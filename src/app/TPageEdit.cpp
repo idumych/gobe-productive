@@ -351,6 +351,9 @@ TPageView::EditText(const char* bytes, int32 count)
 	switch (bytes[0]) {
 		case B_BACKSPACE:
 		case B_DELETE: {
+			fUndo.Begin(fDocument, fCaret.part,
+				bytes[0] == B_BACKSPACE ? "Backspace" : "Delete",
+				CurrentViewState());
 			TextPosition from, to;
 			if (TextSelection(from, to)) {
 				if (DeleteSelection())
@@ -394,6 +397,8 @@ TPageView::EditText(const char* bytes, int32 count)
 			break;
 		}
 		case B_ENTER: {
+			fUndo.Begin(fDocument, fCaret.part, "Enter",
+				CurrentViewState());
 			TextPosition from, to;
 			if (TextSelection(from, to)) {
 				if (!DeleteSelection())
@@ -472,6 +477,7 @@ TPageView::EditText(const char* bytes, int32 count)
 			}
 			if (!shift)
 				fAnchor = fCaret;
+			fUndo.Break();
 			break;
 		}
 		case B_ESCAPE:
@@ -480,6 +486,8 @@ TPageView::EditText(const char* bytes, int32 count)
 			break;
 		default:
 			if ((unsigned char)bytes[0] >= 0x20 || bytes[0] == B_TAB) {
+				fUndo.Begin(fDocument, fCaret.part, "Typing",
+					CurrentViewState(), uint64_t(fCaret.part) + 1);
 				TextPosition from, to;
 				if (TextSelection(from, to)) {
 					if (!DeleteSelection())
@@ -594,6 +602,8 @@ TPageView::EndCellEdit(bool commit, int moveRows, int moveColumns)
 	fCellEditor = NULL;
 	MakeFocus(true);
 	if (commit) {
+		fUndo.Begin(fDocument, fSelectedCell.part, "Cell Entry",
+			CurrentViewState());
 		SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
 		std::string error;
 		auto isName = [&](const std::string& n) {
@@ -643,6 +653,8 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		EndCellEdit(true);
 	if (Window() != NULL)
 		MakeFocus(true);
+
+	fUndo.Break();
 
 	size_t part;
 	int row, column;
@@ -803,6 +815,8 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				return;
 			case B_BACKSPACE:
 			case B_DELETE: {
+				fUndo.Begin(fDocument, fSelectedCell.part, "Delete",
+					CurrentViewState());
 				int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
 				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
 				int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
@@ -876,6 +890,23 @@ TPageView::MessageReceived(BMessage* message)
 		case kMsgCellCancel:
 			EndCellEdit(false);
 			return;
+		case 'sM10':	// Undo
+		case 'sM11': {	// Redo
+			if (fCellEditor != NULL)
+				EndCellEdit(true);
+			UndoStack::ViewState v = CurrentViewState();
+			int part = message->what == 'sM10' ? fUndo.Undo(fDocument, v)
+				: fUndo.Redo(fDocument, v);
+			if (part < 0) {
+				beep();
+				return;
+			}
+			if (fDocument.SpreadsheetPart(part) != NULL)
+				fBook->Reset();
+			TextChanged();
+			RestoreViewState(v);
+			return;
+		}
 		default: {
 			static const uint32 kCmdClear = 'sM12';
 			// cell selection: handle before text handling
@@ -900,6 +931,8 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case B_CUT: {
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cut",
+							CurrentViewState());
 						SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
 						if (ss != NULL) {
 							std::string text = RangeInput(*ss, uint16_t(r0), uint16_t(c0),
@@ -921,6 +954,8 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case B_PASTE: {
+						fUndo.Begin(fDocument, fSelectedCell.part, "Paste",
+							CurrentViewState());
 						if (!be_clipboard->Lock())
 							return;
 						const void* data = NULL;
@@ -964,6 +999,8 @@ TPageView::MessageReceived(BMessage* message)
 					}
 					case kCmdClear:
 						{
+							fUndo.Begin(fDocument, fSelectedCell.part, "Clear",
+								CurrentViewState());
 							SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
 							std::string error;
 							if (ss != NULL && ClearRange(*ss, uint16_t(r0), uint16_t(c0),
@@ -995,21 +1032,30 @@ TPageView::MessageReceived(BMessage* message)
 			if (fCaret.active) {
 				// the Edit menu (MENU 3) sends B_CUT, B_COPY, B_PASTE, B_SELECT_ALL
 				switch (message->what) {
-					case B_CUT:
+					case B_CUT: {
+						fUndo.Begin(fDocument, fCaret.part, "Cut",
+							CurrentViewState());
 						CopySelection();
 						if (DeleteSelection())
 							TextChanged();
 						return;
+					}
 					case B_COPY:
 						CopySelection();
 						return;
-					case B_PASTE:
+					case B_PASTE: {
+						fUndo.Begin(fDocument, fCaret.part, "Paste",
+							CurrentViewState());
 						PasteText();
 						return;
-					case kCmdClear:
+					}
+					case kCmdClear: {
+						fUndo.Begin(fDocument, fCaret.part, "Clear",
+							CurrentViewState());
 						if (DeleteSelection())
 							TextChanged();
 						return;
+					}
 					case B_SELECT_ALL:
 						SelectAllText();
 						return;
@@ -1026,7 +1072,8 @@ TPageView::MessageReceived(BMessage* message)
 // "sclick x y" (shift-click), "tclick x y" (triple-click),
 // "key text" (with {enter} {bs} {del} {left} {right} {up} {down} {tab}
 // {esc} {home} {end} {sleft} {sright}), "selectall", "copy", "cut", "paste",
-// "cellrect row col", "selection", "commit" (the cell editor), "save path".
+// "undo", "redo", "cellrect row col", "cell row col", "selection",
+// "commit" (the cell editor), "save path".
 // "copy", "cut", "paste", "selectall", "{sup}", "{sdown}", "{sleft}",
 // "{sright}" work for cell selection too.
 void
@@ -1154,13 +1201,93 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 		} else if (command == "commit") {
 			EndCellEdit(true);
+		} else if (command == "undo") {
+			BMessage msg('sM10');
+			MessageReceived(&msg);
+		} else if (command == "redo") {
+			BMessage msg('sM11');
+			MessageReceived(&msg);
+		} else if (command.size() >= 5 && command.substr(0, 5) == "cell ") {
+			int row, column;
+			if (sscanf(command.c_str() + 5, "%d %d", &row, &column) == 2) {
+				const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+				if (ss != NULL) {
+					std::string val = CellInput(*ss, uint16_t(row), uint16_t(column));
+					fprintf(stderr, "cell %d %d %s\n", row, column, val.c_str());
+				} else
+					fprintf(stderr, "cell %d %d (no sheet)\n", row, column);
+			}
 		} else if (command.compare(0, 5, "save ") == 0) {
 			std::string error;
 			if (!document.Save(command.substr(5), error))
 				fprintf(stderr, "save: %s\n", error.c_str());
+			DocumentSaved();
 			DocumentReloaded();
 		}
 	}
+}
+
+
+void
+TPageView::DocumentSaved()
+{
+	fUndo.DocumentSaved();
+}
+
+
+void
+TPageView::ClearUndo()
+{
+	fUndo.Clear();
+}
+
+
+UndoStack::ViewState
+TPageView::CurrentViewState() const
+{
+	if (fCaret.active)
+		return {1, int64_t(fCaret.part), int64_t(fCaret.paragraph),
+			int64_t(fCaret.offset), int64_t(fAnchor.paragraph),
+			int64_t(fAnchor.offset)};
+	if (fSelectedCell.active)
+		return {2, int64_t(fSelectedCell.part), int64_t(fSelectedCell.row),
+			int64_t(fSelectedCell.column), int64_t(fSelectedCell.anchorRow),
+			int64_t(fSelectedCell.anchorColumn)};
+	return {0};
+}
+
+
+void
+TPageView::RestoreViewState(const UndoStack::ViewState& v)
+{
+	if (v.empty())
+		return;
+	int64_t type = v[0];
+	if (type == 1) {
+		fCaret.active = true;
+		fCaret.part = size_t(v[1]);
+		fCaret.paragraph = size_t(v[2]);
+		fCaret.offset = size_t(v[3]);
+		fAnchor.active = true;
+		fAnchor.part = fCaret.part;
+		fAnchor.paragraph = size_t(v[4]);
+		fAnchor.offset = size_t(v[5]);
+		fSelectedCell.active = false;
+	} else if (type == 2) {
+		fSelectedCell.active = true;
+		fSelectedCell.part = size_t(v[1]);
+		fSelectedCell.row = int(v[2]);
+		fSelectedCell.column = int(v[3]);
+		fSelectedCell.anchorRow = int(v[4]);
+		fSelectedCell.anchorColumn = int(v[5]);
+		fCaret.active = false;
+		fAnchor.active = false;
+	} else {
+		fCaret.active = false;
+		fAnchor.active = false;
+		fSelectedCell.active = false;
+	}
+	Invalidate();
 }
 
 
@@ -1176,9 +1303,10 @@ TPageView::DocumentReloaded()
 	fImages.clear();
 	fCellStyles.clear();
 	const WPPart* wp = fDocument.WordPart(fCaret.part);
-	if (wp == NULL || fCaret.paragraph >= wp->paragraphs.size())
+	if (wp == NULL || fCaret.paragraph >= wp->paragraphs.size()) {
 		fCaret.active = false;
 		fAnchor.active = false;
+	}
 	Rebuild();
 	Invalidate();
 }

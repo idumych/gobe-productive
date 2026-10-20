@@ -185,8 +185,10 @@ TDocWindow::MessageReceived(BMessage* message)
 				return;
 			}
 			*fDocument = std::move(fresh);
-			if (fPages != NULL)
+			if (fPages != NULL) {
 				fPages->DocumentReloaded();
+				fPages->ClearUndo();
+			}
 			fModified = false;
 			UpdateTitle();
 			return;
@@ -269,8 +271,10 @@ TDocWindow::Save(const std::string& path)
 		(new BAlert("Save", text.String(), "OK"))->Go(NULL);
 		return false;
 	}
-	if (fPages != NULL)
+	if (fPages != NULL) {
+		fPages->DocumentSaved();
 		fPages->DocumentReloaded();
+	}
 	fModified = false;
 	UpdateTitle();
 	fStatus->SetText(("Saved " + path).c_str());

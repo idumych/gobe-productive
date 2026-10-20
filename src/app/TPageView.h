@@ -23,6 +23,7 @@
 #include "SSEval.h"
 #include "SSStyle.h"
 #include "Styles.h"
+#include "Undo.h"
 
 namespace gobe {
 
@@ -45,6 +46,9 @@ public:
 
 	// after the document was saved (and loaded again) or reverted
 	void DocumentReloaded();
+	// after saving or reverting
+	void DocumentSaved();
+	void ClearUndo();
 	// test hook: scripted clicks, keys and saves (see TPageEdit.cpp)
 	void RunScript(const std::string& script, Document& document);
 	void Click(BPoint where, int32 clicks, int32 buttons);
@@ -134,6 +138,9 @@ private:
 	static BRect RotatedBounds(BRect rect, float angle);
 	// the area a frame may draw in: its containers' frames intersected
 	BRect ContainerClip(const Document::PlacedFrame& frame) const;
+	// undo: view state helpers
+	UndoStack::ViewState CurrentViewState() const;
+	void RestoreViewState(const UndoStack::ViewState& v);
 
 	Document& fDocument;
 	std::vector<Document::PlacedFrame> fFrames;
@@ -153,6 +160,7 @@ private:
 		int anchorRow = 0, anchorColumn = 0;
 	} fSelectedCell;
 	BTextView* fCellEditor = NULL;
+	UndoStack fUndo;
 	BRect fBounds;					// everything, in document coordinates
 	float fMargin;
 };
