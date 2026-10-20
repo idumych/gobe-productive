@@ -129,6 +129,9 @@ int main(int argc, char* argv[])
 				case Sig("SpaB"):
 				case Sig("SpaA"):
 				case Sig("LSpa"): {
+					// gradient text colors aren't written by the encoders
+					if (prop.type == Sig("TCol") && !prop.data.empty() && prop.data[0] == 0)
+						break;
 					TextStyle ts;
 					if (ApplyProperty(prop, ts)) {
 						Property enc;
