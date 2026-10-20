@@ -39,6 +39,15 @@ TextPosition SplitParagraph(WPPart& part, TextPosition at);
 // returns where the two meet.
 bool JoinWithPrevious(WPPart& part, size_t paragraph, TextPosition& joined);
 
+// The plain text of a range ('\n' between paragraphs).
+std::string RangeText(const WPPart& part, TextPosition from, TextPosition to);
+// Deletes a range that may span paragraphs; false, with nothing changed, if
+// it would remove an anchor (frame, formula field, ...) or a page break.
+// `result` is where the range started.
+bool DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition& result);
+// InsertText for text with line breaks; returns the position after it.
+TextPosition InsertMultiline(WPPart& part, TextPosition at, const std::string& text);
+
 // TParser: parses a formula ("=..." without the "="), relative to the
 // formula's cell; `isName` tells known names (named ranges) apart. Returns
 // false with an error message on a syntax error.

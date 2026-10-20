@@ -228,6 +228,100 @@ JoinWithPrevious(WPPart& part, size_t paragraph, TextPosition& joined)
 }
 
 
+// Extracts plain text between two positions, handling paragraph boundaries and clamping.
+std::string
+RangeText(const WPPart& part, TextPosition from, TextPosition to)
+{
+	if (from.paragraph > to.paragraph || (from.paragraph == to.paragraph && from.offset > to.offset))
+	{
+		auto tmp = from; from = to; to = tmp;
+	}
+	const auto N = part.paragraphs.size();
+	if (N == 0) return {};
+	size_t f_p = std::min(from.paragraph, N - 1);
+	size_t t_p = std::min(to.paragraph, N - 1);
+	size_t f_o = std::min(from.offset, EditableLength(part.paragraphs[f_p]));
+	size_t t_o = std::min(to.offset, EditableLength(part.paragraphs[t_p]));
+	if (f_p == t_p)
+		return part.paragraphs[f_p].text.substr(f_o, t_o - f_o);
+	std::string res;
+	for (size_t i = f_p; i <= t_p; ++i)
+	{
+		const auto& p = part.paragraphs[i];
+		size_t start = (i == f_p) ? f_o : 0;
+		size_t end = (i == t_p) ? t_o : EditableLength(p);
+		res += p.text.substr(start, end - start);
+		if (i < t_p) res += '\n';
+	}
+	return res;
+}
+
+
+// Deletes [from, to) across paragraphs; false (nothing changed) if it would
+// remove a misc-info anchor or a break
+bool
+DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition& result)
+{
+	if (from.paragraph > to.paragraph
+			|| (from.paragraph == to.paragraph && from.offset > to.offset))
+		std::swap(from, to);
+	const size_t count = part.paragraphs.size();
+	if (from.paragraph >= count || to.paragraph >= count)
+		return false;
+	from.offset = std::min(from.offset, EditableLength(part.paragraphs[from.paragraph]));
+	to.offset = std::min(to.offset, EditableLength(part.paragraphs[to.paragraph]));
+	result = from;
+	if (from.paragraph == to.paragraph && from.offset == to.offset)
+		return true;
+
+	// check everything first
+	for (size_t i = from.paragraph; i <= to.paragraph; i++) {
+		const WPParagraph& p = part.paragraphs[i];
+		if (i < to.paragraph && (p.text.empty() || p.text.back() != '\n'))
+			return false;
+		size_t a = i == from.paragraph ? from.offset : 0;
+		size_t b = i == to.paragraph ? to.offset : EditableLength(p);
+		for (const WPMiscInfo& m : p.misc)
+			if (m.position >= a && m.position < b)
+				return false;
+	}
+
+	if (from.paragraph == to.paragraph)
+		return DeleteText(part, from, to.offset);
+	for (size_t i = to.paragraph; i > from.paragraph; i--) {
+		size_t b = i == to.paragraph ? to.offset : EditableLength(part.paragraphs[i]);
+		DeleteText(part, {i, 0}, b);
+	}
+	DeleteText(part, from, EditableLength(part.paragraphs[from.paragraph]));
+	TextPosition joined;
+	for (size_t i = to.paragraph; i > from.paragraph; i--)
+		if (!JoinWithPrevious(part, i, joined))
+			return false;
+	return true;
+}
+
+
+// Inserts text that may contain line breaks, splitting paragraphs at them
+TextPosition
+InsertMultiline(WPPart& part, TextPosition at, const std::string& text)
+{
+	std::string piece;
+	for (size_t i = 0; i <= text.size(); i++) {
+		char c = i < text.size() ? text[i] : '\n';
+		if (c == '\r' && i + 1 < text.size() && text[i + 1] == '\n')
+			continue;
+		if (c == '\n' || c == '\r') {
+			at = InsertText(part, at, piece);
+			piece.clear();
+			if (i < text.size())
+				at = SplitParagraph(part, at);
+		} else
+			piece += c;
+	}
+	return at;
+}
+
+
 // #pragma mark - formulas
 
 namespace {
