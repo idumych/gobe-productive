@@ -1,7 +1,8 @@
 // Undo and redo of edits, kept in memory apart from the file (Gobe's own
 // CommandMgr section is copied unchanged on save). Each step is a snapshot
 // of what an edit can change: the edited part's parsed data, the document's
-// links (UpdateDependencies adds some) and which parts were dirty. Undo
+// links (UpdateDependencies adds some), the styles (text styling adds
+// some) and which parts were dirty. Undo
 // swaps the snapshot with the current state, so redo is the same operation
 // the other way.
 #ifndef GOBE_UNDO_H

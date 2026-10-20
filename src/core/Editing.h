@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "DocSections.h"
 #include "Formula.h"
 #include "SSPart.h"
 #include "WPPart.h"
@@ -74,6 +75,26 @@ bool SetCellInput(SSPart& part, uint16_t row, uint16_t column, const std::string
 // changed.
 struct Document;
 bool UpdateDependencies(Document& doc, size_t part);
+
+// Text styles. A run's or paragraph's style is an index into the
+// StyleMgr; unnamed run styles are children of unnamed paragraph styles,
+// which are children of named ones ("Body"). A style's value4 counts its
+// users (runs, paragraphs, child styles) plus one for the manager, and is
+// kept up to date here.
+
+// The style like `base` but with `property` set (replacing one of the
+// same type): an existing identical unnamed style, or a new one (added
+// with no users yet).
+uint32_t StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property);
+// Character properties (TFon, TSiz, TFac, TCol, ...) for the text in
+// [from, to), which may span paragraphs; runs are split at the ends and
+// merged again where neighbours end up alike. False if nothing changed.
+bool ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextPosition to,
+	const Property& property);
+// Paragraph properties (PAlg, PLef, PInd, PRig, SpaB, SpaA, LSpa, PTab)
+// for paragraphs first..last.
+bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
+	const Property& property);
 
 // What a cell's editor starts with: its formula or its value as typed.
 std::string CellInput(const SSPart& part, uint16_t row, uint16_t column);

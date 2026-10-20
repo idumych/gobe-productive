@@ -361,6 +361,186 @@ WordRange(const std::string& text, size_t offset, size_t& from, size_t& to)
 }
 
 
+// #pragma mark - styles
+
+namespace {
+
+bool
+SameStyle(const Style& a, const Style& b)
+{
+	return a.id == b.id && a.value8 == b.value8 && a.valueC == b.valueC
+		&& a.value10 == b.value10 && a.name == b.name && a.props == b.props
+		&& a.props2 == b.props2 && a.substyles.empty() && b.substyles.empty()
+		&& std::equal(a.links, a.links + 3, b.links);
+}
+
+
+uint32_t
+AddProperty(StyleMgr& styles, const Property& property)
+{
+	for (size_t i = 0; i < styles.properties.size(); i++)
+		if (styles.properties[i].type == property.type
+			&& styles.properties[i].data == property.data)
+			return uint32_t(i);
+	styles.properties.push_back(property);
+	return uint32_t(styles.properties.size() - 1);
+}
+
+
+void
+Retain(StyleMgr& styles, uint32_t style)
+{
+	if (style < styles.styles.size())
+		styles.styles[style].value4++;
+}
+
+
+void
+Release(StyleMgr& styles, uint32_t style)
+{
+	if (style < styles.styles.size() && styles.styles[style].value4 > 1)
+		styles.styles[style].value4--;
+}
+
+
+// the run in effect at `offset`
+size_t
+RunAt(const WPParagraph& p, size_t offset)
+{
+	size_t run = 0;
+	for (size_t i = 0; i < p.runs.size(); i++)
+		if (p.runs[i].position <= offset)
+			run = i;
+	return run;
+}
+
+} // namespace
+
+
+uint32_t
+StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
+{
+	if (base >= styles.styles.size())
+		return base;
+	uint32_t index = AddProperty(styles, property);
+	Style style;
+	if (styles.styles[base].name.empty()) {
+		// a copy with the property replaced or added
+		style = styles.styles[base];
+		bool replaced = false;
+		for (uint32_t& p : style.props)
+			if (p < styles.properties.size() && styles.properties[p].type == property.type) {
+				p = index;
+				replaced = true;
+			}
+		if (!replaced) {
+			style.props.push_back(index);
+			std::sort(style.props.begin(), style.props.end());
+		}
+	} else {
+		// a named style: an unnamed child holding the property
+		style = styles.styles[base];
+		style.name.clear();
+		style.value8 = 32;
+		style.links[0] = base;
+		style.props = {index};
+	}
+	style.substyles.clear();
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (SameStyle(styles.styles[i], style))
+			return uint32_t(i);
+	style.value4 = 1;
+	Retain(styles, style.links[0]);
+	styles.styles.push_back(style);
+	return uint32_t(styles.styles.size() - 1);
+}
+
+
+bool
+ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextPosition to,
+	const Property& property)
+{
+	if (to.paragraph < from.paragraph
+			|| (to.paragraph == from.paragraph && to.offset < from.offset))
+		std::swap(from, to);
+	WPPart* wp = doc.EditableWordPart(part);
+	if (wp == nullptr || from.paragraph >= wp->paragraphs.size())
+		return false;
+	to.paragraph = std::min(to.paragraph, wp->paragraphs.size() - 1);
+	StyleMgr& styles = doc.styles;
+	bool changed = false;
+	for (size_t k = from.paragraph; k <= to.paragraph; k++) {
+		WPParagraph& p = wp->paragraphs[k];
+		if (p.runs.empty())
+			continue;
+		size_t length = EditableLength(p);
+		size_t a = k == from.paragraph ? std::min(from.offset, length) : 0;
+		size_t b = k == to.paragraph ? std::min(to.offset, length) : length;
+		if (a >= b && !(a == 0 && length == 0))
+			continue;
+		// runs starting at a and b
+		for (size_t at : {a, b}) {
+			if (at >= length && at != 0)
+				continue;
+			size_t r = RunAt(p, at);
+			if (p.runs[r].position != at) {
+				p.runs.insert(p.runs.begin() + r + 1, {uint32_t(at), p.runs[r].style});
+				Retain(styles, p.runs[r].style);
+			}
+		}
+		for (WPStyleRun& run : p.runs) {
+			if (run.position < a || (run.position >= b && b < length))
+				continue;
+			uint32_t style = StyleWithProperty(styles, run.style, property);
+			if (style != run.style) {
+				Retain(styles, style);
+				Release(styles, run.style);
+				run.style = style;
+				changed = true;
+			}
+		}
+		// neighbours alike: one run
+		for (size_t i = 1; i < p.runs.size();) {
+			if (p.runs[i].style == p.runs[i - 1].style) {
+				Release(styles, p.runs[i].style);
+				p.runs.erase(p.runs.begin() + i);
+			} else
+				i++;
+		}
+	}
+	if (changed)
+		doc.stylesChanged = true;
+	return changed;
+}
+
+
+bool
+ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
+	const Property& property)
+{
+	WPPart* wp = doc.EditableWordPart(part);
+	if (wp == nullptr || first >= wp->paragraphs.size())
+		return false;
+	if (last < first)
+		std::swap(first, last);
+	last = std::min(last, wp->paragraphs.size() - 1);
+	bool changed = false;
+	for (size_t k = first; k <= last; k++) {
+		WPParagraph& p = wp->paragraphs[k];
+		uint32_t style = StyleWithProperty(doc.styles, p.parStyle, property);
+		if (style != p.parStyle) {
+			Retain(doc.styles, style);
+			Release(doc.styles, p.parStyle);
+			p.parStyle = style;
+			changed = true;
+		}
+	}
+	if (changed)
+		doc.stylesChanged = true;
+	return changed;
+}
+
+
 // #pragma mark - formulas
 
 namespace {

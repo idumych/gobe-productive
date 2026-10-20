@@ -10,6 +10,8 @@ struct UndoStack::Step {
 	std::optional<WPPart> word;
 	std::optional<SSPart> sheet;
 	LinksMgr links;
+	StyleMgr styles;
+	bool stylesChanged = false;
 	bool wasDirty = false;
 	bool trustDirty = true;			// false once the document was saved
 	ViewState view;
@@ -24,6 +26,8 @@ struct UndoStack::Step {
 		else if (const SSPart* ss = doc.SpreadsheetPart(part))
 			sheet = *ss;
 		links = doc.links;
+		styles = doc.styles;
+		stylesChanged = doc.stylesChanged;
 		wasDirty = doc.dirtyParts.count(part) != 0;
 	}
 
@@ -41,6 +45,11 @@ struct UndoStack::Step {
 				std::swap(*ss, *sheet);
 		}
 		std::swap(doc.links, links);
+		std::swap(doc.styles, styles);
+		// once saved, the file's StyleMgr may differ from either
+		bool changed = doc.stylesChanged;
+		doc.stylesChanged = trustDirty ? stylesChanged : true;
+		stylesChanged = changed;
 		if (!wasDirty && trustDirty)
 			doc.dirtyParts.erase(part);
 		else

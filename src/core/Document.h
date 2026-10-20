@@ -63,6 +63,7 @@ struct Document {
 
 	// editing: parts changed since loading (written by Save)
 	std::set<size_t> dirtyParts;
+	bool stylesChanged = false;		// the StyleMgr (written by Save)
 	WPPart* EditableWordPart(size_t part);
 	SSPart* EditableSpreadsheetPart(size_t part);
 	// writes the document (changed parts written, everything else copied)
