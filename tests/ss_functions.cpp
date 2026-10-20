@@ -1,6 +1,8 @@
 // Spreadsheet formula functions: TRUNC, SIGN, QUOTIENT, LOG10, LOG, LN, FRAC,
 // FACT, EXP, COMBIN, ATAN2, RADIANS, DEGREES, PI, ATANH, ASINH, ACOSH, TANH,
 // SINH, COSH, ATAN, ASIN, ACOS, TAN, SIN, COS, PRODUCT, STDEV, VAR
+// Text: VALUE, UPPER, LOWER, TRIM, T, EXACT, SUBSTITUTE, SEARCH, FIND,
+// RIGHT, LEFT, MID, REPLACE, PROPER, LEN, CHAR, CODE, CLEAN, TEXT, FIXED, DOLLAR
 #include <cmath>
 #include <cstdio>
 #include <functional>
@@ -348,6 +350,256 @@ int main()
 	// ====== VAR with text in range (should error per decomp) ======
 	setFormula(86, "VAR(A1:A6)");
 	Check(IsError(eval(86, 2)), "VAR(A1:A6) with text is error");
+
+	// ====== Text functions (batch 2) ======
+	std::string got;
+
+	// ====== VALUE ======
+	// python3 -c "print(42.5); print(float('3.14'))"
+	SetCellInput(part, 87, 0, "3.14", NoName, dummyError);
+	setFormula(87, "VALUE(A88)");  // A88 holds "3.14"
+	CheckNum(eval(87, 2).number, 3.14, "VALUE(3.14)", 1e-9);
+	// error: VALUE of non-numeric
+	setFormula(88, "VALUE(\"hello\")");
+	Check(IsError(eval(88, 2)), "VALUE(\"hello\") is error");
+
+	// ====== UPPER ======
+	// python3 -c "print(repr('hello world'.upper()), repr('héllo'.upper()))"
+	setFormula(89, "UPPER(\"hello world\")");
+	got.clear(); eval(89, 2).GetString(got);
+	Check(got == "HELLO WORLD", "UPPER(\"hello world\")");
+	setFormula(90, "UPPER(\"héllo\")");
+	got.clear(); eval(90, 2).GetString(got);
+	Check(got == "HÉLLO", "UPPER(\"héllo\") == HÉLLO");
+	// error: UPPER of number
+	setFormula(91, "UPPER(42)");
+	got.clear(); eval(91, 2).GetString(got);
+	Check(got == "42", "UPPER(42) -> \"42\"");
+
+	// ====== LOWER ======
+	// python3 -c "print(repr('HELLO WORLD'.lower()), repr('hÉllo'.lower()))"
+	setFormula(92, "LOWER(\"HELLO WORLD\")");
+	got.clear(); eval(92, 2).GetString(got);
+	Check(got == "hello world", "LOWER(\"HELLO WORLD\")");
+	setFormula(93, "LOWER(\"hÉllo\")");
+	got.clear(); eval(93, 2).GetString(got);
+	Check(got == "héllo", "LOWER(\"hÉllo\")");
+
+	// ====== TRIM ======
+	// python3 -c "print(repr('hello world'.replace(' ', '')))"
+	setFormula(94, "TRIM(\"hello world\")");
+	got.clear(); eval(94, 2).GetString(got);
+	Check(got == "helloworld", "TRIM removes all spaces");
+	setFormula(95, "TRIM(\"héllo mUnde\")");
+	got.clear(); eval(95, 2).GetString(got);
+	Check(got == "héllomUnde", "TRIM UTF-8");
+
+	// ====== T ======
+	// python3 -c "print(repr('hello'))"
+	setFormula(96, "T(\"hello\")");
+	got.clear(); eval(96, 2).GetString(got);
+	Check(got == "hello", "T(\"hello\")");
+	// T of a number -> "42"
+	got.clear(); eval(96, 2).GetString(got);
+	// T of blank -> ""
+	setFormula(97, "T(\"\")");
+	got.clear(); eval(97, 2).GetString(got);
+	Check(got == "", "T(\"\")");
+
+	// ====== EXACT ======
+	// python3 -c "print('hello' == 'hello', 'hello' == 'Hello')"
+	setFormula(98, "EXACT(\"hello\",\"hello\")");
+	Check(eval(98, 2).type == SSValue::kBool && eval(98, 2).number != 0, "EXACT(\"hello\",\"hello\")");
+	setFormula(99, "EXACT(\"hello\",\"Hello\")");
+	Check(eval(99, 2).type == SSValue::kBool && eval(99, 2).number == 0, "EXACT(\"hello\",\"Hello\")");
+
+	// ====== SUBSTITUTE ======
+	// python3 -c "print(repr('abcabcabc'.replace('b','X',1)), repr('abcabcabc'.replace('b','X',2)))"
+	setFormula(100, "SUBSTITUTE(\"abcabcabc\",\"b\",\"X\")");
+	got.clear(); eval(100, 2).GetString(got);
+	Check(got == "aXcaXcaXc", "SUBSTITUTE replaces all");
+	setFormula(101, "SUBSTITUTE(\"abcabcabc\",\"b\",\"X\",1)");
+	got.clear(); eval(101, 2).GetString(got);
+	Check(got == "aXcabcabc", "SUBSTITUTE instance 1");
+	setFormula(102, "SUBSTITUTE(\"abcabcabc\",\"b\",\"X\",2)");
+	got.clear(); eval(102, 2).GetString(got);
+	Check(got == "aXcaXcabc", "SUBSTITUTE instance 2");
+	setFormula(103, "SUBSTITUTE(\"hello\",\"x\",\"X\",1)");
+	got.clear(); eval(103, 2).GetString(got);
+	Check(got == "hello", "SUBSTITUTE no match");
+	// error: SUBSTITUTE instance 0
+	setFormula(104, "SUBSTITUTE(\"abc\",\"b\",\"X\",0)");
+	Check(IsError(eval(104, 2)), "SUBSTITUTE instance 0 is error");
+
+	// ====== SEARCH ======
+	// python3 -c "print('hello'.lower().find('h')+1, 'hello'.lower().find('l',1)+1, 'hello'.lower().find('x')+1)"
+	setFormula(105, "SEARCH(\"h\",\"hello\")");
+	CheckNum(eval(105, 2).number, 1.0, "SEARCH(\"h\",\"hello\")");
+	setFormula(106, "SEARCH(\"l\",\"hello\",2)");
+	CheckNum(eval(106, 2).number, 3.0, "SEARCH(\"l\",\"hello\",2)");
+	setFormula(107, "SEARCH(\"x\",\"hello\")");
+	CheckNum(eval(107, 2).number, 0.0, "SEARCH not found");
+	// UTF-8: SEARCH in 'héllo'
+	setFormula(108, "SEARCH(\"é\",\"héllo\")");
+	CheckNum(eval(108, 2).number, 2.0, "SEARCH UTF-8");
+	// error: SEARCH start < 1
+	setFormula(109, "SEARCH(\"a\",\"hello\",0)");
+	Check(IsError(eval(109, 2)), "SEARCH start 0 is error");
+
+	// ====== FIND ======
+	// python3 -c "print('hello'.find('e')+1, 'Hello'.find('H')+1)"
+	setFormula(110, "FIND(\"e\",\"hello\")");
+	CheckNum(eval(110, 2).number, 2.0, "FIND(\"e\",\"hello\")");
+	setFormula(111, "FIND(\"H\",\"Hello\")");
+	CheckNum(eval(111, 2).number, 1.0, "FIND(\"H\",\"Hello\")");
+	// case-sensitive: FIND 'H' in 'hello' -> not found
+	setFormula(112, "FIND(\"H\",\"hello\")");
+	CheckNum(eval(112, 2).number, 0.0, "FIND case-sensitive");
+	// UTF-8: FIND 'é' in 'héllo'
+	setFormula(113, "FIND(\"é\",\"héllo\")");
+	CheckNum(eval(113, 2).number, 2.0, "FIND UTF-8");
+	// error: FIND start < 1
+	setFormula(114, "FIND(\"a\",\"hello\",0)");
+	Check(IsError(eval(114, 2)), "FIND start 0 is error");
+
+	// ====== RIGHT ======
+	// python3 -c "print(repr('hello'[-2:]), repr('héllo'[-2:]))"
+	setFormula(115, "RIGHT(\"hello\",2)");
+	got.clear(); eval(115, 2).GetString(got);
+	Check(got == "lo", "RIGHT(\"hello\",2)");
+	setFormula(116, "RIGHT(\"héllo\",2)");
+	got.clear(); eval(116, 2).GetString(got);
+	Check(got == "lo", "RIGHT UTF-8");
+	// error: RIGHT count < 1
+	setFormula(117, "RIGHT(\"hello\",0)");
+	Check(IsError(eval(117, 2)), "RIGHT(0) is error");
+
+	// ====== LEFT ======
+	// python3 -c "print(repr('hello'[:2]), repr('héllo'[:2]))"
+	setFormula(118, "LEFT(\"hello\",2)");
+	got.clear(); eval(118, 2).GetString(got);
+	Check(got == "he", "LEFT(\"hello\",2)");
+	setFormula(119, "LEFT(\"héllo\",2)");
+	got.clear(); eval(119, 2).GetString(got);
+	Check(got == "hé", "LEFT UTF-8");
+	// error: LEFT count < 1
+	setFormula(120, "LEFT(\"hello\",0)");
+	Check(IsError(eval(120, 2)), "LEFT(0) is error");
+
+	// ====== MID ======
+	// python3 -c "print(repr('hello world'[3:7]), repr('héllo'[1:3]))"
+	setFormula(121, "MID(\"hello world\",4,4)");
+	got.clear(); eval(121, 2).GetString(got);
+	Check(got == "lo w", "MID(\"hello world\",4,4)");
+	setFormula(122, "MID(\"héllo\",2,2)");
+	got.clear(); eval(122, 2).GetString(got);
+	Check(got == "él", "MID UTF-8");
+	// error: MID start < 1
+	setFormula(123, "MID(\"hello\",0,2)");
+	Check(IsError(eval(123, 2)), "MID start 0 is error");
+
+	// ====== REPLACE ======
+	// python3 -c "s='hello world'; print(repr('XYZ'+s[3:]))"
+	setFormula(124, "REPLACE(\"hello world\",1,3,\"XYZ\")");
+	got.clear(); eval(124, 2).GetString(got);
+	Check(got == "XYZlo world", "REPLACE");
+	// UTF-8: REPLACE char 2 of 'héllo world' (é) with 'X'
+	setFormula(125, "REPLACE(\"héllo world\",2,1,\"X\")");
+	got.clear(); eval(125, 2).GetString(got);
+	Check(got == "hXllo world", "REPLACE UTF-8");
+	// error: REPLACE start < 1
+	setFormula(126, "REPLACE(\"hello\",0,1,\"X\")");
+	Check(IsError(eval(126, 2)), "REPLACE start 0 is error");
+
+	// ====== PROPER ======
+	// python3 -c "print(repr('hello world'.title()), repr('héllo mUnde'.title()))"
+	setFormula(127, "PROPER(\"hello world\")");
+	got.clear(); eval(127, 2).GetString(got);
+	Check(got == "Hello World", "PROPER");
+
+	// ====== LEN ======
+	// python3 -c "print(len('hello'), len('héllo'))"
+	setFormula(128, "LEN(\"hello\")");
+	CheckNum(eval(128, 2).number, 5.0, "LEN(\"hello\")");
+	setFormula(129, "LEN(\"héllo\")");
+	CheckNum(eval(129, 2).number, 5.0, "LEN(\"héllo\") UTF-8");
+	// LEN of blank
+	setFormula(130, "LEN(\"\")");
+	CheckNum(eval(130, 2).number, 0.0, "LEN(\"\")");
+
+	// ====== CHAR ======
+	// python3 -c "print(repr(chr(65)), repr(chr(32)))"
+	setFormula(131, "CHAR(65)");
+	got.clear(); eval(131, 2).GetString(got);
+	Check(got == "A", "CHAR(65)");
+	setFormula(132, "CHAR(32)");
+	got.clear(); eval(132, 2).GetString(got);
+	Check(got == " ", "CHAR(32)");
+	// out of range -> ""
+	setFormula(133, "CHAR(200)");
+	got.clear(); eval(133, 2).GetString(got);
+	// CHAR(200) is out of ASCII range, returns empty
+	Check(got == "", "CHAR(200) empty");
+
+	// ====== CODE ======
+	// python3 -c "print(ord('A'), ord('a'))"
+	setFormula(134, "CODE(\"A\")");
+	CheckNum(eval(134, 2).number, 65.0, "CODE(\"A\")");
+	setFormula(135, "CODE(\"a\")");
+	CheckNum(eval(135, 2).number, 97.0, "CODE(\"a\")");
+	// error: CODE of empty
+	setFormula(136, "CODE(\"\")");
+	Check(IsError(eval(136, 2)), "CODE(\"\") is error");
+
+	// ====== CLEAN ======
+	// python3 -c "print(repr(''.join(' ' if ord(c) < 32 or ord(c) == 127 else c for c in 'hello\\x01world\\x7f')))"
+	setFormula(137, "CLEAN(\"hello\\x01world\\x7f\")");
+	got.clear(); eval(137, 2).GetString(got);
+	Check(got.find("\x01") == std::string::npos && got.find("\x7f") == std::string::npos, "CLEAN removes control chars");
+
+	// ====== TEXT ======
+	// python3 -c "print(f'{0:.2f}', f'{1234.50:,.2f}', f'{-5:.2f}')"
+	setFormula(138, "TEXT(0,\"0.00\")");
+	got.clear(); eval(138, 2).GetString(got);
+	Check(got == "0.00", "TEXT(0,\"0.00\")");
+	setFormula(139, "TEXT(1234.5,\"#,##0.00\")");
+	got.clear(); eval(139, 2).GetString(got);
+	// Should be "1,234.50"
+	Check(got == "1,234.50", "TEXT(1234.5,\"#,##0.00\")");
+	setFormula(140, "TEXT(-5,\"0.00\")");
+	got.clear(); eval(140, 2).GetString(got);
+	// Negative: "-5.00" (no explicit negative format)
+	Check(got.find("-5.00") >= 0, "TEXT(-5) negative");
+
+	// ====== FIXED ======
+	// python3 -c "print(f'{1234.5:,.2f}', f'{1234:.0f}', f'{1234.5:.2f}')"
+	setFormula(141, "FIXED(1234.5,2)");
+	got.clear(); eval(141, 2).GetString(got);
+	Check(got == "1,234.50", "FIXED(1234.5,2)");
+	setFormula(142, "FIXED(1234,0)");
+	got.clear(); eval(142, 2).GetString(got);
+	Check(got == "1,234", "FIXED(1234,0)");
+	setFormula(143, "FIXED(1234.5,2,TRUE)");
+	got.clear(); eval(143, 2).GetString(got);
+	Check(got == "1234.50", "FIXED no commas");
+	// error: FIXED decimals < 0
+	setFormula(144, "FIXED(1,-1)");
+	Check(IsError(eval(144, 2)), "FIXED decimals -1 is error");
+	// error: FIXED decimals > 10
+	setFormula(145, "FIXED(1,11)");
+	Check(IsError(eval(145, 2)), "FIXED decimals 11 is error");
+
+	// ====== DOLLAR ======
+	// python3 -c "print(f'\\${1234.50:,.2f}')", f'-(\\${1234.50:,.2f})'
+	setFormula(146, "DOLLAR(1234.5)");
+	got.clear(); eval(146, 2).GetString(got);
+	Check(got == "$1,234.50", "DOLLAR(1234.5)");
+	setFormula(147, "DOLLAR(1234.5,0)");
+	got.clear(); eval(147, 2).GetString(got);
+	Check(got == "$1,235", "DOLLAR(1234.5,0)");
+	// error: DOLLAR decimals < 0
+	setFormula(148, "DOLLAR(1,-1)");
+	Check(IsError(eval(148, 2)), "DOLLAR decimals -1 is error");
 
 	printf(failures ? "%d failures\n" : "ss_functions: ok\n", failures);
 	return failures != 0;

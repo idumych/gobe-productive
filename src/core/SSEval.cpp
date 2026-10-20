@@ -1,5 +1,9 @@
 #include "SSEval.h"
 
+#include "Editing.h"
+#include "SSStyle.h"
+
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdio>
@@ -1189,6 +1193,520 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 		for (int i = 0; i < int(llround(n)); i++)
 			r += text;
 		return finish(SSValue::String(r));
+	}
+
+	// --- batch 2: text functions ---
+
+	// UTF-8 helpers: count chars, find char by index, left/right/mid,
+	// replace at char positions, find char by index (case-sensitive),
+	// find char by index (case-insensitive)
+	std::function<int(const std::string&)> utf8CharLen =
+		[](const std::string& s) -> int {
+		int n = 0;
+		size_t i = 0;
+		while (i < s.size()) {
+			n++;
+			i = NextCharacter(s, i);
+		}
+		return n;
+	};
+	std::function<std::string(const std::string&, int)> utf8Left =
+		[](const std::string& s, int n) -> std::string {
+		if (n <= 0) return "";
+		std::string out;
+		size_t i = 0, count = 0;
+		while (i < s.size() && count < size_t(n)) {
+			i = NextCharacter(s, i);
+			count++;
+		}
+		return s.substr(0, i);
+	};
+	std::function<std::string(const std::string&, int)> utf8Right =
+		[&](const std::string& s, int n) -> std::string {
+		if (n <= 0) return "";
+		int total = utf8CharLen(s);
+		if (n >= total) return s;
+		int skip = total - n;
+		size_t i = 0;
+		for (int c = 0; c < skip; c++)
+			i = NextCharacter(s, i);
+		return s.substr(i);
+	};
+	std::function<std::string(const std::string&, int, int)> utf8Mid =
+		[&](const std::string& s, int start, int n) -> std::string {
+		if (start < 1 || n < 0) return "";
+		size_t i = 0;
+		for (int c = 1; c < start && i < s.size(); c++)
+			i = NextCharacter(s, i);
+		if (i >= s.size() && start > 1) return "";
+		if (n <= 0) return "";
+		size_t end = i;
+		for (int c = 0; c < n && end < s.size(); c++)
+			end = NextCharacter(s, end);
+		return s.substr(i, end - i);
+	};
+	std::function<void(std::string&, int, int, const std::string&)> utf8Replace =
+		[&](std::string& s, int start, int n, const std::string& repl) {
+		if (start < 1) return;
+		size_t byteStart = 0;
+		for (int c = 1; c < start && byteStart < s.size(); c++)
+			byteStart = NextCharacter(s, byteStart);
+		size_t byteEnd = byteStart;
+		for (int c = 0; c < n && byteEnd < s.size(); c++)
+			byteEnd = NextCharacter(s, byteEnd);
+		s.replace(byteStart, byteEnd - byteStart, repl);
+	};
+	std::function<int(const std::string&, const std::string&, int)> utf8Find =
+		[&](const std::string& source, const std::string& target,
+		int start) -> int {
+		if (start < 1 || target.empty()) return 0;
+		size_t pos = 0;
+		int charPos = 1;
+		for (int c = 1; c < start && pos < source.size(); c++) {
+			pos = NextCharacter(source, pos);
+			charPos++;
+		}
+		while (pos < source.size()) {
+			size_t nextPos = NextCharacter(source, pos);
+			if (source.substr(pos, nextPos - pos) == target)
+				return charPos;
+			pos = nextPos;
+			charPos++;
+		}
+		return 0;
+	};
+	std::function<int(const std::string&, const std::string&, int)> utf8FindNoCase =
+		[&](const std::string& source, const std::string& target,
+		int start) -> int {
+		if (start < 1) return 0;
+		size_t pos = 0;
+		int charPos = 1;
+		for (int c = 1; c < start && pos < source.size(); c++) {
+			pos = NextCharacter(source, pos);
+			charPos++;
+		}
+		std::string tgtUp = target;
+		for (char& c : tgtUp)
+			c = toupper((unsigned char)c);
+		while (pos < source.size()) {
+			size_t nextPos = NextCharacter(source, pos);
+			std::string chunk = source.substr(pos, nextPos - pos);
+			std::string chunkUp = chunk;
+			for (char& c : chunkUp)
+				c = toupper((unsigned char)c);
+			if (chunkUp == tgtUp)
+				return charPos;
+			pos = nextPos;
+			charPos++;
+		}
+		return 0;
+	};
+	std::function<int(const std::string&, const std::string&, int&)> utf8FindAll =
+		[&](const std::string& source, const std::string& target,
+		int& start) -> int {
+		if (target.empty()) return 0;
+		int pos = -1;
+		for (int s = start; s < utf8CharLen(source); s++) {
+			std::string sub = utf8Mid(source, s + 1, utf8CharLen(target));
+			if (sub == target) {
+				pos = s;
+				start = s + 1;
+				break;
+			}
+		}
+		return pos;
+	};
+
+	if (name == "VALUE") {
+		double n;
+		SSValue v = next();
+		if (!v.GetNum(n))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(n));
+	}
+	// UTF-8-aware case conversion helpers
+	auto encode_utf8 = [](uint32_t cp, std::string& out) {
+		if (cp < 0x80) {
+			out += static_cast<char>(cp);
+		} else if (cp < 0x800) {
+			out += static_cast<char>(0xC0 | (cp >> 6));
+			out += static_cast<char>(0x80 | (cp & 0x3F));
+		} else if (cp < 0x10000) {
+			out += static_cast<char>(0xE0 | (cp >> 12));
+			out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+			out += static_cast<char>(0x80 | (cp & 0x3F));
+		} else {
+			out += static_cast<char>(0xF0 | (cp >> 18));
+			out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+			out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+			out += static_cast<char>(0x80 | (cp & 0x3F));
+		}
+	};
+	auto decode_utf8 = [](const std::string& s, size_t& i, uint32_t& cp) -> bool {
+		unsigned char c = static_cast<unsigned char>(s[i]);
+		if (c < 0x80) {
+			cp = c;
+			i += 1;
+			return true;
+		} else if (c < 0xE0) {
+			cp = ((c & 0x1F) << 6) | (static_cast<unsigned char>(s[i + 1]) & 0x3F);
+			i += 2;
+			return true;
+		} else if (c < 0xF0) {
+			cp = ((c & 0x0F) << 12) | ((static_cast<unsigned char>(s[i + 1]) & 0x3F) << 6)
+				| (static_cast<unsigned char>(s[i + 2]) & 0x3F);
+			i += 3;
+			return true;
+		} else {
+			cp = ((c & 0x07) << 18) | ((static_cast<unsigned char>(s[i + 1]) & 0x3F) << 12)
+				| ((static_cast<unsigned char>(s[i + 2]) & 0x3F) << 6)
+				| (static_cast<unsigned char>(s[i + 3]) & 0x3F);
+			i += 4;
+			return true;
+		}
+	};
+	auto toupper_utf8 = [&](const std::string& s) -> std::string {
+		std::string out;
+		size_t i = 0;
+		while (i < s.size()) {
+			uint32_t cp;
+			if (!decode_utf8(s, i, cp))
+				break;
+			if (cp < 0x80) {
+				out += static_cast<char>(toupper(cp));
+			} else {
+				// Basic Latin uppercase: lowercase (0xE0-0xFF) to uppercase (0xC0-0xFF)
+				if (cp >= 0xE0 && cp <= 0xFF)
+					cp -= 32;
+				encode_utf8(cp, out);
+			}
+		}
+		return out;
+	};
+	auto tolower_utf8 = [&](const std::string& s) -> std::string {
+		std::string out;
+		size_t i = 0;
+		while (i < s.size()) {
+			uint32_t cp;
+			if (!decode_utf8(s, i, cp))
+				break;
+			if (cp < 0x80) {
+				out += static_cast<char>(tolower(cp));
+			} else {
+				// Basic Latin lowercase: uppercase (0xC0-0xDF) to lowercase (0xE0-0xFF)
+				if (cp >= 0xC0 && cp <= 0xDF)
+					cp += 32;
+				encode_utf8(cp, out);
+			}
+		}
+		return out;
+	};
+
+	if (name == "UPPER") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::String(""));
+		return finish(SSValue::String(toupper_utf8(s)));
+	}
+	if (name == "LOWER") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::String(""));
+		return finish(SSValue::String(tolower_utf8(s)));
+	}
+	if (name == "TRIM") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::String(""));
+		s.erase(std::remove_if(s.begin(), s.end(), [](unsigned char c){ return c == ' '; }), s.end());
+		return finish(SSValue::String(s));
+	}
+	if (name == "T") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::String(""));
+		return finish(SSValue::String(s));
+	}
+	if (name == "EXACT") {
+		SSValue a = next();
+		SSValue b = next();
+		std::string sa, sb;
+		if (!a.GetString(sa) || !b.GetString(sb))
+			return finish(SSValue::Bool(false));
+		return finish(SSValue::Bool(sa == sb));
+	}
+	if (name == "SUBSTITUTE") {
+		SSValue srcVal = next();
+		SSValue oldVal = next();
+		SSValue newVal = next();
+		std::string source, oldText, newText;
+		if (!srcVal.GetString(source) || !oldVal.GetString(oldText)
+				|| !newVal.GetString(newText))
+			return finish(SSValue::String(""));
+		int instance = 0;  // 0 = replace all
+		if (used < argc) {
+			double d;
+			if (!numArg(d))
+				return finish(SSValue::Error(kErrValue));
+			instance = static_cast<int>(floor(d));
+			if (instance < 1)
+				return finish(SSValue::Error(kErrValue));
+		}
+		int pos = -1, start = 0;
+		if (instance <= 0) {
+			// replace all occurrences
+			while (true) {
+				pos = utf8FindAll(source, oldText, start);
+				if (pos < 0)
+					break;
+				size_t bytePos = 0;
+				for (int c = 0; c < pos && bytePos < source.size(); c++)
+					bytePos = NextCharacter(source, bytePos);
+				size_t byteEnd = bytePos;
+				for (int c = 0; c < utf8CharLen(oldText) && byteEnd < source.size(); c++)
+					byteEnd = NextCharacter(source, byteEnd);
+				source.replace(bytePos, byteEnd - bytePos, newText);
+			}
+		} else {
+			for (int i = 0; i < instance; i++) {
+				pos = utf8FindAll(source, oldText, start);
+				if (pos < 0)
+					break;
+				size_t bytePos = 0;
+				for (int c = 0; c < pos && bytePos < source.size(); c++)
+					bytePos = NextCharacter(source, bytePos);
+				size_t byteEnd = bytePos;
+				for (int c = 0; c < utf8CharLen(oldText) && byteEnd < source.size(); c++)
+					byteEnd = NextCharacter(source, byteEnd);
+				source.replace(bytePos, byteEnd - bytePos, newText);
+			}
+		}
+		return finish(SSValue::String(source));
+	}
+	if (name == "SEARCH") {
+		SSValue findVal = next();
+		SSValue srcVal = next();
+		std::string findStr, source;
+		if (!findVal.GetString(findStr) || !srcVal.GetString(source))
+			return finish(SSValue::Error(kErrValue));
+		int start = 1;
+		if (used < argc) {
+			double d;
+			if (!numArg(d))
+				return finish(SSValue::Error(kErrValue));
+			start = static_cast<int>(floor(d));
+			if (start < 1)
+				return finish(SSValue::Error(kErrValue));
+		}
+		int charPos = utf8FindNoCase(source, findStr, start);
+		if (charPos <= 0)
+			return finish(SSValue::Number(0.0));
+		return finish(SSValue::Number(static_cast<double>(charPos)));
+	}
+	if (name == "FIND") {
+		SSValue findVal = next();
+		SSValue srcVal = next();
+		std::string findStr, source;
+		if (!findVal.GetString(findStr) || !srcVal.GetString(source))
+			return finish(SSValue::Error(kErrValue));
+		int start = 1;
+		if (used < argc) {
+			double d;
+			if (!numArg(d))
+				return finish(SSValue::Error(kErrValue));
+			start = static_cast<int>(floor(d));
+			if (start < 1)
+				return finish(SSValue::Error(kErrValue));
+		}
+		int charPos = utf8Find(source, findStr, start);
+		if (charPos <= 0)
+			return finish(SSValue::Number(0.0));
+		return finish(SSValue::Number(static_cast<double>(charPos)));
+	}
+	if (name == "RIGHT") {
+		SSValue sVal = next();
+		double nD;
+		std::string s;
+		if (!sVal.GetString(s) || !numArg(nD))
+			return finish(SSValue::Error(kErrValue));
+		int n = static_cast<int>(floor(nD));
+		if (n < 1)
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::String(utf8Right(s, n)));
+	}
+	if (name == "LEFT") {
+		SSValue sVal = next();
+		double nD;
+		std::string s;
+		if (!sVal.GetString(s) || !numArg(nD))
+			return finish(SSValue::Error(kErrValue));
+		int n = static_cast<int>(floor(nD));
+		if (n < 1)
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::String(utf8Left(s, n)));
+	}
+	if (name == "MID") {
+		SSValue sVal = next();
+		double startD, nD;
+		std::string s;
+		if (!sVal.GetString(s) || !numArg(startD) || !numArg(nD))
+			return finish(SSValue::Error(kErrValue));
+		int start = static_cast<int>(floor(startD));
+		int n = static_cast<int>(floor(nD));
+		if (start < 1)
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::String(utf8Mid(s, start, n)));
+	}
+	if (name == "REPLACE") {
+		SSValue srcVal = next();
+		double startD, nD;
+		std::string src, repl;
+		if (!srcVal.GetString(src) || !numArg(startD) || !numArg(nD)
+				|| !next().GetString(repl))
+			return finish(SSValue::Error(kErrValue));
+		int start = static_cast<int>(floor(startD));
+		int n = static_cast<int>(floor(nD));
+		if (start < 1)
+			return finish(SSValue::Error(kErrValue));
+		utf8Replace(src, start, n, repl);
+		return finish(SSValue::String(src));
+	}
+	if (name == "PROPER") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::String(""));
+		bool upperNext = true;
+		for (char& c : s) {
+			unsigned char uc = static_cast<unsigned char>(c);
+			if ((uc & 0xc0) == 0x80) {
+				// continuation byte of multichar
+				c = tolower(uc);
+				upperNext = false;
+			} else if (uc < 0x80) {
+				if (upperNext) {
+					c = toupper(uc);
+				} else {
+					c = tolower(uc);
+				}
+				upperNext = !isalnum(uc);
+			}
+		}
+		return finish(SSValue::String(s));
+	}
+	if (name == "LEN") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::Number(0.0));
+		return finish(SSValue::Number(utf8CharLen(s)));
+	}
+	if (name == "CHAR") {
+		double d;
+		if (!numArg(d))
+			return finish(SSValue::Error(kErrValue));
+		int val = static_cast<int>(floor(d));
+		if (val < 0 || val > 127)
+			return finish(SSValue::String(""));
+		char c = static_cast<char>(val);
+		return finish(SSValue::String(std::string(1, c)));
+	}
+	if (name == "CODE") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s) || s.empty())
+			return finish(SSValue::Error(kErrValue));
+		unsigned char c = static_cast<unsigned char>(s[0]);
+		return finish(SSValue::Number(static_cast<double>(c)));
+	}
+	if (name == "CLEAN") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::String(""));
+		std::string out;
+		for (size_t i = 0; i < s.size(); ) {
+			size_t nextPos = NextCharacter(s, i);
+			size_t len = nextPos - i;
+			unsigned char c = static_cast<unsigned char>(s[i]);
+			if (len == 1 && (c < 32 || c == 127)) {
+				out += ' ';
+			} else {
+				out += s.substr(i, len);
+			}
+			i = nextPos;
+		}
+		return finish(SSValue::String(out));
+	}
+	if (name == "TEXT") {
+		SSValue numV = next();
+		double n;
+		if (!numV.GetNum(n))
+			return finish(SSValue::Error(kErrValue));
+		SSValue fmtV = next();
+		std::string fmt;
+		if (!fmtV.GetString(fmt))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::String(FormatCellValue(SSValue::Number(n), fmt)));
+	}
+	if (name == "FIXED") {
+		double n, decimalsD;
+		if (!numArg(n) || !numArg(decimalsD))
+			return finish(SSValue::Error(kErrValue));
+		int decimals = static_cast<int>(floor(decimalsD));
+		if (decimals < 0 || decimals > 10)
+			return finish(SSValue::Error(kErrValue));
+		bool noCommas = false;
+		if (used < argc) {
+			double d;
+			if (!numArg(d))
+				return finish(SSValue::Error(kErrValue));
+			noCommas = (d != 0);
+		}
+		std::string fmt;
+		if (decimals == 0) {
+			fmt = noCommas ? "#" : "#,###";
+		} else {
+			fmt = noCommas ? "#." : "#,###.";
+			for (int i = 0; i < decimals; i++)
+				fmt += "0";
+		}
+		// Build format pattern: positive;negative
+		std::string pattern = fmt + ";(";
+		for (int i = 0; i < decimals; i++)
+			pattern += "0";
+		pattern += ")";
+		return finish(SSValue::String(FormatCellValue(SSValue::Number(n), pattern)));
+	}
+	if (name == "DOLLAR") {
+		double n;
+		if (!numArg(n))
+			return finish(SSValue::Error(kErrValue));
+		double decimalsD = 2;  // default 2 decimals
+		if (used < argc) {
+			if (!numArg(decimalsD))
+				return finish(SSValue::Error(kErrValue));
+		}
+		int decimals = static_cast<int>(floor(decimalsD));
+		if (decimals < 0 || decimals > 10)
+			return finish(SSValue::Error(kErrValue));
+		// Round to the specified number of decimals
+		double multiplier = pow(10.0, decimals);
+		n = round(n * multiplier) / multiplier;
+		std::string fmt = "$#,###";
+		if (decimals > 0)
+			fmt += ".";
+		for (int i = 0; i < decimals; i++)
+			fmt += "0";
+		std::string pattern = fmt + ";(";
+		for (int i = 0; i < decimals; i++)
+			pattern += "0";
+		pattern += ")";
+		return finish(SSValue::String(FormatCellValue(SSValue::Number(n), pattern)));
 	}
 	if (name == "PMT" || name == "PV") {
 		double rate, periods, x, fv = 0, type = 0;
