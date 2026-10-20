@@ -1456,6 +1456,63 @@ ClearRange(SSPart& part, uint16_t row0, uint16_t column0,
 
 
 bool
+FillRange(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
+	uint16_t column1, bool right)
+{
+	if (row0 > row1 || column0 > column1)
+		return false;
+	if (row1 == 0 && column1 == 0 && row0 == 0 && column0 == 0)
+		return false;
+
+	bool changed = false;
+	// For fill down: source = row0, target = row0+1..row1
+	// For fill right: source = column0, target = column0+1..column1
+	uint16_t start = right ? uint16_t(column0 + 1) : uint16_t(row0 + 1);
+	uint16_t end = right ? column1 : row1;
+	// If nothing to fill, return false
+	if (start > end)
+		return false;
+
+	for (uint16_t col = column0; col <= column1; col++) {
+		for (uint16_t target = start; target <= end; target++) {
+			uint16_t src = right ? column0 : row0;
+			uint16_t tgt = target;
+			uint16_t srcRow = right ? row0 : src;
+			uint16_t srcCol = right ? col : col;
+			uint16_t tgtRow = right ? row0 : tgt;
+			uint16_t tgtCol = right ? tgt : col;
+
+			const SSCell* srcCell = part.Cell(srcRow, srcCol);
+			if (srcCell == nullptr) {
+				// Source has no cell: clear target
+				std::string error;
+				SetCellInput(part, tgtRow, tgtCol, "", nullptr, error);
+				changed = true;
+			} else {
+				// Copy source cell to target
+				SSCell cell = *srcCell;
+				cell.id = {tgtRow, tgtCol};
+				// Find or insert in sorted part.cells
+				auto it = std::find_if(part.cells.begin(), part.cells.end(),
+					[&](const SSCell& c) { return c.id.a == tgtRow && c.id.b == tgtCol; });
+				if (it != part.cells.end())
+					*it = cell;
+				else {
+					auto at = std::find_if(part.cells.begin(), part.cells.end(),
+						[&](const SSCell& c) {
+							return std::make_pair(c.id.b, c.id.a) > std::make_pair(tgtCol, tgtRow);
+						});
+					part.cells.insert(at, cell);
+				}
+				changed = true;
+			}
+		}
+	}
+	return changed;
+}
+
+
+bool
 PasteInput(SSPart& part, uint16_t row, uint16_t column, const std::string& text,
 	const std::function<bool(const std::string&)>& isName, std::string& error,
 	uint16_t& rows, uint16_t& columns)

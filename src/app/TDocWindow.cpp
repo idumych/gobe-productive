@@ -177,6 +177,19 @@ TDocWindow::InstallBaseMenus()
 	fAlignmentMenu = new TMenu(300);
 	bar->AddItem(fAlignmentMenu);
 
+	// the Spreadsheet part's Options menu (MENU 53 of Parts/Spreadsheet),
+	// the items that work so far; Insert/Delete Cells shift whole rows
+	// until their dialog is done
+	if (fDocument != NULL && !fDocument->spreadsheetParts.empty()) {
+		BMenu* options = new BMenu("Options");
+		options->AddItem(new BMenuItem("Fill Down", new BMessage('sM70'), 'D'));
+		options->AddItem(new BMenuItem("Fill Right", new BMessage('sM71'), 'R'));
+		options->AddSeparatorItem();
+		options->AddItem(new BMenuItem("Insert Cells…", new BMessage('sM73')));
+		options->AddItem(new BMenuItem("Delete Cells…", new BMessage('sM74')));
+		bar->AddItem(options);
+	}
+
 	return bar;
 }
 

@@ -8,6 +8,7 @@
 #include <MenuBar.h>
 #include <Window.h>
 
+
 #include <string>
 
 class BFilePanel;
@@ -73,6 +74,8 @@ private:
 	BMenu* fSizeMenu = NULL;
 	BMenu* fFaceMenu = NULL;
 	BMenu* fAlignmentMenu = NULL;
+
+	// Spreadsheet menu (populated when a spreadsheet part is active)
 };
 
 } // namespace gobe

@@ -25,6 +25,10 @@ namespace gobe {
 
 static const uint32 kMsgCellCommit = 'Gcel';
 static const uint32 kMsgCellCancel = 'Gccl';
+// columns: not in the original's menus (its Insert/Delete Cells dialog
+// chooses); for RunScript until that dialog works
+static const uint32 kCmdInsertColumns = 'Gicl';
+static const uint32 kCmdDeleteColumns = 'Gdcl';
 
 
 // the in-place cell editor
@@ -1181,6 +1185,64 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						return;
 					}
+					// Insert/Delete Rows and Columns
+					case 'sM73': {	// Insert Cells… (rows, until its dialog)
+						fUndo.Begin(fDocument, fSelectedCell.part, "Insert Rows",
+							CurrentViewState());
+						InsertRowsColumns(fDocument, fSelectedCell.part, false,
+							uint16_t(r0), r1 - r0 + 1);
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 'sM74': {	// Delete Cells… (rows, until its dialog)
+						fUndo.Begin(fDocument, fSelectedCell.part, "Delete Rows",
+							CurrentViewState());
+						InsertRowsColumns(fDocument, fSelectedCell.part, false,
+							uint16_t(r0), -(r1 - r0 + 1));
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case kCmdInsertColumns: {
+						fUndo.Begin(fDocument, fSelectedCell.part, "Insert Columns",
+							CurrentViewState());
+						InsertRowsColumns(fDocument, fSelectedCell.part, true,
+							uint16_t(c0), c1 - c0 + 1);
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case kCmdDeleteColumns: {
+						fUndo.Begin(fDocument, fSelectedCell.part, "Delete Columns",
+							CurrentViewState());
+						InsertRowsColumns(fDocument, fSelectedCell.part, true,
+							uint16_t(c0), -(c1 - c0 + 1));
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					// Fill Down / Fill Right
+					case 'sM70': {	// Fill Down
+						fUndo.Begin(fDocument, fSelectedCell.part, "Fill Down",
+							CurrentViewState());
+						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							false);
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 'sM71': {	// Fill Right
+						fUndo.Begin(fDocument, fSelectedCell.part, "Fill Right",
+							CurrentViewState());
+						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							true);
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 				}
 			}
 			if (fCaret.active) {
@@ -1360,6 +1422,24 @@ TPageView::RunScript(const std::string& script, Document& document)
 			MessageReceived(&msg);
 		} else if (command == "redo") {
 			BMessage msg('sM11');
+			MessageReceived(&msg);
+		} else if (command == "insertrows") {
+			BMessage msg('sM73');
+			MessageReceived(&msg);
+		} else if (command == "deleterows") {
+			BMessage msg('sM74');
+			MessageReceived(&msg);
+		} else if (command == "insertcolumns") {
+			BMessage msg(kCmdInsertColumns);
+			MessageReceived(&msg);
+		} else if (command == "deletecolumns") {
+			BMessage msg(kCmdDeleteColumns);
+			MessageReceived(&msg);
+		} else if (command == "filldown") {
+			BMessage msg('sM70');
+			MessageReceived(&msg);
+		} else if (command == "fillright") {
+			BMessage msg('sM71');
 			MessageReceived(&msg);
 		} else if (command.size() >= 5 && command.substr(0, 5) == "cell ") {
 			int row, column;

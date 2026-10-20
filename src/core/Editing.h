@@ -136,6 +136,13 @@ bool PasteInput(SSPart& part, uint16_t row, uint16_t column, const std::string& 
 	const std::function<bool(const std::string&)>& isName, std::string& error,
 	uint16_t& rows, uint16_t& columns);
 
+// Fill Down / Fill Right: copies the first row (column) of the block
+// into the rest of it — value, formula and style. Relative references
+// are stored as offsets from their cell, so copied formulas follow.
+// False if nothing changed.
+bool FillRange(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
+	uint16_t column1, bool right);
+
 } // namespace gobe
 
 #endif
