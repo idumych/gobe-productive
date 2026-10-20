@@ -1,6 +1,7 @@
 // Encoders (inverse of ApplyProperty), ApplyCharacterProperty,
 // ApplyParagraphProperty, reference counts and undo.
 #include <cstdio>
+#include <cstdlib>
 #include <set>
 #include <cstring>
 #include <map>
@@ -330,6 +331,27 @@ int main(int argc, char* argv[])
 		Check(StylesEqual(doc.styles), "undo styles equal");
 		Check(WPEqual(doc), "undo runs equal");
 		Check(!doc.stylesChanged, "undo stylesChanged false");
+
+		// (f) saving: styled text survives a save and reload
+		{
+			ApplyCharacterProperty(doc, size_t(wpPartID), {k, 2}, {k, 6}, TextFaceProperty(2));
+			std::string path = std::string(getenv("TMPDIR") ? getenv("TMPDIR") : "/tmp")
+				+ "/doc_styling_save", error;
+			bool saved = doc.Save(path, error);
+			Check(saved, ("save: " + error).c_str());
+			if (saved) {
+				const WPPart* wp = doc.WordPart(size_t(wpPartID));
+				const WPParagraph& p = wp->paragraphs[k];
+				uint32_t style = p.runs[0].style;
+				for (const WPStyleRun& r : p.runs)
+					if (r.position <= 3)
+						style = r.style;
+				Check((ResolveTextStyle(doc.styles, style).faceFlags & 2) != 0,
+					"bold after save and reload");
+				Check(!doc.stylesChanged, "stylesChanged false after reload");
+			}
+			remove(path.c_str());
+		}
 
 	}
 

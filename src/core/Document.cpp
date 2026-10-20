@@ -487,6 +487,8 @@ Document::Save(const std::string& to, std::string& error)
 			linksChanged |= UpdateDependencies(*this, part);
 	if (linksChanged)
 		changes.sections["LinksMgr"] = WriteLinksMgr(links);
+	if (stylesChanged)
+		changes.sections["StyleMgr"] = WriteStyleMgr(styles);
 	for (size_t part : dirtyParts) {
 		const std::vector<uint8_t>& record = parts.parts[part].data;
 		if (const WPPart* wp = WordPart(part)) {
