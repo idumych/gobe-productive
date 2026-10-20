@@ -72,10 +72,11 @@ int main()
 	Check(DeleteRange(a, {0, 2}, {2, 2}, r) && a.paragraphs[0].misc.size() == 1
 		&& a.paragraphs[0].misc[0].position == 3, "anchor outside the range moves");
 
-	// a page break in the middle blocks it
+	// a page break in the middle goes like any character
 	a = part;
 	a.paragraphs[1].text = "\x0c";
-	Check(!DeleteRange(a, {0, 1}, {2, 1}, r), "page break blocks");
+	Check(DeleteRange(a, {0, 1}, {2, 1}, r) && All(a) == "aeta gamma\ndelta\n",
+		"page break deleted");
 
 	// insert then delete restores it
 	for (const char* text : {"x", "x\ny", "\n", "x\n", "\ny", "a\r\nb\rc", "\n\n"}) {

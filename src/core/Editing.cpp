@@ -205,8 +205,10 @@ JoinWithPrevious(WPPart& part, size_t paragraph, TextPosition& joined)
 		return false;
 	WPParagraph& prev = part.paragraphs[paragraph - 1];
 	WPParagraph& p = part.paragraphs[paragraph];
-	if (prev.text.empty() || prev.text.back() != '\n')
-		return false;	// a page or column break: keep it
+	// page, column and section breaks go like any character, as in the
+	// original (TParagraph::DeleteText; sections keep their own starts)
+	if (prev.text.empty() || !IsTerminator(prev.text.back()))
+		return false;
 	size_t base = prev.text.size() - 1;
 	uint32_t globalBase = ParagraphStart(part, paragraph - 1) + uint32_t(base);
 	prev.text.erase(base);
@@ -277,7 +279,7 @@ DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition& resu
 	// check everything first
 	for (size_t i = from.paragraph; i <= to.paragraph; i++) {
 		const WPParagraph& p = part.paragraphs[i];
-		if (i < to.paragraph && (p.text.empty() || p.text.back() != '\n'))
+		if (i < to.paragraph && (p.text.empty() || !IsTerminator(p.text.back())))
 			return false;
 		size_t a = i == from.paragraph ? from.offset : 0;
 		size_t b = i == to.paragraph ? to.offset : EditableLength(p);

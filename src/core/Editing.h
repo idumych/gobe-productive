@@ -43,7 +43,8 @@ bool JoinWithPrevious(WPPart& part, size_t paragraph, TextPosition& joined);
 // The plain text of a range ('\n' between paragraphs).
 std::string RangeText(const WPPart& part, TextPosition from, TextPosition to);
 // Deletes a range that may span paragraphs; false, with nothing changed, if
-// it would remove an anchor (frame, formula field, ...) or a page break.
+// it would remove an anchor (frame, formula field, ...). Breaks (page,
+// column, section) are deleted like other characters.
 // `result` is where the range started.
 bool DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition& result);
 // InsertText for text with line breaks; returns the position after it.
