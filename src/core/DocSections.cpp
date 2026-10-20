@@ -120,6 +120,7 @@ ReadStyleMgr(DocArchive& a, StyleMgr& out)
 	}
 	a.CheckSig(Sig("StlT"));
 	a.CheckSig(Sig("StyM"));
+	out.afterSection = a.UInt32();	// TDoc +0x6c
 }
 
 
@@ -267,6 +268,87 @@ ReadLinksMgr(DocArchive& a, LinksMgr& out)
 
 
 std::vector<uint8_t>
+WritePropertyManager(const std::vector<Property>& properties)
+{
+	DocWriter w;
+	w.Sig(Sig("PRPM"));
+	w.UInt32(uint32_t(properties.size()));
+	for (const Property& p : properties) {
+		w.Sig(Sig("PROP"));
+		w.UInt32(p.type);
+		w.UInt32(uint32_t(p.data.size()));
+		w.Bytes(p.data);
+		w.Sig(Sig("ProP"));
+	}
+	w.Sig(Sig("PrpM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WritePropsTable(const std::vector<uint32_t>& indexes)
+{
+	DocWriter w;
+	w.Sig(Sig("PTAB"));
+	w.UInt32(uint32_t(indexes.size()));
+	for (uint32_t idx : indexes)
+		w.UInt32(idx);
+	w.Sig(Sig("PtaB"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteStyle(const Style& style)
+{
+	DocWriter w;
+	w.Sig(Sig("STYL"));
+	w.UInt32(style.id);
+	w.UInt32(style.value4);
+	w.UInt32(style.value8);
+	w.UInt16(style.valueC);
+	w.UInt32(style.value10);
+	w.String(style.name);
+	for (uint32_t link : style.links)
+		w.UInt32(link);
+	w.Bytes(WritePropsTable(style.props));
+	w.Bytes(WritePropsTable(style.props2));
+	w.UInt32(uint32_t(style.substyles.size()));
+	for (const auto& sub : style.substyles) {
+		w.UInt16(sub.first);
+		w.Bytes(WriteStyle(sub.second));
+	}
+	w.Sig(Sig("STYL"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteStyleMgr(const StyleMgr& styles)
+{
+	DocWriter w;
+	w.Sig(Sig("STYM"));
+	w.Bytes(WritePropertyManager(styles.properties));
+	w.Sig(Sig("STYP"));
+	w.UInt32(uint32_t(styles.names.size()));
+	for (const auto& [id, name] : styles.names) {
+		w.UInt32(id);
+		w.String(name);
+	}
+	w.Sig(Sig("StyP"));
+	w.Sig(Sig("STLT"));
+	w.UInt32(uint32_t(styles.styles.size()));
+	for (const Style& style : styles.styles) {
+		w.Bytes(WriteStyle(style));
+	}
+	w.Sig(Sig("StlT"));
+	w.Sig(Sig("StyM"));
+	w.UInt32(styles.afterSection);
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
 WriteLinksMgr(const LinksMgr& links)
 {
 	DocWriter w;
@@ -315,7 +397,6 @@ ReadSection(DocArchive& a, const std::string& name, std::string& summary)
 	if (name == "StyleMgr") {
 		StyleMgr m;
 		ReadStyleMgr(a, m);
-		a.UInt32();	// TDoc +0x6c, written right after the style manager
 		summary = std::to_string(m.properties.size()) + " properties, "
 			+ std::to_string(m.styles.size()) + " styles:";
 		for (size_t i = 0; i < m.styles.size() && i < 6; i++)

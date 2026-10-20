@@ -69,8 +69,10 @@ struct StyleMgr {
 	std::vector<Property> properties;
 	std::vector<std::pair<uint32_t, std::string>> names;	// 'STYP' table
 	std::vector<Style> styles;
+	uint32_t afterSection = 0;		// TDoc +0x6c, stored after StyM in the section
 };
 void ReadStyleMgr(DocArchive& a, StyleMgr& out);
+std::vector<uint8_t> WriteStyleMgr(const StyleMgr& styles);
 
 // "PartMgr": TPartMgr::ReadParts / ReadOnePart. 'PARM', a u32, the part
 // count, an index of (kind, record size) per part, the parts, 'ParM'. Each
