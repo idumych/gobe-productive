@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include "DocWriter.h"
+
 namespace gobe {
 
 namespace {
@@ -197,6 +199,109 @@ ResolveTextStyle(const StyleMgr& styles, uint32_t index)
 				ApplyProperty(styles.properties[p], style);
 	}
 	return style;
+}
+
+
+// --- encoders (inverse of ApplyProperty) ---
+
+Property
+TextSizeProperty(float size)
+{
+	DocWriter w;
+	w.UInt16(uint16_t(size));
+	Property p;
+	p.type = Sig("TSiz");
+	p.data = w.Data();
+	return p;
+}
+
+Property
+TextFontProperty(const std::string& family, const std::string& face)
+{
+	DocWriter w;
+	w.String(family);
+	w.String(face);
+	Property p;
+	p.type = Sig("TFon");
+	p.data = w.Data();
+	return p;
+}
+
+Property
+TextFaceProperty(uint32_t faceFlags)
+{
+	DocWriter w;
+	w.UInt32(faceFlags);
+	w.Bool(true);		// always set in the documents
+	Property p;
+	p.type = Sig("TFac");
+	p.data = w.Data();
+	return p;
+}
+
+Property
+TextColorProperty(Color color)
+{
+	DocWriter w;
+	w.Bool(true);		// solid ink
+	w.UInt8(color.r);
+	w.UInt8(color.g);
+	w.UInt8(color.b);
+	w.UInt8(color.a);
+	// as in every document: 'wtw' and a solid pattern
+	static const uint8_t kTail[12] = {0x77, 0x74, 0x77, 0x00,
+		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+	w.Bytes(kTail, 12);
+	Property p;
+	p.type = Sig("TCol");
+	p.data = w.Data();
+	return p;
+}
+
+Property
+AlignmentProperty(int alignment)
+{
+	DocWriter w;
+	w.UInt16(uint16_t(alignment));
+	Property p;
+	p.type = Sig("PAlg");
+	p.data = w.Data();
+	return p;
+}
+
+Property
+IndentProperty(uint32_t type, float value)
+{
+	DocWriter w;
+	w.Float(value);
+	Property p;
+	p.type = type;
+	p.data = w.Data();
+	return p;
+}
+
+Property
+SpacingProperty(uint32_t type, float value)
+{
+	DocWriter w;
+	w.Bool(true);		// always set in the documents
+	w.Float(value);
+	Property p;
+	p.type = type;
+	p.data = w.Data();
+	return p;
+}
+
+Property
+LineSpacingProperty(float value, bool multiple)
+{
+	DocWriter w;
+	w.Bool(multiple);
+	w.Float(value);
+	Property p;
+	p.type = Sig("LSpa");
+	p.data = w.Data();
+	return p;
 }
 
 } // namespace gobe

@@ -14,6 +14,8 @@ namespace gobe {
 
 struct Color {
 	uint8_t r = 0, g = 0, b = 0, a = 255;
+	bool operator==(const Color& o) const
+		{ return r == o.r && g == o.g && b == o.b && a == o.a; }
 };
 
 // TPropParTab: one tab stop (a style can hold several; one at the same
@@ -74,6 +76,17 @@ ShapeStyle ResolveShapeStyle(const StyleMgr& styles, uint32_t index);
 // Applies one property to `style`; returns false if the type isn't decoded
 // (or the payload doesn't match what the type should hold).
 bool ApplyProperty(const Property& property, TextStyle& style);
+
+// Properties for text styling, encoded as the documents store them
+// (the inverse of ApplyProperty).
+Property TextSizeProperty(float size);
+Property TextFontProperty(const std::string& family, const std::string& face);
+Property TextFaceProperty(uint32_t faceFlags);
+Property TextColorProperty(Color color);
+Property AlignmentProperty(int alignment);
+Property IndentProperty(uint32_t type, float value);	// 'PLef', 'PInd' or 'PRig'
+Property SpacingProperty(uint32_t type, float value);	// 'SpaB' or 'SpaA'
+Property LineSpacingProperty(float value, bool multiple);
 
 // The effective style for a style index (TStyleID), following parents.
 TextStyle ResolveTextStyle(const StyleMgr& styles, uint32_t index);
