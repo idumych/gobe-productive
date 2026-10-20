@@ -78,6 +78,24 @@ bool UpdateDependencies(Document& doc, size_t part);
 // What a cell's editor starts with: its formula or its value as typed.
 std::string CellInput(const SSPart& part, uint16_t row, uint16_t column);
 
+// A block of cells as tab-separated text, one line per row: each cell as
+// CellInput gives it (formulas as typed, "=..."). Rows [row0, row1],
+// columns [column0, column1], inclusive; no trailing newline.
+std::string RangeInput(const SSPart& part, uint16_t row0, uint16_t column0,
+	uint16_t row1, uint16_t column1);
+// Clears the cells of a block (SetCellInput with ""); true if any changed.
+bool ClearRange(SSPart& part, uint16_t row0, uint16_t column0,
+	uint16_t row1, uint16_t column1);
+// Pastes tab-separated text (lines separated by \n, \r\n or \r; one
+// trailing line break ignored) with its top left cell at (row, column).
+// Formulas are pasted as typed (no reference adjustment). Stops at the
+// first cell whose input doesn't parse: returns false with `error`
+// naming that cell's text; cells before it stay pasted. `rows` and
+// `columns` receive the pasted block's size.
+bool PasteInput(SSPart& part, uint16_t row, uint16_t column, const std::string& text,
+	const std::function<bool(const std::string&)>& isName, std::string& error,
+	uint16_t& rows, uint16_t& columns);
+
 } // namespace gobe
 
 #endif

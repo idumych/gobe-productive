@@ -994,4 +994,96 @@ CellInput(const SSPart& part, uint16_t row, uint16_t column)
 	}
 }
 
+
+std::string
+RangeInput(const SSPart& part, uint16_t row0, uint16_t column0,
+	uint16_t row1, uint16_t column1)
+{
+	std::string s;
+	for (uint16_t r = row0; r <= row1; r++) {
+		if (r > row0)
+			s += "\n";
+		for (uint16_t c = column0; c <= column1; c++) {
+			if (c > column0)
+				s += "\t";
+			s += CellInput(part, r, c);
+		}
+	}
+	return s;
+}
+
+
+bool
+ClearRange(SSPart& part, uint16_t row0, uint16_t column0,
+	uint16_t row1, uint16_t column1)
+{
+	bool changed = false;
+	for (uint16_t r = row0; r <= row1; r++) {
+		for (uint16_t c = column0; c <= column1; c++) {
+			std::string input = CellInput(part, r, c);
+			if (!input.empty()) {
+				std::string error;
+				SetCellInput(part, r, c, "", nullptr, error);
+				changed = true;
+			}
+		}
+	}
+	return changed;
+}
+
+
+bool
+PasteInput(SSPart& part, uint16_t row, uint16_t column, const std::string& text,
+	const std::function<bool(const std::string&)>& isName, std::string& error,
+	uint16_t& rows, uint16_t& columns)
+{
+	// split into rows (the \n of \r\n ends the line)
+	std::vector<std::string> lines;
+	std::string cur;
+	for (size_t i = 0; i <= text.size(); i++) {
+		char c = i < text.size() ? text[i] : '\n';
+		if (c == '\r' && i + 1 < text.size() && text[i + 1] == '\n')
+			continue;
+		if (c == '\n' || c == '\r') {
+			lines.push_back(cur);
+			cur.clear();
+		} else
+			cur += c;
+	}
+	// ignore trailing line break (trailing empty line)
+	if (!lines.empty() && lines.back().empty())
+		lines.pop_back();
+
+	rows = uint16_t(lines.size());
+	// determine columns from the row with the most tabs
+	uint16_t maxCols = 0;
+	for (const auto& line : lines) {
+		uint16_t cols = 1;
+		for (char c : line)
+			if (c == '\t')
+				cols++;
+		if (cols > maxCols)
+			maxCols = cols;
+	}
+	columns = maxCols;
+
+	// paste cell by cell, stop at first parse failure
+	for (uint16_t r = 0; r < rows; r++) {
+		const std::string& line = lines[r];
+		size_t start = 0;
+		for (uint16_t c = 0; c < columns; c++) {
+			// short rows: the cells after their last one are cleared
+			std::string cellText;
+			if (start <= line.size()) {
+				size_t end = std::min(line.find('\t', start), line.size());
+				cellText = line.substr(start, end - start);
+				start = end + 1;
+			}
+			if (!SetCellInput(part, row + r, column + c, cellText, isName, error))
+				return false;
+		}
+	}
+	return true;
+}
+
 } // namespace gobe
