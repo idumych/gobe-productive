@@ -48,6 +48,10 @@ bool DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition&
 // InsertText for text with line breaks; returns the position after it.
 TextPosition InsertMultiline(WPPart& part, TextPosition at, const std::string& text);
 
+// Double click: [from, to) is the word, blank run or punctuation character
+// at `offset` (the one before it at the end of the text).
+void WordRange(const std::string& text, size_t offset, size_t& from, size_t& to);
+
 // TParser: parses a formula ("=..." without the "="), relative to the
 // formula's cell; `isName` tells known names (named ranges) apart. Returns
 // false with an error message on a syntax error.

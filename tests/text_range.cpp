@@ -91,6 +91,18 @@ int main()
 	Check(All(a) == "alpha\n\nbeta x\ny\ngamma\ndelta\n" && end.paragraph == 4 && end.offset == 0,
 		"multiline insert");
 
+	size_t f, e;
+	WordRange("hello, wor\xc3\xa9ld  x", 8, f, e);
+	Check(f == 7 && e == 14, "word with multibyte character");
+	WordRange("hello, world", 5, f, e);
+	Check(f == 5 && e == 6, "punctuation alone");
+	WordRange("a  b", 2, f, e);
+	Check(f == 1 && e == 3, "blank run");
+	WordRange("abc", 3, f, e);
+	Check(f == 0 && e == 3, "at the end");
+	WordRange("", 0, f, e);
+	Check(f == 0 && e == 0, "empty");
+
 	printf(failures ? "%d failures\n" : "text_range: ok\n", failures);
 	return failures != 0;
 }

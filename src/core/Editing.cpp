@@ -322,6 +322,45 @@ InsertMultiline(WPPart& part, TextPosition at, const std::string& text)
 }
 
 
+namespace {
+
+// 0: word character, 1: blank, 2: punctuation (a run by itself)
+int
+CharacterKind(char c)
+{
+	unsigned char u = (unsigned char)c;
+	if (u >= 0x80 || isalnum(u) || u == '_')
+		return 0;
+	return u == ' ' || u == '\t' ? 1 : 2;
+}
+
+} // namespace
+
+
+void
+WordRange(const std::string& text, size_t offset, size_t& from, size_t& to)
+{
+	from = to = 0;
+	if (text.empty())
+		return;
+	// the character at offset, or the one before at the end
+	size_t start = offset >= text.size() ? PreviousCharacter(text, text.size()) : offset;
+	int kind = CharacterKind(text[start]);
+	from = start;
+	to = NextCharacter(text, start);
+	if (kind == 2)
+		return;
+	while (from > 0) {
+		size_t previous = PreviousCharacter(text, from);
+		if (CharacterKind(text[previous]) != kind)
+			break;
+		from = previous;
+	}
+	while (to < text.size() && CharacterKind(text[to]) == kind)
+		to = NextCharacter(text, to);
+}
+
+
 // #pragma mark - formulas
 
 namespace {
