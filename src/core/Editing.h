@@ -107,6 +107,14 @@ bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t las
 // Dependencies are brought up to date. False if nothing changed.
 bool InsertRowsColumns(Document& doc, size_t part, bool columns, uint16_t at, int count);
 
+// Cell formats: sets `property` (a number format 'SSNm', fill 'FCol',
+// alignment 'HAln'/'VAln', wrap 'ClWp', text properties, ...) in the style
+// of every cell of the block, adding empty cells where there are none.
+// Border properties, which a style holds once per side, aren't handled.
+// False if nothing changed.
+bool ApplyCellProperty(Document& doc, size_t part, uint16_t row0, uint16_t column0,
+	uint16_t row1, uint16_t column1, const Property& property);
+
 // What a cell's editor starts with: its formula or its value as typed.
 std::string CellInput(const SSPart& part, uint16_t row, uint16_t column);
 

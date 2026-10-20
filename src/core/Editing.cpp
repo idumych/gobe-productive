@@ -422,11 +422,19 @@ RunAt(const WPParagraph& p, size_t offset)
 uint32_t
 StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 {
-	if (base >= styles.styles.size())
+	if (base >= styles.styles.size() && base != 0xffffffff)
 		return base;
 	uint32_t index = AddProperty(styles, property);
 	Style style;
-	if (styles.styles[base].name.empty()) {
+	if (base == 0xffffffff) {
+		// no style yet: a flat unnamed one, like the documents' cell styles
+		style.id = styles.styles.empty() ? 0 : styles.styles[0].id;
+		style.value8 = 32;
+		style.valueC = 0xffff;
+		style.value10 = Sig("Basi");
+		style.links[0] = style.links[1] = style.links[2] = 0xffffffff;
+		style.props = {index};
+	} else if (styles.styles[base].name.empty()) {
 		// a copy with the property replaced or added
 		style = styles.styles[base];
 		bool replaced = false;
@@ -512,6 +520,56 @@ ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextPositi
 	}
 	if (changed)
 		doc.stylesChanged = true;
+	return changed;
+}
+
+
+bool
+ApplyCellProperty(Document& doc, size_t part, uint16_t row0, uint16_t column0,
+	uint16_t row1, uint16_t column1, const Property& property)
+{
+	SSPart* ss = doc.EditableSpreadsheetPart(part);
+	if (ss == nullptr)
+		return false;
+	if (row1 < row0)
+		std::swap(row0, row1);
+	if (column1 < column0)
+		std::swap(column0, column1);
+	StyleMgr& styles = doc.styles;
+	bool changed = false;
+	for (uint16_t column = column0; ; column++) {
+		for (uint16_t row = row0; ; row++) {
+			auto it = std::find_if(ss->cells.begin(), ss->cells.end(), [&](const SSCell& c) {
+				return c.id.a == row && c.id.b == column;
+			});
+			if (it == ss->cells.end()) {
+				SSCell cell;
+				cell.id = {row, column};
+				cell.kind = Sig("NONE");
+				auto at = std::find_if(ss->cells.begin(), ss->cells.end(),
+					[&](const SSCell& c) {
+						return std::make_pair(c.id.b, c.id.a) > std::make_pair(column, row);
+					});
+				it = ss->cells.insert(at, cell);
+			}
+			uint32_t style = StyleWithProperty(styles, it->style, property);
+			if (style != it->style) {
+				Retain(styles, style);
+				Release(styles, it->style);
+				it->style = style;
+				changed = true;
+			}
+			if (row == row1)
+				break;
+		}
+		if (column == column1)
+			break;
+	}
+	if (changed) {
+		doc.stylesChanged = true;
+		ss->used.to.a = std::max(ss->used.to.a, row1);
+		ss->used.to.b = std::max(ss->used.to.b, column1);
+	}
 	return changed;
 }
 
