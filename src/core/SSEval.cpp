@@ -856,6 +856,292 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 			return finish(SSValue::Error(kErrNum));
 		return finish(SSValue::Number(sqrt(a)));
 	}
+	if (name == "TRUNC") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(trunc(a)));
+	}
+	if (name == "SIGN") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (a > 0)
+			return finish(SSValue::Number(1.0));
+		if (a < 0)
+			return finish(SSValue::Number(-1.0));
+		return finish(SSValue::Number(0.0));
+	}
+	if (name == "QUOTIENT") {
+		double a, b;
+		if (!numArg(a) || !numArg(b))
+			return finish(SSValue::Error(kErrValue));
+		if (b == 0)
+			return finish(SSValue::Error(kErrDiv0));
+		return finish(SSValue::Number(trunc(a / b)));
+	}
+	if (name == "LOG10") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (a <= 0)
+			return finish(SSValue::Error(kErrNum));
+		return finish(SSValue::Number(log10(a)));
+	}
+	if (name == "LOG") {
+		double val, base;
+		if (!numArg(val))
+			return finish(SSValue::Error(kErrValue));
+		base = 10.0;
+		if (used < argc) {
+			if (!numArg(base))
+				return finish(SSValue::Error(kErrValue));
+		}
+		if (val <= 0 || base <= 0)
+			return finish(SSValue::Error(kErrNum));
+		return finish(SSValue::Number(log(val) / log(base)));
+	}
+	if (name == "LN") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (a <= 0)
+			return finish(SSValue::Error(kErrNum));
+		return finish(SSValue::Number(log(a)));
+	}
+	if (name == "FRAC") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(a - trunc(a)));
+	}
+	if (name == "FACT") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (a < 0 || a != trunc(a))
+			return finish(SSValue::Error(kErrNum));
+		int n = (int)a;
+		double r = 1.0;
+		for (int i = 2; i <= n; i++)
+			r *= i;
+		return finish(SSValue::Number(r));
+	}
+	if (name == "EXP") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(exp(a)));
+	}
+	if (name == "COMBIN") {
+		double n, k;
+		if (!numArg(n) || !numArg(k))
+			return finish(SSValue::Error(kErrValue));
+		n = trunc(n);
+		k = trunc(k);
+		if (n < 0 || k < 0 || n < k)
+			return finish(SSValue::Error(kErrNum));
+		if (k == 0 || n == k)
+			return finish(SSValue::Number(1.0));
+		if (k > n - k)
+			k = n - k;
+		double r = 1.0;
+		for (int i = 0; i < (int)k; i++) {
+			r *= (n - i);
+			r /= (i + 1);
+		}
+		return finish(SSValue::Number(r));
+	}
+	if (name == "ATAN2") {
+		double x, y;
+		if (!numArg(x) || !numArg(y))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(atan2(y, x)));
+	}
+	if (name == "RADIANS") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(a * M_PI / 180.0));
+	}
+	if (name == "DEGREES") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(a * 180.0 / M_PI));
+	}
+	if (name == "PI") {
+		return finish(SSValue::Number(M_PI));
+	}
+	if (name == "ATANH") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (fabs(a) >= 1.0)
+			return finish(SSValue::Error(kErrNum));
+		return finish(SSValue::Number(0.5 * log((1.0 + a) / (1.0 - a))));
+	}
+	if (name == "ASINH") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(log(a + sqrt(a * a + 1.0))));
+	}
+	if (name == "ACOSH") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (a < 1.0)
+			return finish(SSValue::Error(kErrNum));
+		return finish(SSValue::Number(log(a + sqrt(a * a - 1.0))));
+	}
+	if (name == "TANH") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(tanh(a)));
+	}
+	if (name == "SINH") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(sinh(a)));
+	}
+	if (name == "COSH") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(cosh(a)));
+	}
+	if (name == "ATAN") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(atan(a)));
+	}
+	if (name == "ASIN") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (a < -1.0 || a > 1.0)
+			return finish(SSValue::Error(kErrNum));
+		return finish(SSValue::Number(asin(a)));
+	}
+	if (name == "ACOS") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		if (a < -1.0 || a > 1.0)
+			return finish(SSValue::Error(kErrNum));
+		return finish(SSValue::Number(acos(a)));
+	}
+	if (name == "TAN") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(tan(a)));
+	}
+	if (name == "SIN") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(sin(a)));
+	}
+	if (name == "COS") {
+		double a;
+		if (!numArg(a))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(cos(a)));
+	}
+	if (name == "PRODUCT") {
+		double prod = 1.0;
+		SSValue error;
+		each([&](const SSValue& v) {
+			if (v.type == SSValue::kError) {
+				error = v;
+				return false;
+			}
+			if (v.type == SSValue::kNone || v.type == SSValue::kString)
+				return true;
+			double n;
+			if (!v.GetNum(n))
+				return true;
+			prod *= n;
+			return true;
+		});
+		if (error.type == SSValue::kError)
+			return finish(error);
+		return finish(SSValue::Number(prod));
+	}
+	if (name == "STDEV") {
+		// sample standard deviation
+		double sum = 0, sum2 = 0;
+		int count = 0;
+		bool textSeen = false;
+		SSValue error;
+		each([&](const SSValue& v) {
+			if (v.type == SSValue::kError) {
+				error = v;
+				return false;
+			}
+			if (v.type == SSValue::kNone)
+				return true;
+			if (v.type == SSValue::kString) {
+				textSeen = true;
+				return false;
+			}
+			double n;
+			if (!v.GetNum(n))
+				return true;
+			sum += n;
+			sum2 += n * n;
+			count++;
+			return true;
+		});
+		if (error.type == SSValue::kError)
+			return finish(error);
+		if (textSeen)
+			return finish(SSValue::Error(kErrValue));
+		if (count < 2)
+			return finish(SSValue::Error(kErrDiv0));
+		double variance = sum2 / (count - 1) - (sum * sum) / ((count - 1) * count);
+		if (variance < 0)
+			variance = 0;
+		return finish(SSValue::Number(sqrt(variance)));
+	}
+	if (name == "VAR") {
+		// sample variance
+		double sum = 0, sum2 = 0;
+		int count = 0;
+		bool textSeen = false;
+		SSValue error;
+		each([&](const SSValue& v) {
+			if (v.type == SSValue::kError) {
+				error = v;
+				return false;
+			}
+			if (v.type == SSValue::kNone)
+				return true;
+			if (v.type == SSValue::kString) {
+				textSeen = true;
+				return false;
+			}
+			double n;
+			if (!v.GetNum(n))
+				return true;
+			sum += n;
+			sum2 += n * n;
+			count++;
+			return true;
+		});
+		if (error.type == SSValue::kError)
+			return finish(error);
+		if (textSeen)
+			return finish(SSValue::Error(kErrValue));
+		if (count < 2)
+			return finish(SSValue::Error(kErrDiv0));
+		return finish(SSValue::Number(sum2 / (count - 1) - (sum * sum) / ((count - 1) * count)));
+	}
 	if (name == "DATE") {
 		double y, m, d;
 		if (!numArg(y) || !numArg(m) || !numArg(d))
