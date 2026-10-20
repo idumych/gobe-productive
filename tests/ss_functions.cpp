@@ -771,6 +771,250 @@ int main()
 	got.clear(); eval(192, 2).GetString(got);
 	Check(got == "13:05:09", "TEXT(TIME,\"h:mm:ss\")");
 
+	// ====== Add data for batch 4 tests ======
+	// rows 299-306 (parser subtracts 1 from user-visible rows), columns 0-2 (A-C)
+	SetCellInput(part, 299, 0, "1", NoName, dummyError);
+	SetCellInput(part, 300, 0, "2", NoName, dummyError);
+	SetCellInput(part, 301, 0, "3", NoName, dummyError);
+	SetCellInput(part, 302, 0, "4", NoName, dummyError);
+	SetCellInput(part, 303, 0, "5", NoName, dummyError);
+	SetCellInput(part, 304, 0, "6", NoName, dummyError);
+	SetCellInput(part, 305, 0, "7", NoName, dummyError);
+	SetCellInput(part, 306, 0, "8", NoName, dummyError);
+
+	SetCellInput(part, 299, 1, "10", NoName, dummyError);
+	SetCellInput(part, 300, 1, "20", NoName, dummyError);
+	SetCellInput(part, 301, 1, "30", NoName, dummyError);
+	SetCellInput(part, 302, 1, "40", NoName, dummyError);
+	SetCellInput(part, 303, 1, "50", NoName, dummyError);
+	SetCellInput(part, 304, 1, "60", NoName, dummyError);
+	SetCellInput(part, 305, 1, "70", NoName, dummyError);
+	SetCellInput(part, 306, 1, "80", NoName, dummyError);
+
+	SetCellInput(part, 299, 2, "ALPHA", NoName, dummyError);
+	SetCellInput(part, 300, 2, "BRAVO", NoName, dummyError);
+	SetCellInput(part, 301, 2, "CHARLIE", NoName, dummyError);
+	SetCellInput(part, 302, 2, "DELTA", NoName, dummyError);
+	SetCellInput(part, 303, 2, "ECHO", NoName, dummyError);
+	SetCellInput(part, 304, 2, "FOXTROT", NoName, dummyError);
+	SetCellInput(part, 305, 2, "GOLF", NoName, dummyError);
+	SetCellInput(part, 306, 2, "HOTEL", NoName, dummyError);
+
+	// date in D299, error in D303
+	SetCellInput(part, 299, 3, "=DATE(1999,3,1)", NoName, dummyError);
+	SetCellInput(part, 302, 3, "70", NoName, dummyError);
+	SetCellInput(part, 303, 3, "=1/0", NoName, dummyError);
+
+	// Helper for column E (index 4)
+	auto setFormulaE = [&](uint16_t row, const std::string& formula) {
+		std::string error;
+		SetCellInput(part, row, 4, "=" + formula, NoName, error);
+	};
+
+	// ====== INDEX ======
+	// python3 -c "print(50)"  # B304 = 50
+	setFormulaE(400, "INDEX(B300:D304,5,1)");
+	CheckNum(eval(400, 4).number, 50.0, "INDEX(B300:D304,5,1)");
+	// INDEX with column offset
+	// python3 -c "print(70)"  # D303 = 70
+	setFormulaE(401, "INDEX(B300:D304,4,3)");
+	CheckNum(eval(401, 4).number, 70.0, "INDEX(B300:D304,4,3)");
+	// error: INDEX out of range
+	setFormulaE(402, "INDEX(B300:D304,10,1)");
+	Check(IsError(eval(402, 4)), "INDEX out of range is error");
+
+	// ====== VLOOKUP (re-test with our data) ======
+	// Separate text data for text-key VLOOKUP
+	SetCellInput(part, 307, 0, "ALPHA", NoName, dummyError);
+	SetCellInput(part, 307, 1, "10", NoName, dummyError);
+	SetCellInput(part, 308, 0, "BRAVO", NoName, dummyError);
+	SetCellInput(part, 308, 1, "20", NoName, dummyError);
+	SetCellInput(part, 309, 0, "CHARLIE", NoName, dummyError);
+	SetCellInput(part, 309, 1, "30", NoName, dummyError);
+	SetCellInput(part, 310, 0, "DELTA", NoName, dummyError);
+	SetCellInput(part, 310, 1, "40", NoName, dummyError);
+	setFormulaE(403, "VLOOKUP(\"CHARLIE\",A308:B311,1,FALSE)");
+	got.clear(); eval(403, 4).GetString(got);
+	Check(got == "30", "VLOOKUP(\"CHARLIE\",A308:B311,1)");
+	setFormulaE(404, "VLOOKUP(5,A300:C307,1,FALSE)");
+	CheckNum(eval(404, 4).number, 50.0, "VLOOKUP(5,A300:C307,1)");
+	setFormulaE(405, "VLOOKUP(99,A300:C307,1,FALSE)");
+	Check(IsError(eval(405, 4)), "VLOOKUP not found is error");
+	// approximate: last <= 5 in first column
+	setFormulaE(406, "VLOOKUP(5.5,A300:C307,1)");
+	CheckNum(eval(406, 4).number, 50.0, "VLOOKUP(5.5) approx");
+
+	// ====== MATCH ======
+	// python3 -c "print(1)"  # 1 matches first element
+	setFormulaE(407, "MATCH(1,A300:A307)");
+	CheckNum(eval(407, 4).number, 1.0, "MATCH(1,A300:A307) exact");
+	// exact text
+	setFormulaE(408, "MATCH(\"DELTA\",C300:C307,FALSE)");
+	CheckNum(eval(408, 4).number, 4.0, "MATCH(\"DELTA\") exact");
+	// approximate: last <= 5
+	// python3 -c "print(5)"  # 5 is at position 5
+	setFormulaE(409, "MATCH(5.5,A300:A307,1)");
+	CheckNum(eval(409, 4).number, 5.0, "MATCH(5.5) approx");
+	// not found
+	setFormulaE(410, "MATCH(99,A300:A307,FALSE)");
+	Check(IsError(eval(410, 4)), "MATCH not found is error");
+	// approximate not found (key > all values) -> last position
+	setFormulaE(411, "MATCH(99,A300:A307,1)");
+	CheckNum(eval(411, 4).number, 8.0, "MATCH approx not found");
+
+	// ====== LOOKUP ======
+	// python3 -c "print(70)"  # 20 is last <= 25; B303=40, but wait...
+	// search A300:A307, result B300:B307
+	// 25: last value <= 25 in A is 5 at A304 (pos 4), B304=50
+	// Actually: A300=1,A301=2,A302=3,A303=4,A304=5,A305=6,A306=7,A307=8
+	// last <= 25 is 8 at A307, B307=80
+	setFormulaE(412, "LOOKUP(25,A300:A307,B300:B307)");
+	CheckNum(eval(412, 4).number, 80.0, "LOOKUP(25) approx");
+	// exact match
+	setFormulaE(413, "LOOKUP(4,A300:A307,B300:B307,0)");
+	CheckNum(eval(413, 4).number, 40.0, "LOOKUP(4) exact");
+	// not found exact
+	setFormulaE(414, "LOOKUP(99,A300:A307,B300:B307,0)");
+	Check(IsError(eval(414, 4)), "LOOKUP not found exact is error");
+
+	// ====== HLOOKUP ======
+	// Separate data with labels in the first row for HLOOKUP
+	SetCellInput(part, 311, 0, "ALPHA", NoName, dummyError);
+	SetCellInput(part, 311, 1, "BRAVO", NoName, dummyError);
+	SetCellInput(part, 311, 2, "CHARLIE", NoName, dummyError);
+	SetCellInput(part, 312, 0, "1", NoName, dummyError);
+	SetCellInput(part, 312, 1, "2", NoName, dummyError);
+	SetCellInput(part, 312, 2, "2", NoName, dummyError);
+	setFormulaE(415, "HLOOKUP(\"CHARLIE\",A312:C314,1,FALSE)");
+	CheckNum(eval(415, 4).number, 2.0, "HLOOKUP(\"CHARLIE\",row below)");
+	// approximate: last <= "DELTA" in first row (CHARLIE is last < DELTA)
+	setFormulaE(416, "HLOOKUP(\"DELTA\",A312:C314,1)");
+	CheckNum(eval(416, 4).number, 2.0, "HLOOKUP approx");
+	// not found
+	setFormulaE(417, "HLOOKUP(\"ZZZZZ\",A312:C314,1,FALSE)");
+	Check(IsError(eval(417, 4)), "HLOOKUP not found is error");
+
+	// ====== TYPE ======
+	// python3 -c "print(1, 2, 3, 4, 5, 6)"  # blank, bool, number, date/time, error, text
+	setFormulaE(418, "TYPE(\"\")");
+	CheckNum(eval(418, 4).number, 1.0, "TYPE(blank)=1");
+	setFormulaE(419, "TYPE(TRUE)");
+	CheckNum(eval(419, 4).number, 2.0, "TYPE(bool)=2");
+	setFormulaE(420, "TYPE(42)");
+	CheckNum(eval(420, 4).number, 3.0, "TYPE(number)=3");
+	setFormulaE(421, "TYPE(DATE(1999,3,1))");
+	CheckNum(eval(421, 4).number, 4.0, "TYPE(date)=4");
+	setFormulaE(422, "TYPE(NA())");
+	CheckNum(eval(422, 4).number, 5.0, "TYPE(error)=5");
+	setFormulaE(423, "TYPE(\"hello\")");
+	CheckNum(eval(423, 4).number, 6.0, "TYPE(text)=6");
+
+	// ====== NA ======
+	setFormulaE(424, "ISNA(NA())");
+	Check(eval(424, 4).type == SSValue::kBool && eval(424, 4).number != 0,
+		  "ISNA(NA())");
+	setFormulaE(425, "ISNA(1)");
+	Check(eval(425, 4).type == SSValue::kBool && eval(425, 4).number == 0,
+		  "ISNA(1)");
+
+	// ====== ERROR ======
+	setFormulaE(426, "ERROR()");
+	Check(IsError(eval(426, 4)), "ERROR() returns error");
+	setFormulaE(427, "ISERROR(ERROR())");
+	Check(eval(427, 4).type == SSValue::kBool && eval(427, 4).number != 0,
+		  "ISERROR(ERROR())");
+
+	// ====== COL / ROW ======
+	setFormulaE(428, "COL(E428)");
+	CheckNum(eval(428, 4).number, 5.0, "COL(E428)=5");
+	setFormulaE(429, "ROW(E429)");
+	CheckNum(eval(429, 4).number, 429.0, "ROW(E429)=429");
+	// no-arg: column/row of formula cell
+	setFormulaE(430, "COL()");
+	CheckNum(eval(430, 4).number, 5.0, "COL() no-arg");
+	setFormulaE(431, "ROW()");
+	CheckNum(eval(431, 4).number, 432.0, "ROW() no-arg");
+
+	// ====== ISNUMBER ======
+	setFormulaE(432, "ISNUMBER(42)");
+	Check(eval(432, 4).type == SSValue::kBool && eval(432, 4).number != 0,
+		  "ISNUMBER(42)");
+	setFormulaE(433, "ISNUMBER(\"hello\")");
+	Check(eval(433, 4).type == SSValue::kBool && eval(433, 4).number == 0,
+		  "ISNUMBER(\"hello\")");
+
+	// ====== ISLOGICAL ======
+	setFormulaE(434, "ISLOGICAL(TRUE)");
+	Check(eval(434, 4).type == SSValue::kBool && eval(434, 4).number != 0,
+		  "ISLOGICAL(TRUE)");
+	setFormulaE(435, "ISLOGICAL(1)");
+	Check(eval(435, 4).type == SSValue::kBool && eval(435, 4).number == 0,
+		  "ISLOGICAL(1)");
+
+	// ====== ISTEXT ======
+	setFormulaE(436, "ISTEXT(\"hello\")");
+	Check(eval(436, 4).type == SSValue::kBool && eval(436, 4).number != 0,
+		  "ISTEXT(\"hello\")");
+	setFormulaE(437, "ISTEXT(42)");
+	Check(eval(437, 4).type == SSValue::kBool && eval(437, 4).number == 0,
+		  "ISTEXT(42)");
+
+	// ====== ISERR ======
+	// ISERR: true for any error except #N/A!
+	setFormulaE(438, "ISERR(ERROR())");
+	Check(eval(438, 4).type == SSValue::kBool && eval(438, 4).number != 0,
+		  "ISERR(ERROR())");
+	setFormulaE(439, "ISERR(NA())");
+	Check(eval(439, 4).type == SSValue::kBool && eval(439, 4).number == 0,
+		  "ISERR(NA())");
+
+	// ====== ISERROR ======
+	setFormulaE(440, "ISERROR(ERROR())");
+	Check(eval(440, 4).type == SSValue::kBool && eval(440, 4).number != 0,
+		  "ISERROR(ERROR())");
+	setFormulaE(441, "ISERROR(NA())");
+	Check(eval(441, 4).type == SSValue::kBool && eval(441, 4).number != 0,
+		  "ISERROR(NA())");
+	setFormulaE(442, "ISERROR(1)");
+	Check(eval(442, 4).type == SSValue::kBool && eval(442, 4).number == 0,
+		  "ISERROR(1)");
+
+	// ====== ISDATE ======
+	setFormulaE(443, "ISDATE(DATE(1999,3,1))");
+	Check(eval(443, 4).type == SSValue::kBool && eval(443, 4).number != 0,
+		  "ISDATE(date)");
+	setFormulaE(444, "ISDATE(42)");
+	Check(eval(444, 4).type == SSValue::kBool && eval(444, 4).number == 0,
+		  "ISDATE(42)");
+
+	// ====== SUMIF ======
+	// python3 -c "print(10+20+30+40+50+60+70+80)"  # SUMIF(A300:A307,">0",B300:B307)
+	setFormulaE(445, "SUMIF(A300:A307,\">0\",B300:B307)");
+	CheckNum(eval(445, 4).number, 360.0, "SUMIF all >0");
+	// python3 -c "print(30+40+50+60+70+80)"  # A>2
+	setFormulaE(446, "SUMIF(A300:A307,\">2\",B300:B307)");
+	CheckNum(eval(446, 4).number, 330.0, "SUMIF A>2");
+	// python3 -c "print(20)"  # A=2
+	setFormulaE(447, "SUMIF(A300:A307,\"=2\",B300:B307)");
+	CheckNum(eval(447, 4).number, 20.0, "SUMIF A=2");
+	// SUMIF with text match, summing B where C="ALPHA"
+	setFormulaE(448, "SUMIF(C300:C307,\"ALPHA\",B300:B307)");
+	CheckNum(eval(448, 4).number, 10.0, "SUMIF C=\"ALPHA\"");
+
+	// ====== COUNTIF ======
+	// python3 -c "print(8)"  # A>0 count
+	setFormulaE(449, "COUNTIF(A300:A307,\">0\")");
+	CheckNum(eval(449, 4).number, 8.0, "COUNTIF A>0");
+	// python3 -c "print(6)"  # A>2 count
+	setFormulaE(450, "COUNTIF(A300:A307,\">2\")");
+	CheckNum(eval(450, 4).number, 6.0, "COUNTIF A>2");
+	// python3 -c "print(1)"  # C="ALPHA" count
+	setFormulaE(451, "COUNTIF(C300:C307,\"ALPHA\")");
+	CheckNum(eval(451, 4).number, 1.0, "COUNTIF C=\"ALPHA\"");
+	// error: COUNTIF with text and numeric comparison (none match)
+	setFormulaE(452, "COUNTIF(C300:C307,\">5\")");
+	CheckNum(eval(452, 4).number, 0.0, "COUNTIF text > 5 = 0");
+
 	printf(failures ? "%d failures\n" : "ss_functions: ok\n", failures);
 	return failures != 0;
 }

@@ -1979,8 +1979,379 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 		if (found < 0)
 			return finish(SSValue::Error(kErrNA));
 		// TVLookupFunction: the column is counted from the key column
-		// (1 = the column right of it)
+		// (1 = the column right of it; HLOOKUP: the row below it)
 		return finish(CellValue(table.part, found, r.from.b + col));
+	}
+	if (name == "INDEX") {
+		SSValue rng = next(false);
+		double rd, cd;
+		if (rng.type != SSValue::kRange || !numArg(rd) || !numArg(cd))
+			return finish(SSValue::Error(kErrValue));
+		const SSRange& r = rng.range;
+		int rowOff = int(floor(rd));
+		int colOff = int(floor(cd));
+		if (rowOff < 1 || rowOff > r.to.a - r.from.a + 1
+			|| colOff < 1 || colOff > r.to.b - r.from.b + 1)
+			return finish(SSValue::Error(kErrRef));
+		return finish(CellValue(rng.part, r.from.a + rowOff - 1,
+		                             r.from.b + colOff - 1));
+	}
+	if (name == "MATCH") {
+		SSValue key = next();
+		SSValue rng = next(false);
+		double modeD = 0;
+		if (rng.type != SSValue::kRange)
+			return finish(SSValue::Error(kErrValue));
+		if (used < argc)
+			numArg(modeD);
+		const SSRange& r = rng.range;
+		bool approx = modeD != 0;
+		int cols = r.to.b - r.from.b + 1;
+		int pos = 0;
+		double kn;
+		bool numeric = key.GetNum(kn) && key.type != SSValue::kString;
+		int idx = 0;
+		for (int row = r.from.a; row <= r.to.a; row++) {
+			for (int col = r.from.b; col <= r.to.b; col++) {
+				SSValue v = CellValue(rng.part, row, col);
+				int cmp = 0;
+				if (numeric && v.type != SSValue::kString
+					&& v.type != SSValue::kNone) {
+					double vn;
+					if (v.GetNum(vn)) {
+						cmp = vn < kn ? -1 : vn > kn;
+					}
+				} else {
+					std::string a, b;
+					if (!v.GetString(a) || !key.GetString(b)) {
+						idx++;
+						continue;
+					}
+					int c2 = strcasecmp(a.c_str(), b.c_str());
+					cmp = c2 < 0 ? -1 : c2 > 0;
+				}
+				if (cmp == 0) {
+					pos = idx + 1;
+					break;
+				}
+				if (approx && cmp > 0)
+					break;
+				if (approx && cmp < 0)
+					pos = idx + 1;
+				idx++;
+			}
+			if (!approx && pos > 0)
+				break;
+		}
+		if (pos < 1)
+			return finish(SSValue::Error(kErrNA));
+		return finish(SSValue::Number(double(pos)));
+	}
+	if (name == "LOOKUP") {
+		SSValue key = next();
+		SSValue searchRng = next(false);
+		SSValue resultRng = next(false);
+		double modeD = 1;
+		if (searchRng.type != SSValue::kRange)
+			return finish(SSValue::Error(kErrValue));
+		numArg(modeD);
+		const SSRange& sr = searchRng.range;
+		const SSRange& rr = resultRng.range;
+		bool approx = modeD != 0;
+		int found = -1;
+		double kn;
+		bool numeric = key.GetNum(kn) && key.type != SSValue::kString;
+		int idx = 0;
+		for (int row = sr.from.a; row <= sr.to.a; row++) {
+			for (int col = sr.from.b; col <= sr.to.b; col++) {
+				SSValue v = CellValue(searchRng.part, row, col);
+				int cmp = 0;
+				double vn;
+				if (numeric && v.type != SSValue::kString
+					&& v.type != SSValue::kNone && v.GetNum(vn)) {
+					cmp = vn < kn ? -1 : vn > kn;
+				} else {
+					std::string a, b;
+					if (!v.GetString(a) || !key.GetString(b)) {
+						idx++;
+						continue;
+					}
+					int c2 = strcasecmp(a.c_str(), b.c_str());
+					cmp = c2 < 0 ? -1 : c2 > 0;
+				}
+				if (cmp == 0) {
+					found = idx;
+					break;
+				}
+				if (approx) {
+					if (cmp < 0)
+						found = idx;
+					if (cmp > 0)
+						break;
+				}
+				idx++;
+			}
+			if (!approx && found >= 0)
+				break;
+		}
+		if (found < 0)
+			return finish(SSValue::Error(kErrNA));
+		int rowOff = found / (sr.to.b - sr.from.b + 1);
+		return finish(CellValue(resultRng.part, rr.from.a + rowOff,
+		                             rr.from.b + found % (sr.to.b - sr.from.b + 1)));
+	}
+	if (name == "HLOOKUP") {
+		SSValue key = next();
+		SSValue table = next(false);
+		double rowOffD, modeD = 1;
+		if (table.type != SSValue::kRange || !numArg(rowOffD))
+			return finish(SSValue::Error(kErrValue));
+		const SSRange& r = table.range;
+		int rowOff = int(floor(rowOffD));
+		if (rowOff < 1 || rowOff > r.to.a - r.from.a + 1)
+			return finish(SSValue::Error(kErrRef));
+		if (used < argc)
+			numArg(modeD);
+		bool approx = modeD != 0;
+		int found = -1;
+		int lastLess = -1;
+		double kn;
+		bool numeric = key.GetNum(kn) && key.type != SSValue::kString;
+		for (int col = r.from.b; col <= r.to.b; col++) {
+			SSValue v = CellValue(table.part, r.from.a, col);
+			int cmp;
+			double vn;
+			if (numeric && v.type != SSValue::kString
+				&& v.type != SSValue::kNone && v.GetNum(vn))
+				cmp = vn < kn ? -1 : vn > kn;
+			else {
+				std::string a, b;
+				if (!v.GetString(a) || !key.GetString(b))
+					continue;
+				int c2 = strcasecmp(a.c_str(), b.c_str());
+				cmp = c2 < 0 ? -1 : c2 > 0;
+			}
+			if (cmp == 0) {
+				found = col;
+				break;
+			}
+			if (approx) {
+				if (cmp < 0)
+					lastLess = col;
+				else if (cmp > 0) {
+					if (lastLess >= 0)
+						found = lastLess;
+					break;
+				}
+			}
+		}
+		if (found < 0) {
+			if (approx && lastLess >= 0)
+				found = lastLess;
+			else
+				return finish(SSValue::Error(kErrNA));
+		}
+		return finish(CellValue(table.part, r.from.a + rowOff, found));
+	}
+	if (name == "TYPE") {
+		SSValue v = next();
+		int t;
+		switch (v.type) {
+			case SSValue::kNone:    t = 1; break;
+			case SSValue::kString:
+				if (v.text.empty())
+					t = 1;
+				else
+					t = 6;
+				break;
+			case SSValue::kBool:    t = 2; break;
+			case SSValue::kNumber:  t = 3; break;
+			case SSValue::kTime:    t = 4; break;
+			case SSValue::kError:   t = 5; break;
+			default:                t = 6; break;
+		}
+		return finish(SSValue::Number(double(t)));
+	}
+	if (name == "NA") {
+		return finish(SSValue::Error(kErrNA));
+	}
+	if (name == "ERROR") {
+		return finish(SSValue::Error(kErrUser));
+	}
+	if (name == "COL") {
+		SSValue v = next(false);
+		if (v.type == SSValue::kRange) {
+			const SSRange& r = v.range;
+			return finish(SSValue::Number(double(r.from.b + 1)));
+		}
+		return finish(SSValue::Number(double(it.at.b + 1)));
+	}
+	if (name == "ROW") {
+		SSValue v = next(false);
+		if (v.type == SSValue::kRange) {
+			const SSRange& r = v.range;
+			return finish(SSValue::Number(double(r.from.a + 1)));
+		}
+		return finish(SSValue::Number(double(it.at.a + 1)));
+	}
+	if (name == "ISNUMBER") {
+		SSValue v = next();
+		double n;
+		return finish(SSValue::Bool(v.GetNum(n)));
+	}
+	if (name == "ISNA") {
+		SSValue v = next();
+		return finish(SSValue::Bool(v.type == SSValue::kError
+		                       && v.error == kErrNA));
+	}
+	if (name == "ISLOGICAL") {
+		SSValue v = next();
+		return finish(SSValue::Bool(v.type == SSValue::kBool));
+	}
+	if (name == "ISTEXT") {
+		SSValue v = next();
+		return finish(SSValue::Bool(v.type == SSValue::kString));
+	}
+	if (name == "ISERR") {
+		SSValue v = next();
+		return finish(SSValue::Bool(v.type == SSValue::kError
+		                       && v.error != kErrNA));
+	}
+	if (name == "ISERROR") {
+		SSValue v = next();
+		return finish(SSValue::Bool(v.type == SSValue::kError));
+	}
+	if (name == "ISDATE") {
+		SSValue v = next();
+		return finish(SSValue::Bool(v.type == SSValue::kTime));
+	}
+	if (name == "SUMIF") {
+		SSValue rangeV = next(false);
+		SSValue critV = next();
+		SSValue sumRangeV = next(false);
+		if (rangeV.type != SSValue::kRange)
+			return finish(SSValue::Error(kErrValue));
+		const SSRange& range = rangeV.range;
+		int rangePart = rangeV.part;
+		int sumPart = rangePart;
+		const SSRange& sumR = sumRangeV.type == SSValue::kRange
+			? sumRangeV.range : range;
+		if (sumRangeV.type == SSValue::kRange)
+			sumPart = sumRangeV.part;
+		// Parse criteria string
+		std::string crit;
+		critV.GetString(crit);
+		char op = 0;
+		double val = 0;
+		if (!crit.empty() && (crit[0] == '>' || crit[0] == '<' || crit[0] == '='
+		                        || crit[0] == '!')) {
+			op = crit[0];
+			if (crit.size() > 1 && crit[1] == '=') {
+				op = '=';
+				if (!StringToNumber(crit.substr(2), val))
+					return finish(SSValue::Error(kErrValue));
+			} else {
+				if (!StringToNumber(crit.substr(1), val))
+					return finish(SSValue::Error(kErrValue));
+			}
+		} else {
+			val = 0;
+			if (StringToNumber(crit, val)) {
+				op = '=';
+			} else {
+				op = 't';
+			}
+		}
+		double sum = 0;
+		for (int r = range.from.a; r <= range.to.a; r++) {
+			for (int c = range.from.b; c <= range.to.b; c++) {
+				SSValue v = CellValue(rangePart, r, c);
+				if (v.type == SSValue::kError)
+					return finish(v);
+				int sr = r;
+				int sc = c - range.from.b + sumR.from.b;
+				if (v.type == SSValue::kNone || v.type == SSValue::kString) {
+					if (op == 't') {
+						std::string s;
+						v.GetString(s);
+						if (s == crit)
+							sum += CellValue(sumPart, sr, sc).number;
+					}
+					continue;
+				}
+				double n;
+				if (!v.GetNum(n)) continue;
+				bool match = false;
+				switch (op) {
+					case '>': match = n > val; break;
+					case '<': match = n < val; break;
+					case '=': match = n == val; break;
+					case 't': match = true; break;
+				}
+				if (match)
+					sum += CellValue(sumPart, sr, sc).number;
+			}
+		}
+		return finish(SSValue::Number(sum));
+	}
+	if (name == "COUNTIF") {
+		SSValue rangeV = next(false);
+		SSValue critV = next();
+		if (rangeV.type != SSValue::kRange)
+			return finish(SSValue::Error(kErrValue));
+		const SSRange& range = rangeV.range;
+		std::string crit;
+		critV.GetString(crit);
+		char op = 0;
+		double val = 0;
+		if (!crit.empty() && (crit[0] == '>' || crit[0] == '<' || crit[0] == '='
+		                        || crit[0] == '!')) {
+			op = crit[0];
+			if (crit.size() > 1 && crit[1] == '=') {
+				op = '=';
+				if (!StringToNumber(crit.substr(2), val))
+					return finish(SSValue::Error(kErrValue));
+			} else {
+				if (!StringToNumber(crit.substr(1), val))
+					return finish(SSValue::Error(kErrValue));
+			}
+		} else {
+			val = 0;
+			if (StringToNumber(crit, val)) {
+				op = '=';
+			} else {
+				op = 't';
+			}
+		}
+		int count = 0;
+		for (int r = range.from.a; r <= range.to.a; r++) {
+			for (int c = range.from.b; c <= range.to.b; c++) {
+				SSValue v = CellValue(rangeV.part, r, c);
+				if (v.type == SSValue::kError)
+					return finish(v);
+				if (v.type == SSValue::kNone || v.type == SSValue::kString) {
+					if (op == 't') {
+						std::string s;
+						v.GetString(s);
+						if (s == crit)
+							count++;
+					}
+					continue;
+				}
+				double n;
+				if (!v.GetNum(n)) continue;
+				bool match = false;
+				switch (op) {
+					case '>': match = n > val; break;
+					case '<': match = n < val; break;
+					case '=': match = n == val; break;
+					case 't': match = true; break;
+				}
+				if (match)
+					count++;
+			}
+		}
+		return finish(SSValue::Number(count));
 	}
 	if (name == "ALERT") {
 		// shows an alert when the condition is true (Functions/System
