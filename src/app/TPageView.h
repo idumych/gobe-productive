@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "Document.h"
+#include "Editing.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 #include "Styles.h"
@@ -38,6 +39,8 @@ public:
 	virtual void Draw(BRect updateRect);
 	virtual void KeyDown(const char* bytes, int32 count);
 	virtual void MouseDown(BPoint where);
+	virtual void MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage);
+	virtual void MouseUp(BPoint where);
 	virtual void MessageReceived(BMessage* message);
 
 	// after the document was saved (and loaded again) or reverted
@@ -97,6 +100,15 @@ private:
 	void MoveCaretVertically(int direction);
 	void TextChanged();
 	void DrawCaret();
+	// the x of a byte offset in that line
+	float OffsetX(size_t lineIndex, size_t offset) const;
+	// the selection: from fAnchor to fCaret, in one part
+	bool TextSelection(TextPosition& from, TextPosition& to) const;
+	bool DeleteSelection();
+	void CopySelection();
+	void PasteText();
+	void SelectAllText();
+	void DrawSelection();
 	// spreadsheet editing
 	bool HitCell(BPoint where, size_t& part, int& row, int& column, BRect& rect) const;
 	void BeginCellEdit(size_t part, int row, int column, BRect rect);
@@ -130,6 +142,9 @@ private:
 	std::map<std::vector<uint32_t>, CellStyle> fCellStyles;
 	std::map<size_t, std::unique_ptr<BBitmap>> fImages;
 	Caret fCaret;
+	Caret fAnchor;					// the other end of the selection
+	bool fDragging = false;
+	bool fScriptShift = false;		// RunScript: shift held
 	struct {
 		bool active = false;
 		size_t part = 0;

@@ -1412,6 +1412,8 @@ TPageView::DrawFrame(const Document::PlacedFrame& f, BRect r, uint32_t kind, flo
 void
 TPageView::DrawLines(BRect updateRect, float dx, float dy)
 {
+	// the selection highlight goes under the text
+	DrawSelection();
 	SetDrawingMode(B_OP_OVER);
 	for (const Line& line : fLines) {
 		if (line.angle == 0 && !line.frame.Intersects(updateRect))
