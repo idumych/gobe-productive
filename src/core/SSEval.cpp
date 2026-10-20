@@ -1937,6 +1937,219 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 		double f = pow(rate + 1.0, periods);
 		return finish(SSValue::Number(((f - 1.0) / rate * -x * (rate * type + 1.0) - fv) / f));
 	}
+	// ====== RATE ======
+	if (name == "RATE") {
+		double pv, fv, periods;
+		if (!numArg(pv) || !numArg(fv) || !numArg(periods))
+			return finish(SSValue::Error(kErrValue));
+		if (periods == 0)
+			return finish(SSValue::Error(kErrValue));
+		if (pv == 0 || fv == 0 || pv * fv < 0)
+			return finish(SSValue::Error(kErrValue));
+		// rate = (fv/pv)^(1/periods) - 1
+		double ratio = fv / pv;
+		if (ratio <= 0)
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(pow(ratio, 1.0 / periods) - 1.0));
+	}
+	// ====== NPV ======
+	if (name == "NPV") {
+		double rate;
+		if (!numArg(rate))
+			return finish(SSValue::Error(kErrValue));
+		double sum = 0;
+		int i = 0;
+		each([&](const SSValue& v) {
+			if (v.type == SSValue::kError) {
+				return false;
+			}
+			if (v.type == SSValue::kNone || v.type == SSValue::kString)
+				return true;
+			double n;
+			if (!v.GetNum(n))
+				return true;
+			sum += n / pow(rate + 1.0, i + 1);
+			i++;
+			return true;
+		});
+		return finish(SSValue::Number(sum));
+	}
+	// ====== MIRR ======
+	if (name == "MIRR") {
+		double finance_rate, reinvest_rate;
+		if (!numArg(finance_rate) || !numArg(reinvest_rate))
+			return finish(SSValue::Error(kErrValue));
+		std::vector<double> cash_flows;
+		each([&](const SSValue& v) {
+			if (v.type == SSValue::kError) {
+				return false;
+			}
+			if (v.type == SSValue::kNone || v.type == SSValue::kString)
+				return true;
+			double n;
+			if (!v.GetNum(n))
+				return true;
+			cash_flows.push_back(n);
+			return true;
+		});
+		if (cash_flows.empty())
+			return finish(SSValue::Error(kErrValue));
+		// Check there's at least one positive and one negative
+		bool has_pos = false, has_neg = false;
+		for (auto cf : cash_flows) {
+			if (cf > 0) has_pos = true;
+			if (cf < 0) has_neg = true;
+		}
+		if (!has_pos || !has_neg)
+			return finish(SSValue::Error(kErrValue));
+		// FV of positive cash flows at reinvest_rate
+		// PV of negative cash flows at finance_rate
+		double fv_pos = 0, pv_neg = 0;
+		for (int i = 0; i < (int)cash_flows.size(); i++) {
+			if (cash_flows[i] > 0)
+				fv_pos += cash_flows[i] * pow(reinvest_rate + 1.0, (int)cash_flows.size() - 1 - i);
+			if (cash_flows[i] < 0)
+				pv_neg += cash_flows[i] / pow(finance_rate + 1.0, i);
+		}
+		if (pv_neg >= 0 || fv_pos <= 0)
+			return finish(SSValue::Error(kErrValue));
+		int n = (int)cash_flows.size();
+		return finish(SSValue::Number(pow(fv_pos / -pv_neg, 1.0 / (n - 1)) - 1.0));
+	}
+	// ====== IRR ======
+	if (name == "IRR") {
+		std::vector<double> cash_flows;
+		each([&](const SSValue& v) {
+			if (v.type == SSValue::kError) {
+				return false;
+			}
+			if (v.type == SSValue::kNone || v.type == SSValue::kString)
+				return true;
+			double n;
+			if (!v.GetNum(n))
+				return true;
+			cash_flows.push_back(n);
+			return true;
+		});
+		if (cash_flows.empty())
+			return finish(SSValue::Error(kErrValue));
+		// Check sign change
+		bool has_pos = false, has_neg = false;
+		for (auto cf : cash_flows) {
+			if (cf > 0) has_pos = true;
+			if (cf < 0) has_neg = true;
+		}
+		if (!has_pos || !has_neg)
+			return finish(SSValue::Error(kErrValue));
+		// Newton's method
+		double estimate = 0.1;
+		for (int iter = 0; iter < 100; iter++) {
+			double npv = 0, dnpv = 0;
+			for (int i = 0; i < (int)cash_flows.size(); i++) {
+				double d = pow(1.0 + estimate, i + 1);
+				npv += cash_flows[i] / d;
+				dnpv -= (double)i * cash_flows[i] / (d * (1.0 + estimate));
+			}
+			if (fabs(dnpv) < 1e-15)
+				break;
+			double new_estimate = estimate - npv / dnpv;
+			if (fabs(new_estimate - estimate) < 1e-10) {
+				estimate = new_estimate;
+				break;
+			}
+			estimate = new_estimate;
+		}
+		return finish(SSValue::Number(estimate));
+	}
+	// ====== NPER ======
+	if (name == "NPER") {
+		double rate, pmt, pv, fv = 0, atEnd = 0;
+		if (!numArg(rate) || !numArg(pmt) || !numArg(pv))
+			return finish(SSValue::Error(kErrValue));
+		if (used < argc && !numArg(fv))
+			return finish(SSValue::Error(kErrValue));
+		if (used < argc && !numArg(atEnd))
+			return finish(SSValue::Error(kErrValue));
+		// Negate pv internally (per decompiled)
+		pv = -pv;
+		if (rate == 0.0)
+			return finish(SSValue::Number((pv - fv) / pmt));
+		double d = (1.0 - rate * fv / pmt) / (1.0 - rate * pv / pmt);
+		if (d <= 0.0)
+			return finish(SSValue::Error(kErrValue));
+		double log_rate = log(rate + 1.0);
+		if (fabs(log_rate) < 1e-15)
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Number(log(d) / log_rate));
+	}
+	// ====== FV ======
+	if (name == "FV") {
+		double rate, periods, payment, pv = 0, atEnd = 0;
+		if (!numArg(rate) || !numArg(periods) || !numArg(payment))
+			return finish(SSValue::Error(kErrValue));
+		if (used < argc && !numArg(pv))
+			return finish(SSValue::Error(kErrValue));
+		if (used < argc && !numArg(atEnd))
+			return finish(SSValue::Error(kErrValue));
+		double f = pow(rate + 1.0, periods);
+		return finish(SSValue::Number(-pv * f - ((f - 1.0) / rate) * (rate * atEnd + 1.0) * payment));
+	}
+	// ====== DDB ======
+	if (name == "DDB") {
+		double cost, salvage, life, period, factor = 2.0;
+		if (!numArg(cost) || !numArg(salvage) || !numArg(life) || !numArg(period))
+			return finish(SSValue::Error(kErrValue));
+		if (cost < 0 || life < 0 || period < 0 || period > life)
+			return finish(SSValue::Error(kErrValue));
+		if (used < argc && !numArg(factor))
+			return finish(SSValue::Error(kErrValue));
+		double accumulated = 0;
+		double dep = 0;
+		for (int i = 1; i <= (int)period; i++) {
+			if (i == (int)period && period == life) {
+				// Last period: force to salvage
+				dep = cost - accumulated - salvage;
+			} else {
+				dep = (cost - accumulated) * factor / life;
+			}
+			accumulated += dep;
+		}
+		return finish(SSValue::Number(dep));
+	}
+	// ====== DB ======
+	if (name == "DB") {
+		double cost, salvage, life, period, month = 12.0;
+		if (!numArg(cost) || !numArg(salvage) || !numArg(life) || !numArg(period))
+			return finish(SSValue::Error(kErrValue));
+		if (cost <= 0 || life <= 0 || period <= 0 || period > life)
+			return finish(SSValue::Error(kErrValue));
+		if (period == life && cost == salvage) {
+			// If cost equals salvage, no depreciation
+			return finish(SSValue::Number(0.0));
+		}
+		if (used < argc && !numArg(month))
+			return finish(SSValue::Error(kErrValue));
+		if (month < 1 || month > 12)
+			return finish(SSValue::Error(kErrValue));
+		// rate = (salvage/cost)^(1/life), r = 1 - rate, rounded to 3 decimals
+		double fixed_rate = pow(salvage / cost, 1.0 / life);
+		double r = 1.0 - fixed_rate;
+		// Round to 3 decimals
+		r = round(r * 1000.0) / 1000.0;
+		double accumulated = 0;
+		double dep = 0;
+		for (int i = 1; i <= (int)period; i++) {
+			if (i == 1) {
+				// First period: cost * r * month / 12
+				dep = cost * r * month / 12.0;
+			} else {
+				// Subsequent: (cost - accumulated) * r
+				dep = (cost - accumulated) * r;
+			}
+			accumulated += dep;
+		}
+		return finish(SSValue::Number(dep));
+	}
 	if (name == "VLOOKUP") {
 		SSValue key = next();
 		SSValue table = next(false);

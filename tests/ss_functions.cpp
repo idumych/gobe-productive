@@ -1015,6 +1015,69 @@ int main()
 	setFormulaE(452, "COUNTIF(C300:C307,\">5\")");
 	CheckNum(eval(452, 4).number, 0.0, "COUNTIF text > 5 = 0");
 
+	// ====== RATE ======
+	// Args: pv, fv, periods - same sign required
+	// rate = (fv/pv)^(1/periods) - 1
+	setFormula(500, "RATE(10000,15000,5)");
+	CheckNum(eval(500, 2).number, 0.0844717711976986, "RATE(10000, 15000, 5)");
+
+	// ====== NPV ======
+	// Args: rate, cash_flows... - NPV = sum(cf_i / (1+rate)^(i+1))
+	setFormula(501, "NPV(0.1,100,200,300)");
+	CheckNum(eval(501, 2).number, 481.592787377911, "NPV(0.1, 100, 200, 300)");
+	setFormula(502, "NPV(0.05,100,200)");
+	CheckNum(eval(502, 2).number, 100.0/1.05 + 200.0/1.05/1.05, "NPV with range");
+	setFormula(503, "NPV(0,100,200)");
+	CheckNum(eval(503, 2).number, 300.0, "NPV zero rate");
+
+	// ====== MIRR ======
+	setFormula(504, "MIRR(0.1,0.15,-1000,500,800)");
+	CheckNum(eval(504, 2).number, 0.172603939955857, "MIRR(0.1, 0.15, -1000, 500, 800)");
+
+	// ====== IRR ======
+	setFormula(505, "IRR(-1000,300,400,500,600)");
+	CheckNum(eval(505, 2).number, 0.248883356624071, "IRR(-1000, 300, 400, 500, 600)");
+
+	// ====== NPER ======
+	// pv = -pv internally: pv=-1000 -> 1000
+	setFormula(506, "NPER(0.05,100,-1000)");
+	CheckNum(eval(506, 2).number, 14.2066990828905, "NPER(0.05, 100, -1000)");
+	setFormula(507, "NPER(0.08,200,-5000,10000)");
+	CheckNum(eval(507, 2).number, 14.2749145860032, "NPER(0.08, 200, -5000, 10000)");
+	setFormula(508, "NPER(0.06,100,-1000,0,1)");
+	CheckNum(eval(508, 2).number, 15.7252085438878, "NPER atEnd=1");
+	setFormula(509, "NPER(0,100,-1000)");
+	CheckNum(eval(509, 2).number, 10.0, "NPER zero rate");
+
+	// ====== FV ======
+	setFormula(510, "FV(0.05,10,-110)");
+	CheckNum(eval(510, 2).number, 1383.56817891037, "FV(0.05, 10, -110)");
+	setFormula(511, "FV(0.05,10,-100,1000)");
+	CheckNum(eval(511, 2).number, -371.105373222558, "FV with pv");
+	setFormula(512, "FV(0.05,10,-100,0,1)");
+	CheckNum(eval(512, 2).number, 1320.67871623263, "FV atEnd=1");
+
+	// ====== DDB ======
+	// Returns depreciation for specified period (not book value)
+	setFormula(513, "DDB(10000,1000,5,1)");
+	CheckNum(eval(513, 2).number, 4000.0, "DDB(10000, 1000, 5, 1)");
+	setFormula(514, "DDB(10000,1000,5,2)");
+	CheckNum(eval(514, 2).number, 2400.0, "DDB(10000, 1000, 5, 2)");
+	setFormula(515, "DDB(10000,1000,5,5)");
+	CheckNum(eval(515, 2).number, 296.0, "DDB(10000, 1000, 5, 5)");
+	setFormula(516, "DDB(10000,1000,5,1,1.5)");
+	CheckNum(eval(516, 2).number, 3000.0, "DDB factor=1.5");
+
+	// ====== DB ======
+	// Returns depreciation for specified period (not book value)
+	// r = (salvage/cost)^(1/life), rounded to 3 decimals: (1000/10000)^0.2 = 0.630957, r = 0.369
+	setFormula(517, "DB(10000,1000,5,1)");
+	CheckNum(eval(517, 2).number, 3690.0, "DB(10000, 1000, 5, 1)");
+	setFormula(518, "DB(10000,1000,5,2)");
+	CheckNum(eval(518, 2).number, 2328.39, "DB(10000, 1000, 5, 2)");
+	setFormula(519, "DB(10000,1000,5,1,3)");
+	CheckNum(eval(519, 2).number, 922.5, "DB month=3");
+
 	printf(failures ? "%d failures\n" : "ss_functions: ok\n", failures);
 	return failures != 0;
 }
