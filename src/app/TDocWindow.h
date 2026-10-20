@@ -6,7 +6,16 @@
 #define GOBE_TDOCWINDOW_H
 
 #include <MenuBar.h>
+#include <Menu.h>
+#include <PopUpMenu.h>
+#include <CheckBox.h>
+#include <TextControl.h>
 #include <Window.h>
+
+// BColorControl forward declaration
+class BColorControl;
+class BMenu;
+class BMenuField;
 
 
 #include <string>
@@ -46,6 +55,54 @@ private:
 	BMenuItem* fCurrentFamily = NULL;
 };
 
+// TFontDialog: Font dialog with family, size, face checkboxes (Bold, Italic,
+// Underline) and a ColorControl. OK applies changed properties to the
+// selection as one undo step.
+class TFontDialog : public BWindow {
+public:
+	TFontDialog(Document* doc, TPageView* view);
+
+	virtual void MessageReceived(BMessage* message);
+	virtual bool QuitRequested();
+
+private:
+	void DoApply();
+
+	Document* fDocument;
+	TPageView* fView;
+	BTextControl* fFamily;
+	BTextControl* fSize;
+	BCheckBox* fBold;
+	BCheckBox* fItalic;
+	BCheckBox* fUnderline;
+	BColorControl* fColor;
+};
+
+// TParagraphDialog: Paragraph dialog with alignment popup, left/first/right
+// indent fields, space before/after fields, line spacing field, and an
+// alignment pop-up for the dialog. OK applies changed properties to the
+// selected paragraphs as one undo step.
+class TParagraphDialog : public BWindow {
+public:
+	TParagraphDialog(Document* doc, TPageView* view);
+
+	virtual void MessageReceived(BMessage* message);
+	virtual bool QuitRequested();
+
+private:
+	void DoApply();
+
+	Document* fDocument;
+	TPageView* fView;
+	BMenuField* fAlignmentField;
+	BTextControl* fLeftIndent;
+	BTextControl* fFirstIndent;
+	BTextControl* fRightIndent;
+	BTextControl* fSpaceBefore;
+	BTextControl* fSpaceAfter;
+	BTextControl* fLineSpacing;
+};
+
 // TFindDialog: the Find/Replace (DIAL 7) dialog, made functional.
 // Controls: 0=Find text, 1=Replace text, 2=Ignore Case, 3=Entire Word,
 // 4=Wrap, 5=Insert Special, 6=Find, 7=Replace, 8=Replace & Find,
@@ -82,6 +139,59 @@ private:
 	bool fCaseSensitive = false;
 	bool fEntireWord = false;
 	bool fWrap = true;
+};
+
+// TColumnWidthDialog: the Column Width dialog.
+// A single text field (width in points) and OK/Cancel buttons.
+class TColumnWidthDialog : public BWindow {
+public:
+	TColumnWidthDialog(BHandler* target, Document* doc, TPageView* view);
+
+	virtual void MessageReceived(BMessage* message);
+	virtual bool QuitRequested();
+
+private:
+	void DoApply();
+
+	Document* fDocument;
+	TPageView* fView;
+	BTextControl* fField;
+	BButton* fOKBtn;
+};
+
+// TGoToCellDialog: the Go To Cell (DIAL 21) dialog.
+// A single text field (cell reference like "B12") and OK button.
+class TGoToCellDialog : public BWindow {
+public:
+	TGoToCellDialog(BHandler* target, Document* doc, TPageView* view);
+
+	virtual void MessageReceived(BMessage* message);
+	virtual bool QuitRequested();
+
+private:
+	void DoGoTo();
+
+	Document* fDocument;
+	TPageView* fView;
+	BTextControl* fField;
+	BButton* fOKBtn;
+};
+
+// TRowHeightDialog: similar to TColumnWidthDialog but for rows.
+class TRowHeightDialog : public BWindow {
+public:
+	TRowHeightDialog(BHandler* target, Document* doc, TPageView* view);
+
+	virtual void MessageReceived(BMessage* message);
+	virtual bool QuitRequested();
+
+private:
+	void DoApply();
+
+	Document* fDocument;
+	TPageView* fView;
+	BTextControl* fField;
+	BButton* fOKBtn;
 };
 
 struct Document;

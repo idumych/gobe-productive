@@ -107,6 +107,12 @@ bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t las
 // Dependencies are brought up to date. False if nothing changed.
 bool InsertRowsColumns(Document& doc, size_t part, bool columns, uint16_t at, int count);
 
+// Sets the width of column `first` through `last` to `size` (points), or the
+// height of row `first` through `last` to `size` (points) when `columns` is
+// false.  Returns true if the header was created, modified or deleted (size
+// == 0).  Sizes of 0 are stored as 0 (the view treats them as "use default").
+bool SetLineSize(SSPart& part, bool columns, uint16_t first, uint16_t last, float size);
+
 // Cell formats: sets `property` (a number format 'SSNm', fill 'FCol',
 // alignment 'HAln'/'VAln', wrap 'ClWp', text properties, ...) in the style
 // of every cell of the block, adding empty cells where there are none.

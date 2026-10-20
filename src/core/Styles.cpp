@@ -301,4 +301,25 @@ LineSpacingProperty(float value, bool multiple)
 	return p;
 }
 
+
+Property
+TabsProperty(const std::vector<TabStop>& tabs)
+{
+	DocWriter w;
+	// Encode each tab stop exactly as ApplyProperty reads it:
+	// position (float), type (uint16), fill (uint16), alignChar (uint32),
+	// fillChar (uint32) = 20 bytes each
+	for (const TabStop& tab : tabs) {
+		w.Float(tab.position);
+		w.UInt16(uint16_t(tab.type));
+		w.UInt16(uint16_t(tab.fill));
+		w.UInt32(tab.alignChar);
+		w.UInt32(tab.fillChar);
+	}
+	Property p;
+	p.type = Sig("PTab");
+	p.data = w.Data();
+	return p;
+}
+
 } // namespace gobe

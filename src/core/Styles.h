@@ -90,6 +90,7 @@ Property AlignmentProperty(int alignment);
 Property IndentProperty(uint32_t type, float value);	// 'PLef', 'PInd' or 'PRig'
 Property SpacingProperty(uint32_t type, float value);	// 'SpaB' or 'SpaA'
 Property LineSpacingProperty(float value, bool multiple);
+Property TabsProperty(const std::vector<TabStop>& tabs);
 
 // The effective style for a style index (TStyleID), following parents.
 TextStyle ResolveTextStyle(const StyleMgr& styles, uint32_t index);

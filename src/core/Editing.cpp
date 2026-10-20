@@ -1178,6 +1178,51 @@ InsertRowsColumns(Document& doc, size_t part, bool columns, uint16_t at, int cou
 }
 
 
+// #pragma mark - row heights / column widths
+
+
+bool
+SetLineSize(SSPart& part, bool columns, uint16_t first, uint16_t last, float size)
+{
+	if (last < first)
+		std::swap(first, last);
+	std::vector<SSHeader>& headers = columns ? part.columns : part.rows;
+	bool changed = false;
+	for (uint16_t i = first; ; i++) {
+		SSHeader* h = nullptr;
+		for (SSHeader& hdr : headers)
+			if (hdr.index == i) {
+				h = &hdr;
+				break;
+			}
+		if (size == 0.0f) {
+			// Delete the header to revert to default
+			if (h != nullptr) {
+				headers.erase(std::find_if(headers.begin(), headers.end(),
+					[&](const SSHeader& hdr) { return hdr.index == i; }));
+				changed = true;
+			}
+		} else {
+			if (h == nullptr) {
+				SSHeader hdr;
+				hdr.index = i;
+				hdr.cell.kind = Sig("Head");
+				hdr.cell.style = 0xffffffff;
+				hdr.cell.number = size;
+				headers.push_back(std::move(hdr));
+				changed = true;
+			} else if (h->cell.number != size) {
+				h->cell.number = size;
+				changed = true;
+			}
+		}
+		if (i == last)
+			break;
+	}
+	return changed;
+}
+
+
 // #pragma mark - formulas
 
 namespace {

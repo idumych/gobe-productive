@@ -4,19 +4,23 @@
 
 #include <Alert.h>
 #include <Application.h>
+#include <Button.h>
 #include <CheckBox.h>
+#include <ColorControl.h>
 #include <FilePanel.h>
 #include <Entry.h>
 #include <Font.h>
 #include <NodeInfo.h>
 #include <Path.h>
 #include <LayoutBuilder.h>
+#include <Beep.h>
 #include <MenuBar.h>
 #include <MenuItem.h>
 #include <SeparatorItem.h>
 #include <String.h>
 #include <StringView.h>
 #include <TextControl.h>
+#include <GroupLayout.h>
 
 #include "DocWriter.h"
 #include "Document.h"
@@ -26,11 +30,16 @@
 #include "TDialog.h"
 #include "TDocView.h"
 #include "TPageView.h"
+#include "Styles.h"
 
 #include <ScrollView.h>
 #include "TMenu.h"
 
 namespace gobe {
+
+// Message codes for the Font and Paragraph dialogs
+static const uint32 kMsgFontOK = 'gFON';
+static const uint32 kMsgParagraphOK = 'gPAR';
 
 // ASCII case-folding for a single byte; used when case-insensitive matching.
 static inline char
@@ -45,6 +54,28 @@ FoldCase(char c)
 static const uint32 kMsgOpenDialog = 'gDLG';
 // TDialog's controls: 'sD00' + index (TItemHandler in TDialog's setup)
 static const uint32 kDialogCommand = 'sD00';
+
+// Column Width / Row Height / Go To Cell
+static const uint32 kMsgColWidth = 'gCOL';
+static const uint32 kMsgRowHeight = 'gROW';
+static const uint32 kMsgGoTo = 'gGOT';
+
+// Menu command codes
+static const uint32 kCmdColWidth = 'sM64';
+static const uint32 kCmdRowHeight = 'sM65';
+static const uint32 kCmdGoToCell = 'sM77';
+
+// Tab menu commands (MENU 120)
+static const uint32 kCmdTabLeft = 3;
+static const uint32 kCmdTabCenter = 4;
+static const uint32 kCmdTabRight = 5;
+static const uint32 kCmdTabAlign = 6;
+static const uint32 kCmdDeleteTab = 8;
+static const uint32 kCmdEditTab = 9;
+
+// Format menu insert commands
+static const uint32 kCmdInsertDate = 'sM53';
+static const uint32 kCmdInsertTime = 'sM54';
 
 // Find/Replace dialog controls (DIAL 7, Item 7)
 static const uint32 kFindBtn = 6;
@@ -331,7 +362,753 @@ TFindDialog::MessageReceived(BMessage* message)
 	TDialog::MessageReceived(message);
 }
 
+// #pragma mark - TFontDialog
+
+TFontDialog::TFontDialog(Document* doc, TPageView* view)
+	:
+	BWindow(BRect(100, 100, 370, 340), "Font",
+		B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, B_NOT_RESIZABLE
+		| B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+	fDocument(doc),
+	fView(view)
+{
+	BView* top = new BView("top", B_WILL_DRAW);
+	top->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	SetLayout(new BGroupLayout(B_VERTICAL, 0));
+	GetLayout()->AddView(top);
+
+	// Get the style at the selection start for prefilling
+	TextStyle style;
+	if (fView != NULL && fView->fCaret.active && fDocument != NULL) {
+		style = fView->StyleAt({fView->fCaret.paragraph, fView->fCaret.offset});
+	}
+
+	// Build layout manually (older Haiku: BLayoutBuilder::End() returns void*)
+	BGroupLayout* outerLayout = new BGroupLayout(B_VERTICAL, B_USE_SMALL_SPACING);
+	top->SetLayout(outerLayout);
+
+	BGroupLayout* familyLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("family_label", "Font family:"));
+	outerLayout->AddView(fFamily = new BTextControl("family", NULL, style.family.c_str(), NULL));
+
+	BGroupLayout* sizeLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("size_label", "Size:"));
+	outerLayout->AddView(fSize = new BTextControl("size", NULL, "", NULL));
+
+	BGroupLayout* faceLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_INSETS);
+	outerLayout->AddView(fBold = new BCheckBox("bold", "Bold", NULL));
+	outerLayout->AddView(fItalic = new BCheckBox("italic", "Italic", NULL));
+	outerLayout->AddView(fUnderline = new BCheckBox("underline", "Underline", NULL));
+
+	outerLayout->AddView(fColor = new BColorControl(
+		B_ORIGIN, B_CELLS_32x8, 8, "color",
+		new BMessage('kColor')));
+
+	BGroupLayout* btnLayout = new BGroupLayout(B_HORIZONTAL, B_USE_DEFAULT_SPACING);
+	BView* spacer = new BView(NULL, B_WILL_DRAW);
+	spacer->SetExplicitSize(BSize(9999, B_SIZE_UNSET));
+	outerLayout->AddView(spacer);
+	outerLayout->AddView(new BButton("ok", "OK", new BMessage(kMsgFontOK)));
+	outerLayout->AddView(new BButton("cancel", "Cancel", new BMessage(B_QUIT_REQUESTED)));
+
+	// Pre-fill with current values
+	char buf[32];
+	snprintf(buf, sizeof buf, "%.0f", style.size);
+	fSize->SetText(buf);
+	fSize->TextView()->SelectAll();
+
+	fBold->SetValue(style.faceFlags & 2 ? B_CONTROL_ON : B_CONTROL_OFF);
+	fItalic->SetValue(style.faceFlags & 4 ? B_CONTROL_ON : B_CONTROL_OFF);
+	fUnderline->SetValue((style.faceFlags & 8) ? B_CONTROL_ON : B_CONTROL_OFF);
+
+	rgb_color c = { style.color.r, style.color.g, style.color.b, 255 };
+	fColor->SetValue(c);
+
+	CenterOnScreen();
+}
+
+
+void
+TFontDialog::DoApply()
+{
+	if (fView == NULL || fDocument == NULL)
+		return;
+
+	if (!fView->fCaret.active) {
+		beep();
+		return;
+	}
+
+	fView->fUndo.Begin(*fDocument, fView->fCaret.part, "Font",
+		fView->CurrentViewState());
+
+	auto sel = fView->TextSelectionRange();
+
+	// Family
+	const char* family = fFamily->Text();
+	if (family != NULL && strlen(family) > 0) {
+		ApplyCharacterProperty(*fDocument, fView->fCaret.part,
+			sel.first, sel.second,
+			TextFontProperty(family, ""));
+	}
+
+	// Size
+	float size = strtof(fSize->Text(), NULL);
+	if (size > 0) {
+		ApplyCharacterProperty(*fDocument, fView->fCaret.part,
+			sel.first, sel.second,
+			TextSizeProperty(size));
+	}
+
+	// Face flags: compute from checkboxes
+	uint32_t flags = 1;  // plain text base
+	if (fBold->Value() == B_CONTROL_ON)
+		flags |= 2;
+	if (fItalic->Value() == B_CONTROL_ON)
+		flags |= 4;
+	if (fUnderline->Value() == B_CONTROL_ON)
+		flags |= 8;
+	ApplyCharacterProperty(*fDocument, fView->fCaret.part,
+		sel.first, sel.second,
+		TextFaceProperty(flags));
+
+	// Color (BColorControl stores inverse; ValueAsColor returns inverse)
+	rgb_color c = fColor->ValueAsColor();
+	Color color{c.red, c.green, c.blue, 255};
+	ApplyCharacterProperty(*fDocument, fView->fCaret.part,
+		sel.first, sel.second,
+		TextColorProperty(color));
+
+	fView->TextChanged();
+	PostMessage(B_QUIT_REQUESTED);
+}
+
+
+void
+TFontDialog::MessageReceived(BMessage* message)
+{
+	if (message->what == kMsgFontOK) {
+		DoApply();
+		return;
+	}
+	BWindow::MessageReceived(message);
+}
+
+
+bool
+TFontDialog::QuitRequested()
+{
+	delete this;
+	return true;
+}
+
+// #pragma mark - TParagraphDialog
+
+TParagraphDialog::TParagraphDialog(Document* doc, TPageView* view)
+	:
+	BWindow(BRect(100, 100, 350, 420), "Paragraph",
+		B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, B_NOT_RESIZABLE
+		| B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+	fDocument(doc),
+	fView(view)
+{
+	BView* top = new BView("top", B_WILL_DRAW);
+	top->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	SetLayout(new BGroupLayout(B_VERTICAL, 0));
+	GetLayout()->AddView(top);
+
+	// Get the style at the caret's paragraph for prefilling
+	TextStyle style;
+	if (fView != NULL && fView->fCaret.active && fDocument != NULL) {
+		style = fView->StyleAt({fView->fCaret.paragraph, fView->fCaret.offset});
+	}
+
+	// Build alignment popup with style codes: 0=left, 1=right, 2=center, 3=justify
+	BPopUpMenu* alignMenu = new BPopUpMenu("alignment");
+	alignMenu->AddItem(new BMenuItem("Left", new BMessage(static_cast<uint32>(0))));
+	alignMenu->AddItem(new BMenuItem("Right", new BMessage(static_cast<uint32>(1))));
+	alignMenu->AddItem(new BMenuItem("Center", new BMessage(static_cast<uint32>(2))));
+	alignMenu->AddItem(new BMenuItem("Justify", new BMessage(static_cast<uint32>(3))));
+	alignMenu->SetLabelFromMarked(true);
+
+	// Build layout manually (older Haiku: BLayoutBuilder::End() returns void*)
+	BGroupLayout* outerLayout = new BGroupLayout(B_VERTICAL, B_USE_SMALL_SPACING);
+	top->SetLayout(outerLayout);
+
+	BGroupLayout* alignLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("align_label", "Alignment:"));
+	outerLayout->AddView(fAlignmentField = new BMenuField("alignment", "", alignMenu));
+
+	BGroupLayout* leftLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("left_label", "Left indent:"));
+	outerLayout->AddView(fLeftIndent = new BTextControl("left_indent", NULL, "", NULL));
+
+	BGroupLayout* firstLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("first_label", "First indent:"));
+	outerLayout->AddView(fFirstIndent = new BTextControl("first_indent", NULL, "", NULL));
+
+	BGroupLayout* rightLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("right_label", "Right indent:"));
+	outerLayout->AddView(fRightIndent = new BTextControl("right_indent", NULL, "", NULL));
+
+	BGroupLayout* beforeLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("before_label", "Space before:"));
+	outerLayout->AddView(fSpaceBefore = new BTextControl("space_before", NULL, "", NULL));
+
+	BGroupLayout* afterLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("after_label", "Space after:"));
+	outerLayout->AddView(fSpaceAfter = new BTextControl("space_after", NULL, "", NULL));
+
+	BGroupLayout* lineLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
+	outerLayout->AddView(new BStringView("linespacing_label", "Line spacing:"));
+	outerLayout->AddView(fLineSpacing = new BTextControl("line_spacing", NULL, "", NULL));
+
+	BGroupLayout* btnLayout = new BGroupLayout(B_HORIZONTAL, B_USE_DEFAULT_SPACING);
+	BView* spacer = new BView(NULL, B_WILL_DRAW);
+	spacer->SetExplicitSize(BSize(9999, B_SIZE_UNSET));
+	outerLayout->AddView(spacer);
+	outerLayout->AddView(new BButton("ok", "OK", new BMessage(kMsgParagraphOK)));
+	outerLayout->AddView(new BButton("cancel", "Cancel", new BMessage(B_QUIT_REQUESTED)));
+
+	// Pre-fill with current values
+	char buf[32];
+
+	snprintf(buf, sizeof buf, "%.1f", style.leftIndent);
+	fLeftIndent->SetText(buf);
+	snprintf(buf, sizeof buf, "%.1f", style.firstIndent);
+	fFirstIndent->SetText(buf);
+	snprintf(buf, sizeof buf, "%.1f", style.rightIndent);
+	fRightIndent->SetText(buf);
+	snprintf(buf, sizeof buf, "%.1f", style.spaceBefore);
+	fSpaceBefore->SetText(buf);
+	snprintf(buf, sizeof buf, "%.1f", style.spaceAfter);
+	fSpaceAfter->SetText(buf);
+
+	if (style.lineSpacingMultiple) {
+		snprintf(buf, sizeof buf, "%.1f", style.lineSpacing);
+	} else {
+		snprintf(buf, sizeof buf, "%.1f pt", style.lineSpacing);
+	}
+	fLineSpacing->SetText(buf);
+
+	// Mark the alignment item
+	for (int32_t i = 0; i < alignMenu->CountItems(); i++) {
+		BMenuItem* item = alignMenu->ItemAt(i);
+		int32_t val = 0;
+		if (item->Message() != NULL &&
+			item->Message()->FindInt32("value", &val) == B_OK) {
+			if (val == style.alignment) {
+				item->SetMarked(true);
+				break;
+			}
+		}
+	}
+
+	CenterOnScreen();
+}
+
+
+void
+TParagraphDialog::DoApply()
+{
+	if (fView == NULL || fDocument == NULL)
+		return;
+
+	if (!fView->fCaret.active) {
+		beep();
+		return;
+	}
+
+	// Determine the paragraph range
+	int32_t firstPar = fView->fCaret.paragraph;
+	int32_t lastPar = fView->fCaret.paragraph;
+
+	if (fView->fAnchor.active && fView->fAnchor.part == fView->fCaret.part) {
+		int32_t aPar = std::min(fView->fCaret.paragraph, fView->fAnchor.paragraph);
+		int32_t bPar = std::max(fView->fCaret.paragraph, fView->fAnchor.paragraph);
+		firstPar = aPar;
+		lastPar = bPar;
+	}
+
+	fView->fUndo.Begin(*fDocument, fView->fCaret.part, "Paragraph",
+		fView->CurrentViewState());
+
+	// Alignment
+	if (fAlignmentField != NULL) {
+		BMenuItem* marked = fAlignmentField->Menu()->FindMarked();
+		if (marked != NULL && marked->Message() != NULL) {
+			int32_t align = 0;
+			if (marked->Message()->FindInt32("value", &align) == B_OK) {
+				ApplyParagraphProperty(*fDocument, fView->fCaret.part,
+					firstPar, lastPar,
+					AlignmentProperty(align));
+			}
+		}
+	}
+
+	// Indents
+	char* end;
+	float leftIndent = strtof(fLeftIndent->Text(), &end);
+	if (end != fLeftIndent->Text())
+		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
+			firstPar, lastPar,
+			IndentProperty(Sig("PLef"), leftIndent));
+
+	float firstIndent = strtof(fFirstIndent->Text(), &end);
+	if (end != fFirstIndent->Text())
+		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
+			firstPar, lastPar,
+			IndentProperty(Sig("PInd"), firstIndent));
+
+	float rightIndent = strtof(fRightIndent->Text(), &end);
+	if (end != fRightIndent->Text())
+		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
+			firstPar, lastPar,
+			IndentProperty(Sig("PRig"), rightIndent));
+
+	// Spacing
+	float spaceBefore = strtof(fSpaceBefore->Text(), &end);
+	if (end != fSpaceBefore->Text())
+		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
+			firstPar, lastPar,
+			SpacingProperty(Sig("SpaB"), spaceBefore));
+
+	float spaceAfter = strtof(fSpaceAfter->Text(), &end);
+	if (end != fSpaceAfter->Text())
+		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
+			firstPar, lastPar,
+			SpacingProperty(Sig("SpaA"), spaceAfter));
+
+	// Line spacing
+	std::string ls = fLineSpacing->Text();
+	float lineSpacing = strtof(ls.c_str(), &end);
+	if (end != ls.c_str()) {
+		bool multiple = true;
+		if (ls.find("pt") != std::string::npos)
+			multiple = false;
+		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
+			firstPar, lastPar,
+			LineSpacingProperty(lineSpacing, multiple));
+	}
+
+	fView->TextChanged();
+	PostMessage(B_QUIT_REQUESTED);
+}
+
+
+void
+TParagraphDialog::MessageReceived(BMessage* message)
+{
+	if (message->what == kMsgParagraphOK) {
+		DoApply();
+		return;
+	}
+	BWindow::MessageReceived(message);
+}
+
+
+bool
+TParagraphDialog::QuitRequested()
+{
+	delete this;
+	return true;
+}
+
 // #pragma mark - TDocWindow
+
+
+// Helpers for cell reference parsing (A1, AB12, etc.)
+namespace {
+
+static bool ParseCellRef(const char* text, int& row, int& column)
+{
+	const char* p = text;
+	// Skip leading whitespace
+	while (*p == ' ') p++;
+	
+	// Parse column letters
+	int col = 0;
+	while (*p >= 'A' && *p <= 'Z') {
+		col = col * 26 + (*p - 'A' + 1);
+		p++;
+	}
+	// Must have at least one letter
+	if (col == 0) return false;
+	col--;  // 0-indexed
+	
+	// Parse row digits (must be at least one)
+	const char* d = p;
+	while (*p >= '0' && *p <= '9') p++;
+	if (p == d) return false;
+	
+	row = atoi(d) - 1;  // 0-indexed
+	column = col;
+	
+	if (row < 0 || row > 0x3fff || column > 0x2be)
+		return false;
+	return true;
+}
+
+
+static void CellRefToString(int column, int row, BString& out)
+{
+	// Column letters
+	BString colStr;
+	int c = column + 1;  // 1-indexed
+	while (c > 0) {
+		c--;
+		char ch = 'A' + (c % 26);
+		colStr.Prepend(&ch, 1);
+		c /= 26;
+	}
+	out << colStr << (row + 1);
+}
+
+} // namespace
+
+
+// #pragma mark - TColumnWidthDialog
+
+
+TColumnWidthDialog::TColumnWidthDialog(BHandler* target, Document* doc,
+	TPageView* view)
+	:
+	BWindow(BRect(100, 100, 320, 200), "Column Width",
+		B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, B_NOT_RESIZABLE
+		| B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+	fDocument(doc),
+	fView(view),
+	fField(NULL),
+	fOKBtn(NULL)
+{
+	BView* top = new BView("top", B_WILL_DRAW);
+	top->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	SetLayout(new BGroupLayout(B_VERTICAL, 0));
+	GetLayout()->AddView(top);
+	top->SetLayout(BLayoutBuilder::Group<>(B_VERTICAL, B_USE_SMALL_INSETS)
+		.AddGroup(B_HORIZONTAL, B_USE_SMALL_INSETS)
+			.Add(new BStringView("label", "Column width (points):"))
+			.AddGlue()
+		.End()
+		.Add(fField = new BTextControl("field", NULL, "", NULL))
+		.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+			.AddGlue()
+			.Add(fOKBtn = new BButton("ok", "OK",
+				new BMessage(kMsgColWidth)))
+			.Add(new BButton("cancel", "Cancel",
+				new BMessage(B_QUIT_REQUESTED)))
+		.End()
+		.SetInsets(B_USE_WINDOW_INSETS)
+	);
+	
+	// Pre-fill with current column width
+	if (fView != NULL) {
+		float w = 0;
+		if (fDocument != NULL) {
+			const SSPart* ss = fDocument->SpreadsheetPart(fView->fSelectedCell.part);
+			if (ss != NULL) {
+				int c0 = 0;
+				if (fView->fSelectedCell.active)
+					c0 = std::min(fView->fSelectedCell.column,
+						fView->fSelectedCell.anchorColumn);
+				w = ss->ColumnWidth(uint16_t(c0));
+			} else
+				w = 72.0f;
+		} else
+			w = 72.0f;
+		char buf[32];
+		snprintf(buf, sizeof buf, "%.1f", w);
+		fField->SetText(buf);
+		fField->TextView()->SelectAll();
+	}
+	
+	CenterOnScreen();
+}
+
+
+void
+TColumnWidthDialog::DoApply()
+{
+	if (fView == NULL || fDocument == NULL)
+		return;
+	
+	// Parse the width value
+	char* end;
+	float width = strtof(fField->Text(), &end);
+	if (end == fField->Text() || width < 0) {
+		fprintf(stderr, "colwidth: invalid value '%s'\n", fField->Text());
+		return;
+	}
+	
+	// Get the selection range (columns)
+	size_t part = fView->fSelectedCell.part;
+	int c0, c1;
+	if (fView->fSelectedCell.active && fView->fSelectedCell.column >= 0
+		&& fView->fSelectedCell.anchorColumn >= 0) {
+		c0 = std::min(fView->fSelectedCell.column, fView->fSelectedCell.anchorColumn);
+		c1 = std::max(fView->fSelectedCell.column, fView->fSelectedCell.anchorColumn);
+	} else {
+		c0 = 0; c1 = 0;
+	}
+	
+	gobe::SSPart* ss = fDocument->EditableSpreadsheetPart(part);
+	if (ss == NULL) {
+		fprintf(stderr, "colwidth: no spreadsheet part\n");
+		return;
+	}
+	
+	fView->fUndo.Begin(*fDocument, part, "Column Width",
+		fView->CurrentViewState());
+	bool changed = gobe::SetLineSize(*ss, true, uint16_t(c0), uint16_t(c1), width);
+	if (changed) {
+		fView->fBook->Reset();
+		PostMessage(kMsgDocumentChanged);
+		fprintf(stderr, "colwidth: %.1f for columns %d-%d\n", width, c0, c1);
+	}
+}
+
+
+void
+TColumnWidthDialog::MessageReceived(BMessage* message)
+{
+	if (message->what == kMsgColWidth) {
+		DoApply();
+		PostMessage(B_QUIT_REQUESTED);
+		return;
+	}
+	BWindow::MessageReceived(message);
+}
+
+
+bool
+TColumnWidthDialog::QuitRequested()
+{
+	delete this;
+	return true;
+}
+
+
+// #pragma mark - TRowHeightDialog
+
+
+TRowHeightDialog::TRowHeightDialog(BHandler* target, Document* doc,
+	TPageView* view)
+	:
+	BWindow(BRect(100, 100, 320, 200), "Row Height",
+		B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, B_NOT_RESIZABLE
+		| B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+	fDocument(doc),
+	fView(view),
+	fField(NULL),
+	fOKBtn(NULL)
+{
+	BView* top = new BView("top", B_WILL_DRAW);
+	top->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	SetLayout(new BGroupLayout(B_VERTICAL, 0));
+	GetLayout()->AddView(top);
+	top->SetLayout(BLayoutBuilder::Group<>(B_VERTICAL, B_USE_SMALL_INSETS)
+		.AddGroup(B_HORIZONTAL, B_USE_SMALL_INSETS)
+			.Add(new BStringView("label", "Row height (points):"))
+			.AddGlue()
+		.End()
+		.Add(fField = new BTextControl("field", NULL, "", NULL))
+		.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+			.AddGlue()
+			.Add(fOKBtn = new BButton("ok", "OK",
+				new BMessage(kMsgRowHeight)))
+			.Add(new BButton("cancel", "Cancel",
+				new BMessage(B_QUIT_REQUESTED)))
+		.End()
+		.SetInsets(B_USE_WINDOW_INSETS)
+	);
+	
+	// Pre-fill with current row height
+	if (fView != NULL) {
+		float h = 0;
+		if (fDocument != NULL) {
+			const SSPart* ss = fDocument->SpreadsheetPart(fView->fSelectedCell.part);
+			if (ss != NULL) {
+				int r = 0;
+				if (fView->fSelectedCell.active)
+					r = fView->fSelectedCell.row;
+				h = ss->RowHeight(uint16_t(r));
+			} else
+				h = 16.0f;
+		} else
+			h = 16.0f;
+		char buf[32];
+		snprintf(buf, sizeof buf, "%.1f", h);
+		fField->SetText(buf);
+		fField->TextView()->SelectAll();
+	}
+	
+	CenterOnScreen();
+}
+
+
+void
+TRowHeightDialog::DoApply()
+{
+	if (fView == NULL || fDocument == NULL)
+		return;
+	
+	// Parse the height value
+	char* end;
+	float height = strtof(fField->Text(), &end);
+	if (end == fField->Text() || height < 0) {
+		fprintf(stderr, "rowheight: invalid value '%s'\n", fField->Text());
+		return;
+	}
+	
+	// Get the selection range (rows)
+	size_t part = fView->fSelectedCell.part;
+	int r0, r1;
+	if (fView->fSelectedCell.active && fView->fSelectedCell.row >= 0
+		&& fView->fSelectedCell.anchorRow >= 0) {
+		r0 = std::min(fView->fSelectedCell.row, fView->fSelectedCell.anchorRow);
+		r1 = std::max(fView->fSelectedCell.row, fView->fSelectedCell.anchorRow);
+	} else {
+		r0 = 0; r1 = 0;
+	}
+	
+	gobe::SSPart* ss = fDocument->EditableSpreadsheetPart(part);
+	if (ss == NULL) {
+		fprintf(stderr, "rowheight: no spreadsheet part\n");
+		return;
+	}
+	
+	fView->fUndo.Begin(*fDocument, part, "Row Height",
+		fView->CurrentViewState());
+	bool changed = gobe::SetLineSize(*ss, false, uint16_t(r0), uint16_t(r1), height);
+	if (changed) {
+		fView->fBook->Reset();
+		PostMessage(kMsgDocumentChanged);
+		fprintf(stderr, "rowheight: %.1f for rows %d-%d\n", height, r0, r1);
+	}
+}
+
+
+void
+TRowHeightDialog::MessageReceived(BMessage* message)
+{
+	if (message->what == kMsgRowHeight) {
+		DoApply();
+		PostMessage(B_QUIT_REQUESTED);
+		return;
+	}
+	BWindow::MessageReceived(message);
+}
+
+
+bool
+TRowHeightDialog::QuitRequested()
+{
+	delete this;
+	return true;
+}
+
+
+// #pragma mark - TGoToCellDialog
+
+
+TGoToCellDialog::TGoToCellDialog(BHandler* target, Document* doc,
+	TPageView* view)
+	:
+	BWindow(BRect(100, 100, 300, 180), "Go To Cell",
+		B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, B_NOT_RESIZABLE
+		| B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
+	fDocument(doc),
+	fView(view),
+	fField(NULL),
+	fOKBtn(NULL)
+{
+	BView* top = new BView("top", B_WILL_DRAW);
+	top->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	SetLayout(new BGroupLayout(B_VERTICAL, 0));
+	GetLayout()->AddView(top);
+	top->SetLayout(BLayoutBuilder::Group<>(B_VERTICAL, B_USE_SMALL_INSETS)
+		.AddGroup(B_HORIZONTAL, B_USE_SMALL_INSETS)
+			.Add(new BStringView("label", "Cell reference:"))
+			.AddGlue()
+		.End()
+		.Add(fField = new BTextControl("field", NULL, "", NULL))
+		.AddGroup(B_HORIZONTAL, B_USE_DEFAULT_SPACING)
+			.AddGlue()
+			.Add(fOKBtn = new BButton("ok", "OK",
+				new BMessage(kMsgGoTo)))
+			.Add(new BButton("cancel", "Cancel",
+				new BMessage(B_QUIT_REQUESTED)))
+		.End()
+		.SetInsets(B_USE_WINDOW_INSETS)
+	);
+	
+	// Pre-fill with current cell reference
+	if (fView != NULL) {
+		BString ref;
+		if (fView->fSelectedCell.active) {
+			CellRefToString(fView->fSelectedCell.column, fView->fSelectedCell.row, ref);
+		} else {
+			ref = "A1";
+		}
+		fField->SetText(ref.String());
+		fField->TextView()->SelectAll();
+	}
+	
+	CenterOnScreen();
+}
+
+
+void
+TGoToCellDialog::DoGoTo()
+{
+	if (fView == NULL || fDocument == NULL)
+		return;
+	
+	// Parse the cell reference
+	int row, column;
+	if (!ParseCellRef(fField->Text(), row, column)) {
+		fprintf(stderr, "goto: invalid cell reference '%s'\n", fField->Text());
+		return;
+	}
+	
+	// Find the spreadsheet part
+	size_t part = fView->fSelectedCell.part;
+	const SSPart* ss = fDocument->SpreadsheetPart(part);
+	if (ss == NULL) {
+		fprintf(stderr, "goto: no spreadsheet part\n");
+		return;
+	}
+	
+	// Move the selection
+	fView->fSelectedCell.active = true;
+	fView->fSelectedCell.part = part;
+	fView->fSelectedCell.row = row;
+	fView->fSelectedCell.column = column;
+	fView->fSelectedCell.anchorRow = row;
+	fView->fSelectedCell.anchorColumn = column;
+	
+	fprintf(stderr, "goto: %s (row %d, column %d)\n", fField->Text(), row, column);
+}
+
+
+void
+TGoToCellDialog::MessageReceived(BMessage* message)
+{
+	if (message->what == kMsgGoTo) {
+		DoGoTo();
+		PostMessage(B_QUIT_REQUESTED);
+		return;
+	}
+	BWindow::MessageReceived(message);
+}
+
+
+bool
+TGoToCellDialog::QuitRequested()
+{
+	delete this;
+	return true;
+}
 
 
 // #pragma mark - TDocWindow
@@ -462,6 +1239,13 @@ TDocWindow::InstallBaseMenus()
 
 	bar->AddItem(new TMenu(6));
 
+	// Format menu (MENU 51): Paragraph, Insert Date, Insert Time
+	BMenu* format = new BMenu("Format");
+	format->AddItem(new BMenuItem("Paragraph…", new BMessage('sM50')));
+	format->AddItem(new BMenuItem("Insert Date…", new BMessage(kCmdInsertDate), 'D'));
+	format->AddItem(new BMenuItem("Insert Time…", new BMessage(kCmdInsertTime), 'T'));
+	bar->AddItem(format);
+
 	// Text menus (from the original's TTextMenuElement):
 	// Font (dynamic), Size (MENU 101), Face (MENU 102), Alignment (MENU 300)
 	bar->AddItem(MakeFontMenu());
@@ -472,10 +1256,29 @@ TDocWindow::InstallBaseMenus()
 	fAlignmentMenu = new TMenu(300);
 	bar->AddItem(fAlignmentMenu);
 
-	// the Spreadsheet part's Options menu (MENU 53 of Parts/Spreadsheet),
-	// the items that work so far; Insert/Delete Cells shift whole rows
-	// until their dialog is done
+	// Tab menu (MENU 120)
+	BMenu* tabMenu = new BMenu("Tabs");
+	tabMenu->AddItem(new BMenuItem("Left Tab", new BMessage(kCmdTabLeft), 'l'));
+	tabMenu->AddItem(new BMenuItem("Center Tab", new BMessage(kCmdTabCenter), 'c'));
+	tabMenu->AddItem(new BMenuItem("Right Tab", new BMessage(kCmdTabRight), 'r'));
+	tabMenu->AddItem(new BMenuItem("Align Tab", new BMessage(kCmdTabAlign)));
+	tabMenu->AddItem(new BSeparatorItem());
+	tabMenu->AddItem(new BMenuItem("Delete Tab", new BMessage(kCmdDeleteTab), 'D'));
+	tabMenu->AddItem(new BMenuItem("Edit Tab…", new BMessage(kCmdEditTab)));
+	bar->AddItem(tabMenu);
+
+	// the Spreadsheet part's Format menu (MENU 52 of Parts/Spreadsheet)
+	// and Options menu (MENU 53), with the items that work so far
 	if (fDocument != NULL && !fDocument->spreadsheetParts.empty()) {
+		// Format menu: Column Width, Row Height, Display Options
+		BMenu* format = new BMenu("Format");
+		format->AddItem(new BMenuItem("Column Width…", new BMessage(kCmdColWidth), 'W'));
+		format->AddItem(new BMenuItem("Row Height…", new BMessage(kCmdRowHeight), 'H'));
+		BMenuItem* displayOpts = new BMenuItem("Display Options", NULL);
+		displayOpts->SetEnabled(false);
+		format->AddItem(displayOpts);
+		bar->AddItem(format);
+
 		BMenu* options = new BMenu("Options");
 		options->AddItem(new BMenuItem("Fill Down", new BMessage('sM70'), 'D'));
 		options->AddItem(new BMenuItem("Fill Right", new BMessage('sM71'), 'R'));
@@ -598,6 +1401,8 @@ TDocWindow::InstallBaseMenus()
 
 		options->AddItem(new BMenuItem("Insert Cells…", new BMessage('sM73')));
 		options->AddItem(new BMenuItem("Delete Cells…", new BMessage('sM74')));
+		options->AddSeparatorItem();
+		options->AddItem(new BMenuItem("Go To Cell…", new BMessage(kCmdGoToCell), 'G'));
 		bar->AddItem(options);
 	}
 
@@ -785,6 +1590,155 @@ TDocWindow::MessageReceived(BMessage* message)
 				fDocument, fPages);
 			dialog->Show();
 		}
+		return;
+	}
+	// Column Width, Row Height, Go To Cell
+	if (message->what == kCmdColWidth) {
+		if (fPages != NULL) {
+			TColumnWidthDialog* dialog = new TColumnWidthDialog(this, fDocument, fPages);
+			dialog->Show();
+		}
+		return;
+	}
+	if (message->what == kCmdRowHeight) {
+		if (fPages != NULL) {
+			TRowHeightDialog* dialog = new TRowHeightDialog(this, fDocument, fPages);
+			dialog->Show();
+		}
+		return;
+	}
+	if (message->what == kCmdGoToCell) {
+		if (fPages != NULL) {
+			TGoToCellDialog* dialog = new TGoToCellDialog(this, fDocument, fPages);
+			dialog->Show();
+		}
+		return;
+	}
+	if (message->what == 'sM50') {
+		// Paragraph dialog from the Format menu
+		if (fPages != NULL) {
+			TParagraphDialog* dialog = new TParagraphDialog(fDocument, fPages);
+			dialog->Show();
+		}
+		return;
+	}
+	// Insert Date… (sM53) — insert current date
+	if (message->what == kCmdInsertDate) {
+		if (fPages != NULL) {
+			fPages->fCaret = fPages->fCaret;  // ensure caret is valid
+			// Use the same pattern as the RunScript: get the date and insert it
+			time_t now = time(NULL);
+			struct tm* tm_now = localtime(&now);
+			char dateStr[32];
+			strftime(dateStr, sizeof(dateStr), "%m/%d/%Y", tm_now);
+
+			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
+			if (wp != NULL && fPages->fCaret.active) {
+				fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Date",
+					fPages->CurrentViewState());
+				InsertText(*wp, {fPages->fCaret.paragraph, fPages->fCaret.offset}, dateStr);
+				fPages->fCaret.offset += strlen(dateStr);
+				fPages->TextChanged();
+			}
+		}
+		return;
+	}
+	// Insert Time… (sM54) — insert current time
+	if (message->what == kCmdInsertTime) {
+		if (fPages != NULL) {
+			time_t now = time(NULL);
+			struct tm* tm_now = localtime(&now);
+			char timeStr[32];
+			strftime(timeStr, sizeof(timeStr), "%l:%M %p", tm_now);
+
+			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
+			if (wp != NULL && fPages->fCaret.active) {
+				fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Time",
+					fPages->CurrentViewState());
+				InsertText(*wp, {fPages->fCaret.paragraph, fPages->fCaret.offset}, timeStr);
+				fPages->fCaret.offset += strlen(timeStr);
+				fPages->TextChanged();
+			}
+		}
+		return;
+	}
+	// Tab menu: add tab of given type at caret position
+	if (message->what == kCmdTabLeft || message->what == kCmdTabCenter
+		|| message->what == kCmdTabRight || message->what == kCmdTabAlign) {
+		if (fPages != NULL && fPages->fCaret.active) {
+			// Get the x position of the caret in points
+			float xPoints = fPages->CaretX();
+
+			int type = 0;
+			if (message->what == kCmdTabCenter) type = 1;
+			else if (message->what == kCmdTabRight) type = 2;
+			else if (message->what == kCmdTabAlign) type = 3;
+
+			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
+			if (wp == NULL) return;
+			const WPParagraph& par = wp->paragraphs[fPages->fCaret.paragraph];
+			TextStyle style = fPages->StyleAt({fPages->fCaret.paragraph, fPages->fCaret.offset});
+
+			TabStop tab;
+			tab.position = xPoints;
+			tab.type = type;
+			tab.fill = 0;
+			tab.alignChar = '.';
+			tab.fillChar = '.';
+			auto it = std::find_if(style.tabs.begin(), style.tabs.end(),
+				[&](const TabStop& t) { return t.position == tab.position; });
+			if (it != style.tabs.end())
+				*it = tab;
+			else
+				style.tabs.push_back(tab);
+			std::sort(style.tabs.begin(), style.tabs.end(),
+				[](const TabStop& a, const TabStop& b) { return a.position < b.position; });
+
+			fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Tab",
+				fPages->CurrentViewState());
+			ApplyParagraphProperty(*fDocument, fPages->fCaret.part,
+				fPages->fCaret.paragraph, fPages->fCaret.paragraph,
+				TabsProperty(style.tabs));
+			fPages->TextChanged();
+		}
+		return;
+	}
+	// Delete Tab — remove nearest tab to caret's x position
+	if (message->what == kCmdDeleteTab) {
+		if (fPages != NULL && fPages->fCaret.active) {
+			float xPoints = fPages->CaretX();
+
+			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
+			if (wp == NULL) return;
+			const WPParagraph& par = wp->paragraphs[fPages->fCaret.paragraph];
+			uint32_t styleIdx = par.parStyle;
+			TextStyle style = ResolveTextStyle(fDocument->styles, styleIdx);
+
+			size_t nearestIdx = SIZE_MAX;
+			float nearestDist = 1e18f;
+			for (size_t i = 0; i < style.tabs.size(); i++) {
+				float dist = fabsf(style.tabs[i].position - xPoints);
+				if (dist < nearestDist) {
+					nearestDist = dist;
+					nearestIdx = i;
+				}
+			}
+			if (nearestIdx == SIZE_MAX || nearestIdx >= style.tabs.size())
+				return;
+			style.tabs.erase(style.tabs.begin() + nearestIdx);
+
+			fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Tab",
+				fPages->CurrentViewState());
+			ApplyParagraphProperty(*fDocument, fPages->fCaret.part,
+				fPages->fCaret.paragraph, fPages->fCaret.paragraph,
+				TabsProperty(style.tabs));
+			fPages->TextChanged();
+		}
+		return;
+	}
+	// Edit Tab… — placeholder (not implemented yet)
+	if (message->what == kCmdEditTab) {
+		fStatus->SetText("Edit Tab… not implemented yet");
 		return;
 	}
 

@@ -74,6 +74,23 @@ public:
 	Caret fAnchor;
 	UndoStack fUndo;
 	UndoStack::ViewState CurrentViewState() const;
+	// test hooks used by RunScript
+	TextStyle StyleAt(TextPosition at) const;
+	std::pair<TextPosition, TextPosition> TextSelectionRange() const;
+	// the caret's x position in view coordinates (public for tab menu)
+	float CaretX() const;
+
+	// spreadsheet editing state (public for TDocWindow)
+	struct {
+		bool active = false;
+		size_t part = 0;
+		int row = 0, column = 0;
+		int anchorRow = 0, anchorColumn = 0;
+	} fSelectedCell;
+	BTextView* fCellEditor = NULL;
+	BRect fBounds;					// everything, in document coordinates
+	float fMargin;
+	std::unique_ptr<SSBook> fBook;	// spreadsheet values
 
 private:
 	struct FrameGeometry {
@@ -115,10 +132,6 @@ private:
 	void DrawCaret();
 	// the x of a byte offset in that line
 	float OffsetX(size_t lineIndex, size_t offset) const;
-	// returns the selection range; if no selection, both are at caret
-	std::pair<TextPosition, TextPosition> TextSelectionRange() const;
-	// the effective text style at a position of the caret's part
-	TextStyle StyleAt(TextPosition at) const;
 	bool DeleteSelection();
 	void CopySelection();
 	void PasteText();
@@ -155,21 +168,11 @@ private:
 	Document& fDocument;
 	std::vector<Document::PlacedFrame> fFrames;
 	std::vector<Line> fLines;
-	std::unique_ptr<SSBook> fBook;	// spreadsheet values
 	std::map<std::vector<uint32_t>, CellStyle> fCellStyles;
 	std::map<size_t, std::unique_ptr<BBitmap>> fImages;
 	bool fDragging = false;
 	bool fDraggingCells = false;	// cell range: drag from first click
 	bool fScriptShift = false;		// RunScript: shift held
-	struct {
-		bool active = false;
-		size_t part = 0;
-		int row = 0, column = 0;
-		int anchorRow = 0, anchorColumn = 0;
-	} fSelectedCell;
-	BTextView* fCellEditor = NULL;
-	BRect fBounds;					// everything, in document coordinates
-	float fMargin;
 };
 
 } // namespace gobe

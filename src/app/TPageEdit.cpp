@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+#include <ctime>
 
 #include "Editing.h"
 #include "GobeResources.h"
@@ -144,6 +145,17 @@ TPageView::CaretLine(const Caret& caret, size_t& lineIndex, float& x) const
 		return false;
 	x = OffsetX(lineIndex, caret.offset);
 	return true;
+}
+
+
+// Public accessor: the caret's x position in view coordinates
+float
+TPageView::CaretX() const
+{
+	size_t line;
+	float x = 0;
+	CaretLine(fCaret, line, x);
+	return x;
 }
 
 
@@ -295,8 +307,10 @@ void
 TPageView::SelectAllText()
 {
 	const WPPart* wp = fDocument.WordPart(fCaret.part);
-	if (wp == NULL)
+	if (wp == NULL) {
+		fprintf(stderr, "selectall: no word part\n");
 		return;
+	}
 	fAnchor = {true, fCaret.part, 0, 0};
 	fCaret = {true, fCaret.part, wp->paragraphs.size() - 1,
 		EditableLength(wp->paragraphs.back())};
@@ -1365,10 +1379,13 @@ TPageView::MessageReceived(BMessage* message)
 							TextChanged();
 						return;
 					}
-					case B_SELECT_ALL:
-						SelectAllText();
-						return;
 				}
+			}
+			// B_SELECT_ALL works even when the caret isn't active yet
+			// (e.g. when the document is first opened)
+			if (message->what == B_SELECT_ALL) {
+				SelectAllText();
+				return;
 			}
 			BView::MessageReceived(message);
 			return;
@@ -1850,6 +1867,402 @@ TPageView::RunScript(const std::string& script, Document& document)
 				else
 					fprintf(stderr, "selected none\n");
 			}
+		} else if (command.size() >= 9 && command.substr(0, 9) == "colwidth ") {
+			// "colwidth <points>" — set column width of the selection
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "colwidth: no selection\n");
+				continue;
+			}
+			size_t part = fSelectedCell.part;
+			int c0, c1;
+			c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+			c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+			float width = 0;
+			if (sscanf(command.c_str() + 9, "%f", &width) != 1) {
+				fprintf(stderr, "colwidth: expected points\n");
+				continue;
+			}
+			SSPart* ss = fDocument.EditableSpreadsheetPart(part);
+			if (ss == nullptr) {
+				fprintf(stderr, "colwidth: no spreadsheet part\n");
+				continue;
+			}
+			fUndo.Begin(fDocument, part, "Column Width", CurrentViewState());
+			bool changed = SetLineSize(*ss, true, uint16_t(c0), uint16_t(c1), width);
+			if (changed) {
+				fBook->Reset();
+				Window()->PostMessage(kMsgDocumentChanged);
+				fprintf(stderr, "colwidth: %.1f for columns %d-%d\n", width, c0, c1);
+			}
+		} else if (command.size() >= 10 && command.substr(0, 10) == "rowheight ") {
+			// "rowheight <points>" — set row height of the selection
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "rowheight: no selection\n");
+				continue;
+			}
+			size_t part = fSelectedCell.part;
+			int r0, r1;
+			r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			float height = 0;
+			if (sscanf(command.c_str() + 10, "%f", &height) != 1) {
+				fprintf(stderr, "rowheight: expected points\n");
+				continue;
+			}
+			SSPart* ss = fDocument.EditableSpreadsheetPart(part);
+			if (ss == nullptr) {
+				fprintf(stderr, "rowheight: no spreadsheet part\n");
+				continue;
+			}
+			fUndo.Begin(fDocument, part, "Row Height", CurrentViewState());
+			bool changed = SetLineSize(*ss, false, uint16_t(r0), uint16_t(r1), height);
+			if (changed) {
+				fBook->Reset();
+				Window()->PostMessage(kMsgDocumentChanged);
+				fprintf(stderr, "rowheight: %.1f for rows %d-%d\n", height, r0, r1);
+			}
+		} else if (command.size() >= 5 && command.substr(0, 5) == "goto ") {
+			// "goto <cell>" — go to cell like "B12"
+			int row = 0, column = 0;
+			const char* p = command.c_str() + 5;
+			while (*p == ' ') p++;
+			int col = 0;
+			while (*p >= 'A' && *p <= 'Z') {
+				col = col * 26 + (*p - 'A' + 1);
+				p++;
+			}
+			if (col == 0) {
+				fprintf(stderr, "goto: invalid cell reference '%s'\n",
+					command.c_str() + 5);
+				continue;
+			}
+			col--;
+			const char* d = p;
+			while (*p >= '0' && *p <= '9') p++;
+			if (p == d) {
+				fprintf(stderr, "goto: invalid cell reference '%s'\n",
+					command.c_str() + 5);
+				continue;
+			}
+			row = atoi(d) - 1;
+			column = col;
+			if (row < 0 || row > 0x3fff || column > 0x2be) {
+				fprintf(stderr, "goto: cell out of range\n");
+				continue;
+			}
+			fSelectedCell.active = true;
+			fSelectedCell.row = row;
+			fSelectedCell.column = column;
+			fSelectedCell.anchorRow = row;
+			fSelectedCell.anchorColumn = column;
+			fprintf(stderr, "goto: %s (row %d, column %d)\n",
+				command.c_str() + 5, row, column);
+		} else if (command.size() >= 11 && command.substr(0, 11) == "fontdialog ") {
+			// "fontdialog <family>|<size>|<face flags>" — apply font properties
+			// If a parameter is absent, that property is unchanged
+			if (!fCaret.active) {
+				continue;
+			}
+			std::string args = command.substr(11);
+			size_t pipe1 = args.find('|');
+			size_t pipe2 = std::string::npos;
+			if (pipe1 != std::string::npos)
+				pipe2 = args.find('|', pipe1 + 1);
+			fUndo.Begin(fDocument, fCaret.part, "Font", CurrentViewState());
+			auto sel = TextSelectionRange();
+			// Family
+			std::string family = (pipe1 != std::string::npos) ? args.substr(0, pipe1) : "";
+			if (!family.empty()) {
+				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+					TextFontProperty(family, ""));
+			}
+			// Size
+			if (pipe2 != std::string::npos) {
+				std::string sizeStr = args.substr(pipe1 + 1, pipe2 - pipe1 - 1);
+				if (!sizeStr.empty()) {
+					float size = strtof(sizeStr.c_str(), NULL);
+					if (size > 0) {
+						ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+							TextSizeProperty(size));
+					}
+				}
+			}
+			// Face flags
+			if (pipe2 != std::string::npos) {
+				std::string flagsStr = args.substr(pipe2 + 1);
+				if (!flagsStr.empty()) {
+					char* end = NULL;
+					uint32_t flags = strtoul(flagsStr.c_str(), &end, 10);
+					if (end != flagsStr.c_str()) {
+						ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+							TextFaceProperty(flags));
+					}
+				}
+			}
+			TextChanged();
+		} else if (command.size() >= 11 && command.substr(0, 11) == "paradialog ") {
+			// "paradialog <align>|<left>|<first>|<right>|<before>|<after>|<line spacing>"
+			// — apply paragraph properties; absent params leave properties unchanged
+			if (!fCaret.active) {
+				fprintf(stderr, "paradialog: no caret\n");
+				continue;
+			}
+			std::string args = command.substr(11);
+			std::vector<std::string> parts;
+			size_t start = 0;
+			for (int i = 0; i < 7; i++) {
+				size_t p = args.find('|', start);
+				if (p == std::string::npos) {
+					parts.push_back(args.substr(start));
+					break;
+				}
+				parts.push_back(args.substr(start, p - start));
+				start = p + 1;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Paragraph", CurrentViewState());
+			int32_t firstPar = fCaret.paragraph;
+			int32_t lastPar = fCaret.paragraph;
+			// Alignment
+			if (!parts[0].empty()) {
+				char* end = NULL;
+				int32_t align = strtol(parts[0].c_str(), &end, 10);
+				if (end != parts[0].c_str())
+					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+						AlignmentProperty(align));
+			}
+			// Left indent
+			if (!parts[1].empty()) {
+				char* end = NULL;
+				float val = strtof(parts[1].c_str(), &end);
+				if (end != parts[1].c_str())
+					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+						IndentProperty(Sig("PLef"), val));
+			}
+			// First indent
+			if (!parts[2].empty()) {
+				char* end = NULL;
+				float val = strtof(parts[2].c_str(), &end);
+				if (end != parts[2].c_str())
+					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+						IndentProperty(Sig("PInd"), val));
+			}
+			// Right indent
+			if (!parts[3].empty()) {
+				char* end = NULL;
+				float val = strtof(parts[3].c_str(), &end);
+				if (end != parts[3].c_str())
+					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+						IndentProperty(Sig("PRig"), val));
+			}
+			// Space before
+			if (!parts[4].empty()) {
+				char* end = NULL;
+				float val = strtof(parts[4].c_str(), &end);
+				if (end != parts[4].c_str())
+					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+						SpacingProperty(Sig("SpaB"), val));
+			}
+			// Space after
+			if (!parts[5].empty()) {
+				char* end = NULL;
+				float val = strtof(parts[5].c_str(), &end);
+				if (end != parts[5].c_str())
+					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+						SpacingProperty(Sig("SpaA"), val));
+			}
+			// Line spacing
+			if (!parts[6].empty()) {
+				std::string ls = parts[6];
+				bool multiple = true;
+				if (ls.find("pt") != std::string::npos)
+					multiple = false;
+				char* end = NULL;
+				float val = strtof(ls.c_str(), &end);
+				if (end != ls.c_str())
+					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+						LineSpacingProperty(val, multiple));
+			}
+			TextChanged();
+		} else if (command.size() > 5 && command.compare(0, 5, "para ") == 0) {
+			// "para <par_idx>" — if followed by space, move caret to paragraph;
+			// otherwise print paragraph properties
+			if (command.size() > 5 && command[5] != '\0' && command.back() == ' ') {
+				// "para <par_idx> " — move caret to end of paragraph <par_idx>
+				int par;
+				if (sscanf(command.c_str() + 5, "%d", &par) == 1) {
+					const WPPart* wp = fDocument.WordPart(fCaret.part);
+					if (wp != NULL && size_t(par) < wp->paragraphs.size()) {
+						fCaret.active = true;
+						fCaret.paragraph = size_t(par);
+						fCaret.offset = EditableLength(wp->paragraphs[size_t(par)]);
+						fAnchor = fCaret;
+						Invalidate();
+					}
+				}
+			} else {
+				// "para <par_idx>" — print paragraph properties
+				int par;
+				if (sscanf(command.c_str() + 5, "%d", &par) == 1) {
+					const WPPart* wp = fDocument.WordPart(fCaret.part);
+					if (wp != NULL && size_t(par) < wp->paragraphs.size()) {
+						const WPParagraph& p = wp->paragraphs[size_t(par)];
+						uint32_t styleIdx = p.parStyle;
+						TextStyle s = ResolveTextStyle(fDocument.styles, styleIdx);
+						printf("para %d align %d left %.0f first %.0f right %.0f before %.0f after %.0f spacing %.0f tabs",
+							par, s.alignment, s.leftIndent, s.firstIndent, s.rightIndent,
+							s.spaceBefore, s.spaceAfter, s.lineSpacing);
+						for (const TabStop& tab : s.tabs) {
+							const char* tname = "left";
+							if (tab.type == 1) tname = "center";
+							else if (tab.type == 2) tname = "right";
+							else if (tab.type == 3) tname = "align";
+							printf(" %s@%.0f", tname, tab.position);
+						}
+						printf("\n");
+					}
+				}
+			}
+		} else if (command.compare(0, 4, "tab ") == 0) {
+			// "tab <left|center|right|align> <x points>"
+			// — adds a tab stop at the given x position (in points)
+			if (!fCaret.active) {
+				fprintf(stderr, "tab: no caret\n");
+				continue;
+			}
+			std::string args = command.substr(4);
+			size_t space = args.find(' ');
+			if (space == std::string::npos) {
+				fprintf(stderr, "tab: missing position\n");
+				continue;
+			}
+			std::string typeStr = args.substr(0, space);
+			float xPoints = strtof(args.substr(space + 1).c_str(), NULL);
+			if (xPoints <= 0) {
+				fprintf(stderr, "tab: invalid position\n");
+				continue;
+			}
+			int type = 0;
+			if (typeStr == "center")
+				type = 1;
+			else if (typeStr == "right")
+				type = 2;
+			else if (typeStr == "align")
+				type = 3;
+			// left = 0 is default
+
+			// Get the current tabs from the style at caret
+			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
+			if (wp == NULL) {
+				fprintf(stderr, "tab: no word part\n");
+				continue;
+			}
+			const WPParagraph& par = wp->paragraphs[fCaret.paragraph];
+			uint32_t styleIdx = par.parStyle;
+			TextStyle style = ResolveTextStyle(fDocument.styles, styleIdx);
+
+			// Add a new tab stop
+			TabStop tab;
+			tab.position = xPoints;
+			tab.type = type;
+			tab.fill = 0;
+			tab.alignChar = '.';
+			tab.fillChar = '.';
+			// Replace existing tab at same position, or add
+			auto it = std::find_if(style.tabs.begin(), style.tabs.end(),
+				[&](const TabStop& t) { return t.position == tab.position; });
+			if (it != style.tabs.end())
+				*it = tab;
+			else
+				style.tabs.push_back(tab);
+			std::sort(style.tabs.begin(), style.tabs.end(),
+				[](const TabStop& a, const TabStop& b) { return a.position < b.position; });
+
+			fUndo.Begin(fDocument, fCaret.part, "Tab", CurrentViewState());
+			ApplyParagraphProperty(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
+				TabsProperty(style.tabs));
+			TextChanged();
+		} else if (command.compare(0, 9, "deletetab") == 0) {
+			// "deletetab <x points>" — remove the nearest tab stop to x points
+			if (!fCaret.active) {
+				fprintf(stderr, "deletetab: no caret\n");
+				continue;
+			}
+			std::string args = command.substr(9);
+			float xPoints = strtof(args.c_str(), NULL);
+			if (xPoints <= 0) {
+				fprintf(stderr, "deletetab: invalid position\n");
+				continue;
+			}
+
+			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
+			if (wp == NULL) {
+				fprintf(stderr, "deletetab: no word part\n");
+				continue;
+			}
+			const WPParagraph& par = wp->paragraphs[fCaret.paragraph];
+			uint32_t styleIdx = par.parStyle;
+			TextStyle style = ResolveTextStyle(fDocument.styles, styleIdx);
+
+			// Find the nearest tab to xPoints
+			size_t nearestIdx = SIZE_MAX;
+			float nearestDist = 1e18f;
+			for (size_t i = 0; i < style.tabs.size(); i++) {
+				float dist = fabsf(style.tabs[i].position - xPoints);
+				if (dist < nearestDist) {
+					nearestDist = dist;
+					nearestIdx = i;
+				}
+			}
+			if (nearestIdx == SIZE_MAX || nearestIdx >= style.tabs.size()) {
+				fprintf(stderr, "deletetab: no tabs found\n");
+				continue;
+			}
+			style.tabs.erase(style.tabs.begin() + nearestIdx);
+
+			fUndo.Begin(fDocument, fCaret.part, "Tab", CurrentViewState());
+			ApplyParagraphProperty(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
+				TabsProperty(style.tabs));
+			TextChanged();
+		} else if (command == "insertdate") {
+			// Insert current date as plain text in m/d/yyyy format
+			if (!fCaret.active) {
+				fprintf(stderr, "insertdate: no caret\n");
+				continue;
+			}
+			time_t now = time(NULL);
+			struct tm* tm_now = localtime(&now);
+			char dateStr[32];
+			strftime(dateStr, sizeof(dateStr), "%m/%d/%Y", tm_now);
+
+			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
+			if (wp == NULL) {
+				fprintf(stderr, "insertdate: no word part\n");
+				continue;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Date", CurrentViewState());
+			InsertText(*wp, {fCaret.paragraph, fCaret.offset}, dateStr);
+			fCaret.offset += strlen(dateStr);
+			TextChanged();
+		} else if (command == "inserttime") {
+			// Insert current time as plain text in h:mm AM/PM format
+			if (!fCaret.active) {
+				fprintf(stderr, "inserttime: no caret\n");
+				continue;
+			}
+			time_t now = time(NULL);
+			struct tm* tm_now = localtime(&now);
+			char timeStr[32];
+			strftime(timeStr, sizeof(timeStr), "%l:%M %p", tm_now);
+
+			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
+			if (wp == NULL) {
+				fprintf(stderr, "inserttime: no word part\n");
+				continue;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Time", CurrentViewState());
+			InsertText(*wp, {fCaret.paragraph, fCaret.offset}, timeStr);
+			fCaret.offset += strlen(timeStr);
+			TextChanged();
 		}
 	}
 }
