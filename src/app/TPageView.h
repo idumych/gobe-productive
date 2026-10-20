@@ -144,11 +144,13 @@ private:
 	Caret fCaret;
 	Caret fAnchor;					// the other end of the selection
 	bool fDragging = false;
+	bool fDraggingCells = false;	// cell range: drag from first click
 	bool fScriptShift = false;		// RunScript: shift held
 	struct {
 		bool active = false;
 		size_t part = 0;
 		int row = 0, column = 0;
+		int anchorRow = 0, anchorColumn = 0;
 	} fSelectedCell;
 	BTextView* fCellEditor = NULL;
 	BRect fBounds;					// everything, in document coordinates

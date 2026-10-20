@@ -1,8 +1,10 @@
 // TPageView editing: a caret in word processing text (click, type,
 // Backspace/Delete, Enter, arrows, Home/End, selection, and clipboard
 // operations) and spreadsheet cells (click to select, double-click/Enter/
-// typing to edit in place, Enter/Tab to commit, Escape to cancel). Changes
-// go to the Document through the Editing operations; TDocWindow saves them.
+// typing to edit in place, Enter/Tab to commit, Escape to cancel).
+// Spreadsheet range selection: shift-click, shift+arrows, mouse drag extend
+// the range; copy/cut/paste/clear/selectall work on ranges using
+// RangeInput/ClearRange/PasteInput from Editing.h.
 #include "TPageView.h"
 
 #include <Alert.h>
@@ -614,6 +616,8 @@ TPageView::EndCellEdit(bool commit, int moveRows, int moveColumns)
 	}
 	fSelectedCell.row = std::max(0, fSelectedCell.row + moveRows);
 	fSelectedCell.column = std::max(0, fSelectedCell.column + moveColumns);
+	fSelectedCell.anchorRow = fSelectedCell.row;
+	fSelectedCell.anchorColumn = fSelectedCell.column;
 	Invalidate();
 }
 
@@ -644,16 +648,30 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	int row, column;
 	BRect rect;
 	if (HitCell(where, part, row, column, rect)) {
+		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
 		bool same = fSelectedCell.active && fSelectedCell.part == part
 			&& fSelectedCell.row == row && fSelectedCell.column == column;
 		fCaret.active = false;
 		fAnchor.active = false;
 		fSelectedCell.active = true;
 		fSelectedCell.part = part;
-		fSelectedCell.row = row;
-		fSelectedCell.column = column;
-		if (same || clicks > 1)
+		if (shift && fSelectedCell.active && fSelectedCell.part == part) {
+			// extend range: keep anchor, move row/column
+			fSelectedCell.row = row;
+			fSelectedCell.column = column;
+		} else {
+			fSelectedCell.row = row;
+			fSelectedCell.column = column;
+			fSelectedCell.anchorRow = row;
+			fSelectedCell.anchorColumn = column;
+		}
+		if ((same || clicks > 1) && !shift)
 			BeginCellEdit(part, row, column, rect);
+		else {
+			fDraggingCells = true;
+			if (Window() != NULL)
+				SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+		}
 		Invalidate();
 		return;
 	}
@@ -710,6 +728,16 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 			Invalidate();
 		}
 	}
+	if (fDraggingCells) {
+		size_t part;
+		int row, column;
+		BRect rect;
+		if (HitCell(where, part, row, column, rect) && part == fSelectedCell.part) {
+			fSelectedCell.row = row;
+			fSelectedCell.column = column;
+			Invalidate();
+		}
+	}
 	BView::MouseMoved(where, transit, dragMessage);
 }
 
@@ -718,6 +746,7 @@ void
 TPageView::MouseUp(BPoint where)
 {
 	fDragging = false;
+	fDraggingCells = false;
 	BView::MouseUp(where);
 }
 
@@ -732,31 +761,56 @@ TPageView::KeyDown(const char* bytes, int32 count)
 		return;
 	}
 	if (fSelectedCell.active) {
+		bool shift = ((modifiers() & B_SHIFT_KEY) != 0) || fScriptShift;
 		BRect rect = CellViewRect(fSelectedCell.part, fSelectedCell.row,
 			fSelectedCell.column);
 		switch (bytes[0]) {
 			case B_UP_ARROW:
-				fSelectedCell.row = std::max(0, fSelectedCell.row - 1);
+				if (shift) {
+					fSelectedCell.row = std::max(0, fSelectedCell.row - 1);
+				} else {
+					fSelectedCell.anchorRow = fSelectedCell.row = std::max(0, fSelectedCell.row - 1);
+					fSelectedCell.anchorColumn = fSelectedCell.column;
+				}
 				break;
 			case B_DOWN_ARROW:
-				fSelectedCell.row++;
+				if (shift) {
+					fSelectedCell.row++;
+				} else {
+					fSelectedCell.anchorRow = ++fSelectedCell.row;
+					fSelectedCell.anchorColumn = fSelectedCell.column;
+				}
 				break;
 			case B_LEFT_ARROW:
-				fSelectedCell.column = std::max(0, fSelectedCell.column - 1);
+				if (shift) {
+					fSelectedCell.column = std::max(0, fSelectedCell.column - 1);
+				} else {
+					fSelectedCell.anchorColumn = fSelectedCell.column = std::max(0, fSelectedCell.column - 1);
+					fSelectedCell.anchorRow = fSelectedCell.row;
+				}
 				break;
 			case B_RIGHT_ARROW:
 			case B_TAB:
-				fSelectedCell.column++;
+				if (shift) {
+					fSelectedCell.column++;
+				} else {
+					fSelectedCell.anchorColumn = ++fSelectedCell.column;
+					fSelectedCell.anchorRow = fSelectedCell.row;
+				}
 				break;
 			case B_ENTER:
 				BeginCellEdit(fSelectedCell.part, fSelectedCell.row, fSelectedCell.column, rect);
 				return;
 			case B_BACKSPACE:
 			case B_DELETE: {
+				int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+				int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+				int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
 				SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
 				std::string error;
-				if (ss != NULL && SetCellInput(*ss, uint16_t(fSelectedCell.row),
-						uint16_t(fSelectedCell.column), "", nullptr, error)) {
+				if (ss != NULL && ClearRange(*ss, uint16_t(r0), uint16_t(c0),
+						uint16_t(r1), uint16_t(c1))) {
 					fBook->Reset();
 					if (Window() != NULL)
 						Window()->PostMessage(kMsgDocumentChanged);
@@ -822,10 +876,124 @@ TPageView::MessageReceived(BMessage* message)
 		case kMsgCellCancel:
 			EndCellEdit(false);
 			return;
-		default:
+		default: {
+			static const uint32 kCmdClear = 'sM12';
+			// cell selection: handle before text handling
+			if (fSelectedCell.active && fCellEditor == NULL) {
+				int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+				int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+				int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+				switch (message->what) {
+					case B_COPY: {
+						SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+						if (ss != NULL) {
+							std::string text = RangeInput(*ss, uint16_t(r0), uint16_t(c0),
+								uint16_t(r1), uint16_t(c1));
+							be_clipboard->Lock();
+							be_clipboard->Clear();
+							be_clipboard->Data()->AddData("text/plain", B_MIME_TYPE,
+								text.data(), text.size());
+							be_clipboard->Commit();
+							be_clipboard->Unlock();
+						}
+						return;
+					}
+					case B_CUT: {
+						SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+						if (ss != NULL) {
+							std::string text = RangeInput(*ss, uint16_t(r0), uint16_t(c0),
+								uint16_t(r1), uint16_t(c1));
+							be_clipboard->Lock();
+							be_clipboard->Clear();
+							be_clipboard->Data()->AddData("text/plain", B_MIME_TYPE,
+								text.data(), text.size());
+							be_clipboard->Commit();
+							be_clipboard->Unlock();
+							std::string error;
+							if (ClearRange(*ss, uint16_t(r0), uint16_t(c0),
+									uint16_t(r1), uint16_t(c1))) {
+								fBook->Reset();
+								if (Window() != NULL)
+									Window()->PostMessage(kMsgDocumentChanged);
+							}
+						}
+						return;
+					}
+					case B_PASTE: {
+						if (!be_clipboard->Lock())
+							return;
+						const void* data = NULL;
+						ssize_t size = 0;
+						bool ok = false;
+						if (be_clipboard->Data()->FindData("text/plain", B_MIME_TYPE,
+								&data, &size) == B_OK && size > 0) {
+							std::string text((const char*)data, size);
+							be_clipboard->Unlock();
+							SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+							if (ss != NULL) {
+								std::string error;
+								auto isName = [&](const std::string& n) {
+									return fDocument.NamedSelection(n,
+										int(fSelectedCell.part)) != nullptr;
+								};
+								uint16_t rows, columns;
+								if (PasteInput(*ss, uint16_t(r0), uint16_t(c0), text,
+										isName, error, rows, columns)) {
+									fBook->Reset();
+									if (Window() != NULL)
+										Window()->PostMessage(kMsgDocumentChanged);
+									// select the pasted block
+									fSelectedCell.anchorRow = fSelectedCell.row = r0;
+									fSelectedCell.anchorColumn = fSelectedCell.column = c0;
+									fSelectedCell.row = r0 + int(rows) - 1;
+									fSelectedCell.column = c0 + int(columns) - 1;
+									ok = true;
+								} else {
+									(new BAlert("Formula",
+										("The formula has an error: " + error).c_str(),
+										"OK"))->Go(NULL);
+								}
+							}
+						} else {
+							be_clipboard->Unlock();
+						}
+						if (ok)
+							Invalidate();
+						return;
+					}
+					case kCmdClear:
+						{
+							SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+							std::string error;
+							if (ss != NULL && ClearRange(*ss, uint16_t(r0), uint16_t(c0),
+									uint16_t(r1), uint16_t(c1))) {
+								fBook->Reset();
+								if (Window() != NULL)
+									Window()->PostMessage(kMsgDocumentChanged);
+							}
+							return;
+						}
+					case B_SELECT_ALL: {
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						if (ss != NULL) {
+							int maxRow = 0, maxCol = 0;
+							for (const SSCell& cell : ss->cells) {
+								maxRow = std::max(maxRow, int(cell.id.a));
+								maxCol = std::max(maxCol, int(cell.id.b));
+							}
+							fSelectedCell.anchorRow = 0;
+							fSelectedCell.anchorColumn = 0;
+							fSelectedCell.row = maxRow;
+							fSelectedCell.column = maxCol;
+							Invalidate();
+						}
+						return;
+					}
+				}
+			}
 			if (fCaret.active) {
 				// the Edit menu (MENU 3) sends B_CUT, B_COPY, B_PASTE, B_SELECT_ALL
-				static const uint32 kCmdClear = 'sM12';
 				switch (message->what) {
 					case B_CUT:
 						CopySelection();
@@ -848,6 +1016,8 @@ TPageView::MessageReceived(BMessage* message)
 				}
 			}
 			BView::MessageReceived(message);
+			return;
+		}
 	}
 }
 
@@ -856,7 +1026,9 @@ TPageView::MessageReceived(BMessage* message)
 // "sclick x y" (shift-click), "tclick x y" (triple-click),
 // "key text" (with {enter} {bs} {del} {left} {right} {up} {down} {tab}
 // {esc} {home} {end} {sleft} {sright}), "selectall", "copy", "cut", "paste",
-// "commit" (the cell editor), "save path".
+// "cellrect row col", "selection", "commit" (the cell editor), "save path".
+// "copy", "cut", "paste", "selectall", "{sup}", "{sdown}", "{sleft}",
+// "{sright}" work for cell selection too.
 void
 TPageView::RunScript(const std::string& script, Document& document)
 {
@@ -889,15 +1061,40 @@ TPageView::RunScript(const std::string& script, Document& document)
 			if (sscanf(command.c_str() + 7, "%f %f", &x, &y) == 2)
 				Click(BPoint(x, y), 3, B_PRIMARY_MOUSE_BUTTON);
 		} else if (command == "selectall") {
-			SelectAllText();
+			BMessage msg(B_SELECT_ALL);
+			// dispatch via MessageReceived for both cell and text selection
+			MessageReceived(&msg);
 		} else if (command == "copy") {
-			CopySelection();
+			BMessage msg(B_COPY);
+			MessageReceived(&msg);
 		} else if (command == "cut") {
-			CopySelection();
-			if (DeleteSelection())
-				TextChanged();
+			BMessage msg(B_CUT);
+			MessageReceived(&msg);
 		} else if (command == "paste") {
-			PasteText();
+			BMessage msg(B_PASTE);
+			MessageReceived(&msg);
+		} else if (command.size() >= 9 && command.substr(0, 9) == "cellrect ") {
+			int row, column;
+			if (sscanf(command.c_str() + 9, "%d %d", &row, &column) == 2) {
+				BRect r = CellViewRect(fSelectedCell.part, row, column);
+				if (r.IsValid())
+					fprintf(stderr, "cellrect %d %d %.0f,%.0f-%.0f,%.0f\n",
+						row, column, r.left, r.top, r.right, r.bottom);
+				else
+					fprintf(stderr, "cellrect %d %d (not visible)\n", row, column);
+			}
+		} else if (command == "selection") {
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "cells none\n");
+			} else {
+				int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+				int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+				int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+				fprintf(stderr, "cells part %zu rows %d-%d columns %d-%d active %d,%d\n",
+					fSelectedCell.part, r0, r1, c0, c1,
+					fSelectedCell.row, fSelectedCell.column);
+			}
 		} else if (command.compare(0, 4, "key ") == 0) {
 			std::string keys = command.substr(4);
 			static const struct { const char* name; char key; } kNames[] = {
@@ -905,12 +1102,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 				{"{left}", B_LEFT_ARROW}, {"{right}", B_RIGHT_ARROW}, {"{up}", B_UP_ARROW},
 				{"{down}", B_DOWN_ARROW}, {"{tab}", B_TAB}, {"{esc}", B_ESCAPE},
 				{"{home}", B_HOME}, {"{end}", B_END}, {"{sleft}", B_LEFT_ARROW},
-				{"{sright}", B_RIGHT_ARROW}};
+				{"{sright}", B_RIGHT_ARROW}, {"{sup}", B_UP_ARROW},
+				{"{sdown}", B_DOWN_ARROW}};
 			for (size_t i = 0; i < keys.size();) {
 				char key = keys[i];
 				size_t length = 1;
 				bool shifted = keys.compare(i, 7, "{sleft}") == 0
-					|| keys.compare(i, 8, "{sright}") == 0;
+					|| keys.compare(i, 8, "{sright}") == 0
+					|| keys.compare(i, 4, "{sup}") == 0
+					|| keys.compare(i, 7, "{sdown}") == 0;
 				for (const auto& n : kNames)
 					if (keys.compare(i, strlen(n.name), n.name) == 0) {
 						key = n.key;

@@ -859,6 +859,22 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 				for (int c = texts[i].c0; c <= texts[i].c1; c++)
 					covered[{rw, c}] = int(i);
 
+	// the selected range, under borders and text (the active cell keeps its
+	// background)
+	if (fSelectedCell.active && fSelectedCell.part == f.part) {
+		int r0 = std::max(firstRow, std::min(fSelectedCell.row, fSelectedCell.anchorRow));
+		int r1 = std::min(firstRow + rows - 1,
+			std::max(fSelectedCell.row, fSelectedCell.anchorRow));
+		int c0 = std::max(firstColumn, std::min(fSelectedCell.column, fSelectedCell.anchorColumn));
+		int c1 = std::min(firstColumn + columns - 1,
+			std::max(fSelectedCell.column, fSelectedCell.anchorColumn));
+		SetHighColor(180, 205, 255);
+		for (int r = r0; r <= r1; r++)
+			for (int c = c0; c <= c1; c++)
+				if (r != fSelectedCell.row || c != fSelectedCell.column)
+					FillRect(cellRect(r, c));
+	}
+
 	// borders (TSSDisplayManager::DrawCellBorders): left/top edges are
 	// skipped on the frame's first column/row and inside overflow areas
 	for (int row = firstRow; row < firstRow + rows; row++) {
@@ -909,6 +925,20 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 	if (fSelectedCell.active && fSelectedCell.part == f.part
 		&& fSelectedCell.row >= firstRow && fSelectedCell.row < firstRow + rows
 		&& fSelectedCell.column >= firstColumn && fSelectedCell.column < firstColumn + columns) {
+		int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+		int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+		int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+		int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+		bool singleCell = r0 == r1 && c0 == c1;
+		// 1px black outline around the whole visible range when it has more than
+		// one cell
+		if (!singleCell) {
+			BRect rangeRect = cellRect(r0, c0) | cellRect(r1, c1);
+			SetHighColor(0, 0, 0);
+			SetPenSize(1);
+			StrokeRect(rangeRect);
+		}
+		// 2px outline around the active cell
 		SetHighColor(0, 0, 0);
 		SetPenSize(2);
 		StrokeRect(cellRect(fSelectedCell.row, fSelectedCell.column));
