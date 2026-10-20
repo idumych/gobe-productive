@@ -543,6 +543,189 @@ ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 }
 
 
+// #pragma mark - rows and columns
+
+namespace {
+
+// where row/column `t` goes; -1 if it's deleted
+struct LineMap {
+	int at, count;		// count < 0: deleted [at, at - count)
+
+	int operator()(int t) const
+	{
+		if (t < at)
+			return t;
+		if (count > 0)
+			return t + count;
+		return t < at - count ? -1 : t + count;
+	}
+	// a range's ends: [from, to] -> new [from, to], false if nothing is left
+	bool Range(int& from, int& to) const
+	{
+		int f = (*this)(from), e = (*this)(to);
+		if (f < 0)
+			f = at;				// first row after the deletion
+		if (e < 0)
+			e = at - 1;			// last row before it
+		if (e < f)
+			return false;
+		from = f;
+		to = e;
+		return true;
+	}
+};
+
+
+void
+MapRange(SSRange& r, const LineMap& map, bool columns, bool& valid)
+{
+	int from = columns ? r.from.b : r.from.a;
+	int to = columns ? r.to.b : r.to.a;
+	valid = map.Range(from, to);
+	if (!valid)
+		return;
+	(columns ? r.from.b : r.from.a) = uint16_t(from);
+	(columns ? r.to.b : r.to.a) = uint16_t(to);
+}
+
+} // namespace
+
+
+bool
+InsertRowsColumns(Document& doc, size_t part, bool columns, uint16_t at, int count)
+{
+	SSPart* ss = doc.EditableSpreadsheetPart(part);
+	if (ss == nullptr || count == 0)
+		return false;
+	LineMap map{at, count};
+	auto line = [&](const CellID& id) -> int { return columns ? id.b : id.a; };
+	auto setLine = [&](CellID& id, int v) { (columns ? id.b : id.a) = uint16_t(v); };
+
+	// formulas, with their references resolved against the old positions
+	// and stored against the new ones
+	std::vector<SSCell> cells;
+	for (SSCell& cell : ss->cells) {
+		int moved = map(line(cell.id));
+		if (moved < 0)
+			continue;
+		CellID oldAt = cell.id, newAt = cell.id;
+		setLine(newAt, moved);
+		const uint16_t absolute = columns ? 4 : 2;
+		for (FormulaToken& token : cell.formula) {
+			bool range = token.refs.size() == 2;
+			int ends[2];
+			bool live = true;
+			for (size_t k = 0; k < token.refs.size(); k++) {
+				CellRef& r = token.refs[k];
+				if (r.flags & 1) {
+					live = false;
+					continue;
+				}
+				int16_t stored = int16_t(columns ? r.cell.b : r.cell.a);
+				ends[k % 2] = (r.flags & absolute) ? stored : line(oldAt) + stored;
+			}
+			if (!live || token.refs.empty())
+				continue;
+			bool valid = true;
+			if (range)
+				valid = map.Range(ends[0], ends[1]);
+			else {
+				ends[0] = map(ends[0]);
+				valid = ends[0] >= 0;
+			}
+			for (size_t k = 0; k < token.refs.size(); k++) {
+				CellRef& r = token.refs[k];
+				if (!valid) {
+					r.flags |= 1;
+					continue;
+				}
+				int target = ends[k % 2];
+				int stored = (r.flags & absolute) ? target : target - line(newAt);
+				(columns ? r.cell.b : r.cell.a) = uint16_t(int16_t(stored));
+			}
+		}
+		cell.id = newAt;
+		cells.push_back(std::move(cell));
+	}
+	ss->cells = std::move(cells);
+
+	// sizes of rows/columns
+	std::vector<SSHeader>& headers = columns ? ss->columns : ss->rows;
+	std::vector<SSHeader> kept;
+	for (SSHeader& h : headers) {
+		int moved = map(int(h.index));
+		if (moved < 0)
+			continue;
+		h.index = uint32_t(moved);
+		kept.push_back(h);
+	}
+	headers = std::move(kept);
+
+	// ranges kept with the part
+	bool valid;
+	SSRange used = ss->used;
+	MapRange(used, map, columns, valid);
+	if (valid)
+		ss->used = used;
+	std::vector<SSRange> selection;
+	for (SSRange r : ss->selection) {
+		MapRange(r, map, columns, valid);
+		if (valid)
+			selection.push_back(r);
+	}
+	if (!selection.empty())
+		ss->selection = std::move(selection);
+	std::vector<SSFill> fills;
+	for (SSFill& fill : ss->fills) {
+		MapRange(fill.range, map, columns, valid);
+		if (!valid)
+			continue;
+		std::vector<SSRange> fillCells;
+		for (SSRange r : fill.cells) {
+			bool ok;
+			MapRange(r, map, columns, ok);
+			if (ok)
+				fillCells.push_back(r);
+		}
+		fill.cells = std::move(fillCells);
+		fills.push_back(std::move(fill));
+	}
+	ss->fills = std::move(fills);
+
+	// the calculation order: moved cells, deleted ones left out
+	std::vector<CellID> dependents;
+	for (CellID id : ss->dependents) {
+		int moved = map(line(id));
+		if (moved < 0)
+			continue;
+		setLine(id, moved);
+		dependents.push_back(id);
+	}
+	ss->dependents = std::move(dependents);
+
+	// named ranges and selections of this part ((row, column) pairs); their
+	// number stays the same so they can be written in place
+	for (Selection& sel : doc.selections.selections) {
+		if (sel.kind != Sig("SPRD") || sel.part != part)
+			continue;
+		int c = columns ? sel.cell[1] : sel.cell[0];
+		c = map(c);
+		(columns ? sel.cell[1] : sel.cell[0]) = uint16_t(c < 0 ? at : c);
+		for (auto& r : sel.ranges) {
+			int from = columns ? r[1] : r[0], to = columns ? r[3] : r[2];
+			if (!map.Range(from, to))
+				from = to = std::min<int>(at, 0xfffe);	// nothing left: one row
+			(columns ? r[1] : r[0]) = uint16_t(from);
+			(columns ? r[3] : r[2]) = uint16_t(to);
+		}
+		doc.selectionsChanged = true;
+	}
+
+	UpdateDependencies(doc, part);
+	return true;
+}
+
+
 // #pragma mark - formulas
 
 namespace {

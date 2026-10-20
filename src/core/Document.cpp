@@ -518,14 +518,30 @@ Document::Save(const std::string& to, std::string& error)
 			changes.parts[part] = WriteSSPart(*ss, record);
 	}
 	// text selections of edited parts follow the edits
-	if (!textLength.empty()) {
+	if (!textLength.empty() || selectionsChanged) {
 		for (size_t s = 0; s < file.toc.size(); s++) {
 			if (file.toc[s].name != "SelectionMgr")
 				continue;
 			size_t start = file.toc[s].offset;
 			size_t end = s + 1 < file.toc.size() ? file.toc[s + 1].offset : file.tocOffset;
 			std::vector<uint8_t> section(bytes.begin() + start, bytes.begin() + end);
+			auto put16 = [&](size_t at, uint16_t v) {
+				section[at] = uint8_t(v >> 8);
+				section[at + 1] = uint8_t(v);
+			};
 			for (const Selection& sel : selections.selections) {
+				// spreadsheet selections after rows/columns moved (same count)
+				if (selectionsChanged && sel.kind == Sig("SPRD") && sel.cellAt > start) {
+					size_t at = sel.cellAt - start;
+					put16(at, sel.cell[0]);
+					put16(at + 2, sel.cell[1]);
+					at += 8;
+					for (const auto& r : sel.ranges)
+						for (uint16_t v : r) {
+							put16(at, v);
+							at += 2;
+						}
+				}
 				auto length = textLength.find(sel.part);
 				if (sel.kind != Sig("WORD") || length == textLength.end())
 					continue;

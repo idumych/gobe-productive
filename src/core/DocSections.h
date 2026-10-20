@@ -105,6 +105,7 @@ struct Selection {
 	// spreadsheet: the active cell and the ranges ((row, column) pairs)
 	uint16_t cell[2] = {};
 	std::vector<std::array<uint16_t, 4>> ranges;
+	size_t cellAt = 0;			// where cell[] is in the file (the ranges' count follows)
 	// word processing: text ranges (start, end), and where they are in the
 	// file (to clamp them when the text gets shorter)
 	std::vector<std::pair<uint32_t, uint32_t>> textRanges;

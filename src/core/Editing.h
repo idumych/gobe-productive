@@ -97,6 +97,16 @@ bool ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextP
 bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 	const Property& property);
 
+// Inserts `count` empty rows (or columns) before row (column) `at` of a
+// spreadsheet part, or deletes `count` of them from `at` if count < 0.
+// Formulas follow: references to moved cells move (both in this part's
+// formulas and in its named ranges); a range grows when rows are inserted
+// inside it and shrinks when some of its rows are deleted; a reference to a
+// deleted cell, or a range deleted entirely, becomes invalid (#REF!).
+// Rows/column sizes, fills, the used range and the selection move along.
+// Dependencies are brought up to date. False if nothing changed.
+bool InsertRowsColumns(Document& doc, size_t part, bool columns, uint16_t at, int count);
+
 // What a cell's editor starts with: its formula or its value as typed.
 std::string CellInput(const SSPart& part, uint16_t row, uint16_t column);
 

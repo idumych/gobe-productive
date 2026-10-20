@@ -186,6 +186,7 @@ ReadSelectionMgr(DocArchive& a, SelectionMgr& out)
 			case Sig("SPRD"): {	// TSSSelection
 				base();
 				a.UInt32();
+				s.cellAt = a.Position();
 				s.cell[0] = a.UInt16();
 				s.cell[1] = a.UInt16();
 				uint32_t n = a.UInt32();
