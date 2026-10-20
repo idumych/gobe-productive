@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include <Alert.h>
+#include <exception>
 #include <Application.h>
 #include <Entry.h>
 #include <FilePanel.h>
@@ -39,6 +40,7 @@ public:
 		fOpenMenu(-1),
 		fOpenDialog(-1),
 		fReady(false),
+		fHasDocument(false),
 		fOpenPanel(NULL),
 		fWindowCount(0),
 		fSlide(-1)
@@ -51,21 +53,67 @@ public:
 	//   --render <png>    draw the (first) document's pages into a PNG, quit
 	//   --slide <n>       show slide n (from 1) of a presentation
 	//   --do <script>     with --render: clicks, keys, saves first (TPageView)
+	static void PrintUsage(const char* prog)
+	{
+		fprintf(stderr,
+		    "usage: %s [--menu <n>] [--dialog <id>] [--render <png>]\n"
+		    "        [--slide <n>] [--do <script>] <document> ...\n",
+		    prog);
+	}
+
 	virtual void ArgvReceived(int32 argc, char** argv)
 	{
+		const char* prog = argc > 0 ? argv[0] : "GobeProductive";
 		for (int32 i = 1; i < argc; i++) {
-			if (strcmp(argv[i], "--menu") == 0 && i + 1 < argc)
+			if (strcmp(argv[i], "--menu") == 0) {
+				if (i + 1 >= argc) {
+					fprintf(stderr, "--menu requires an argument\n");
+					PrintUsage(prog);
+					continue;
+				}
 				fOpenMenu = atoi(argv[++i]);
-			else if (strcmp(argv[i], "--dialog") == 0 && i + 1 < argc)
+			} else if (strcmp(argv[i], "--dialog") == 0) {
+				if (i + 1 >= argc) {
+					fprintf(stderr, "--dialog requires an argument\n");
+					PrintUsage(prog);
+					continue;
+				}
 				fOpenDialog = atoi(argv[++i]);
-			else if (strcmp(argv[i], "--render") == 0 && i + 1 < argc)
+			} else if (strcmp(argv[i], "--render") == 0) {
+				if (i + 1 >= argc || argv[i + 1][0] == '-') {
+					if (i + 1 >= argc)
+						fprintf(stderr, "--render requires an argument\n");
+					else {
+						fprintf(stderr, "unknown option: %s\n", argv[i + 1]);
+						PrintUsage(prog);
+					}
+					continue;
+				}
 				fRenderPath = argv[++i];
-			else if (strcmp(argv[i], "--do") == 0 && i + 1 < argc)
+			} else if (strcmp(argv[i], "--do") == 0) {
+				if (i + 1 >= argc || argv[i + 1][0] == '-') {
+					if (i + 1 >= argc)
+						fprintf(stderr, "--do requires an argument\n");
+					else {
+						fprintf(stderr, "unknown option: %s\n", argv[i + 1]);
+						PrintUsage(prog);
+					}
+					continue;
+				}
 				fScript = argv[++i];
-			else if (strcmp(argv[i], "--slide") == 0 && i + 1 < argc)
+			} else if (strcmp(argv[i], "--slide") == 0) {
+				if (i + 1 >= argc) {
+					fprintf(stderr, "--slide requires an argument\n");
+					PrintUsage(prog);
+					continue;
+				}
 				fSlide = atoi(argv[++i]) - 1;
-			else
+			} else if (strncmp(argv[i], "--", 2) == 0) {
+				fprintf(stderr, "unknown option: %s\n", argv[i]);
+				PrintUsage(prog);
+			} else {
 				fPending.push_back(argv[i]);	// documents to open
+			}
 		}
 		if (fReady)
 			OpenPending();
@@ -134,30 +182,38 @@ public:
 
 	void OpenDocument(const std::string& path)
 	{
-		Document* doc = new Document;	// owned by the app for now
-		std::string error;
-		if (!LoadDocument(path, *doc, error)) {
-			BString text;
-			text << "Could not open \"" << path.c_str() << "\":\n" << error.c_str();
-			(new BAlert("Open", text.String(), "OK"))->Go(NULL);
-			delete doc;
-			return;
+		try {
+			Document* doc = new Document;	// owned by the app for now
+			std::string error;
+			if (!LoadDocument(path, *doc, error)) {
+				if (fRenderPath.empty()) {
+					BString text;
+					text << "Could not open \"" << path.c_str() << "\":\n" << error.c_str();
+					(new BAlert("Open", text.String(), "OK"))->Go(NULL);
+				} else
+					fprintf(stderr, "error opening %s: %s\n", path.c_str(), error.c_str());
+				delete doc;
+				return;
+			}
+			fHasDocument = true;
+			for (const std::string& w : doc->warnings)
+				printf("%s: %s\n", path.c_str(), w.c_str());
+			if (fSlide >= 0)
+				doc->ShowSlide(fSlide);
+			if (!fRenderPath.empty()) {
+				Render(*doc, fRenderPath);
+				PostMessage(B_QUIT_REQUESTED);
+				return;
+			}
+			BPath p(path.c_str());
+			BRect frame(80, 60, 720, 620);
+			frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
+			fWindowCount++;
+			TDocWindow* window = new TDocWindow(frame, p.Leaf(), doc);
+			window->Show();
+		} catch (const std::exception& e) {
+			fprintf(stderr, "%s: %s\n", path.c_str(), e.what());
 		}
-		for (const std::string& w : doc->warnings)
-			printf("%s: %s\n", path.c_str(), w.c_str());
-		if (fSlide >= 0)
-			doc->ShowSlide(fSlide);
-		if (!fRenderPath.empty()) {
-			Render(*doc, fRenderPath);
-			PostMessage(B_QUIT_REQUESTED);
-			return;
-		}
-		BPath p(path.c_str());
-		BRect frame(80, 60, 720, 620);
-		frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
-		fWindowCount++;
-		TDocWindow* window = new TDocWindow(frame, p.Leaf(), doc);
-		window->Show();
 	}
 
 	virtual void ReadyToRun()
@@ -172,6 +228,11 @@ public:
 		fReady = true;
 		if (!fPending.empty()) {
 			OpenPending();
+			if (!fRenderPath.empty() && !fHasDocument) {
+				fprintf(stderr, "--render requires a document\n");
+				PostMessage(B_QUIT_REQUESTED);
+				return;
+			}
 			return;
 		}
 		TDocWindow* window = new TDocWindow(BRect(80, 60, 720, 520), "Untitled 1");
@@ -194,6 +255,7 @@ private:
 	int32 fOpenMenu;
 	int32 fOpenDialog;
 	bool fReady;
+	bool fHasDocument;
 	BFilePanel* fOpenPanel;
 	int32 fWindowCount;
 	int fSlide;					// --slide
