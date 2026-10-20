@@ -17,7 +17,9 @@
 #include <cstring>
 
 #include "Editing.h"
+#include "GobeResources.h"
 #include "SSEval.h"
+#include "TDocWindow.h"
 
 namespace gobe {
 
@@ -147,6 +149,33 @@ TPageView::TextSelection(TextPosition& from, TextPosition& to) const
 		to = {fAnchor.paragraph, fAnchor.offset};
 	}
 	return true;
+}
+
+
+TextStyle
+TPageView::StyleAt(TextPosition at) const
+{
+	const WPPart* wp = fDocument.WordPart(fCaret.part);
+	if (wp == NULL || at.paragraph >= wp->paragraphs.size())
+		return TextStyle();
+	const WPParagraph& p = wp->paragraphs[at.paragraph];
+	uint32_t style = p.parStyle;
+	for (const WPStyleRun& r : p.runs)
+		if (r.position <= at.offset)
+			style = r.style;
+	return ResolveTextStyle(fDocument.styles, style);
+}
+
+
+std::pair<TextPosition, TextPosition>
+TPageView::TextSelectionRange() const
+{
+	TextPosition from, to;
+	if (TextSelection(from, to))
+		return {from, to};
+	// no selection: zero-length range at caret
+	return {{fCaret.paragraph, fCaret.offset},
+		{fCaret.paragraph, fCaret.offset}};
 }
 
 
@@ -319,6 +348,42 @@ TPageView::TextChanged()
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);
+	UpdateMarks();
+}
+
+
+void
+TPageView::UpdateMarks()
+{
+	if (Window() == NULL || !fCaret.active)
+		return;
+	// Get the style at the caret position
+	const WPPart* wp = fDocument.WordPart(fCaret.part);
+	if (wp == NULL || fCaret.paragraph >= wp->paragraphs.size())
+		return;
+	const WPParagraph& par = wp->paragraphs[fCaret.paragraph];
+
+	// Find the run at the caret offset
+	TextStyle style = ResolveTextStyle(fDocument.styles, par.parStyle);
+	size_t pos = fCaret.offset;
+	size_t runIdx = 0;
+	for (; runIdx < par.runs.size(); runIdx++) {
+		const WPStyleRun& r = par.runs[runIdx];
+		if (r.position > pos)
+			break;
+	}
+	if (runIdx < par.runs.size()) {
+		style = ResolveTextStyle(fDocument.styles, par.runs[runIdx].style);
+	}
+
+	TDocWindow* win = dynamic_cast<TDocWindow*>(Window());
+	if (win != NULL) {
+		win->UpdateTextMarks(
+			style.family.empty() ? NULL : style.family.c_str(),
+			style.faceFlags,
+			style.size,
+			style.alignment);
+	}
 }
 
 
@@ -907,6 +972,95 @@ TPageView::MessageReceived(BMessage* message)
 			RestoreViewState(v);
 			return;
 		}
+		// Font menu: what = 'sM05', "name" = font family
+		case 'sM05': {
+			if (!fCaret.active) {
+				beep();
+				return;
+			}
+			const char* family = NULL;
+			if (message->FindString("name", &family) != B_OK || family == NULL) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Font", CurrentViewState());
+			auto sel = TextSelectionRange();
+			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+				TextFontProperty(family, ""));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
+		// Size menu: value_message = 'sf0K', "value" = point size
+		case 'sf0K': {
+			if (!fCaret.active) {
+				beep();
+				return;
+			}
+			int32 size = 0;
+			if (message->FindInt32(kValueString, &size) != B_OK) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Size", CurrentViewState());
+			auto sel = TextSelectionRange();
+			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+				TextSizeProperty((float)size));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
+		// Face menu: value_message = 'sf0C', "value" = face flag
+		case 'sf0C': {
+			if (!fCaret.active) {
+				beep();
+				return;
+			}
+			int32 flag = 0;
+			if (message->FindInt32(kValueString, &flag) != B_OK) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Face", CurrentViewState());
+			auto sel = TextSelectionRange();
+			// Plain Text (1) clears the others; the rest toggle, as at the
+			// selection's start
+			uint32_t flags = 1;
+			if (flag != 1) {
+				flags = StyleAt(sel.first).faceFlags ^ uint32_t(flag);
+				flags &= ~uint32_t(1);
+				if (flags == 0)
+					flags = 1;
+			}
+			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+				TextFaceProperty(flags));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
+		// Alignment menu (MENU 300, value message 300): 0 left, 1 center,
+		// 2 right, 3 justify; TextStyle has 1 right, 2 center
+		case 300: {
+			if (!fCaret.active) {
+				beep();
+				return;
+			}
+			int32 align = 0;
+			if (message->FindInt32(kValueString, &align) != B_OK) {
+				beep();
+				return;
+			}
+			// Remap MENU 300 codes to code's alignment codes
+			if (align == 1) align = 2;	// center -> right code
+			else if (align == 2) align = 1;	// right -> center code
+			fUndo.Begin(fDocument, fCaret.part, "Alignment", CurrentViewState());
+			auto range = TextSelectionRange();
+			ApplyParagraphProperty(fDocument, fCaret.part, range.first.paragraph,
+				range.second.paragraph, AlignmentProperty(align));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
 		default: {
 			static const uint32 kCmdClear = 'sM12';
 			// cell selection: handle before text handling
@@ -1223,6 +1377,63 @@ TPageView::RunScript(const std::string& script, Document& document)
 				fprintf(stderr, "save: %s\n", error.c_str());
 			DocumentSaved();
 			DocumentReloaded();
+		} else if (command.compare(0, 5, "menu ") == 0) {
+			// "menu <what> <value>" — send a text menu value message
+			// what: "font", "size", "face", "align"
+			// value: for font = family name, for size/face/align = integer
+			const char* what = command.c_str() + 5;
+			const char* space = strchr(what, ' ');
+			if (space != NULL) {
+				std::string whatStr(what, space - what);
+				std::string valStr = space + 1;
+				BMessage msg;
+				if (whatStr == "font") {
+					msg.what = 'sM05';
+					msg.AddString("name", valStr.c_str());
+				} else if (whatStr == "size") {
+					msg.what = 'sf0K';
+					int32 size = 0;
+					sscanf(valStr.c_str(), "%d", &size);
+					msg.AddInt32(kValueString, size);
+				} else if (whatStr == "face") {
+					msg.what = 'sf0C';
+					int32 flag = 0;
+					sscanf(valStr.c_str(), "%d", &flag);
+					msg.AddInt32(kValueString, flag);
+				} else if (whatStr == "align") {
+					msg.what = 300;
+					int32 align = 0;
+					sscanf(valStr.c_str(), "%d", &align);
+					msg.AddInt32(kValueString, align);
+				} else {
+					fprintf(stderr, "menu: unknown what '%s'\n", whatStr.c_str());
+					continue;
+				}
+				MessageReceived(&msg);
+			}
+		} else if (command.compare(0, 6, "style ") == 0) {
+			// "style P O": the style of the caret's part at paragraph P, offset O
+			int p, o;
+			if (sscanf(command.c_str() + 6, "%d %d", &p, &o) == 2) {
+				TextStyle t = StyleAt({size_t(p), size_t(o)});
+				int align = -1;
+				if (const WPPart* wp = fDocument.WordPart(fCaret.part))
+					if (size_t(p) < wp->paragraphs.size())
+						align = ResolveTextStyle(fDocument.styles,
+							wp->paragraphs[p].parStyle).alignment;
+				fprintf(stderr, "style %d %d family %s size %g face %u align %d\n", p, o,
+					t.family.c_str(), t.size, t.faceFlags, align);
+			}
+		} else if (command.compare(0, 5, "font ") == 0) {
+			// "font <family>" — apply font family to current selection/caret
+			const char* family = command.c_str() + 5;
+			if (fCaret.active) {
+				fUndo.Begin(fDocument, fCaret.part, "Font", CurrentViewState());
+				auto sel = TextSelectionRange();
+				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+					TextFontProperty(family, ""));
+				TextChanged();
+			}
 		}
 	}
 }

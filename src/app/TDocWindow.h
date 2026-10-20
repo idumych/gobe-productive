@@ -12,6 +12,7 @@
 
 class BFilePanel;
 class BMenu;
+class BMenuItem;
 class BStringView;
 
 namespace gobe {
@@ -25,6 +26,19 @@ public:
 	void OpenMenu(int32 index) { StartMenuBar(index, true, true); }
 };
 
+// TFontMenu: a font menu built dynamically from system font families.
+class TFontMenu : public BMenu {
+public:
+	TFontMenu();
+	// test hook: rebuild the list from system fonts
+	void Rebuild();
+	BMenuItem* CurrentFamily() const { return fCurrentFamily; }
+	void SetCurrentFamily(BMenuItem* item) { fCurrentFamily = item; }
+
+private:
+	BMenuItem* fCurrentFamily = NULL;
+};
+
 struct Document;
 
 class TDocWindow : public BWindow {
@@ -35,9 +49,15 @@ public:
 	virtual void MessageReceived(BMessage* message);
 	virtual bool QuitRequested();
 
+	// Called from TPageView after text style changes to update marks.
+	// `family` is the current font family (empty = default).
+	void UpdateTextMarks(const char* family, uint32_t faceFlags,
+		float textSize, int alignment);
+
 private:
 	TMenuBar* InstallBaseMenus();
 	BMenu* MakeDialogsMenu();
+	BMenu* MakeFontMenu();
 	bool Save(const std::string& path);
 	void UpdateTitle();
 
@@ -47,6 +67,12 @@ private:
 	BFilePanel* fSavePanel = NULL;
 	bool fModified = false;
 	bool fBackedUp = false;
+
+	// text menus for menu mark tracking
+	TFontMenu* fFontMenu = NULL;
+	BMenu* fSizeMenu = NULL;
+	BMenu* fFaceMenu = NULL;
+	BMenu* fAlignmentMenu = NULL;
 };
 
 } // namespace gobe

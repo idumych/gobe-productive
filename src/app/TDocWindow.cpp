@@ -6,6 +6,7 @@
 #include <Application.h>
 #include <FilePanel.h>
 #include <Entry.h>
+#include <Font.h>
 #include <NodeInfo.h>
 #include <Path.h>
 #include <LayoutBuilder.h>
@@ -87,6 +88,62 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 }
 
 
+// TFontMenu: builds the dynamic font list from system font families.
+TFontMenu::TFontMenu()
+	:
+	BMenu("Font", B_ITEMS_IN_COLUMN)
+{
+	Rebuild();
+}
+
+
+void
+TFontMenu::Rebuild()
+{
+	// Keep the current selection
+	const char* current = NULL;
+	if (fCurrentFamily != NULL) {
+		BMessage* msg = fCurrentFamily->Message();
+		if (msg != NULL)
+			msg->FindString("name", &current);
+	}
+
+	// Remove all existing items
+	while (CountItems() > 0)
+		RemoveItem(0);
+
+	int32 count = count_font_families();
+	fCurrentFamily = NULL;
+	for (int32 i = 0; i < count; i++) {
+		font_family name;
+		uint32 flags;
+		if (get_font_family(i, &name, &flags) != B_OK)
+			continue;
+		BMessage* msg = new BMessage('sM05');  // font value message
+		msg->AddString("name", name);
+		TMenuItem* item = new TMenuItem((const char*)name, msg, 0, 0);
+		AddItem(item);
+		if (current != NULL && strcmp(name, current) == 0)
+			fCurrentFamily = item;
+	}
+	if (fCurrentFamily == NULL && CountItems() > 0)
+		fCurrentFamily = ItemAt(0);
+}
+
+
+BMenu*
+TDocWindow::MakeFontMenu()
+{
+	// The original's font menu has a "More Fonts..." item at the end.
+	// Build a TFontMenu and add the "More Fonts..." item.
+	fFontMenu = new TFontMenu();
+	BMenuItem* more = new BMenuItem("More Fonts...", new BMessage('sM05'));
+	more->SetEnabled(false);
+	fFontMenu->AddItem(more);
+	return fFontMenu;
+}
+
+
 // TNormalDocWinHelper::InstallBaseMenus: MENU 2-6, with the part menu
 // (TPartMenu) and a separator at the top of the Frame menu (MENU 5).
 TMenuBar*
@@ -109,6 +166,17 @@ TDocWindow::InstallBaseMenus()
 	bar->AddItem(frameMenu);
 
 	bar->AddItem(new TMenu(6));
+
+	// Text menus (from the original's TTextMenuElement):
+	// Font (dynamic), Size (MENU 101), Face (MENU 102), Alignment (MENU 300)
+	bar->AddItem(MakeFontMenu());
+	fSizeMenu = new TMenu(101);
+	bar->AddItem(fSizeMenu);
+	fFaceMenu = new TMenu(102);
+	bar->AddItem(fFaceMenu);
+	fAlignmentMenu = new TMenu(300);
+	bar->AddItem(fAlignmentMenu);
+
 	return bar;
 }
 
@@ -291,6 +359,103 @@ TDocWindow::UpdateTitle()
 	if (fModified)
 		title << " *";
 	SetTitle(title.String());
+}
+
+
+void
+TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
+	float textSize, int alignment)
+{
+	if (fFontMenu != NULL) {
+		BMenuItem* current = fFontMenu->CurrentFamily();
+		if (current != NULL)
+			current->SetMarked(false);
+		if (family != NULL && strlen(family) > 0) {
+			for (int32 i = 0; i < fFontMenu->CountItems(); i++) {
+				BMenuItem* item = fFontMenu->ItemAt(i);
+				BMessage* msg = item->Message();
+				if (msg != NULL) {
+					const char* name = NULL;
+					msg->FindString("name", &name);
+					if (name != NULL && strcmp(name, family) == 0) {
+						item->SetMarked(true);
+						fFontMenu->SetCurrentFamily(item);
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	// Size: mark the item whose value matches textSize
+	if (fSizeMenu != NULL) {
+		BMenuItem* found = NULL;
+		for (int32 i = 0; i < fSizeMenu->CountItems(); i++) {
+			BMenuItem* item = fSizeMenu->ItemAt(i);
+			BMessage* msg = item->Message();
+			if (msg != NULL) {
+				int32 val = 0;
+				if (msg->FindInt32(kValueString, &val) == B_OK
+					&& val == int32(textSize)) {
+					item->SetMarked(true);
+					found = item;
+					break;
+				}
+			}
+		}
+	}
+
+	// Face: mark the item whose value matches faceFlags
+	if (fFaceMenu != NULL) {
+		for (int32 i = 0; i < fFaceMenu->CountItems(); i++) {
+			BMenuItem* item = fFaceMenu->ItemAt(i);
+			BMessage* msg = item->Message();
+			if (msg != NULL) {
+				int32 val = 0;
+				if (msg->FindInt32(kValueString, &val) == B_OK) {
+					// Plain Text (1) is the default; if faceFlags is 0 or 1, mark Plain Text
+					if (faceFlags == 0 || faceFlags == 1) {
+						item->SetMarked(val == 1);
+					} else if (val == 2 && (faceFlags & 2)) {	// Bold
+						item->SetMarked(true);
+					} else if (val == 4 && (faceFlags & 4)) {	// Italic
+						item->SetMarked(true);
+					} else if (val == 8 && (faceFlags & 8)) {	// Underline
+						item->SetMarked(true);
+					} else if (val == 16 && (faceFlags & 16)) {	// Double Underline
+						item->SetMarked(true);
+					} else if (val == 32 && (faceFlags & 32)) {	// Strike Thru
+						item->SetMarked(true);
+					} else if (val == 64 && (faceFlags & 64)) {	// Superscript
+						item->SetMarked(true);
+					} else if (val == 128 && (faceFlags & 128)) {	// Subscript
+						item->SetMarked(true);
+					} else {
+						item->SetMarked(false);
+					}
+				}
+			}
+		}
+	}
+
+	// Alignment: mark the item whose value matches alignment
+	// Note: MENU 300 has val 1=center, 2=right; style has 1=right, 2=center
+	if (fAlignmentMenu != NULL) {
+		for (int32 i = 0; i < fAlignmentMenu->CountItems(); i++) {
+			BMenuItem* item = fAlignmentMenu->ItemAt(i);
+			BMessage* msg = item->Message();
+			if (msg != NULL) {
+				int32 val = 0;
+				if (msg->FindInt32(kValueString, &val) == B_OK) {
+					// Remap: style 1=right -> menu 2, style 2=center -> menu 1
+					int markedVal = val;
+					if (val == 1) markedVal = 2;
+					else if (val == 2) markedVal = 1;
+					item->SetMarked(markedVal == alignment);
+				}
+			}
+		}
+	}
 }
 
 

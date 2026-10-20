@@ -103,11 +103,16 @@ private:
 	void EditText(const char* bytes, int32 count);
 	void MoveCaretVertically(int direction);
 	void TextChanged();
+	void UpdateMarks();
 	void DrawCaret();
 	// the x of a byte offset in that line
 	float OffsetX(size_t lineIndex, size_t offset) const;
 	// the selection: from fAnchor to fCaret, in one part
 	bool TextSelection(TextPosition& from, TextPosition& to) const;
+	// returns the selection range; if no selection, both are at caret
+	std::pair<TextPosition, TextPosition> TextSelectionRange() const;
+	// the effective text style at a position of the caret's part
+	TextStyle StyleAt(TextPosition at) const;
 	bool DeleteSelection();
 	void CopySelection();
 	void PasteText();
