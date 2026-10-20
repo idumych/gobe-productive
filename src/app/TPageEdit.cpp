@@ -18,6 +18,7 @@
 
 #include "Editing.h"
 #include "GobeResources.h"
+#include "SSStyle.h"
 #include "SSEval.h"
 #include "TDocWindow.h"
 
@@ -29,6 +30,14 @@ static const uint32 kMsgCellCancel = 'Gccl';
 // chooses); for RunScript until that dialog works
 static const uint32 kCmdInsertColumns = 'Gicl';
 static const uint32 kCmdDeleteColumns = 'Gdcl';
+
+// Cell format menu commands: value_message = 'sM20' (HAln), 'sM21' (VAln),
+// 'sM22' (number format), 'sM23' (fill color), 'sM24' (wrap).
+static const uint32 kCmdCellHAlign = 'sM20';
+static const uint32 kCmdCellVAlign = 'sM21';
+static const uint32 kCmdCellFormat = 'sM22';
+static const uint32 kCmdCellFill = 'sM23';
+static const uint32 kCmdCellWrap = 'sM24';
 
 
 // the in-place cell editor
@@ -1243,6 +1252,90 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case kCmdCellHAlign: {	// Cell horizontal alignment
+						int32 align = 0;
+						if (message->FindInt32(kValueString, &align) != B_OK) {
+							beep();
+							return;
+						}
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Align",
+							CurrentViewState());
+						ApplyCellProperty(fDocument, fSelectedCell.part,
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							CellHAlignProperty(align));
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case kCmdCellVAlign: {	// Cell vertical alignment
+						int32 align = 0;
+						if (message->FindInt32(kValueString, &align) != B_OK) {
+							beep();
+							return;
+						}
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Align",
+							CurrentViewState());
+						ApplyCellProperty(fDocument, fSelectedCell.part,
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							CellVAlignProperty(align));
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case kCmdCellWrap: {	// Cell wrap
+						bool wrap = false;
+						if (message->FindBool("value", &wrap) != B_OK) {
+							// Try kValueString as int32 too
+							int32 val = 0;
+							if (message->FindInt32(kValueString, &val) == B_OK)
+								wrap = (val != 0);
+							else
+								beep();
+							return;
+						}
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Wrap",
+							CurrentViewState());
+						ApplyCellProperty(fDocument, fSelectedCell.part,
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							CellWrapProperty(wrap));
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case kCmdCellFormat: {	// Cell number format
+						const char* format = NULL;
+						if (message->FindString(kValueString, &format) != B_OK
+							|| format == NULL) {
+							beep();
+							return;
+						}
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Format",
+							CurrentViewState());
+						ApplyCellProperty(fDocument, fSelectedCell.part,
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							NumberFormatProperty(format));
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case kCmdCellFill: {	// Cell fill color
+						int32 r = 0, g = 0, b = 0;
+						if (message->FindInt32("red", &r) != B_OK
+							|| message->FindInt32("green", &g) != B_OK
+							|| message->FindInt32("blue", &b) != B_OK) {
+							beep();
+							return;
+						}
+						Color col{uint8_t(r), uint8_t(g), uint8_t(b), 255};
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Fill",
+							CurrentViewState());
+						ApplyCellProperty(fDocument, fSelectedCell.part,
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							CellFillProperty(col));
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 				}
 			}
 			if (fCaret.active) {
@@ -1288,10 +1381,13 @@ TPageView::MessageReceived(BMessage* message)
 // "sclick x y" (shift-click), "tclick x y" (triple-click),
 // "key text" (with {enter} {bs} {del} {left} {right} {up} {down} {tab}
 // {esc} {home} {end} {sleft} {sright}), "selectall", "copy", "cut", "paste",
-// "undo", "redo", "cellrect row col", "cell row col", "selection",
-// "commit" (the cell editor), "save path".
+// "undo", "redo", "cellrect row col", "cell row col", "celltext row col",
+// "selection", "commit" (the cell editor), "save path",
+// "cellformat fmt", "cellfill R G B", "cellalign H V", "cellwrap 0|1",
+// "cellstyle name".
 // "copy", "cut", "paste", "selectall", "{sup}", "{sdown}", "{sleft}",
 // "{sright}" work for cell selection too.
+// "cellfill_check R C" — check if cell (R,C) has a solid fill.
 void
 TPageView::RunScript(const std::string& script, Document& document)
 {
@@ -1441,6 +1537,106 @@ TPageView::RunScript(const std::string& script, Document& document)
 		} else if (command == "fillright") {
 			BMessage msg('sM71');
 			MessageReceived(&msg);
+		} else if (command.compare(0, 11, "cellformat ") == 0) {
+			// "cellformat <format>" — apply number format to selection
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "cellformat: no selection\n");
+				continue;
+			}
+			int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+			fUndo.Begin(fDocument, fSelectedCell.part, "Cell Format",
+				CurrentViewState());
+			ApplyCellProperty(fDocument, fSelectedCell.part,
+				uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+				NumberFormatProperty(command.substr(11)));
+			fBook->Reset();
+			Window()->PostMessage(kMsgDocumentChanged);
+		} else if (command.compare(0, 8, "cellfill ") == 0) {
+			// "cellfill R G B" — apply fill color to selection
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "cellfill: no selection\n");
+				continue;
+			}
+			int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int rr, gg, bb;
+			if (sscanf(command.c_str() + 8, "%d %d %d", &rr, &gg, &bb) != 3) {
+				fprintf(stderr, "cellfill: expected 'R G B'\n");
+				continue;
+			}
+			Color col{uint8_t(rr), uint8_t(gg), uint8_t(bb), 255};
+			fUndo.Begin(fDocument, fSelectedCell.part, "Cell Fill",
+				CurrentViewState());
+			ApplyCellProperty(fDocument, fSelectedCell.part,
+				uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+				CellFillProperty(col));
+			fBook->Reset();
+			Window()->PostMessage(kMsgDocumentChanged);
+		} else if (command.compare(0, 9, "cellalign ") == 0) {
+			// "cellalign H V" — apply horizontal and vertical alignment
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "cellalign: no selection\n");
+				continue;
+			}
+			int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int hAlign = 0, vAlign = 0;
+			if (sscanf(command.c_str() + 9, "%d %d", &hAlign, &vAlign) != 2) {
+				fprintf(stderr, "cellalign: expected 'H V'\n");
+				continue;
+			}
+			fUndo.Begin(fDocument, fSelectedCell.part, "Cell Align",
+				CurrentViewState());
+			ApplyCellProperty(fDocument, fSelectedCell.part,
+				uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+				CellHAlignProperty(hAlign));
+			ApplyCellProperty(fDocument, fSelectedCell.part,
+				uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+				CellVAlignProperty(vAlign));
+			fBook->Reset();
+			Window()->PostMessage(kMsgDocumentChanged);
+		} else if (command.compare(0, 13, "cellwrap ") == 0) {
+			// "cellwrap 0|1" — toggle cell wrap
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "cellwrap: no selection\n");
+				continue;
+			}
+			int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int val = 0;
+			if (sscanf(command.c_str() + 9, "%d", &val) != 1) {
+				fprintf(stderr, "cellwrap: expected 0 or 1\n");
+				continue;
+			}
+			fUndo.Begin(fDocument, fSelectedCell.part, "Cell Wrap",
+				CurrentViewState());
+			ApplyCellProperty(fDocument, fSelectedCell.part,
+				uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+				CellWrapProperty(val != 0));
+			fBook->Reset();
+			Window()->PostMessage(kMsgDocumentChanged);
+		} else if (command.compare(0, 9, "cellstyle ") == 0) {
+			// "cellstyle <name>" — apply a cell style by name (for future use)
+			if (!fSelectedCell.active) {
+				fprintf(stderr, "cellstyle: no selection\n");
+				continue;
+			}
+			int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+			int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+			std::string name = command.substr(9);
+			// TODO: look up style by name and apply
+			fprintf(stderr, "cellstyle '%s': not yet implemented\n", name.c_str());
 		} else if (command.size() >= 5 && command.substr(0, 5) == "cell ") {
 			int row, column;
 			if (sscanf(command.c_str() + 5, "%d %d", &row, &column) == 2) {
@@ -1450,6 +1646,54 @@ TPageView::RunScript(const std::string& script, Document& document)
 					fprintf(stderr, "cell %d %d %s\n", row, column, val.c_str());
 				} else
 					fprintf(stderr, "cell %d %d (no sheet)\n", row, column);
+			}
+		} else if (command.size() >= 9 && command.substr(0, 9) == "celltext ") {
+			// "celltext R C" — output the formatted text of cell (R,C)
+			int row, column;
+			if (sscanf(command.c_str() + 9, "%d %d", &row, &column) == 2) {
+				const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+				if (ss != NULL) {
+					const SSCell* cell = ss->Cell(row, column);
+					std::vector<uint32_t> stack = {ss->style};
+					if (const SSHeader* h = ss->Column(column))
+						stack.push_back(h->cell.style);
+					if (const SSHeader* h = ss->Row(row))
+						stack.push_back(h->cell.style);
+					if (cell != NULL)
+						stack.push_back(cell->style);
+					CellStyle resolved = ResolveCellStyle(fDocument.styles, stack);
+					SSEvaluator eval(*ss, nullptr, int(fSelectedCell.part));
+					SSValue value = eval.Value(row, column);
+					bool red = false;
+					std::string text = FormatCellValue(value, resolved.format, &red);
+					fprintf(stderr, "celltext %d %d %s%s\n", row, column, text.c_str(),
+						red ? " [red]" : "");
+				} else
+					fprintf(stderr, "celltext %d %d (no sheet)\n", row, column);
+			}
+		} else if (command.size() >= 15 && command.substr(0, 15) == "cellfill_check ") {
+			// "cellfill_check R C" — check if cell (R,C) has a solid fill
+			int row, column;
+			if (sscanf(command.c_str() + 15, "%d %d", &row, &column) == 2) {
+				const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+				if (ss != NULL) {
+					const SSCell* cell = ss->Cell(row, column);
+					std::vector<uint32_t> stack = {ss->style};
+					if (const SSHeader* h = ss->Column(column))
+						stack.push_back(h->cell.style);
+					if (const SSHeader* h = ss->Row(row))
+						stack.push_back(h->cell.style);
+					if (cell != NULL)
+						stack.push_back(cell->style);
+					CellStyle resolved = ResolveCellStyle(fDocument.styles, stack);
+					if (resolved.fill.set)
+						fprintf(stderr, "cellfill_check %d %d solid %.2x %.2x %.2x\n",
+							row, column, resolved.fill.color.r,
+							resolved.fill.color.g, resolved.fill.color.b);
+					else
+						fprintf(stderr, "cellfill_check %d %d no fill\n", row, column);
+				} else
+					fprintf(stderr, "cellfill_check %d %d (no sheet)\n", row, column);
 			}
 		} else if (command.compare(0, 5, "save ") == 0) {
 			std::string error;
@@ -1513,6 +1757,98 @@ TPageView::RunScript(const std::string& script, Document& document)
 				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
 					TextFontProperty(family, ""));
 				TextChanged();
+			}
+		} else if (command.compare(0, 5, "find ") == 0) {
+			// "find <text>" — find the next occurrence of text in the caret's
+			// part (backwards when the command has a leading '-' prefix).
+			// Selects the match (fAnchor = start, fCaret = end).
+			if (!fCaret.active) {
+				fprintf(stderr, "find: no caret\n");
+				continue;
+			}
+			std::string query = command.substr(5);
+			while (!query.empty() && query[0] == ' ')
+				query.erase(query.begin());
+			if (query.empty()) {
+				fprintf(stderr, "find: no search text\n");
+				continue;
+			}
+			FindDialogOptions opts;
+			opts.caseSensitive = false;
+			opts.wholeWord = false;
+			opts.backwards = false;
+			opts.wrap = true;
+			bool backwards = false;
+			if (!query.empty() && query[0] == '-') {
+				backwards = true;
+				query = query.substr(1);
+			}
+			if (backwards)
+				opts.backwards = true;
+			const WPPart* wp = fDocument.WordPart(fCaret.part);
+			if (wp == NULL) {
+				fprintf(stderr, "find: no word part\n");
+				continue;
+			}
+			TextPosition from = {fCaret.paragraph, fCaret.offset};
+			TextPosition start, endPos;
+			if (FindText(*wp, from, query, opts, start, endPos)) {
+				fAnchor.active = true;
+				fAnchor.part = fCaret.part;
+				fAnchor.paragraph = start.paragraph;
+				fAnchor.offset = start.offset;
+				fCaret.active = true;
+				fCaret.part = fCaret.part;
+				fCaret.paragraph = start.paragraph;
+				fCaret.offset = endPos.offset;
+				Invalidate();
+			} else {
+				fprintf(stderr, "find: not found\n");
+			}
+		} else if (command.compare(0, 11, "replaceall ") == 0) {
+			// "replaceall <query>|<replacement>" — replace all matches in the
+			// caret's part.
+			if (!fCaret.active) {
+				fprintf(stderr, "replaceall: no caret\n");
+				continue;
+			}
+			std::string args = command.substr(11);
+			size_t pipe = args.find('|');
+			if (pipe == std::string::npos) {
+				fprintf(stderr, "replaceall: need query|replacement\n");
+				continue;
+			}
+			std::string query = args.substr(0, pipe);
+			std::string replacement = args.substr(pipe + 1);
+			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
+			if (wp == NULL) {
+				fprintf(stderr, "replaceall: no word part\n");
+				continue;
+			}
+			FindDialogOptions opts;
+			opts.caseSensitive = false;
+			opts.wholeWord = false;
+			opts.backwards = false;
+			opts.wrap = true;
+			fUndo.Begin(fDocument, fCaret.part, "Replace All", CurrentViewState());
+			int count = ReplaceAll(*wp, query, replacement, opts);
+			TextChanged();
+			fprintf(stderr, "replaceall: %d replacements\n", count);
+		} else if (command == "selected") {
+			// "selected" — print the current text selection:
+			// selected P1 O1 - P2 O2
+			TextPosition from, to;
+			if (TextSelection(from, to)) {
+				fprintf(stderr, "selected %zu %zu - %zu %zu\n",
+					from.paragraph, from.offset, to.paragraph, to.offset);
+			} else {
+				// No selection: print caret position twice
+				if (fCaret.active)
+					fprintf(stderr, "selected %zu %zu - %zu %zu\n",
+						fCaret.paragraph, fCaret.offset,
+						fCaret.paragraph, fCaret.offset);
+				else
+					fprintf(stderr, "selected none\n");
 			}
 		}
 	}

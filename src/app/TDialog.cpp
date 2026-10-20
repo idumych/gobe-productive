@@ -16,6 +16,7 @@
 #include <RadioButton.h>
 #include <ScrollView.h>
 #include <Slider.h>
+#include <String.h>
 #include <StringView.h>
 #include <TextControl.h>
 #include <TextView.h>

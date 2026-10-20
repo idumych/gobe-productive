@@ -118,6 +118,54 @@ bool ApplyCellProperty(Document& doc, size_t part, uint16_t row0, uint16_t colum
 // What a cell's editor starts with: its formula or its value as typed.
 std::string CellInput(const SSPart& part, uint16_t row, uint16_t column);
 
+// Find options and results. `text` is the search string (empty = use last
+// search). `caseSensitive` toggles ASCII case sensitivity; `entireWord`
+// requires the match to be surrounded by non-word characters (or paragraph
+// boundaries). `wrap` means search continues from the start when the end is
+// reached. `paragraph` and `offset` are set to the position of the found
+// match (or the paragraph after the last search if not found).
+struct FindOptions {
+	std::string text;
+	bool caseSensitive = false;
+	bool entireWord = false;
+	bool wrap = false;
+	size_t paragraph = 0;
+	size_t offset = 0;
+};
+
+// Find the next occurrence of `options.text` in the part starting at
+// `options.paragraph`/`options.offset`. If found, sets `options.paragraph`
+// and `options.offset` to the match position and returns true. If not found
+// and `wrap` is true, restarts from the beginning. Returns false if the
+// text is empty or there really is nothing to find.
+// Matches never span paragraphs.
+bool FindText(WPPart& part, FindOptions& options);
+
+// Replace all non-overlapping occurrences of `options.text` with `replacement`
+// in the part starting from the first paragraph. Returns the number of
+// replacements made. `options` fields (caseSensitive, entireWord) are used.
+// Uses DeleteRange + InsertText to handle styles and anchors correctly.
+uint32_t ReplaceAll(WPPart& part, const std::string& replacement,
+	const FindOptions& options);
+
+// Alternative find-and-replace API for the Find/Replace dialog and scripts.
+// `FindText` searches from `from` (before it when backwards); sets `start`
+// and `end` to the match byte offsets within the paragraph. Returns false
+// when there is no match. Case-insensitive uses ASCII case folding.
+struct FindDialogOptions {
+	bool caseSensitive = false;
+	bool wholeWord = false;		// use WordRange's word characters
+	bool backwards = false;
+	bool wrap = true;
+};
+bool FindText(const WPPart& part, TextPosition from, const std::string& query,
+	const FindDialogOptions& options, TextPosition& start, TextPosition& end);
+// Replaces every match with `replacement` (through DeleteRange and
+// InsertText, so styles and anchors are handled as there; a match that
+// DeleteRange refuses is skipped). Returns the number replaced.
+int ReplaceAll(WPPart& part, const std::string& query, const std::string& replacement,
+	const FindDialogOptions& options);
+
 // A block of cells as tab-separated text, one line per row: each cell as
 // CellInput gives it (formulas as typed, "=..."). Rows [row0, row1],
 // columns [column0, column1], inclusive; no trailing newline.

@@ -6,8 +6,6 @@
 
 namespace gobe {
 
-namespace {
-
 // TPenInk::Read into an Ink: solid -> TColorPattern; otherwise a fill:
 // kind, size, data ('FGRD' -> TGradientFactory::ReadGradient)
 bool
@@ -23,6 +21,7 @@ ReadInk(DocArchive& a, Ink& ink)
 		a.Bytes(8);
 		return true;
 	}
+	ink.gradient = true;
 	uint32_t kind = a.UInt32();
 	uint32_t size = a.UInt32();
 	size_t start = a.Position();
@@ -52,8 +51,6 @@ ReadInk(DocArchive& a, Ink& ink)
 		a.Seek(start + size);
 	return true;
 }
-
-} // namespace
 
 
 bool

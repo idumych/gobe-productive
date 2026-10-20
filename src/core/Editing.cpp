@@ -363,6 +363,400 @@ WordRange(const std::string& text, size_t offset, size_t& from, size_t& to)
 }
 
 
+// #pragma mark - find and replace
+
+
+namespace {
+
+// ASCII case-folding for a single byte; used when case-insensitive matching.
+static inline char
+FoldCase(char c)
+{
+	unsigned char u = (unsigned char)c;
+	if (u >= 'A' && u <= 'Z')
+		return c + ('a' - 'A');
+	return c;
+}
+
+// Compare text[start..start+len) against target. If caseInsensitive is true,
+// uses ASCII case-folding. Returns true on a match.
+static bool
+TextMatch(const std::string& text, size_t start, const std::string& target,
+	bool caseInsensitive, size_t editableLength)
+{
+	if (start > editableLength)
+		return false;
+	if (start + target.size() > text.size())
+		return false;
+	for (size_t i = 0; i < target.size(); i++) {
+		char a = caseInsensitive ? FoldCase(text[start + i]) : text[start + i];
+		char b = caseInsensitive ? FoldCase(target[i]) : target[i];
+		if (a != b)
+			return false;
+	}
+	return true;
+}
+
+// Check if the character at position `pos` in paragraph `paragraph` of `part`
+// is a word character (letter, digit, or underscore). Returns false if pos is
+// at paragraph boundaries or on paragraph terminators/breaks.
+static bool
+IsWordChar(const WPPart& part, size_t paragraph, size_t pos)
+{
+	if (paragraph >= part.paragraphs.size())
+		return false;
+	const std::string& text = part.paragraphs[paragraph].text;
+	if (pos >= text.size())
+		return false;
+	// Paragraph terminators and break characters are not word characters
+	if (IsTerminator(text[pos]))
+		return false;
+	return CharacterKind(text[pos]) == 0;
+}
+
+} // namespace
+
+
+bool
+FindText(WPPart& part, FindOptions& options)
+{
+	if (options.text.empty())
+		return false;
+
+	size_t startPara = options.paragraph;
+	size_t startOffset = options.offset;
+	const bool caseInsensitive = !options.caseSensitive;
+
+	// If we can't search the starting paragraph (offset past editable end),
+	// skip it and set "not found" to the next paragraph instead.
+	if (startPara < part.paragraphs.size()
+			&& startOffset > EditableLength(part.paragraphs[startPara])) {
+		// We can't search from the starting position — it's past the end.
+		// "Not found" should point to the next paragraph (where searching would
+		// resume).
+		if (startPara + 1 < part.paragraphs.size()) {
+			options.paragraph = startPara + 1;
+			options.offset = EditableLength(part.paragraphs[startPara + 1]);
+		} else {
+			// Only one paragraph: we can't search it, so set to its end.
+			options.paragraph = startPara;
+			options.offset = EditableLength(part.paragraphs[startPara]);
+		}
+		if (!options.wrap)
+			return false;
+		// Continue to wrap-around section below.
+	}
+
+	// Search from the start position within each paragraph
+	for (size_t para = startPara; para < part.paragraphs.size(); para++) {
+		const WPParagraph& p = part.paragraphs[para];
+		size_t from = (para == startPara) ? startOffset : 0;
+
+		// Try to find the text in this paragraph
+		size_t searchPos = from;
+		size_t editableLen = EditableLength(p);
+		while (searchPos <= editableLen) {
+			if (TextMatch(p.text, searchPos, options.text, caseInsensitive,
+					editableLen)) {
+				// Check entire-word boundary if requested
+				if (options.entireWord) {
+					bool beforeOk = (searchPos == 0)
+							|| !IsWordChar(part, para, searchPos - 1);
+					bool afterOk = !IsWordChar(part, para,
+						searchPos + options.text.size());
+					if (beforeOk && afterOk) {
+						options.paragraph = para;
+						options.offset = searchPos;
+						return true;
+					}
+				} else {
+					options.paragraph = para;
+					options.offset = searchPos;
+					return true;
+				}
+			}
+			searchPos++;
+		}
+	}
+
+	// Wrap around: search from the beginning up to the start position.
+	// Only applicable when we actually started from somewhere other than
+	// the very beginning of the document.
+	if (options.wrap && startPara > 0) {
+		for (size_t para = 0; para < startPara; para++) {
+			const WPParagraph& p = part.paragraphs[para];
+			size_t to = (para == startPara - 1) ? startOffset
+				: EditableLength(p);
+
+			size_t searchPos = 0;
+			size_t editableLen = EditableLength(p);
+			while (searchPos <= editableLen) {
+				if (TextMatch(p.text, searchPos, options.text, caseInsensitive,
+						editableLen)) {
+					if (options.entireWord) {
+						bool beforeOk = (searchPos == 0)
+								|| !IsWordChar(part, para, searchPos - 1);
+						bool afterOk = !IsWordChar(part, para,
+							searchPos + options.text.size());
+						if (beforeOk && afterOk) {
+							options.paragraph = para;
+							options.offset = searchPos;
+							return true;
+						}
+					} else {
+						options.paragraph = para;
+						options.offset = searchPos;
+						return true;
+					}
+				}
+				searchPos++;
+			}
+		}
+	}
+
+	// Not found: point to the paragraph after the last one we could search.
+	if (startPara < part.paragraphs.size()) {
+		if (startPara + 1 < part.paragraphs.size()) {
+			options.paragraph = startPara + 1;
+			options.offset = EditableLength(part.paragraphs[startPara + 1]);
+		} else {
+			options.paragraph = startPara;
+			options.offset = EditableLength(part.paragraphs[startPara]);
+		}
+	} else {
+		// startPara is beyond all paragraphs; set to last.
+		options.paragraph = part.paragraphs.size() - 1;
+		options.offset = EditableLength(
+			part.paragraphs[part.paragraphs.size() - 1]);
+	}
+	return false;
+}
+
+
+uint32_t
+ReplaceAll(WPPart& part, const std::string& replacement, const FindOptions& options)
+{
+	if (options.text.empty() || replacement.empty())
+		return 0;
+
+	const bool caseInsensitive = !options.caseSensitive;
+	uint32_t count = 0;
+
+	// Collect all match positions first (in order), then replace from the end
+	// so that offsets don't shift.
+	struct Match {
+		size_t paragraph;
+		size_t offset;
+	};
+	std::vector<Match> matches;
+
+	for (size_t para = 0; para < part.paragraphs.size(); para++) {
+		const WPParagraph& p = part.paragraphs[para];
+		size_t searchPos = 0;
+		size_t editableLen = EditableLength(p);
+		while (searchPos <= editableLen) {
+			if (TextMatch(p.text, searchPos, options.text, caseInsensitive, editableLen)) {
+				if (options.entireWord) {
+					bool beforeOk = (searchPos == 0) || !IsWordChar(part, para, searchPos - 1);
+					bool afterOk = !IsWordChar(part, para, searchPos + options.text.size());
+					if (!beforeOk || !afterOk) {
+						searchPos++;
+						continue;
+					}
+				}
+				matches.push_back({para, searchPos});
+				searchPos += options.text.size();
+			} else {
+				searchPos++;
+			}
+		}
+	}
+
+	// Replace from the end so offsets remain valid
+	for (int32_t i = int32_t(matches.size()) - 1; i >= 0; i--) {
+		const Match& m = matches[i];
+		const WPParagraph& p = part.paragraphs[m.paragraph];
+		size_t editableLen = EditableLength(p);
+		if (m.offset + options.text.size() > editableLen)
+			continue;
+
+		TextPosition pos{m.paragraph, m.offset};
+
+		if (!DeleteText(part, pos, m.offset + options.text.size()))
+			continue;
+		InsertText(part, pos, replacement);
+		count++;
+	}
+
+	return count;
+}
+
+
+// #pragma mark - find/replace dialog API
+
+// Alternative FindText: searches from `from`, forwards or backwards, with
+// the new FindDialogOptions. Case-insensitive comparison uses ASCII case
+// folding (non-ASCII bytes are compared literally). Matches never span
+// paragraphs.
+bool
+FindText(const WPPart& part, TextPosition from, const std::string& query,
+	const FindDialogOptions& options, TextPosition& start, TextPosition& end)
+{
+	if (query.empty() || part.paragraphs.empty())
+		return false;
+
+	const bool caseInsensitive = !options.caseSensitive;
+	const bool backwards = options.backwards;
+
+	// Collect all matches in the part, then pick the right one
+	struct Match {
+		size_t paragraph;
+		size_t offset;
+	};
+	std::vector<Match> matches;
+
+	for (size_t para = 0; para < part.paragraphs.size(); para++) {
+		const WPParagraph& p = part.paragraphs[para];
+		size_t editableLen = EditableLength(p);
+		if (backwards) {
+			// search backwards within this paragraph
+			size_t pos = editableLen;
+			while (pos > 0) {
+				pos = PreviousCharacter(p.text, pos);
+				if (TextMatch(p.text, pos, query, caseInsensitive, editableLen)) {
+					if (options.wholeWord) {
+						bool beforeOk = (pos == 0)
+							|| !IsWordChar(part, para, pos - 1);
+						bool afterOk = !IsWordChar(part, para,
+							pos + query.size());
+						if (!beforeOk || !afterOk) {
+							pos = PreviousCharacter(p.text, pos);
+							continue;
+						}
+					}
+					matches.push_back({para, pos});
+				}
+				if (pos == 0)
+					break;
+			}
+		} else {
+			// search forwards within this paragraph
+			size_t searchPos = 0;
+			while (searchPos <= editableLen) {
+				if (TextMatch(p.text, searchPos, query, caseInsensitive,
+						editableLen)) {
+					if (options.wholeWord) {
+						bool beforeOk = (searchPos == 0)
+							|| !IsWordChar(part, para, searchPos - 1);
+						bool afterOk = !IsWordChar(part, para,
+							searchPos + query.size());
+						if (!beforeOk || !afterOk) {
+							searchPos++;
+							continue;
+						}
+					}
+					matches.push_back({para, searchPos});
+					searchPos += query.size();
+				} else {
+					searchPos++;
+				}
+			}
+		}
+	}
+
+	if (matches.empty())
+		return false;
+
+	if (backwards) {
+		// Find the last match strictly before `from`
+		int bestIdx = -1;
+		for (int i = int(matches.size()) - 1; i >= 0; i--) {
+			const Match& m = matches[i];
+			if (m.paragraph < from.paragraph
+					|| (m.paragraph == from.paragraph && m.offset < from.offset)) {
+				bestIdx = i;
+				break;
+			}
+		}
+		// If nothing before from and wrap is enabled, use the last match
+		if (bestIdx < 0 && options.wrap && !matches.empty()) {
+			bestIdx = int(matches.size()) - 1;
+		}
+		if (bestIdx < 0)
+			return false;
+		const Match& m = matches[bestIdx];
+		start = {m.paragraph, m.offset};
+		end = {m.paragraph, m.offset + query.size()};
+		return true;
+	} else {
+		// Find the first match strictly after `from`
+		int bestIdx = -1;
+		for (int i = 0; i < int(matches.size()); i++) {
+			const Match& m = matches[i];
+			if (m.paragraph > from.paragraph
+					|| (m.paragraph == from.paragraph && m.offset > from.offset)) {
+				bestIdx = i;
+				break;
+			}
+		}
+		// If nothing after from and wrap is enabled, use the first match
+		if (bestIdx < 0 && options.wrap && !matches.empty()) {
+			bestIdx = 0;
+		}
+		if (bestIdx < 0)
+			return false;
+		const Match& m = matches[bestIdx];
+		start = {m.paragraph, m.offset};
+		end = {m.paragraph, m.offset + query.size()};
+		return true;
+	}
+}
+
+
+int
+ReplaceAll(WPPart& part, const std::string& query, const std::string& replacement,
+	const FindDialogOptions& options)
+{
+	if (query.empty() || replacement.empty())
+		return 0;
+
+	const bool caseInsensitive = !options.caseSensitive;
+	int count = 0;
+
+	for (size_t para = 0; para < part.paragraphs.size(); para++) {
+		WPParagraph& p = part.paragraphs[para];
+		size_t editableLen = EditableLength(p);
+		size_t searchPos = 0;
+		while (searchPos <= editableLen) {
+			if (TextMatch(p.text, searchPos, query, caseInsensitive, editableLen)) {
+				if (options.wholeWord) {
+					bool beforeOk = (searchPos == 0) || !IsWordChar(part, para, searchPos - 1);
+					bool afterOk = !IsWordChar(part, para, searchPos + query.size());
+					if (!beforeOk || !afterOk) {
+						searchPos++;
+						continue;
+					}
+				}
+				TextPosition pos{para, searchPos};
+				if (DeleteText(part, pos, searchPos + query.size())) {
+					InsertText(part, pos, replacement);
+					count++;
+					// update searchPos past the replacement
+					searchPos += replacement.size();
+				} else {
+					searchPos++;
+				}
+				editableLen = EditableLength(p);
+			} else {
+				searchPos++;
+			}
+		}
+	}
+
+	return count;
+}
+
+
 // #pragma mark - styles
 
 namespace {

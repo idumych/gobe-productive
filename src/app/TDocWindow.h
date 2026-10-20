@@ -11,12 +11,18 @@
 
 #include <string>
 
+#include "TDialog.h"
+
 class BFilePanel;
+class BHandler;
 class BMenu;
 class BMenuItem;
 class BStringView;
 
 namespace gobe {
+
+struct Document;
+class TPageView;
 
 // The document window's menu bar ("Main Menu Bar" in the original).
 class TMenuBar : public BMenuBar {
@@ -38,6 +44,44 @@ public:
 
 private:
 	BMenuItem* fCurrentFamily = NULL;
+};
+
+// TFindDialog: the Find/Replace (DIAL 7) dialog, made functional.
+// Controls: 0=Find text, 1=Replace text, 2=Ignore Case, 3=Entire Word,
+// 4=Wrap, 5=Insert Special, 6=Find, 7=Replace, 8=Replace & Find,
+// 9=Replace All.
+class TFindDialog : public TDialog {
+public:
+	// `target` is the TDocWindow that owns this dialog.
+	TFindDialog(int32 dialogId, int32 itemsId, uint32 command,
+		BHandler* target, Document* doc, TPageView* view);
+	virtual ~TFindDialog();
+
+	virtual void MessageReceived(BMessage* message);
+
+	// Set the dialog's values (called from TDocWindow before showing)
+	void SetFindText(const char* text);
+	void SetReplaceText(const char* text);
+	void SetCaseSensitive(bool on);
+	void SetEntireWord(bool on);
+	void SetWrap(bool on);
+
+private:
+	void DoFind();
+	void DoReplace();
+	void DoReplaceAndFind();
+	void DoReplaceAll();
+	// Read current values from BTextControl and BCheckBox controls
+	// in the dialog's view hierarchy.
+	void ReadControls();
+
+	Document* fDocument;
+	TPageView* fView;
+	std::string fFindText;
+	std::string fReplaceText;
+	bool fCaseSensitive = false;
+	bool fEntireWord = false;
+	bool fWrap = true;
 };
 
 struct Document;

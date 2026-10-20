@@ -43,6 +43,13 @@ std::string FormatCellValue(const SSValue& value, const std::string& format, boo
 // numbers and times right, booleans and errors centered.
 int CellHAlign(const CellStyle& style, const SSValue& value);
 
+// Cell property encoders (inverse of the decoders in ApplyCellProperty):
+Property NumberFormatProperty(const std::string& format);	// 'SSNm'
+Property CellHAlignProperty(int align);		// 'HAln'
+Property CellVAlignProperty(int align);		// 'VAln'
+Property CellWrapProperty(bool wrap);		// 'ClWp'
+Property CellFillProperty(Color color);		// 'FCol', solid ink
+
 } // namespace gobe
 
 #endif

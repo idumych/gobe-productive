@@ -61,6 +61,20 @@ public:
 	// presentations: arrows, Page Up/Down, space, Home/End change slides
 	void ShowSlide(int index);
 
+	// text editing: the caret's position in a word processing part
+	struct Caret {
+		bool active = false;
+		size_t part = 0, paragraph = 0, offset = 0;
+	};
+
+	// text editing state (public for TDocWindow)
+	void TextChanged();
+	bool TextSelection(TextPosition& from, TextPosition& to) const;
+	Caret fCaret;
+	Caret fAnchor;
+	UndoStack fUndo;
+	UndoStack::ViewState CurrentViewState() const;
+
 private:
 	struct FrameGeometry {
 		BRect rect;					// in view coordinates, unrotated
@@ -93,22 +107,14 @@ private:
 	};
 	SheetGeometry SheetLayout(const Document::PlacedFrame& frame, BRect rect) const;
 
-	// text editing: the caret's position in a word processing part
-	struct Caret {
-		bool active = false;
-		size_t part = 0, paragraph = 0, offset = 0;
-	};
 	bool HitText(BPoint where, Caret& caret) const;
 	bool CaretLine(const Caret& caret, size_t& line, float& x) const;
 	void EditText(const char* bytes, int32 count);
 	void MoveCaretVertically(int direction);
-	void TextChanged();
 	void UpdateMarks();
 	void DrawCaret();
 	// the x of a byte offset in that line
 	float OffsetX(size_t lineIndex, size_t offset) const;
-	// the selection: from fAnchor to fCaret, in one part
-	bool TextSelection(TextPosition& from, TextPosition& to) const;
 	// returns the selection range; if no selection, both are at caret
 	std::pair<TextPosition, TextPosition> TextSelectionRange() const;
 	// the effective text style at a position of the caret's part
@@ -144,7 +150,6 @@ private:
 	// the area a frame may draw in: its containers' frames intersected
 	BRect ContainerClip(const Document::PlacedFrame& frame) const;
 	// undo: view state helpers
-	UndoStack::ViewState CurrentViewState() const;
 	void RestoreViewState(const UndoStack::ViewState& v);
 
 	Document& fDocument;
@@ -153,8 +158,6 @@ private:
 	std::unique_ptr<SSBook> fBook;	// spreadsheet values
 	std::map<std::vector<uint32_t>, CellStyle> fCellStyles;
 	std::map<size_t, std::unique_ptr<BBitmap>> fImages;
-	Caret fCaret;
-	Caret fAnchor;					// the other end of the selection
 	bool fDragging = false;
 	bool fDraggingCells = false;	// cell range: drag from first click
 	bool fScriptShift = false;		// RunScript: shift held
@@ -165,7 +168,6 @@ private:
 		int anchorRow = 0, anchorColumn = 0;
 	} fSelectedCell;
 	BTextView* fCellEditor = NULL;
-	UndoStack fUndo;
 	BRect fBounds;					// everything, in document coordinates
 	float fMargin;
 };

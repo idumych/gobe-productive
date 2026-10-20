@@ -1,6 +1,7 @@
 #include "SSStyle.h"
 
 #include <cmath>
+#include "DocWriter.h"
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -360,5 +361,79 @@ CellHAlign(const CellStyle& style, const SSValue& value)
 			return 1;
 	}
 }
+
+// --- cell property encoders (inverse of ApplyCellProperty) ---
+
+Property
+NumberFormatProperty(const std::string& format)
+{
+	DocWriter w;
+	w.String(format);
+	Property p;
+	p.type = Sig("SSNm");
+	p.data = w.Data();
+	return p;
+}
+
+
+Property
+CellHAlignProperty(int align)
+{
+	DocWriter w;
+	w.UInt16(uint16_t(align));
+	Property p;
+	p.type = Sig("HAln");
+	p.data = w.Data();
+	return p;
+}
+
+
+Property
+CellVAlignProperty(int align)
+{
+	DocWriter w;
+	w.UInt16(uint16_t(align));
+	Property p;
+	p.type = Sig("VAln");
+	p.data = w.Data();
+	return p;
+}
+
+
+Property
+CellWrapProperty(bool wrap)
+{
+	DocWriter w;
+	w.Bool(wrap);
+	Property p;
+	p.type = Sig("ClWp");
+	p.data = w.Data();
+	return p;
+}
+
+
+// FCol: solid ink — 1 byte bool(true), 4 bytes RGBA, 4 bytes 'wtw\0',
+// 8 bytes 0xff.
+static const uint8_t kFColTail[12] = {
+	0x77, 0x74, 0x77, 0x00,
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff
+};
+
+Property
+CellFillProperty(Color color)
+{
+	DocWriter w;
+	w.Bool(true);		// solid ink
+	w.UInt8(color.r);
+	w.UInt8(color.g);
+	w.UInt8(color.b);
+	w.UInt8(color.a);
+	w.Bytes(kFColTail, sizeof(kFColTail));
+	Property p;
+	p.type = Sig("FCol");
+	p.data = w.Data();
+	return p;
+}
+
 
 } // namespace gobe

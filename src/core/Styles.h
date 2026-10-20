@@ -70,6 +70,9 @@ struct ShapeStyle {
 	float backgroundOpacity = 0;	// BTra
 };
 
+// ReadInk: parse an ink (solid color or gradient) from a DocArchive.
+bool ReadInk(DocArchive& a, Ink& ink);
+
 bool ApplyShapeProperty(const Property& property, ShapeStyle& style);
 ShapeStyle ResolveShapeStyle(const StyleMgr& styles, uint32_t index);
 
