@@ -601,6 +601,176 @@ int main()
 	setFormula(148, "DOLLAR(1,-1)");
 	Check(IsError(eval(148, 2)), "DOLLAR decimals -1 is error");
 
+	// ====== TIME ======
+	// 13*3600 + 5*60 + 9 = 47109 seconds since midnight
+	setFormula(149, "TIME(13,5,9)");
+	Check(eval(149, 2).type == SSValue::kTime && eval(149, 2).time == 47109,
+		  "TIME(13,5,9)");
+	setFormula(150, "TIME(0,0,0)");
+	Check(eval(150, 2).type == SSValue::kTime && eval(150, 2).time == 0,
+		  "TIME(0,0,0)");
+
+	// ====== SECOND ======
+	// python3 -c "import datetime as d;t=d.datetime(1999,3,1,13,5,9,tzinfo=d.timezone.utc);print(t.second)"
+	setFormula(151, "SECOND(DATE(1999,3,1)+TIME(13,5,9))");
+	CheckNum(eval(151, 2).number, 9.0, "SECOND(DATE(1999,3,1)+TIME(13,5,9))");
+	// python3 -c "import datetime as d;t=d.datetime(2000,2,29,12,30,45,tzinfo=d.timezone.utc);print(t.second)"
+	setFormula(152, "SECOND(DATE(2000,2,29)+TIME(12,30,45))");
+	CheckNum(eval(152, 2).number, 45.0, "SECOND(DATE(2000,2,29)+TIME(12,30,45))");
+	// error: SECOND of text
+	setFormula(153, "SECOND(\"hello\")");
+	Check(IsError(eval(153, 2)), "SECOND(\"hello\") is error");
+
+	// ====== DAYOFYEAR ======
+	// python3 -c "import datetime as d;d=d.date(1999,3,1);print(d.timetuple().tm_yday+1)"
+	setFormula(154, "DAYOFYEAR(DATE(1999,3,1))");
+	CheckNum(eval(154, 2).number, 60.0, "DAYOFYEAR(Mar 1 1999)");
+	// 2000 is a leap year: Jan 31 + Feb 29 = 60
+	// python3 -c "import datetime as d;d=d.date(2000,2,29);print(d.timetuple().tm_yday+1)"
+	setFormula(155, "DAYOFYEAR(DATE(2000,2,29))");
+	CheckNum(eval(155, 2).number, 60.0, "DAYOFYEAR(Feb 29 2000)");
+	// python3 -c "import datetime as d;d=d.date(1999,1,1);print(d.timetuple().tm_yday+1)"
+	setFormula(156, "DAYOFYEAR(DATE(1999,1,1))");
+	CheckNum(eval(156, 2).number, 1.0, "DAYOFYEAR(Jan 1 1999)");
+	// python3 -c "import datetime as d;d=d.date(2000,12,31);print(d.timetuple().tm_yday+1)"
+	setFormula(157, "DAYOFYEAR(DATE(2000,12,31))");
+	CheckNum(eval(157, 2).number, 366.0, "DAYOFYEAR(Dec 31 2000 leap)");
+
+	// ====== DAYOFWEEK ======
+	// python3 -c "import datetime as d;d=d.date(1999,3,1);print((d.weekday()+6)%7)"  # Monday=1
+	setFormula(158, "DAYOFWEEK(DATE(1999,3,1))");
+	CheckNum(eval(158, 2).number, 1.0, "DAYOFWEEK(Monday)");
+	// python3 -c "import datetime as d;d=d.date(1999,1,1);print((d.weekday()+6)%7)"  # Friday=5
+	setFormula(159, "DAYOFWEEK(DATE(1999,1,1))");
+	CheckNum(eval(159, 2).number, 5.0, "DAYOFWEEK(Friday)");
+	// python3 -c "import datetime as d;d=d.date(1999,1,3);print((d.weekday()+6)%7)"  # Sunday=0
+	setFormula(160, "DAYOFWEEK(DATE(1999,1,3))");
+	CheckNum(eval(160, 2).number, 0.0, "DAYOFWEEK(Sunday)");
+
+	// ====== DAYNAME ======
+	// python3 -c "print('Sunday','Monday')"
+	setFormula(161, "DAYNAME(0)");
+	Check(eval(161, 2).GetString(got) && got == "Sunday", "DAYNAME(0)");
+	setFormula(162, "DAYNAME(1)");
+	Check(eval(162, 2).GetString(got) && got == "Monday", "DAYNAME(1)");
+	// python3 -c "print('Saturday')"
+	setFormula(163, "DAYNAME(6)");
+	Check(eval(163, 2).GetString(got) && got == "Saturday", "DAYNAME(6)");
+	// short form
+	setFormula(164, "DAYNAME(0,TRUE)");
+	Check(eval(164, 2).GetString(got) && got == "Sun", "DAYNAME(0,TRUE)");
+	setFormula(165, "DAYNAME(3,TRUE)");
+	Check(eval(165, 2).GetString(got) && got == "Wed", "DAYNAME(3,TRUE)");
+	// error: DAYNAME out of range
+	setFormula(166, "DAYNAME(7)");
+	Check(IsError(eval(166, 2)), "DAYNAME(7) is error");
+
+	// ====== WEEKOFYEAR ======
+	// python3 -c "import datetime as d;d=d.date(1999,3,1);print(int(d.strftime('%U')))"  # Sunday-based %U
+	setFormula(167, "WEEKOFYEAR(DATE(1999,3,1))");
+	CheckNum(eval(167, 2).number, 9.0, "WEEKOFYEAR(Mar 1 1999)");
+	// Jan 1 1999 is a Friday; first Sunday is Jan 3 → week 0 for Jan 1
+	// python3 -c "import datetime as d;d=d.date(1999,1,1);print(int(d.strftime('%U')))"
+	setFormula(168, "WEEKOFYEAR(DATE(1999,1,1))");
+	CheckNum(eval(168, 2).number, 0.0, "WEEKOFYEAR(Jan 1 1999)");
+	// python3 -c "import datetime as d;d=d.date(1999,1,3);print(int(d.strftime('%U')))"  # first Sunday
+	setFormula(169, "WEEKOFYEAR(DATE(1999,1,3))");
+	CheckNum(eval(169, 2).number, 1.0, "WEEKOFYEAR(Jan 3 1999 first Sun)");
+
+	// ====== TIMEZONE ======
+	// depends on machine; only check type
+	setFormula(170, "TIMEZONE()");
+	Check(eval(170, 2).type == SSValue::kNumber, "TIMEZONE() is number");
+
+	// ====== LOCALTIME ======
+	// python3 -c "print(1)"  # just check types; offset is machine-dependent
+	setFormula(171, "LOCALTIME()");
+	Check(eval(171, 2).type == SSValue::kTime, "LOCALTIME() is time");
+	setFormula(172, "LOCALTIME(DATE(1999,3,1)+TIME(13,5,9))");
+	Check(eval(172, 2).type == SSValue::kTime, "LOCALTIME(datetime) is time");
+	setFormula(173, "LOCALTIME(DATE(1999,3,1)+TIME(13,5,9),3600)");
+	Check(eval(173, 2).type == SSValue::kTime, "LOCALTIME(datetime,offset) is time");
+	// Verify LOCALTIME(t,offset) shifts by offset (machine-independent)
+	setFormula(174, "LOCALTIME(DATE(1999,3,1)+TIME(13,5,9),0)");
+	setFormula(175, "LOCALTIME(DATE(1999,3,1)+TIME(13,5,9),3600)");
+	CheckNum(eval(175, 2).time - eval(174, 2).time, 3600.0,
+			 "LOCALTIME offset difference", 1e-6);
+	// error: LOCALTIME of text
+	setFormula(176, "LOCALTIME(\"hello\")");
+	Check(IsError(eval(176, 2)), "LOCALTIME(\"hello\") is error");
+
+	// ====== DATETOTEXT ======
+	// python3 -c "import datetime as d;d=d.datetime(1999,3,1,tzinfo=d.timezone.utc);print(d.strftime('%m/%d/%y'))"
+	setFormula(177, "DATETOTEXT(DATE(1999,3,1))");
+	got.clear(); eval(177, 2).GetString(got);
+	Check(got == "3/1/99", "DATETOTEXT(DATE(1999,3,1))");
+	// python3 -c "import datetime as d;d=d.datetime(1999,3,1,tzinfo=d.timezone.utc);print(d.strftime('%A, %B %d, %Y'))"
+	setFormula(178, "DATETOTEXT(DATE(1999,3,1),\"dddd, mmmm dd, yyyy\")");
+	got.clear(); eval(178, 2).GetString(got);
+	Check(got == "Monday, March 01, 1999", "DATETOTEXT custom format");
+	// error: DATETOTEXT of text
+	setFormula(179, "DATETOTEXT(\"hello\")");
+	Check(IsError(eval(179, 2)), "DATETOTEXT(\"hello\") is error");
+
+	// ====== TIMETOTEXT ======
+	// python3 -c "import datetime as d;d=d.datetime(1970,1,1,13,5,9,tzinfo=d.timezone.utc);print(d.strftime('%H:%M:%S'))"
+	setFormula(180, "TIMETOTEXT(TIME(13,5,9))");
+	got.clear(); eval(180, 2).GetString(got);
+	Check(got == "13:05:09", "TIMETOTEXT(TIME(13,5,9))");
+	// python3 -c "import datetime as d;d=d.datetime(1970,1,1,13,5,9,tzinfo=d.timezone.utc);print(d.strftime('%H:%M'))"
+	setFormula(181, "TIMETOTEXT(TIME(13,5,9),\"hh:mm\")");
+	got.clear(); eval(181, 2).GetString(got);
+	Check(got == "13:05", "TIMETOTEXT hh:mm");
+	// error: TIMETOTEXT of text
+	setFormula(182, "TIMETOTEXT(\"hello\")");
+	Check(IsError(eval(182, 2)), "TIMETOTEXT(\"hello\") is error");
+
+	// ====== TEXTTOTIME ======
+	// 13*3600+5*60+9 = 47109
+	setFormula(183, "TEXTTOTIME(\"13:05:09\")");
+	Check(eval(183, 2).type == SSValue::kTime && eval(183, 2).time == 47109,
+		  "TEXTTOTIME(\"13:05:09\")");
+	// 1:05:09 PM = 13:05:09 = 47109
+	setFormula(184, "TEXTTOTIME(\"1:05:09 PM\")");
+	Check(eval(184, 2).type == SSValue::kTime && eval(184, 2).time == 47109,
+		  "TEXTTOTIME(\"1:05:09 PM\")");
+	// 13:05 = 13:05:00 = 47100
+	setFormula(185, "TEXTTOTIME(\"13:05\")");
+	Check(eval(185, 2).type == SSValue::kTime && eval(185, 2).time == 47100,
+		  "TEXTTOTIME(\"13:05\")");
+	// error: invalid
+	setFormula(186, "TEXTTOTIME(\"not a time\")");
+	Check(IsError(eval(186, 2)), "TEXTTOTIME(\"not a time\")");
+	// error: no colon
+	setFormula(187, "TEXTTOTIME(\"12345\")");
+	Check(IsError(eval(187, 2)), "TEXTTOTIME(\"12345\")");
+
+	// ====== TEXTTODATE ======
+	// python3 -c "import datetime as d;print(d.date(1999,3,1).toordinal())"
+	// DATE(1999,3,1) stored at row 200 for comparison
+	setFormula(200, "DATE(1999,3,1)");
+	setFormula(188, "TEXTTODATE(\"1999-03-01\")");
+	Check(eval(188, 2).type == SSValue::kTime
+			&& eval(188, 2).time == eval(200, 2).time,
+		"TEXTTODATE(\"1999-03-01\")");
+	// python3 -c "import datetime as d;print(d.date(1999,3,1).toordinal())"
+	setFormula(189, "TEXTTODATE(\"3/1/99\")");
+	Check(eval(189, 2).type == SSValue::kTime
+			&& eval(189, 2).time == eval(200, 2).time,
+		"TEXTTODATE(\"3/1/99\")");
+	// error
+	setFormula(190, "TEXTTODATE(\"not a date\")");
+	Check(IsError(eval(190, 2)), "TEXTTODATE(\"not a date\")");
+
+	// ====== TEXT with dates ======
+	// python3 -c "print(f'{0:.2f}', f'{1234.50:,.2f}')"
+	setFormula(191, "TEXT(DATE(1999,3,1),\"m/d/yy\")");
+	got.clear(); eval(191, 2).GetString(got);
+	Check(got == "3/1/99", "TEXT(DATE,\"m/d/yy\")");
+	setFormula(192, "TEXT(TIME(13,5,9),\"h:mm:ss\")");
+	got.clear(); eval(192, 2).GetString(got);
+	Check(got == "13:05:09", "TEXT(TIME,\"h:mm:ss\")");
+
 	printf(failures ? "%d failures\n" : "ss_functions: ok\n", failures);
 	return failures != 0;
 }

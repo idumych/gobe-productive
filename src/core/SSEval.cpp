@@ -134,6 +134,18 @@ DaysToTm(double days)
 	return out;
 }
 
+
+// GetTimezoneOffset: returns the offset from UTC in seconds.
+// Positive for timezones east of UTC.
+int
+GetTimezoneOffset()
+{
+	time_t now = time(nullptr);
+	struct tm local;
+	localtime_r(&now, &local);
+	return int(local.tm_gmtoff);
+}
+
 } // namespace
 
 
@@ -1181,6 +1193,205 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 	}
 	if (name == "NOW")
 		return finish(SSValue::Time(int64_t(time(nullptr))));
+	if (name == "TIME") {
+		double h, m, s;
+		if (!numArg(h) || !numArg(m) || !numArg(s))
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Time(
+			llround(floor(h) * 3600 + floor(m) * 60 + floor(s))));
+	}
+	if (name == "SECOND") {
+		double n;
+		if (!numArg(n))
+			return finish(SSValue::Error(kErrValue));
+		struct tm tm = DaysToTm(n);
+		return finish(SSValue::Number(tm.tm_sec));
+	}
+	if (name == "DAYOFYEAR") {
+		double n;
+		if (!numArg(n))
+			return finish(SSValue::Error(kErrValue));
+		struct tm tm = DaysToTm(n);
+		return finish(SSValue::Number(tm.tm_yday + 1));
+	}
+	if (name == "DAYOFWEEK") {
+		double n;
+		if (!numArg(n))
+			return finish(SSValue::Error(kErrValue));
+		struct tm tm = DaysToTm(n);
+		return finish(SSValue::Number(tm.tm_wday));
+	}
+	if (name == "DAYNAME") {
+		double dn;
+		if (!numArg(dn) || dn < 0 || dn > 6)
+			return finish(SSValue::Error(kErrDate));
+		bool shortName = false;
+		if (used < argc) {
+			SSValue v = next();
+			if (!v.GetBool(shortName))
+				return finish(SSValue::Error(kErrValue));
+		}
+		static const char* kDays[] = {
+			"Sunday", "Monday", "Tuesday", "Wednesday",
+			"Thursday", "Friday", "Saturday"};
+		std::string day = kDays[int(llround(dn))];
+		if (shortName && day.size() > 3)
+			day = day.substr(0, 3);
+		return finish(SSValue::String(day));
+	}
+	if (name == "WEEKOFYEAR") {
+		double n;
+		if (!numArg(n))
+			return finish(SSValue::Error(kErrValue));
+		struct tm tm = DaysToTm(n);
+		// Sunday-based week numbering (like strftime %U).
+		// First Sunday starts week 1; days before are week 0.
+		int week = (tm.tm_yday + 6 - tm.tm_wday) / 7;
+		return finish(SSValue::Number(week));
+	}
+	if (name == "TIMEZONE") {
+		int offset = GetTimezoneOffset();
+		return finish(SSValue::Number(offset));
+	}
+	if (name == "LOCALTIME") {
+		int64_t utc_seconds;
+		if (used < argc) {
+			double n;
+			if (!numArg(n))
+				return finish(SSValue::Error(kErrValue));
+			utc_seconds = llround(n * 86400.0);
+		} else {
+			utc_seconds = int64_t(time(nullptr));
+		}
+		int offset = 0;
+		if (used < argc) {
+			double od;
+			if (!numArg(od))
+				return finish(SSValue::Error(kErrValue));
+			offset = int(llround(od));
+		} else {
+			offset = GetTimezoneOffset();
+		}
+		return finish(SSValue::Time(utc_seconds + offset));
+	}
+	if (name == "DATETOTEXT") {
+		double n;
+		if (!numArg(n))
+			return finish(SSValue::Error(kErrValue));
+		std::string fmt = "m/d/yy";
+		if (used < argc) {
+			SSValue v = next();
+			std::string s;
+			if (!v.GetString(s))
+				return finish(SSValue::Error(kErrValue));
+			fmt = s;
+		}
+		int64_t seconds = llround(n * 86400.0);
+		SSValue dateVal = SSValue::Time(seconds);
+		return finish(SSValue::String(FormatCellValue(dateVal, fmt)));
+	}
+	if (name == "TIMETOTEXT") {
+		double n;
+		if (!numArg(n))
+			return finish(SSValue::Error(kErrValue));
+		std::string fmt = "h:mm:ss";
+		if (used < argc) {
+			SSValue v = next();
+			std::string s;
+			if (!v.GetString(s))
+				return finish(SSValue::Error(kErrValue));
+			fmt = s;
+		}
+		int64_t seconds = llround(n * 86400.0);
+		int64_t tod = seconds % 86400;
+		if (tod < 0)
+			tod += 86400;
+		SSValue timeVal = SSValue::Time(tod);
+		return finish(SSValue::String(FormatCellValue(timeVal, fmt)));
+	}
+	if (name == "TEXTTOTIME") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::Error(kErrValue));
+		// Trim whitespace
+		size_t start = 0, end = s.size();
+		while (start < end && isspace((unsigned char)s[start])) start++;
+		while (end > start && isspace((unsigned char)s[end - 1])) end--;
+		std::string t = s.substr(start, end - start);
+		if (t.empty())
+			return finish(SSValue::Error(kErrValue));
+		int hours = 0, minutes = 0, seconds = 0;
+		bool isPM = false;
+		if (t.size() >= 2) {
+			char a = tolower((unsigned char)t[t.size() - 2]);
+			char b = tolower((unsigned char)t[t.size() - 1]);
+			if (a == 'a' && b == 'm') {
+				isPM = false;
+				t = t.substr(0, t.size() - 2);
+			} else if (a == 'p' && b == 'm') {
+				isPM = true;
+				t = t.substr(0, t.size() - 2);
+			}
+		}
+		while (!t.empty() && isspace((unsigned char)t.back()))
+			t.pop_back();
+		if (t.empty())
+			return finish(SSValue::Error(kErrValue));
+		int parsed;
+		size_t p2 = t.find(':');
+		if (p2 == std::string::npos)
+			return finish(SSValue::Error(kErrValue));
+		size_t p3 = t.find(':', p2 + 1);
+		if (p3 != std::string::npos) {
+			parsed = sscanf(t.c_str(), "%d:%d:%d", &hours, &minutes, &seconds);
+			if (parsed != 3)
+				return finish(SSValue::Error(kErrValue));
+		} else {
+			parsed = sscanf(t.c_str(), "%d:%d", &hours, &minutes);
+			if (parsed != 2)
+				return finish(SSValue::Error(kErrValue));
+			seconds = 0;
+		}
+		if (isPM && hours != 12)
+			hours += 12;
+		if (!isPM && hours == 12)
+			hours = 0;
+		if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59
+				|| seconds < 0 || seconds > 59)
+			return finish(SSValue::Error(kErrValue));
+		return finish(SSValue::Time(
+			int64_t(hours * 3600 + minutes * 60 + seconds)));
+	}
+	if (name == "TEXTTODATE") {
+		SSValue v = next();
+		std::string s;
+		if (!v.GetString(s))
+			return finish(SSValue::Error(kErrValue));
+		size_t start = 0, end = s.size();
+		while (start < end && isspace((unsigned char)s[start])) start++;
+		while (end > start && isspace((unsigned char)s[end - 1])) end--;
+		std::string t = s.substr(start, end - start);
+		int year = 0, month = 0, day = 0;
+		int parsed;
+		// Try ISO format: YYYY-MM-DD
+		parsed = sscanf(t.c_str(), "%d-%d-%d", &year, &month, &day);
+		if (parsed == 3 && month >= 1 && month <= 12
+				&& day >= 1 && day <= 31) {
+			if (year < 100)
+				year += 1900;
+			return finish(SSValue::Time(DateToSeconds(year, month, day)));
+		}
+		// Try US format: MM/DD/YYYY or M/D/YY
+		parsed = sscanf(t.c_str(), "%d/%d/%d", &month, &day, &year);
+		if (parsed == 3 && month >= 1 && month <= 12
+				&& day >= 1 && day <= 31) {
+			if (year < 100)
+				year += 1900;
+			return finish(SSValue::Time(DateToSeconds(year, month, day)));
+		}
+		return finish(SSValue::Error(kErrValue));
+	}
 	if (name == "RAND")
 		return finish(SSValue::Number(rand() / (RAND_MAX + 1.0)));
 	if (name == "REPT") {
