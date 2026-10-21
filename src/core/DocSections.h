@@ -135,6 +135,41 @@ struct LinksMgr {
 void ReadLinksMgr(DocArchive& a, LinksMgr& out);
 std::vector<uint8_t> WriteLinksMgr(const LinksMgr& links);
 
+// "SetMgr" (unparseable): 'SETM', 3 zero u32s (ink set counts), 'SetM'.
+std::vector<uint8_t> WriteSetMgr();
+
+// "PenMgr" (unparseable): 'PENM', u8 flag, bool, pen count, pen entries,
+// double-passthrough, same data, 'PenM'. For blank: count 0.
+std::vector<uint8_t> WritePenMgr();
+
+// "SheetMgr" (unparseable): TSheet::Write format — name TString, u32 flags,
+// u32 index, count of extra sheets, per-sheet data. For blank: just the root.
+std::vector<uint8_t> WriteSheetMgr();
+
+// "CommandMgr" (unparseable): 'CMDM', count, per-command 'TCMD' blocks, 'CmdM'.
+std::vector<uint8_t> WriteCommandMgr();
+
+// "HistoryMgr" (unparseable): TOrderTable::Write (no explicit sig, writes
+// count), then two u32s. For blank: count 0, two zero u32s.
+std::vector<uint8_t> WriteHistoryMgr();
+
+// "WindowMgr" (unparseable): TDocWindow::Write per window (doc pointer,
+// internal TOC, window name). For blank: 0 windows.
+std::vector<uint8_t> WriteWindowMgr();
+
+// PartFactory Table write helper.
+std::vector<uint8_t> WriteFactoryTable(
+	const std::vector<PartFactoryEntry>& factories);
+
+// Document Misc write helper.
+std::vector<uint8_t> WriteDocumentMisc(const DocumentMisc& misc);
+
+// SelectionMgr write helper.
+std::vector<uint8_t> WriteSelectionMgr(const SelectionMgr& mgr);
+
+// PartMgr write helper — writes from PartRecord data (for creating new docs).
+std::vector<uint8_t> WritePartMgrFromRecords(const PartMgr& mgr);
+
 // One section reader per TOC name; returns false if there is none (yet).
 bool ReadSection(DocArchive& a, const std::string& name, std::string& summary);
 

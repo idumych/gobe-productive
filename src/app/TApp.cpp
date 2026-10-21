@@ -43,7 +43,8 @@ public:
 		fHasDocument(false),
 		fOpenPanel(NULL),
 		fWindowCount(0),
-		fSlide(-1)
+		fSlide(-1),
+		fNewDocument(false)
 	{
 	}
 
@@ -57,7 +58,7 @@ public:
 	{
 		fprintf(stderr,
 		    "usage: %s [--menu <n>] [--dialog <id>] [--render <png>]\n"
-		    "        [--slide <n>] [--do <script>] <document> ...\n",
+		    "        [--slide <n>] [--do <script>] [--new] <document> ...\n",
 		    prog);
 	}
 
@@ -108,6 +109,8 @@ public:
 					continue;
 				}
 				fSlide = atoi(argv[++i]) - 1;
+			} else if (strcmp(argv[i], "--new") == 0) {
+				fNewDocument = true;
 			} else if (strncmp(argv[i], "--", 2) == 0) {
 				fprintf(stderr, "unknown option: %s\n", argv[i]);
 				PrintUsage(prog);
@@ -235,6 +238,24 @@ public:
 			}
 			return;
 		}
+		if (fNewDocument) {
+			Document* document = new Document;
+			std::string error;
+			if (CreateBlankDocument(*document, error)) {
+				if (!fRenderPath.empty()) {
+					Render(*document, fRenderPath);
+					PostMessage(B_QUIT_REQUESTED);
+					return;
+				}
+				BRect frame(80, 60, 720, 520);
+				frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
+				fWindowCount++;
+				TDocWindow* window = new TDocWindow(frame, document->name.c_str(), document);
+				window->Show();
+			} else
+				fprintf(stderr, "CreateBlankDocument: %s\n", error.c_str());
+			return;
+		}
 		TDocWindow* window = new TDocWindow(BRect(80, 60, 720, 520), "Untitled 1");
 		window->Show();
 
@@ -256,6 +277,7 @@ private:
 	int32 fOpenDialog;
 	bool fReady;
 	bool fHasDocument;
+	bool fNewDocument;
 	BFilePanel* fOpenPanel;
 	int32 fWindowCount;
 	int fSlide;					// --slide

@@ -25,6 +25,7 @@ namespace gobe {
 
 struct Document {
 	std::string path;
+	std::string name;		// window title ("untitled 1", etc. for new docs)
 	std::vector<uint8_t> bytes;		// the file as read (for saving)
 	DocFile file;
 	std::vector<PartFactoryEntry> factories;
@@ -111,6 +112,12 @@ struct Document {
 };
 
 bool LoadDocument(const std::string& path, Document& doc, std::string& error);
+
+// Creates a blank WORD document: header + all 13 sections, 1 WORD part with
+// an empty paragraph, "Bas" and "GRFX" styles, proper TOC.  On success the
+// document is fully populated and `path` is empty (it's unnamed).  On failure
+// returns false and sets `error`.
+bool CreateBlankDocument(Document& doc, std::string& error);
 
 } // namespace gobe
 

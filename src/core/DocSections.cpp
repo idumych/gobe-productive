@@ -370,6 +370,149 @@ WriteLinksMgr(const LinksMgr& links)
 }
 
 
+std::vector<uint8_t>
+WriteSetMgr()
+{
+	DocWriter w;
+	w.Sig(Sig("SETM"));
+	w.UInt32(0);	// ink set count 0
+	w.UInt32(0);
+	w.UInt32(0);
+	w.Sig(Sig("SetM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WritePenMgr()
+{
+	DocWriter w;
+	w.Sig(Sig("PENM"));
+	w.UInt8(1);	// pen flag
+	w.UInt8(0);	// bool
+	w.UInt32(0);	// pen count
+	// double-passthrough: same data repeated (no pens, just the signature)
+	w.Sig(Sig("PenM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteSheetMgr()
+{
+	// TSheet::Write: TString name, u32 flags, u32 index,
+	// count of extra sheets, per-sheet data
+	// For a blank WORD document: the root sheet
+	DocWriter w;
+	w.String("Sheet 1");
+	w.UInt32(0);	// flags
+	w.UInt32(0);	// index (root)
+	w.UInt32(0);	// extra sheet count
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteCommandMgr()
+{
+	DocWriter w;
+	w.Sig(Sig("CMDM"));
+	w.UInt32(0);	// command count
+	w.Sig(Sig("CmdM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteHistoryMgr()
+{
+	// TOrderTable::Write: count, then two u32s
+	DocWriter w;
+	w.UInt32(0);	// count
+	w.UInt32(0);	// two u32s
+	w.UInt32(0);
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteWindowMgr()
+{
+	// TDocWindow::Write per window: doc pointer, internal TOC, window name
+	// For blank: 0 windows
+	DocWriter w;
+	w.UInt32(0);	// window count
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteFactoryTable(const std::vector<PartFactoryEntry>& factories)
+{
+	DocWriter w;
+	w.UInt32(uint32_t(factories.size()));
+	for (const auto& f : factories) {
+		w.UInt32(f.kind);
+		w.UInt32(f.id);
+		w.String(f.name);
+	}
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteDocumentMisc(const DocumentMisc& misc)
+{
+	DocWriter w;
+	w.UInt32(misc.blockCount);
+	w.UInt32(misc.value70);
+	for (const auto& msg : misc.messages)
+		w.Bytes(msg);
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WriteSelectionMgr(const SelectionMgr& mgr)
+{
+	DocWriter w;
+	w.Sig(Sig("SELM"));
+	w.UInt32(uint32_t(mgr.selections.size()));
+	for (const auto& sel : mgr.selections) {
+		w.UInt32(0);	// record size placeholder
+		w.UInt32(sel.kind);
+		w.UInt32(sel.part);
+		w.UInt32(sel.value);
+		// ... selection-specific data ...
+	}
+	w.Sig(Sig("SelM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WritePartMgrFromRecords(const PartMgr& mgr)
+{
+	// Writes the PartMgr section from PartRecord data.
+	// Format: 'PARM', value14, count, (kind, size) per part,
+	// (size, record) per part, 'ParM'
+	DocWriter w;
+	w.Sig(Sig("PARM"));
+	w.UInt32(mgr.value14);
+	w.UInt32(uint32_t(mgr.parts.size()));
+	for (const auto& p : mgr.parts) {
+		w.UInt32(p.kind);
+		w.UInt32(uint32_t(p.data.size() + 4));	// size includes the size field itself
+	}
+	for (const auto& p : mgr.parts) {
+		w.UInt32(uint32_t(p.data.size() + 4));
+		w.Bytes(p.data);
+	}
+	w.Sig(Sig("ParM"));
+	return w.Data();
+}
+
+
 bool
 ReadSection(DocArchive& a, const std::string& name, std::string& summary)
 {

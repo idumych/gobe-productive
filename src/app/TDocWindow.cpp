@@ -1500,8 +1500,16 @@ TDocWindow::MessageReceived(BMessage* message)
 		}
 		case kCmdNew:
 		{
-			TDocWindow* window = new TDocWindow(Frame().OffsetByCopy(20, 20), "Untitled");
-			window->Show();
+			Document* document = new Document;
+			std::string error;
+			if (CreateBlankDocument(*document, error)) {
+				TDocWindow* window = new TDocWindow(Frame().OffsetByCopy(20, 20),
+					document->name.c_str(), document);
+				window->Show();
+			} else {
+				fprintf(stderr, "kCmdNew: %s\n", error.c_str());
+				delete document;
+			}
 			return;
 		}
 		case kCmdOpen:
