@@ -1285,6 +1285,10 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 			|| column >= firstColumn + columns)
 			continue;
 		SSValue value = eval.Value(row, column);
+		// Show Formulas (TSSDisplayManager::CellText): a formula cell shows
+		// itself, its formula, not its result
+		if (ss.options[2] && cell.kind == Sig("Fmla"))
+			value = SSValue::String(CellInput(ss, uint16_t(row), uint16_t(column)));
 		if (value.type == SSValue::kNone)
 			continue;
 		const CellStyle& style = SpreadsheetStyle(stackFor(row, column, &cell));
@@ -1441,6 +1445,30 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 		PopState();
 	}
 	SetDrawingMode(B_OP_COPY);
+	// the locked cells shaded (TSSDisplayManager::DrawCells, ShowLockedCells):
+	// each locked range filled over the cells with LockStyle's fill, in
+	// B_OP_OVER
+	if (ss.options[1]) {
+		const CellStyle& lock = SpreadsheetStyle({ss.displayStyles[4]});
+		for (const SSRange& range : ss.locked) {
+			BRect rr;
+			BGradient* gradient = NULL;
+			if (!lock.fill.set || lock.fillOpacity <= 0 || !rangeRect(range, rr)
+					|| !SetInk(lock.fill, lock.fillOpacity, rr, &gradient))
+				continue;
+			SetDrawingMode(lock.fillOpacity >= 0.999f ? B_OP_OVER : B_OP_ALPHA);
+			// (its pattern, the low color's pixels left out in B_OP_OVER)
+			pattern stipple;
+			for (int i = 0; i < 8; i++)
+				stipple.data[i] = lock.fill.pattern[i];
+			if (gradient != NULL) {
+				FillRect(rr, *gradient);
+				delete gradient;
+			} else
+				FillRect(rr, stipple);
+			SetDrawingMode(B_OP_COPY);
+		}
+	}
 	SetPenSize(1);
 	// the cell being edited / selected
 	if (fSelectedCell.active && fSelectedCell.part == f.part

@@ -87,6 +87,7 @@ struct SSPart {
 	size_t headerStart = 0;
 	size_t dataStart = 0, dataEnd = 0;
 	size_t depmStart = 0, depmEnd = 0;
+	size_t optionsEnd = 0;		// after 'disp' and 'dopt' (written from the parsed form)
 	CellID dataEndID;			// the terminating cell id (column 0xffff)
 
 	const SSCell* Cell(uint16_t a, uint16_t b) const;

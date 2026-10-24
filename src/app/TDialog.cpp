@@ -32,10 +32,11 @@
 namespace gobe {
 
 static DialogData
-LoadDialog(int32 id)
+LoadDialog(int32 id, const ResourceFile* resources)
 {
 	DialogData d;
-	const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("DIAL"), id);
+	const ResourceFile::Resource* r = (resources != NULL ? *resources : GobeResources::File())
+		.Find(FourCC("DIAL"), id);
 	if (r == NULL || !ParseDialog(r->data, d)) {
 		fprintf(stderr, "TDialog: DIAL %d missing or malformed\n", (int)id);
 		d.title = "Dialog";
@@ -53,12 +54,15 @@ TDialog::Exists(int32 dialogId)
 }
 
 
-TDialog::TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target)
+TDialog::TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target,
+		const ResourceFile* resources)
 	:
-	BWindow(BRect(100, 100, 400, 300), LoadDialog(dialogId).title.c_str(),
-		(window_look)LoadDialog(dialogId).look, (window_feel)LoadDialog(dialogId).feel,
-		LoadDialog(dialogId).flags | B_AUTO_UPDATE_SIZE_LIMITS),
+	BWindow(BRect(100, 100, 400, 300), LoadDialog(dialogId, resources).title.c_str(),
+		(window_look)LoadDialog(dialogId, resources).look,
+		(window_feel)LoadDialog(dialogId, resources).feel,
+		LoadDialog(dialogId, resources).flags | B_AUTO_UPDATE_SIZE_LIMITS),
 	fDialogId(dialogId),
+	fResources(resources != NULL ? resources : &GobeResources::File()),
 	fCommand(command),
 	fTarget(target)
 {
@@ -71,7 +75,7 @@ TDialog::TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target
 	GetLayout()->AddView(top);
 
 	ItemList list;
-	const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("Item"), itemsId);
+	const ResourceFile::Resource* r = fResources->Find(FourCC("Item"), itemsId);
 	if (r == NULL) {
 		root->AddView(new BStringView("missing", "(no Item resource for this dialog)"));
 	} else {
@@ -255,10 +259,10 @@ TDialog::MakeControl(const ItemData& item)
 				popup->AddItem(new BMenuItem("(font list)", NULL));
 			} else if (item.menu == 0x79) {
 				popup->AddItem(new BMenuItem("(arrows)", NULL));
-			} else if (GobeResources::File().Find(FourCC("MENU"), item.menu) != NULL) {
+			} else if (fResources->Find(FourCC("MENU"), item.menu) != NULL) {
 				// TPopUpMenu(id, ...): the MENU's items; their messages are
 				// rewritten to the control's command like the original
-				TMenu source(item.menu, true);
+				TMenu source(item.menu, *fResources, true);
 				while (source.CountItems() > 0) {
 					BMenuItem* mi = source.RemoveItem((int32)0);
 					if (mi->Message() != NULL) {
@@ -598,7 +602,7 @@ TDialog::LoadItemSet(int32 index, int32 itemsId)
 	fSetItems.clear();
 	fSetRadios.clear();
 	ItemList list;
-	const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("Item"), itemsId);
+	const ResourceFile::Resource* r = fResources->Find(FourCC("Item"), itemsId);
 	if (r == NULL || !ParseItems(r->data, list))
 		return;
 	fBuildingSet = index;

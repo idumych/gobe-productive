@@ -17,8 +17,12 @@ ReadInk(DocArchive& a, Ink& ink)
 		ink.color.g = a.UInt8();
 		ink.color.b = a.UInt8();
 		ink.color.a = a.UInt8();
-		a.Bytes(4);
-		a.Bytes(8);
+		ink.low.r = a.UInt8();
+		ink.low.g = a.UInt8();
+		ink.low.b = a.UInt8();
+		ink.low.a = a.UInt8();
+		for (uint8_t& b : ink.pattern)
+			b = a.UInt8();
 		return true;
 	}
 	ink.gradient = true;

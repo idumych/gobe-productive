@@ -2479,6 +2479,34 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 'sM66': {	// Display Options… (TSSDisplayManager options)
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						if (ss == NULL)
+							return;
+						const void* data = NULL;
+						ssize_t size = 0;
+						if (message->FindData("displayOptions", B_RAW_TYPE, &data, &size) != B_OK
+								|| size < 6) {
+							(new TDialogDisplayOptions(this, ss->options))->RunDialog();
+							return;
+						}
+						const uint8* options = (const uint8*)data;
+						bool same = true;
+						for (int i = 0; i < 6; i++)
+							same = same && ss->options[i] == (options[i] != 0);
+						if (same)
+							return;
+						// not a command (no Undo), as in the original
+						SSPart* sheet = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+						for (int i = 0; i < 6; i++)
+							sheet->options[i] = options[i] != 0;
+						// (the original repaginates or redraws, and doesn't mark the
+						// document changed)
+						fBook->Reset();
+						Rebuild();
+						Invalidate();
+						return;
+					}
 					case 'sM78':	// Calculate Now (ChangeAll: every formula again)
 						fBook->Reset();
 						Invalidate();
@@ -4077,7 +4105,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
-		case 'sM62': case 'sM63': case 'sM78': case 'sM60':
+		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

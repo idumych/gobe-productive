@@ -45,6 +45,24 @@ private:
 	int32 fDecimals = 2;		// field_0x5c: the last valid decimal places
 };
 
+// Format > Display Options… (TDialogDisplayOptions; TSSDialog 23 of
+// Parts/Spreadsheet): the six display options as check boxes (items 2-7:
+// grid, locked cells shaded, formulas, column headings, row headings,
+// circular references marked). OK sends `target` 'sM66' with
+// "displayOptions", six bytes.
+class TDialogDisplayOptions : public TDialog {
+public:
+	TDialogDisplayOptions(BHandler* target, const bool options[6]);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+	bool fOptions[6];
+};
+
 } // namespace gobe
 
 #endif

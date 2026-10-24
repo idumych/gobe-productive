@@ -22,8 +22,11 @@ namespace gobe {
 class TDialog : public BWindow {
 public:
 	// TDialog(ulong dialogId, ulong itemsId, BResources*, ulong command):
-	// controls send `command + index` like the original.
-	TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target);
+	// controls send `command + index` like the original. The resources
+	// are the application's, or `resources` (a part's: TSSDialog's
+	// SSResources).
+	TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target,
+		const ResourceFile* resources = NULL);
 
 	virtual void MessageReceived(BMessage* message);
 
@@ -71,7 +74,10 @@ private:
 	BView* MakeControl(const ItemData& item);
 	BMessage* ControlMessage(const ItemData& item) const;
 
+	const ResourceFile& Resources() const { return *fResources; }
+
 	int32 fDialogId;
+	const ResourceFile* fResources;
 	uint32 fCommand;
 	BHandler* fTarget;
 	std::map<int32, BView*> fItems;

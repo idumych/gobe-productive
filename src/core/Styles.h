@@ -64,6 +64,10 @@ struct Ink {
 	uint32_t gradientType = 0;		// 'GDdr' directional, 'GDrl' radial
 	float angle = 0;				// directional: degrees
 	float center[2] = {0.5f, 0.5f};	// radial
+	// a solid ink's low color and 8x8 pattern (TColorPattern: the bits
+	// set show `color`; all 0xff, solid, in nearly every document)
+	Color low;
+	uint8_t pattern[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 };
 
 // Shape/frame drawing attributes.

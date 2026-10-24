@@ -285,4 +285,39 @@ TDialogNumFormat::ItemHit(int32 index, BMessage* message)
 	return false;
 }
 
+TDialogDisplayOptions::TDialogDisplayOptions(BHandler* target, const bool options[6])
+	:
+	TDialog(23, 23, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
+	fTarget(target)
+{
+	for (int i = 0; i < 6; i++)
+		fOptions[i] = options[i];
+}
+
+
+void
+TDialogDisplayOptions::Init()
+{
+	for (int i = 0; i < 6; i++)
+		SetCheckBoxItem(2 + i, fOptions[i]);
+}
+
+
+bool
+TDialogDisplayOptions::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		uint8 options[6];
+		for (int i = 0; i < 6; i++)
+			options[i] = CheckBoxItem(2 + i) ? 1 : 0;
+		BMessage apply('sM66');
+		apply.AddData("displayOptions", B_RAW_TYPE, options, sizeof(options));
+		if (fTarget != NULL && fTarget->Looper() != NULL)
+			fTarget->Looper()->PostMessage(&apply, fTarget);
+	} else if (index != 1)
+		return false;
+	PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
 } // namespace gobe

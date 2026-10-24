@@ -232,6 +232,7 @@ ReadSSPart(DocArchive& a, SSPart& out)
 	a.CheckSig(Sig("dopt"));
 	for (bool& o : out.options)
 		o = a.Bool();
+	out.optionsEnd = a.Position();
 	count = a.UInt32();					// TSSFillManager: TOrderTable<TSSFillInfo>
 	for (uint32_t i = 0; i < count; i++) {
 		SSFill f;
@@ -349,7 +350,17 @@ WriteSSPart(const SSPart& part, const std::vector<uint8_t>& record)
 		w.Bool(d.flag);
 		w.UInt32(d.value);
 	}
-	w.Bytes(record.data() + part.depmEnd, record.size() - part.depmEnd);
+	// TSSDisplayManager::Write: row height, column width, its styles and
+	// the display options (TSSDisplayOptions)
+	w.Sig(Sig("disp"));
+	w.Float(part.defaultHeight);
+	w.Float(part.defaultWidth);
+	for (uint32_t s : part.displayStyles)
+		w.UInt32(s);
+	w.Sig(Sig("dopt"));
+	for (bool o : part.options)
+		w.Bool(o);
+	w.Bytes(record.data() + part.optionsEnd, record.size() - part.optionsEnd);
 	return w.Data();
 }
 
