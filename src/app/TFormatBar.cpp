@@ -212,6 +212,14 @@ CaretStyles(TPageView* pages, TextStyle& character, uint32_t& paragraphStyle)
 	const WPPart* wp = pages->fCaret.active ? doc.WordPart(pages->fCaret.part) : NULL;
 	if (wp == NULL || pages->fCaret.paragraph >= wp->paragraphs.size())
 		return false;
+	// (TDocWindow::CreateActivePartStyleIterator: the style Edit Styles
+	// has chosen, TEditStyleIterator)
+	uint32_t edit = pages->EditStyle();
+	if (edit < doc.styles.styles.size()) {
+		character = ResolveTextStyle(doc.styles, edit);
+		paragraphStyle = edit;
+		return true;
+	}
 	auto range = pages->TextSelectionRange();
 	character = pages->StyleAt(range.first);
 	paragraphStyle = wp->paragraphs[std::min(range.first.paragraph,
@@ -595,7 +603,7 @@ TFormatBar::Update()
 		size = std::to_string(int(roundf(style.size)));
 		hasInk = true;
 		ink = {style.color.r, style.color.g, style.color.b, 255};
-		if (selection) {
+		if (selection && fPages->EditStyle() >= doc.styles.styles.size()) {
 			// the selection's runs: differing values show the label
 			TextStyle last = fPages->StyleAt(to);
 			if (last.family != style.family)
@@ -604,8 +612,11 @@ TFormatBar::Update()
 				size = GobeResources::IndexString(5, 15).String();
 			mixedInk = last.color != style.color;
 		}
-		// TStyleManager::GetActiveStyle
-		if (const WPPart* wp = doc.WordPart(fPages->fCaret.part)) {
+		// TStyleManager::GetActiveStyle (of the style being edited: it)
+		uint32_t edit = fPages->EditStyle();
+		if (edit < doc.styles.styles.size())
+			name = doc.styles.styles[edit].name;
+		else if (const WPPart* wp = doc.WordPart(fPages->fCaret.part)) {
 			auto range = fPages->TextSelectionRange();
 			name = TextSelectionStyles(doc.styles, *wp, range.first, range.second).active;
 		}

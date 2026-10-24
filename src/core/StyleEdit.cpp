@@ -231,4 +231,24 @@ SetStyleProperty(Document& doc, uint32_t style, const Property& property)
 	return true;
 }
 
+
+
+bool
+RemoveStyleProperty(Document& doc, uint32_t style, const Property& property)
+{
+	StyleMgr& styles = doc.styles;
+	if (!Valid(styles, style))
+		return false;
+	std::vector<uint32_t>& props = styles.styles[style].props;
+	size_t before = props.size();
+	props.erase(std::remove_if(props.begin(), props.end(), [&](uint32_t p) {
+			return p < styles.properties.size() && Replaces(property, styles.properties[p]);
+		}), props.end());
+	if (props.size() == before)
+		return false;
+	UpdateDependents(styles, style);
+	doc.stylesChanged = true;
+	return true;
+}
+
 } // namespace gobe

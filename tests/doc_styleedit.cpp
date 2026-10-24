@@ -107,6 +107,16 @@ main(int argc, char** argv)
 			own = own || (p < m.properties.size() && m.properties[p].type == size.type);
 		Check(!own && ResolveTextStyle(m, body).size == base.size,
 			name + ": Body has no size of its own");
+		// a tab of Body's own, then taken off
+		TabStop tab;
+		tab.position = 100;
+		Check(SetStyleProperty(doc, body, TabProperty(tab))
+			&& ResolveTextStyle(m, body).tabs.size() == 1, name + ": a tab set in Body");
+		tab.position = 50;
+		Check(!RemoveStyleProperty(doc, body, TabProperty(tab)), name + ": no tab at 50");
+		tab.position = 100;
+		Check(RemoveStyleProperty(doc, body, TabProperty(tab))
+			&& ResolveTextStyle(m, body).tabs.empty(), name + ": the tab taken off");
 	}
 	if (documents == 0)
 		Check(false, "no documents with Body and WP Default");

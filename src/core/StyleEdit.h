@@ -48,6 +48,9 @@ bool DeleteNamedStyle(Document& doc, const std::string& name);
 // own (replacing one it replaces), those equal to what it inherits dropped
 // (TStyle::Reduce), its dependents updated. False if nothing changed.
 bool SetStyleProperty(Document& doc, uint32_t style, const Property& property);
+// the style's own properties that `property` replaces taken off (a tab at
+// its position), its dependents updated. False if it had none.
+bool RemoveStyleProperty(Document& doc, uint32_t style, const Property& property);
 
 } // namespace gobe
 

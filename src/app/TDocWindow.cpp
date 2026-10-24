@@ -1941,6 +1941,12 @@ TDocWindow::GetStylesSnapshot(StylesSnapshot& snapshot) const
 		to = range.second;
 	}
 	snapshot.selection = TextSelectionStyles(snapshot.styles, *wp, from, to);
+	// (CreateActivePartStyleIterator: while a style is being edited, it)
+	uint32_t edit = fPages->EditStyle();
+	if (edit < snapshot.styles.styles.size()) {
+		snapshot.selection = SelectionStyles();
+		snapshot.selection.active = snapshot.styles.styles[edit].name;
+	}
 }
 
 

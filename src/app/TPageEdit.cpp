@@ -1557,7 +1557,7 @@ TPageView::MessageReceived(BMessage* message)
 				CurrentViewState());
 			auto sel = TextSelectionRange();
 			for (const Property& property : sCopiedFormat)
-				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second, property);
+				ApplyCharacter(sel.first, sel.second, property);
 			TextChanged();
 			UpdateMarks();
 			return;
@@ -1690,22 +1690,22 @@ TPageView::MessageReceived(BMessage* message)
 				CurrentViewState());
 			auto range = TextSelectionRange();
 			size_t first = range.first.paragraph, last = range.second.paragraph;
-			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+			ApplyParagraph(first, last,
 				IndentProperty(Sig("PLef"), left));
-			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+			ApplyParagraph(first, last,
 				IndentProperty(Sig("PRig"), message->GetFloat("right", 0)));
-			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+			ApplyParagraph(first, last,
 				IndentProperty(Sig("PInd"), message->GetFloat("first", 0)));
-			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+			ApplyParagraph(first, last,
 				LineSpacingProperty(message->GetFloat("lineSpacing", 1),
 					message->GetBool("lineSpacingLines", true)));
-			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+			ApplyParagraph(first, last,
 				SpacingProperty(Sig("SpaB"), message->GetFloat("spaceBefore", 0),
 					message->GetBool("spaceBeforeLines", true)));
-			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+			ApplyParagraph(first, last,
 				SpacingProperty(Sig("SpaA"), message->GetFloat("spaceAfter", 0),
 					message->GetBool("spaceAfterLines", true)));
-			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+			ApplyParagraph(first, last,
 				AlignmentProperty(message->GetInt32("align", 0)));
 			TextChanged();
 			UpdateMarks();
@@ -1808,7 +1808,7 @@ TPageView::MessageReceived(BMessage* message)
 				style = "";
 			fUndo.Begin(fDocument, fCaret.part, "Font", CurrentViewState());
 			auto sel = TextSelectionRange();
-			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+			ApplyCharacter(sel.first, sel.second,
 				TextFontProperty(family, style));
 			TextChanged();
 			UpdateMarks();
@@ -1841,7 +1841,7 @@ TPageView::MessageReceived(BMessage* message)
 			}
 			fUndo.Begin(fDocument, fCaret.part, "Size", CurrentViewState());
 			auto sel = TextSelectionRange();
-			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+			ApplyCharacter(sel.first, sel.second,
 				TextSizeProperty(size));
 			TextChanged();
 			UpdateMarks();
@@ -1869,7 +1869,7 @@ TPageView::MessageReceived(BMessage* message)
 				if (flags == 0)
 					flags = 1;
 			}
-			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+			ApplyCharacter(sel.first, sel.second,
 				TextFaceProperty(flags));
 			TextChanged();
 			UpdateMarks();
@@ -1886,7 +1886,7 @@ TPageView::MessageReceived(BMessage* message)
 			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(5, 5).String())
 				+ GobeResources::IndexString(1304, 0).String(), CurrentViewState());
 			auto range = TextSelectionRange();
-			ApplyParagraphProperty(fDocument, fCaret.part, range.first.paragraph,
+			ApplyParagraph(range.first.paragraph,
 				range.second.paragraph, AlignmentProperty(align));
 			TextChanged();
 			UpdateMarks();
@@ -1912,7 +1912,7 @@ TPageView::MessageReceived(BMessage* message)
 				fUndo.Begin(fDocument, fCaret.part,
 					std::string(GobeResources::IndexString(5, 5).String())
 						+ GobeResources::IndexString(1304, 14).String(), CurrentViewState());
-				ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				ApplyParagraph(first, last,
 					LineSpacingProperty(value, lines));
 			} else {
 				fUndo.Begin(fDocument, fCaret.part,
@@ -1930,7 +1930,7 @@ TPageView::MessageReceived(BMessage* message)
 						spacing = std::min(value * 0.5f + 0.5f * half, 10.0f);
 					}
 					if (spacing > 0)
-						ApplyParagraphProperty(fDocument, fCaret.part, p, p,
+						ApplyParagraph(p, p,
 							LineSpacingProperty(spacing, style.lineSpacingMultiple));
 				}
 			}
@@ -1958,7 +1958,7 @@ TPageView::MessageReceived(BMessage* message)
 			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(5, 5).String())
 				+ GobeResources::IndexString(11, 0).String(), CurrentViewState());
 			auto sel = TextSelectionRange();
-			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+			ApplyCharacter(sel.first, sel.second,
 				TextColorProperty(color));
 			TextChanged();
 			UpdateMarks();
@@ -2065,6 +2065,12 @@ TPageView::MessageReceived(BMessage* message)
 		// the format bar's Styles, a paragraph style ('sf0L' with "Style
 		// Name": TWPApplyStyleCmd, "Apply Style - " and the name)
 		case 'sf0L': {
+			// (TStyleManager::HandleMessage: not while editing a style,
+			// STR# 6, 44)
+			if (EditStyle() < fDocument.styles.styles.size()) {
+				(new BAlert("", GobeResources::IndexString(6, 44).String(), "OK"))->Go(NULL);
+				return;
+			}
 			const char* name = NULL;
 			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL
 					|| message->FindString(kStyleNameStr, &name) != B_OK || name == NULL) {
@@ -2104,7 +2110,7 @@ TPageView::MessageReceived(BMessage* message)
 			}
 			fUndo.Begin(fDocument, fCaret.part, "Alignment", CurrentViewState());
 			auto range = TextSelectionRange();
-			ApplyParagraphProperty(fDocument, fCaret.part, range.first.paragraph,
+			ApplyParagraph(range.first.paragraph,
 				range.second.paragraph, AlignmentProperty(align));
 			TextChanged();
 			UpdateMarks();
@@ -3051,7 +3057,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 			if (fCaret.active) {
 				fUndo.Begin(fDocument, fCaret.part, "Font", CurrentViewState());
 				auto sel = TextSelectionRange();
-				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+				ApplyCharacter(sel.first, sel.second,
 					TextFontProperty(family, ""));
 				TextChanged();
 			}
@@ -3254,7 +3260,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 			// Family
 			std::string family = (pipe1 != std::string::npos) ? args.substr(0, pipe1) : "";
 			if (!family.empty()) {
-				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+				ApplyCharacter(sel.first, sel.second,
 					TextFontProperty(family, ""));
 			}
 			// Size
@@ -3263,7 +3269,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				if (!sizeStr.empty()) {
 					float size = strtof(sizeStr.c_str(), NULL);
 					if (size > 0) {
-						ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+						ApplyCharacter(sel.first, sel.second,
 							TextSizeProperty(size));
 					}
 				}
@@ -3275,7 +3281,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 					char* end = NULL;
 					uint32_t flags = strtoul(flagsStr.c_str(), &end, 10);
 					if (end != flagsStr.c_str()) {
-						ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+						ApplyCharacter(sel.first, sel.second,
 							TextFaceProperty(flags));
 					}
 				}
@@ -3308,7 +3314,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				char* end = NULL;
 				int32_t align = strtol(parts[0].c_str(), &end, 10);
 				if (end != parts[0].c_str())
-					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+					ApplyParagraph(firstPar, lastPar,
 						AlignmentProperty(align));
 			}
 			// Left indent
@@ -3316,7 +3322,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				char* end = NULL;
 				float val = strtof(parts[1].c_str(), &end);
 				if (end != parts[1].c_str())
-					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+					ApplyParagraph(firstPar, lastPar,
 						IndentProperty(Sig("PLef"), val));
 			}
 			// First indent
@@ -3324,7 +3330,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				char* end = NULL;
 				float val = strtof(parts[2].c_str(), &end);
 				if (end != parts[2].c_str())
-					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+					ApplyParagraph(firstPar, lastPar,
 						IndentProperty(Sig("PInd"), val));
 			}
 			// Right indent
@@ -3332,7 +3338,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				char* end = NULL;
 				float val = strtof(parts[3].c_str(), &end);
 				if (end != parts[3].c_str())
-					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+					ApplyParagraph(firstPar, lastPar,
 						IndentProperty(Sig("PRig"), val));
 			}
 			// Space before
@@ -3340,7 +3346,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				char* end = NULL;
 				float val = strtof(parts[4].c_str(), &end);
 				if (end != parts[4].c_str())
-					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+					ApplyParagraph(firstPar, lastPar,
 						SpacingProperty(Sig("SpaB"), val));
 			}
 			// Space after
@@ -3348,7 +3354,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				char* end = NULL;
 				float val = strtof(parts[5].c_str(), &end);
 				if (end != parts[5].c_str())
-					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+					ApplyParagraph(firstPar, lastPar,
 						SpacingProperty(Sig("SpaA"), val));
 			}
 			// Line spacing
@@ -3360,7 +3366,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				char* end = NULL;
 				float val = strtof(ls.c_str(), &end);
 				if (end != ls.c_str())
-					ApplyParagraphProperty(fDocument, fCaret.part, firstPar, lastPar,
+					ApplyParagraph(firstPar, lastPar,
 						LineSpacingProperty(val, multiple));
 			}
 			TextChanged();
@@ -3444,7 +3450,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 			tab.fillChar = '.';
 			// one PTab per tab; it replaces a tab at the same position
 			fUndo.Begin(fDocument, fCaret.part, "Tab", CurrentViewState());
-			ApplyParagraphProperty(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
+			ApplyParagraph(fCaret.paragraph, fCaret.paragraph,
 				TabProperty(tab));
 			TextChanged();
 		} else if (command.compare(0, 9, "deletetab") == 0) {
@@ -3484,7 +3490,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				continue;
 			}
 			fUndo.Begin(fDocument, fCaret.part, "Tab", CurrentViewState());
-			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
+			RemoveTab(fCaret.paragraph, fCaret.paragraph,
 				style.tabs[nearestIdx].position);
 			TextChanged();
 		} else if (command.compare(0, 7, "insert ") == 0) {
@@ -3735,6 +3741,47 @@ TPageView::RulerFrame(BRect& text, BRect& page) const
 }
 
 
+uint32_t
+TPageView::EditStyle() const
+{
+	std::string name = TDialogStylesEdit::EditingStyle(&fDocument);
+	return name.empty() ? 0xffffffff : FindNamedStyle(fDocument.styles, name);
+}
+
+
+bool
+TPageView::ApplyCharacter(TextPosition from, TextPosition to, const Property& property)
+{
+	uint32_t style = EditStyle();
+	if (style < fDocument.styles.styles.size())
+		return SetStyleProperty(fDocument, style, property);
+	return ApplyCharacterProperty(fDocument, fCaret.part, from, to, property);
+}
+
+
+bool
+TPageView::ApplyParagraph(size_t first, size_t last, const Property& property)
+{
+	uint32_t style = EditStyle();
+	if (style < fDocument.styles.styles.size())
+		return SetStyleProperty(fDocument, style, property);
+	return ApplyParagraphProperty(fDocument, fCaret.part, first, last, property);
+}
+
+
+bool
+TPageView::RemoveTab(size_t first, size_t last, float position)
+{
+	uint32_t style = EditStyle();
+	if (style < fDocument.styles.styles.size()) {
+		TabStop tab;
+		tab.position = position;
+		return RemoveStyleProperty(fDocument, style, TabProperty(tab));
+	}
+	return RemoveParagraphTab(fDocument, fCaret.part, first, last, position);
+}
+
+
 void
 TPageView::FormatParagraphs(const std::vector<float>& removeTabs,
 	const std::vector<Property>& add, const std::string& label, bool newStep)
@@ -3746,9 +3793,9 @@ TPageView::FormatParagraphs(const std::vector<float>& removeTabs,
 	auto range = TextSelectionRange();
 	size_t first = range.first.paragraph, last = range.second.paragraph;
 	for (float position : removeTabs)
-		RemoveParagraphTab(fDocument, fCaret.part, first, last, position);
+		RemoveTab(first, last, position);
 	for (const Property& property : add)
-		ApplyParagraphProperty(fDocument, fCaret.part, first, last, property);
+		ApplyParagraph(first, last, property);
 	TextChanged();
 }
 

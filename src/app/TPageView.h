@@ -90,6 +90,13 @@ public:
 	// the ruler's changes to the selected paragraphs (TParFormatCmd): their
 	// tabs at `removeTabs` taken off, then `add` set; `newStep` starts an
 	// undo step called `label`
+	// TPart::CreateFormatCommand: while Edit Styles has a style chosen
+	// (TDoc::EditingStyle), formatting changes that style (TFormatCommand),
+	// else the text; EditStyle is that style or 0xffffffff
+	uint32_t EditStyle() const;
+	bool ApplyCharacter(TextPosition from, TextPosition to, const Property& property);
+	bool ApplyParagraph(size_t first, size_t last, const Property& property);
+	bool RemoveTab(size_t first, size_t last, float position);
 	void FormatParagraphs(const std::vector<float>& removeTabs,
 		const std::vector<Property>& add, const std::string& label, bool newStep);
 	// Document > Page View (TDocWindow::PageView, SetPageView)
