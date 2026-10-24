@@ -91,6 +91,9 @@ public:
 	// undo step called `label`
 	void FormatParagraphs(const std::vector<float>& removeTabs,
 		const std::vector<Property>& add, const std::string& label, bool newStep);
+	// Document > Page View (TDocWindow::PageView, SetPageView)
+	bool PageView() const { return !fBrowse; }
+	void SetPageView(bool on);
 	// the zoom (TDocWindow::Scale, 1/64 to 64)
 	float Zoom() const { return fZoom; }
 	void SetZoom(float zoom);
@@ -152,6 +155,8 @@ private:
 	void RebuildFrames();
 	const Document::PlacedFrame* CaretFrame() const;
 	float fZoom = 1;
+	bool fBrowse = false;			// browse view: no pages
+	gobe::Frame fBrowseFrame;		// its frame for the main text
 	BRect fDrawBounds;				// what Draw shows, in the document's coordinates
 	// the port's room between a frame's edges and its text
 	static constexpr float kTextPad = 2;

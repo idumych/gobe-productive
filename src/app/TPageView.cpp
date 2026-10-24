@@ -44,6 +44,11 @@ TPageView::TPageView(Document& document)
 	fMargin(kDesk)
 {
 	SetViewColor(B_TRANSPARENT_COLOR);
+	// TLeafSheet +0x2d: the sheet shown in page view (a paged document
+	// with it off opens in browse view)
+	fBrowse = fDocument.PagePart() >= 0 && fDocument.WordPart(size_t(std::max(0,
+		fDocument.MainPart()))) != NULL && !fDocument.sheets.sheets.empty()
+		&& !fDocument.sheets.sheets[0].value2d;
 	Rebuild();
 	// a word processing document opens with the insertion point in its
 	// main text, where its selection was (at the start of a new one)
@@ -98,6 +103,36 @@ TPageView::RebuildFrames()
 			f.width = std::max(f.width, gr->size[0]);
 			f.height = std::max(f.height, gr->size[1]);
 		}
+	}
+	fMargin = kDesk;
+	if (fBrowse) {
+		// TBrowseRootFrame, TWPPortal: the main text in one frame growing
+		// with its text, as wide as the sheet's printable area (468 points
+		// without one), 10 points in from the view's edges (TWPFrame::
+		// LogicalDataSize: 20 more)
+		float data = 468;
+		if (!fDocument.sheets.sheets.empty()) {
+			const float* printable = fDocument.sheets.sheets[0].printable;
+			data = printable[2] - printable[0];
+		}
+		float width = data + 20;
+		fBrowseFrame = gobe::Frame();
+		fBrowseFrame.values[3] = 8;
+		fFrames.clear();
+		Document::PlacedFrame f{};
+		f.part = size_t(fDocument.MainPart());
+		f.frame = &fBrowseFrame;
+		f.x = 10 - kTextPad;
+		f.y = 10;
+		f.width = data + 2 * kTextPad;
+		f.height = 20;
+		f.depth = 1;
+		f.index = 0;
+		f.page = -1;
+		fFrames.push_back(f);
+		fMargin = 0;
+		fBounds.Set(0, 0, width, 40);
+		return;
 	}
 	fBounds = BRect();
 	bool first = true;
@@ -224,6 +259,8 @@ void
 TPageView::VisiblePages(int32& first, int32& last) const
 {
 	first = last = -1;
+	if (fBrowse)
+		return;
 	int page = fDocument.PagePart();
 	BRect bounds = Bounds();
 	BRect visible(bounds.left / fZoom, bounds.top / fZoom, bounds.right / fZoom,
@@ -260,6 +297,23 @@ TPageView::FitZoom() const
 	if (bounds.Width() / bounds.Height() < width / height)
 		return bounds.Width() / width;
 	return bounds.Height() / height;
+}
+
+
+// TDocWindow::SetPageView: the pages, or the main text as wide as the
+// window (TBrowseRootFrame)
+void
+TPageView::SetPageView(bool on)
+{
+	if (on == !fBrowse || fDocument.PagePart() < 0)
+		return;
+	fBrowse = !on;
+	Rebuild();
+	InvalidateLayout();
+	if (Parent() != NULL)
+		Parent()->Layout(false);
+	ScrollTo(0, 0);
+	Invalidate();
 }
 
 
@@ -387,6 +441,17 @@ TPageView::LayoutText()
 		paginated = true;
 		RebuildFrames();
 	}
+	if (fBrowse) {
+		// the view as high as the text
+		float bottom = 40;
+		for (const Line& line : fLines)
+			bottom = std::max(bottom, line.frame.bottom + 10);
+		if (bottom != fBounds.bottom) {
+			fBounds.bottom = bottom;
+			InvalidateLayout();
+		}
+		return;
+	}
 	// once pages came or went or the frames were made anew (Columns), the
 	// main text's frames show what the layout put in them
 	int mainIndex = fDocument.MainPart();
@@ -420,6 +485,8 @@ TPageView::LayoutText()
 bool
 TPageView::Paginate(const LayoutResult& main)
 {
+	if (fBrowse)
+		return false;
 	int mainPart = fDocument.MainPart();
 	int pagePart = fDocument.PagePart();
 	if (mainPart < 0 || pagePart < 0 || !fDocument.dirtyParts.count(size_t(mainPart)))
@@ -886,7 +953,8 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				line.from = 0;
 		}
 
-		if (IsFrameBreak(terminator)) {
+		// (browse view: one frame, the text goes on in it)
+		if (IsFrameBreak(terminator) && !fBrowse) {
 			finishFrame(frameIndex, y);
 			frameIndex++;
 			if (frameIndex < frames.size())
@@ -1816,7 +1884,11 @@ TPageView::Draw(BRect updateRect)
 
 	// printing (TPageFrame::Draw): the pages' contents only
 	if (!IsPrinting()) {
-		SetHighColor(152, 152, 152);
+		// (browse view: the text on white)
+		if (fBrowse)
+			SetHighColor(255, 255, 255);
+		else
+			SetHighColor(152, 152, 152);
 		FillRect(updateRect);
 	}
 

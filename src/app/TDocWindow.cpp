@@ -1134,10 +1134,19 @@ TDocWindow::MessageReceived(BMessage* message)
 			if (fPages != NULL)
 				fPages->SetZoom(message->GetFloat("scale", 1));
 			return;
+		// Document > Page View (TDocWindow::SetPageView: the sheet's, saved
+		// with it; not a command)
+		case 'sM2A':
+			if (fPages != NULL && fDocument != NULL && !fDocument->sheets.sheets.empty()) {
+				fPages->SetPageView(!fPages->PageView());
+				fDocument->sheets.sheets[0].value2d = fPages->PageView();
+				fDocument->sheetsChanged = true;
+			}
+			return;
 		// Document > Fit to Window (TPart::FitToWindow: through the zoom
-		// tool, TDocWindow::ChangeScale)
+		// tool, TDocWindow::ChangeScale; TWPPart's only in page view)
 		case 'sM39':
-			if (fPages != NULL && fScaleSlider != NULL)
+			if (fPages != NULL && fScaleSlider != NULL && fPages->PageView())
 				fScaleSlider->SetScale(fPages->FitZoom(), true);
 			return;
 		// Window: the arrangements are the application's
@@ -1851,6 +1860,13 @@ TDocWindow::MenusBeginning()
 		for (int32 i = 0; BWindow* window = be_app->WindowAt(i); i++)
 			windows += dynamic_cast<TDocWindow*>(window) != NULL;
 		item->SetEnabled(windows > 1);
+	}
+	// TNormalDocWinHelper::SetupMenus: Page View marked when on (paged
+	// documents)
+	if (BMenuItem* item = KeyMenuBar()->FindItem('sM2A')) {
+		bool paged = fPages != NULL && fDocument != NULL && fDocument->PagePart() >= 0;
+		item->SetEnabled(paged);
+		item->SetMarked(paged && fPages->PageView());
 	}
 	// (New Window: a second window on a document isn't ported)
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMF0'))
