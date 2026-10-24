@@ -1,111 +1,133 @@
-# Gobe Productive for 64-bit Haiku
+# Gobe Productive, ported
 
-A native x86_64 Haiku port of Gobe Productive 2.0.1 (BeOS R5), rebuilt from
-the decompiled original (`../decomp/`). It reads its resources (menus,
-dialogs, strings, icons) from the user's own original `Gobe Productive`
-binary at runtime; nothing from the original is in this tree.
+Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
+systems: **Haiku** (and Renku OS), **VitruvianOS** (a BeOS-like OS based on
+Linux) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
+documents and works the way the original did, down to its menus and dialogs.
 
-## Installing the preview package
+This is a **preview** focused on the word processor. See [Status](#status).
 
-    pkgman install gobe_productive_port-0.1~preview-1-x86_64.hpkg
-    # or copy it to ~/config/packages
+> **Unofficial.** This is an independent reimplementation, not affiliated
+> with Gobe Software or the current owners of Gobe Productive. It contains
+> **no part of the original program**: no code, menus, dialogs, pictures,
+> sample documents or dictionaries. It needs your own copy of the original
+> (below). See [LICENSE](LICENSE) for the licence and the full notice.
 
-"Gobe Productive" then appears in the Deskbar's Applications. It needs your
-original Gobe Productive 2.0 folder somewhere on your disks: on first start
-it looks for its "Gobe Productive" program file (next to the app, in the
-usual install folders, then by name on every volume) and otherwise asks
-where it is; the place is remembered in
-`~/config/settings/Gobe Productive port settings`. Installing
-`liberation_fonts` makes documents lay out with the widths of the fonts they
-were made with.
+## You need the original Gobe Productive 2.0
 
-## Layout
+The port reads the original's menus, dialogs, strings and pictures (and its
+dictionaries, help and samples) from your own copy at runtime. The original
+can't be installed on any current system, so the port unpacks it itself
+from what you have:
 
-| Path | Contents |
-|------|----------|
-| `src/core/` | Portable C++17, no Haiku API: resource reader (`ResourceFile`, `RsrReader`, `Formats`), document reader (`DocArchive`, `DocSections`, `WPPart`, `GRPart`, `SSPart`, `IMPart`, `ChartPart`, `TablePart`, `DocWriter`, `Editing`, `PartTail`, `Formula`, `Styles`, `StyleText`, `StyleEdit`, `Document`), spreadsheet evaluation and cell formatting (`SSEval`, `SSStyle`). Builds and is tested on Linux. |
-| `src/app/` | Haiku UI: `TApp`, `TDocWindow` (base menu bar), `TMenu`/`TMenuItem` (MENU resources), `TDialog` (DIAL + Item resources), `TPageView` (pages, frames, text, graphics, spreadsheets), `TDocView` (plain text fallback). |
-| `tests/` | Host tests against the original files (see below). |
+- the Gobe Productive **CD image** (an `.iso` file), or
+- its **installer**, the file named `Install Gobe Productive` (from the CD
+  or the download), or
+- a **folder** copied from the CD or from an old BeOS installation (the
+  `Gobe Productive 2.0` folder, or any folder holding the installer).
+
+On first start, if it doesn't find it, the port says so: click **Locate…**
+and choose the image, the installer or the folder. It unpacks the original
+into its settings folder and remembers it, so this happens once:
+
+| System | Unpacked into |
+|---|---|
+| Haiku, Renku OS, VitruvianOS | `~/config/settings/Gobe Productive port/Original` |
+| Linux | `~/.config/cosmoe/Gobe Productive port/Original` |
+
+It also looks on its own in the usual places (`~/Gobe Productive 2.0`,
+`~/config/non-packaged/apps/Gobe Productive 2.0`, `/boot/apps/…`, next to
+the app), and you can name the image, installer or program in the
+`GOBE_ORIGINAL` environment variable.
+
+BeOS-format (BFS) CD images can't be read yet: copy the installer or the
+folder out of the image first (Haiku can mount it), and choose that.
+
+## Install
+
+| System | Package | Install |
+|---|---|---|
+| Haiku R1/beta6, Renku OS (x86_64) | `gobeproductive-<version>-1-x86_64.hpkg` | `pkgman install ./gobeproductive-<version>-1-x86_64.hpkg` |
+| VitruvianOS 0.6 (amd64, arm64) | `gobeproductive_<version>-1_amd64.deb` (or `_arm64`) | `sudo apt install ./gobeproductive_<version>-1_amd64.deb` |
+| Linux, glibc 2.39+ (x86_64, aarch64) | `GobeProductive-<version>-x86_64.AppImage` (or `-aarch64`) | `chmod +x GobeProductive-<version>-x86_64.AppImage`, then run it |
+
+Downloads are on the [releases page](https://github.com/idumych/gobe-productive/releases).
+On Haiku and VitruvianOS it appears in the Deskbar's Applications menu.
+The Command key is **Alt** on Haiku and **Ctrl** on VitruvianOS and Linux.
+
+Documents lay out best with the Liberation fonts (metrically like the
+Times, Helvetica and Courier designs of BeOS's Bitstream fonts): on Haiku
+`pkgman install liberation_fonts`; the AppImage brings them along.
+
+## Screenshots
+
+(added with the release)
+
+## Status
+
+This preview is about the word processor.
+
+**Works**
+
+- Opening and saving Gobe Productive documents. Only what was edited is
+  rewritten; everything else is kept byte for byte. File > New (word
+  processing documents), Open Recent, Revert, Insert… (text and RTF), Page
+  Setup, Print, Help (the original's User's Guide), About.
+- Text: typing, selection (double, triple and quadruple clicks; the arrow
+  keys with Command, Option and Control; Home/End, Page Up/Down), cut, copy
+  and paste with styles, undo and redo, Find/Change, the context menu,
+  fonts, sizes, faces, colours, alignment, Paragraph Format, tabs, line and
+  paragraph spacing, Copy/Paste Format, Show/Hide Invisibles; pages that
+  come and go with the text; margins, headers and footers; columns; page
+  numbers, dates, times and formulas as live fields; footnotes and endnotes;
+  separator lines and line, frame and page breaks; Word Count; the text
+  ruler; the FormatBar and the PartBar; zoom; Page View off (the browse
+  view); spell checking with the original's dictionaries; Preferences;
+  History; Document Size; styles: applying paragraph and basic styles, New
+  Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
+  formatting a style directly).
+- Plain text and RTF: opened as documents, saved with Save As's File Format.
+- Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
+  charts (2D), images, tables, clocks and presentations.
+
+**Not yet**
+
+The ToolBar; pattern and gradient inks, fill, pen and transparency in the
+FormatBar; named selections; Import and Export Styles; New Window; Show
+Clipboard; creating and linking frames; drawing tools; most spreadsheet
+menus; new documents of other kinds; the Word, Excel, HTML and SYLK
+translators; the thesaurus and dictionary (they need data files that weren't part of
+Gobe Productive). Documents saved by the port open in the port; they
+haven't been tried in the original on BeOS.
 
 ## Building
 
-On Haiku (`pkgman install gcc make haiku_devel zlib_devel` on a fresh
-install; `pkgman install liberation_fonts` for documents to lay out as in
-Gobe: Liberation Serif/Sans/Mono have the advance widths of the Times,
-Helvetica and Courier designs BeOS's Bitstream fonts were, while the Noto
-fallback is wider):
+The same sources build on all three systems; the Makefile finds out which
+one it's on.
 
-    make
-    GOBE_ORIGINAL="/path/to/Gobe Productive 2.0/Gobe Productive" build/GobeProductive [document...]
+- **Haiku:** `pkgman install gcc make haiku_devel zlib_devel`, then `make`.
+- **VitruvianOS:** with its headers (`/system/develop/headers`) or
+  `pkg-config vos`: `make`.
+- **Linux:** build [Hokku](https://github.com/idumych/hokku) (the Haiku API
+  as a library, a fork of Cosmoe), then `make COSMOE_ROOT=<its prefix>`.
 
-Without `GOBE_ORIGINAL` it finds the original as the package does.
-`package/make_package.sh [version]` (on Haiku, in `port/`) builds
-`build/gobe_productive_port-<version>-x86_64.hpkg`; its license file is a
-placeholder until the port's terms are decided.
+Run `./GobeProductive [document…]`. `make test` runs the host-side tests of
+the portable core (`src/core`, no Haiku API) on any system; with the
+original's files at `../original/installed` they also run on its sample
+documents. The packages are built by `packaging/` (`build-hpkg.sh` on
+Haiku; `deb.yml` and `appimage.yml` in GitHub Actions).
 
-Test options: `--menu <index>` opens a menu-bar menu, `--dialog <id>` opens a
-DIAL resource, `--render out.png` draws the document into a PNG and quits,
-`--slide <n>` shows a presentation slide, `--do '<script>'` clicks, types,
-sends commands and saves first (with `--render` on the offscreen page;
-without it, in the document's window; see `TPageView::RunScript`).
-`GOBE_DEBUG_MENUS=1` adds a menu listing every DIAL resource.
+| Path | Contents |
+|---|---|
+| `src/core/` | Portable C++17, no Haiku API: reading and writing documents, editing, styles, spreadsheet formulas, fields, spelling, text and RTF, the original's resources, unpacking the original (`OriginalImport`). |
+| `src/app/` | The interface on the Haiku API: windows, menus and dialogs from the original's resources, the page view, the ribbons, the floaters. |
+| `tests/` | Host-side tests. |
 
-## Host tests (Linux, from the project root)
+Test options (used by the test scripts): `--menu <index>`, `--dialog <id>`,
+`--render out.png`, `--slide <n>`, `--do '<script>'` (see
+`TPageView::RunScript`); `GOBE_DEBUG_MENUS=1` adds a menu of every dialog.
 
-    port/tests/check_core.sh        # resource parsing == tools/gobersrc.py, all binaries
-    c++ -std=c++17 -Iport/src/core port/tests/doc_sections.cpp port/src/core/*.cpp -o /tmp/ds
-    /tmp/ds original/installed/.../Samples/*   # each document section consumed exactly
-    # likewise tests/doc_text, doc_styles, doc_frames, doc_graphics,
-    # doc_spreadsheet (parts read exactly, formulas evaluated, known values),
-    # doc_images, doc_tables, doc_save (unchanged documents save byte for
-    # byte), doc_edit (formulas reparse to the same tokens, edits undone
-    # write the same bytes, cell input round trips)
-    # and tests/ss_dump.cpp (prints cells, formulas and computed values)
+## Licence
 
-## Status (preview)
-
-Works:
-- Opening and saving Gobe Productive documents (only what was edited is
-  rewritten, everything else is kept byte for byte); File > New (the New
-  Document dialog; word processing documents so far), Open Recent, Revert,
-  Insert… (text and RTF files), Page Setup, Print, Help (the original's
-  User's Guide), About.
-- Word processing: typing, selection (double, triple and quadruple clicks;
-  Command, Option and Control with the arrows, Home/End, Page Up/Down),
-  cut/copy/paste with styles, undo and redo, Find/Change (across the text
-  parts, with Wrap, Entire Word and special characters), the context menu
-  (copy/paste format, Open URL, suggested spellings), fonts, sizes (and Other…), faces (superscript and
-  subscript too), colors, alignment, Paragraph Format, tabs, line and
-  paragraph spacing, Copy/Paste Format, Show/Hide Invisibles; pages that
-  come and go with the text; Document > Margins, Insert/Remove Header and
-  Footer; Format > Columns, Insert Page #, Date, Time, Formula (live
-  fields), Footnote and endnote (with Footnote Options), Separator Line,
-  Line/Frame/Page Break; Writing Tools > Word Count; the text ruler
-  (indents and tab stops dragged, added, removed, Edit Tab, the ruler's
-  unit and divisions); the FormatBar (font, size, face, text color from the
-  Standard color set, paragraph styles applied and made with New Style…)
-  and the PartBar (alignment, line
-  spacing, columns, invisibles); Window > Cascade, Tile, Cycle, Hide/Show
-  FormatBar and PartBar; zoom (the zoom tool, Fit to Window) and the page
-  indicator; Document > Page View off (the browse view); spell checking
-  (Document > Spell Check, the SpellBar, the PartBar's button and Spell
-  Dictionaries…, with the original's dictionaries); File > Preferences…
-  (Application, Word Processing and Graphics panels, kept in the port's
-  preferences file); Document > History… (the undo steps) with Set Undo
-  Levels…; Document Size… for text; Format > Edit Styles… (the styles and
-  their properties, Modify Style…, Copy, Cut, Paste and Clear Style, and
-  formatting the chosen style).
-- Plain text and RTF: opened as documents, saved with Save As's File Format.
-- Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
-  charts (2D), images, tables, clocks and presentations (slides).
-
-Not yet: the ToolBar and the other ribbons; in the FormatBar the pattern
-and gradient inks, fill, pen and transparency, basic styles on text and
-named selections; Edit Styles' Import and Export Styles; the thesaurus and
-dictionary (they need the BeOS goodies' data files), the add-on parts'
-preference panels, spell checking outside text parts,
-Views & Layers, New Window, frames (creating, linking, autogrow), drawing tools,
-spreadsheet menus beyond a few, new documents of other kinds, and the HTML,
-Word, Excel and SYLK translators. Documents saved by the port open in the
-port; they haven't been tried in BeOS Gobe Productive.
-
+MIT, with a notice: see [LICENSE](LICENSE). "Gobe Productive" is a trademark
+of its owners.
