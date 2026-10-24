@@ -171,14 +171,13 @@ bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t las
 // if the name is taken or empty.
 uint32_t NewNamedStyle(Document& doc, uint32_t type, const std::string& name, uint32_t base,
 	uint32_t fromStyle);
-// Format bar > Styles, a paragraph style (TWPApplyStyleCmd, TParFormatter,
-// TApplyStyleCommand::ChangeStyle: TStyleID::SetParentStyle): paragraphs
-// first..last get styles based on the named style `named`, keeping their
-// own properties (an unnamed copy of theirs with `named` as parent, or an
-// unnamed child of `named` for a paragraph in a named style). False if
-// nothing changed.
+// Format bar > Styles, a paragraph style (TParFormatCmd, TFormatCommand::
+// ApplyStyle: TStyleID::SetParentStyle): paragraphs first..last get styles
+// like theirs with the named style `named` applied (links[1]) and their
+// own properties it replaces taken off (StyleWithAppliedStyle), or with
+// `unapply` no longer applied. False if nothing changed.
 bool ApplyParagraphStyle(Document& doc, size_t part, size_t first, size_t last,
-	uint32_t named);
+	uint32_t named, bool unapply = false);
 // Removes the paragraphs' own tab stop at `position` (the PTab property of
 // their unnamed style); tabs of named styles stay. False if nothing changed.
 bool RemoveParagraphTab(Document& doc, size_t part, size_t first, size_t last,

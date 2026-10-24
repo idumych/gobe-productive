@@ -354,4 +354,138 @@ PasteStyles(Document& doc, const std::vector<StyleDefinition>& definitions)
 	return !changed.empty();
 }
 
+
+
+namespace {
+
+bool
+SameStyle(const Style& a, const Style& b)
+{
+	return a.id == b.id && a.value8 == b.value8 && a.valueC == b.valueC
+		&& a.value10 == b.value10 && a.name == b.name && a.props == b.props
+		&& a.props2 == b.props2 && a.substyles.empty() && b.substyles.empty()
+		&& std::equal(a.links, a.links + 3, b.links);
+}
+
+
+} // namespace
+
+
+uint32_t
+StyleWithAppliedStyle(StyleMgr& styles, uint32_t style, uint32_t named, bool unapply)
+{
+	if (!Valid(styles, style) || !Valid(styles, named))
+		return style;
+	Style copy = styles.styles[style];
+	uint32_t applied = named;
+	if (unapply) {
+		// TFormatCommand::UnApplyStyle: only the style applied
+		if (copy.links[1] != named)
+			return style;
+		applied = kNone;
+	} else if (IsStyleAncestor(styles, style, named) && named != style) {
+		// (TStyle::SetParentStyle: not a style that comes from this one)
+		return style;
+	}
+	if (!copy.name.empty()) {
+		// TStyleID::BeginModify of a named style: an unnamed child of it
+		copy.name.clear();
+		copy.value8 = 32;
+		copy.props.clear();
+		copy.links[0] = style;
+		copy.links[1] = copy.links[2] = kNone;
+	}
+	if (Valid(styles, applied)) {
+		// TStyle::SetParentStyle: own properties the applied style (its own
+		// or inherited ones) replaces go
+		const Style& a = styles.styles[applied];
+		copy.props.erase(std::remove_if(copy.props.begin(), copy.props.end(), [&](uint32_t p) {
+				if (p >= styles.properties.size())
+					return false;
+				for (const std::vector<uint32_t>* set : {&a.props2, &a.props})
+					for (uint32_t q : *set)
+						if (q < styles.properties.size()
+								&& Replaces(styles.properties[q], styles.properties[p]))
+							return true;
+				return false;
+			}), copy.props.end());
+	}
+	copy.links[1] = applied;
+	copy.props2 = StyleUnionSet(styles, copy);
+	copy.substyles.clear();
+	if (SameStyle(copy, styles.styles[style]))
+		return style;
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (SameStyle(styles.styles[i], copy))
+			return uint32_t(i);
+	copy.value4 = 1;
+	for (uint32_t link : copy.links)
+		Retain(styles, link);
+	styles.styles.push_back(copy);
+	return uint32_t(styles.styles.size() - 1);
+}
+
+
+bool
+ApplyCharacterStyle(Document& doc, size_t part, TextPosition from, TextPosition to,
+	uint32_t named, bool unapply)
+{
+	StyleMgr& styles = doc.styles;
+	if (!Valid(styles, named))
+		return false;
+	if (to.paragraph < from.paragraph
+			|| (to.paragraph == from.paragraph && to.offset < from.offset))
+		std::swap(from, to);
+	WPPart* wp = doc.EditableWordPart(part);
+	if (wp == nullptr || from.paragraph >= wp->paragraphs.size())
+		return false;
+	to.paragraph = std::min(to.paragraph, wp->paragraphs.size() - 1);
+	bool changed = false;
+	for (size_t k = from.paragraph; k <= to.paragraph; k++) {
+		WPParagraph& p = wp->paragraphs[k];
+		if (p.runs.empty())
+			continue;
+		size_t length = EditableLength(p);
+		size_t a = k == from.paragraph ? std::min(from.offset, length) : 0;
+		size_t b = k == to.paragraph ? std::min(to.offset, length) : length;
+		if (a >= b && !(a == 0 && length == 0))
+			continue;
+		// runs starting at a and b
+		for (size_t at : {a, b}) {
+			if (at >= length && at != 0)
+				continue;
+			size_t r = 0;
+			for (size_t i = 0; i < p.runs.size(); i++)
+				if (p.runs[i].position <= at)
+					r = i;
+			if (p.runs[r].position != at) {
+				p.runs.insert(p.runs.begin() + r + 1, {uint32_t(at), p.runs[r].style});
+				Retain(styles, p.runs[r].style);
+			}
+		}
+		for (WPStyleRun& run : p.runs) {
+			if (run.position < a || (run.position >= b && b < length))
+				continue;
+			uint32_t style = StyleWithAppliedStyle(styles, run.style, named, unapply);
+			if (style != run.style) {
+				Retain(styles, style);
+				Release(styles, run.style);
+				run.style = style;
+				changed = true;
+			}
+		}
+		// neighbours alike: one run
+		for (size_t i = 1; i < p.runs.size();) {
+			if (p.runs[i].style == p.runs[i - 1].style) {
+				Release(styles, p.runs[i].style);
+				p.runs.erase(p.runs.begin() + i);
+			} else
+				i++;
+		}
+	}
+	if (changed)
+		doc.stylesChanged = true;
+	return changed;
+}
+
 } // namespace gobe

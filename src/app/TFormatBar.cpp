@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 #include "Document.h"
 #include "GobeResources.h"
@@ -403,37 +404,57 @@ public:
 		tip = GobeResources::IndexString(4, 9).String();
 	}
 
-	// TStylesMenuElement::FixMenu: MENU 100, then the named styles (not
-	// the internal ones), a separator between kinds; the paragraph's marked
+	// TStylesMenuElement::FixMenu: MENU 100, then the named styles of the
+	// active part's kinds (TWPPart::ActiveStyles: paragraph, basic; not the
+	// internal ones), a separator between kinds; those applied to all of
+	// the selection marked and sending 'sf0V' (unapply), those applied to
+	// part of it neither (TMenuItem::SetMixed isn't drawn)
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
 	{
 		AddMenuItems(menu, 100);
-		const Document& doc = bar->Pages()->Doc();
+		TPageView* pages = bar->Pages();
+		const Document& doc = pages->Doc();
 		TextStyle style;
 		uint32_t paragraph = 0;
-		bool text = CaretStyles(bar->Pages(), style, paragraph);
-		std::string active = label;
-		if (!active.empty() && active.back() == '+')
-			active.pop_back();
-		// (TWPPart::ActiveStyles: paragraph, then basic styles; applying a
-		// basic one to text isn't ported yet)
+		bool text = CaretStyles(pages, style, paragraph);
+		std::vector<std::pair<std::string, bool>> applied;
+		if (text && pages->EditStyle() >= doc.styles.styles.size()) {
+			if (const WPPart* wp = doc.WordPart(pages->fCaret.part)) {
+				auto range = pages->TextSelectionRange();
+				applied = TextSelectionStyles(doc.styles, *wp, range.first, range.second).applied;
+			}
+		}
 		bool first = true;
 		for (uint32_t type : {Sig("Para"), Sig("Basi")}) {
-			bool group = true;
+			std::vector<size_t> named;
 			for (size_t i = 0; i < doc.styles.styles.size(); i++) {
 				const Style& s = doc.styles.styles[i];
-				if (s.name.empty() || s.value10 != type || (s.value8 & 0x400))
+				if (!s.name.empty() && s.value10 == type && !(s.value8 & 0x400))
+					named.push_back(i);
+			}
+			// (TStyleIDIterator: the manager's sorted table, by name)
+			std::stable_sort(named.begin(), named.end(), [&](size_t a, size_t b) {
+				return strcmp(doc.styles.styles[a].name.c_str(),
+					doc.styles.styles[b].name.c_str()) < 0;
+			});
+			for (size_t i : named) {
+				const Style& s = doc.styles.styles[i];
+				if (s.value10 != type)
 					continue;
-				if (group && !first)
+				if (!first && &s == &doc.styles.styles[named.front()])
 					menu->AddSeparatorItem();
-				group = first = false;
-				BMessage* message = new BMessage('sf0L');
+				first = false;
+				int state = 0;		// 1 applied, 2 to part
+				for (const auto& a : applied)
+					if (a.first == s.name)
+						state = a.second ? 2 : 1;
+				BMessage* message = new BMessage(state == 1 ? 'sf0V' : 'sf0L');
 				message->AddInt32(kStyleLevelStr, -1);
 				message->AddString(kStyleNameStr, s.name.c_str());
 				message->AddInt32(kStyleTypeStr, int32(s.value10));
 				BMenuItem* item = new BMenuItem(s.name.c_str(), message);
-				item->SetMarked(text && s.name == active);
-				item->SetEnabled(text && type == Sig("Para"));
+				item->SetMarked(state == 1);
+				item->SetEnabled(text);
 				menu->AddItem(item);
 			}
 		}

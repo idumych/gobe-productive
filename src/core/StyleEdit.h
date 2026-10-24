@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "DocSections.h"
+#include "Editing.h"
 
 namespace gobe {
 
@@ -52,6 +53,21 @@ bool SetStyleProperty(Document& doc, uint32_t style, const Property& property);
 // the style's own properties that `property` replaces taken off (a tab at
 // its position), its dependents updated. False if it had none.
 bool RemoveStyleProperty(Document& doc, uint32_t style, const Property& property);
+
+// TStyleID::SetParentStyle on a copy (TStyleID::BeginModify: a named
+// style's unnamed child): `named` applied (links[1]), the own properties it
+// replaces (its own or inherited ones) taken off; unapplied: no longer
+// applied, if it was. The style itself if nothing changes, else an equal
+// existing unnamed style or a new one (no users yet).
+uint32_t StyleWithAppliedStyle(StyleMgr& styles, uint32_t style, uint32_t named,
+	bool unapply = false);
+// TWPFormatCmd with a basic style (TCharFormatter, TFormatCommand::
+// ApplyStyle / UnApplyStyle: TStyleID::SetParentStyle): the text from
+// `from` to `to` of a text part gets run styles like its own with the named
+// style `named` applied (links[1]; unapplied: no longer, if it was). False
+// if nothing changed.
+bool ApplyCharacterStyle(Document& doc, size_t part, TextPosition from, TextPosition to,
+	uint32_t named, bool unapply = false);
 
 // TStyle::Archive: what Edit > Copy Style keeps of a style, its links by
 // name

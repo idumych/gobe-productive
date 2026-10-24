@@ -179,22 +179,32 @@ ApplyProperty(const Property& property, TextStyle& style)
 }
 
 
+namespace {
+
+// TStyle::UpdateUnionSet's order: the base's, the applied style's and the
+// owner's properties (each with what they inherit), then its own
+void
+ApplyStyleChain(const StyleMgr& styles, uint32_t index, TextStyle& style, int depth)
+{
+	if (index >= styles.styles.size() || depth > 32)
+		return;
+	const Style& s = styles.styles[index];
+	for (uint32_t link : s.links)
+		if (link != index)
+			ApplyStyleChain(styles, link, style, depth + 1);
+	for (uint32_t p : s.props)
+		if (p < styles.properties.size())
+			ApplyProperty(styles.properties[p], style);
+}
+
+} // namespace
+
+
 TextStyle
 ResolveTextStyle(const StyleMgr& styles, uint32_t index)
 {
 	TextStyle style;
-	// parents first, so a style's own properties win
-	std::vector<const Style*> chain;
-	for (int depth = 0; index < styles.styles.size() && depth < 32; depth++) {
-		const Style& s = styles.styles[index];
-		chain.push_back(&s);
-		index = s.links[0];
-	}
-	for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-		for (uint32_t p : (*it)->props)
-			if (p < styles.properties.size())
-				ApplyProperty(styles.properties[p], style);
-	}
+	ApplyStyleChain(styles, index, style, 0);
 	return style;
 }
 

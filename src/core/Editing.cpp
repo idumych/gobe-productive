@@ -1,5 +1,7 @@
 #include "Editing.h"
 
+#include "StyleEdit.h"
+
 #include "Styles.h"
 
 #include <algorithm>
@@ -1297,35 +1299,9 @@ NewNamedStyle(Document& doc, uint32_t type, const std::string& name, uint32_t ba
 }
 
 
-// the style like `base` (its properties) with `parent` as its parent: an
-// identical existing unnamed style or a new one
-static uint32_t
-StyleWithParent(StyleMgr& styles, uint32_t base, uint32_t parent)
-{
-	if (base >= styles.styles.size() || parent >= styles.styles.size() || base == parent)
-		return base;
-	Style style = styles.styles[base];
-	if (!style.name.empty()) {
-		// TStyleID::BeginModify of a named style: an unnamed child of it
-		style.name.clear();
-		style.value8 = 32;
-		style.props.clear();
-	}
-	style.links[0] = parent;
-	style.props2 = UnionSet(styles, style);
-	style.substyles.clear();
-	for (size_t i = 0; i < styles.styles.size(); i++)
-		if (SameStyle(styles.styles[i], style))
-			return uint32_t(i);
-	style.value4 = 1;
-	Retain(styles, style.links[0]);
-	styles.styles.push_back(style);
-	return uint32_t(styles.styles.size() - 1);
-}
-
-
 bool
-ApplyParagraphStyle(Document& doc, size_t part, size_t first, size_t last, uint32_t named)
+ApplyParagraphStyle(Document& doc, size_t part, size_t first, size_t last, uint32_t named,
+	bool unapply)
 {
 	WPPart* wp = doc.EditableWordPart(part);
 	if (wp == nullptr || first >= wp->paragraphs.size() || named >= doc.styles.styles.size()
@@ -1337,10 +1313,7 @@ ApplyParagraphStyle(Document& doc, size_t part, size_t first, size_t last, uint3
 	bool changed = false;
 	for (size_t k = first; k <= last; k++) {
 		WPParagraph& p = wp->paragraphs[k];
-		if (p.parStyle < doc.styles.styles.size() && doc.styles.styles[p.parStyle].links[0] == named
-				&& doc.styles.styles[p.parStyle].name.empty())
-			continue;
-		uint32_t style = StyleWithParent(doc.styles, p.parStyle, named);
+		uint32_t style = StyleWithAppliedStyle(doc.styles, p.parStyle, named, unapply);
 		if (style != p.parStyle) {
 			Retain(doc.styles, style);
 			Release(doc.styles, p.parStyle);

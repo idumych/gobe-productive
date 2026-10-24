@@ -91,7 +91,7 @@ main(int argc, char** argv)
 			&& doc.styles.styles[plain].props.empty(),
 			name + ": based on None, not copying: no parent, no properties");
 
-		// applied to the first paragraph, its own properties on top
+		// applied to the first paragraph
 		ApplyParagraphStyle(doc, size_t(doc.MainPart()), 0, 0, style);
 
 		std::string path = "/tmp/doc_newstyle.gobe";
@@ -105,8 +105,9 @@ main(int argc, char** argv)
 		const WPPart* rp = reloaded.WordPart(size_t(reloaded.MainPart()));
 		if (rp != nullptr && !rp->paragraphs.empty()) {
 			uint32_t p = rp->paragraphs[0].parStyle;
-			Check(p < reloaded.styles.styles.size() && reloaded.styles.styles[p].links[0] == again,
-				name + ": reloaded, the first paragraph is based on it");
+			// (TStyle::SetParentStyle: applied, links[1])
+			Check(p < reloaded.styles.styles.size() && reloaded.styles.styles[p].links[1] == again,
+				name + ": reloaded, the first paragraph has it applied");
 		}
 	}
 	printf("newstyle: styles made %d, ok %d, failed %d\n", made, sOk, sFailed);

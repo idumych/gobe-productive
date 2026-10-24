@@ -26,6 +26,7 @@
 #include <Window.h>
 
 #include <algorithm>
+#include <functional>
 #include <cstdio>
 #include <cstring>
 #include <ctime>
@@ -2119,13 +2120,17 @@ TPageView::MessageReceived(BMessage* message)
 			}
 			return;
 		}
-		// the format bar's Styles, a paragraph style ('sf0L' with "Style
-		// Name": TWPApplyStyleCmd, "Apply Style - " and the name)
-		case 'sf0L': {
+		// the format bar's Styles: a style applied ('sf0L' with "Style Name")
+		// or unapplied ('sf0V'): a paragraph style to the paragraphs
+		// (TParFormatCmd), a basic one to the text (TWPFormatCmd); "Apply
+		// Style - " or "Unapply Style - " and the name
+		case 'sf0L':
+		case 'sf0V': {
 			// (TStyleManager::HandleMessage: not while editing a style,
-			// STR# 6, 44)
+			// STR# 6, 44; TFormatCommand::Perform refuses unapplying)
 			if (EditStyle() < fDocument.styles.styles.size()) {
-				(new BAlert("", GobeResources::IndexString(6, 44).String(), "OK"))->Go(NULL);
+				if (message->what == 'sf0L')
+					(new BAlert("", GobeResources::IndexString(6, 44).String(), "OK"))->Go(NULL);
 				return;
 			}
 			const char* name = NULL;
@@ -2134,21 +2139,23 @@ TPageView::MessageReceived(BMessage* message)
 				beep();
 				return;
 			}
-			uint32_t named = UINT32_MAX;
-			for (size_t i = 0; i < fDocument.styles.styles.size(); i++)
-				if (fDocument.styles.styles[i].name == name
-						&& fDocument.styles.styles[i].value10 == Sig("Para")
-						&& !(fDocument.styles.styles[i].value8 & kStyleDeleted))
-					named = uint32_t(i);
-			if (named == UINT32_MAX) {
+			uint32_t named = FindNamedStyle(fDocument.styles, name);
+			if (named >= fDocument.styles.styles.size()) {
 				beep();
 				return;
 			}
-			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(3, 0).String())
-				+ name, CurrentViewState());
+			bool unapply = message->what == 'sf0V';
+			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(3,
+				unapply ? 1 : 0).String()) + name, CurrentViewState());
 			auto range = TextSelectionRange();
-			if (ApplyParagraphStyle(fDocument, fCaret.part, range.first.paragraph,
-					range.second.paragraph, named))
+			bool changed;
+			if (fDocument.styles.styles[named].value10 == Sig("Para"))
+				changed = ApplyParagraphStyle(fDocument, fCaret.part, range.first.paragraph,
+					range.second.paragraph, named, unapply);
+			else
+				changed = ApplyCharacterStyle(fDocument, fCaret.part, range.first, range.second,
+					named, unapply);
+			if (changed)
 				TextChanged();
 			UpdateMarks();
 			return;
@@ -2687,7 +2694,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 			// "editstyles row N" (or "invoke N", double-clicked): row N of
 			// the Edit Styles floater's list chosen; "editstyles cmd ABCD":
 			// one of its menus' commands; "editstyles dump": its rows and
-			// properties printed
+			// properties printed; "editstyles close"
 			std::string what = command.substr(11);
 			if (what.compare(0, 4, "row ") == 0)
 				TDialogStylesEdit::ChooseRow(atoi(what.c_str() + 4));
@@ -2699,6 +2706,8 @@ TPageView::RunScript(const std::string& script, Document& document)
 					| uint8(what[7]));
 			else if (what == "dump")
 				TDialogStylesEdit::Dump();
+			else if (what == "close" && TDialogStylesEdit::Open() != NULL)
+				TDialogStylesEdit::Open()->PostMessage(B_QUIT_REQUESTED);
 		} else if (command == "caret") {
 			// "caret": the caret and the anchor (part, paragraph, offset)
 			printf("caret %zu %zu.%zu anchor %zu.%zu\n", fCaret.part, fCaret.paragraph,
@@ -2865,6 +2874,26 @@ TPageView::RunScript(const std::string& script, Document& document)
 				Window()->MessageReceived(&msg);
 			else
 				fprintf(stderr, "window: not in a document window\n");
+		} else if (command == "menus") {
+			// "menus": the window's menus as MenusBeginning leaves them
+			// (label, command, off, marked)
+			if (Window() != NULL && Window()->KeyMenuBar() != NULL) {
+				Window()->MenusBeginning();
+				std::function<void(BMenu*, int)> walk = [&](BMenu* menu, int depth) {
+					for (int32 i = 0; BMenuItem* item = menu->ItemAt(i); i++) {
+						uint32 what = item->Message() != NULL ? item->Message()->what : 0;
+						char code[5] = {char(what >> 24), char(what >> 16), char(what >> 8),
+							char(what), 0};
+						printf("menu %*s%s [%s]%s%s\n", depth * 2, "", item->Label(),
+							what > 0xffffff ? code : std::to_string(what).c_str(),
+							item->IsEnabled() ? "" : " OFF", item->IsMarked() ? " marked" : "");
+						if (item->Submenu() != NULL)
+							walk(item->Submenu(), depth + 1);
+					}
+				};
+				walk(Window()->KeyMenuBar(), 0);
+				fflush(stdout);
+			}
 		} else if (command.compare(0, 8, "special ") == 0 && command.size() == 12) {
 			// "special sM52": a Format > Insert command
 			const char* c = command.c_str() + 8;
@@ -3869,7 +3898,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM5I': case 'sM5J': case 'sM5K':
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
-		case 'sf02': case 'sf0L': case 'sMB6':								// format bar
+		case 'sf02': case 'sf0L': case 'sf0V': case 'sMB6':				// format bar
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells

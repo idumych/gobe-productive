@@ -1,11 +1,12 @@
 // doc_applystyle: Format bar > Styles with a paragraph style
 // (ApplyParagraphStyle): in every document's text parts, each named
 // paragraph style applied to the first paragraph not yet in it. The
-// paragraph's style is then unnamed with the named one as its parent and
-// resolves to the named style with the paragraph's own properties on top
-// (TStyleID::SetParentStyle keeps them); the other paragraphs keep their
-// styles; applying it again changes nothing; it survives saving and
-// loading.
+// paragraph's style is then unnamed with the named one applied (links[1],
+// TStyle::SetParentStyle at +0x18) and resolves to its base, then the
+// named style, then the own properties the named style doesn't replace
+// (SetParentStyle removes those its own or inherited ones replace); the
+// other paragraphs keep their styles; applying it again changes nothing;
+// it survives saving and loading.
 // Arguments: the sample documents.
 #include <cstdio>
 #include <string>
@@ -66,7 +67,7 @@ main(int argc, char** argv)
 				for (size_t p = 0; p < wp->paragraphs.size() && target == wp->paragraphs.size(); p++) {
 					uint32_t s = wp->paragraphs[p].parStyle;
 					if (s != named && !(s < doc.styles.styles.size()
-							&& doc.styles.styles[s].name.empty() && doc.styles.styles[s].links[0] == named))
+							&& doc.styles.styles[s].name.empty() && doc.styles.styles[s].links[1] == named))
 						target = p;
 				}
 				if (target == wp->paragraphs.size())
@@ -74,13 +75,44 @@ main(int argc, char** argv)
 				std::string what = name + " part " + std::to_string(part) + " par "
 					+ std::to_string(target) + " \"" + n.name + "\"";
 
-				// expected: the named style, then the paragraph's own
-				// properties (those of its unnamed style)
+				// expected: the paragraph style's base (itself if it's
+				// named), the named style, then its own properties the
+				// named style's own and inherited ones don't replace (same
+				// type; a tab at the same position)
 				uint32_t old = wp->paragraphs[target].parStyle;
-				TextStyle expected = ResolveTextStyle(doc.styles, uint32_t(named));
-				if (old < doc.styles.styles.size() && doc.styles.styles[old].name.empty())
-					for (uint32_t p : doc.styles.styles[old].props)
-						ApplyProperty(doc.styles.properties[p], expected);
+				bool unnamed = old < doc.styles.styles.size() && doc.styles.styles[old].name.empty();
+				TextStyle expected = ResolveTextStyle(doc.styles,
+					unnamed ? doc.styles.styles[old].links[0] : old);
+				{
+					// the named style's whole chain on top of the base's
+					std::vector<uint32_t> chain;
+					for (uint32_t c = uint32_t(named); c < doc.styles.styles.size()
+							&& chain.size() < 32; c = doc.styles.styles[c].links[0])
+						chain.push_back(c);
+					for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+						for (uint32_t p : doc.styles.styles[*it].props)
+							ApplyProperty(doc.styles.properties[p], expected);
+				}
+				if (unnamed) {
+					auto tabAt = [&](const Property& q) {
+						TextStyle t;
+						ApplyProperty(q, t);
+						return t.tabs.empty() ? -1.0f : t.tabs[0].position;
+					};
+					for (uint32_t p : doc.styles.styles[old].props) {
+						const Property& mine = doc.styles.properties[p];
+						bool replaced = false;
+						for (const std::vector<uint32_t>* set : {&n.props2, &n.props})
+							for (uint32_t q : *set) {
+								const Property& theirs = doc.styles.properties[q];
+								if (theirs.type == mine.type && (mine.type != Sig("PTab")
+										|| tabAt(theirs) == tabAt(mine)))
+									replaced = true;
+							}
+						if (!replaced)
+							ApplyProperty(mine, expected);
+					}
+				}
 				std::vector<uint32_t> before;
 				for (const WPParagraph& p : wp->paragraphs)
 					before.push_back(p.parStyle);
@@ -91,7 +123,7 @@ main(int argc, char** argv)
 				wp = doc.WordPart(part);
 				uint32_t now = wp->paragraphs[target].parStyle;
 				Check(now < doc.styles.styles.size() && doc.styles.styles[now].name.empty()
-					&& doc.styles.styles[now].links[0] == named, what + ": an unnamed child");
+					&& doc.styles.styles[now].links[1] == named, what + ": the style applied");
 				Check(SameText(ResolveTextStyle(doc.styles, now), expected),
 					what + ": resolves to the style and the paragraph's own properties");
 				bool others = true;
@@ -110,9 +142,9 @@ main(int argc, char** argv)
 				if (rp != nullptr && target < rp->paragraphs.size()) {
 					uint32_t s = rp->paragraphs[target].parStyle;
 					bool parent = s < reloaded.styles.styles.size()
-						&& reloaded.styles.styles[s].links[0] < reloaded.styles.styles.size()
-						&& reloaded.styles.styles[reloaded.styles.styles[s].links[0]].name == n.name;
-					Check(parent, what + ": reloaded, based on the style");
+						&& reloaded.styles.styles[s].links[1] < reloaded.styles.styles.size()
+						&& reloaded.styles.styles[reloaded.styles.styles[s].links[1]].name == n.name;
+					Check(parent, what + ": reloaded, the style applied");
 					Check(SameText(ResolveTextStyle(reloaded.styles, s), expected),
 						what + ": reloaded, resolves the same");
 				} else

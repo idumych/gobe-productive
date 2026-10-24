@@ -10,6 +10,7 @@
 #include "Editing.h"
 #include "ResourceFile.h"
 #include "StyleEdit.h"
+#include "StyleText.h"
 #include "Styles.h"
 
 using namespace gobe;
@@ -108,6 +109,48 @@ main(int argc, char** argv)
 			own = own || (p < m.properties.size() && m.properties[p].type == size.type);
 		Check(!own && ResolveTextStyle(m, body).size == base.size,
 			name + ": Body has no size of its own");
+		// a basic style applied to text, then unapplied
+		const WPPart* wp = doc.MainPart() >= 0 ? doc.WordPart(size_t(doc.MainPart())) : nullptr;
+		size_t paragraph = 0;
+		while (wp != nullptr && paragraph < wp->paragraphs.size()
+				&& (EditableLength(wp->paragraphs[paragraph]) < 4
+					|| wp->paragraphs[paragraph].runs.empty()))
+			paragraph++;
+		if (wp != nullptr && paragraph < wp->paragraphs.size()) {
+			uint32_t big = NewNamedStyle(doc, Sig("Basi"), "Big", FindNamedStyle(m, "Default"),
+				kNoPart);
+			SetStyleProperty(doc, big, TextSizeProperty(40));
+			auto styleAt = [&](size_t offset) {
+				const WPParagraph& p = doc.WordPart(size_t(doc.MainPart()))->paragraphs[paragraph];
+				uint32_t s = p.parStyle;
+				for (const WPStyleRun& r : p.runs)
+					if (r.position <= offset)
+						s = r.style;
+				return s;
+			};
+			TextPosition from, to;
+			from.paragraph = to.paragraph = paragraph;
+			from.offset = 0;
+			to.offset = 2;
+			Check(ApplyCharacterStyle(doc, size_t(doc.MainPart()), from, to, big),
+				name + ": Big applied");
+			// 40 points, unless the run has a size of its own (own
+			// properties come after the applied style's)
+			bool ownSize = false;
+			for (uint32_t p : m.styles[styleAt(0)].props)
+				ownSize = ownSize || (p < m.properties.size() && m.properties[p].type == Sig("TSiz"));
+			Check(ownSize || ResolveTextStyle(m, styleAt(0)).size == 40,
+				name + ": the text is 40 points");
+			Check(m.styles[styleAt(0)].links[1] == big, name + ": applied (links[1])");
+			SelectionStyles applied = TextSelectionStyles(m,
+				*doc.WordPart(size_t(doc.MainPart())), from, to);
+			Check(applied.applied.size() == 1 && applied.applied[0].first == "Big"
+				&& !applied.applied[0].second && applied.active.compare(0, 3, "Big") == 0,
+				name + ": Big is the active style (" + applied.active + ")");
+			Check(ApplyCharacterStyle(doc, size_t(doc.MainPart()), from, to, big, true)
+				&& m.styles[styleAt(0)].links[1] != big, name + ": Big unapplied");
+		}
+
 		// a tab of Body's own, then taken off
 		TabStop tab;
 		tab.position = 100;
