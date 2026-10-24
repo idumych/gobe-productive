@@ -1280,8 +1280,9 @@ NewNamedStyle(Document& doc, uint32_t type, const std::string& name, uint32_t ba
 {
 	if (name.empty())
 		return kNoPart;
+	// (TStyleManager::FindNamedStyle: not a cleared one's, flag 0x400)
 	for (const Style& s : doc.styles.styles)
-		if (s.name == name)
+		if (s.name == name && !(s.value8 & 0x400))
 			return kNoPart;
 	// (its own and inherited properties: the character ones and the
 	// paragraph ones)

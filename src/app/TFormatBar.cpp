@@ -9,6 +9,7 @@
 
 #include "Document.h"
 #include "GobeResources.h"
+#include "StyleText.h"
 #include "Styles.h"
 #include "TDocWindow.h"
 #include "TMenu.h"
@@ -399,11 +400,6 @@ public:
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
 	{
 		AddMenuItems(menu, 100);
-		// (Edit Styles… isn't ported yet)
-		for (int32 i = 0; i < menu->CountItems(); i++)
-			if (menu->ItemAt(i)->Message() != NULL
-					&& menu->ItemAt(i)->Message()->what != 'sMB6')
-				menu->ItemAt(i)->SetEnabled(false);
 		const Document& doc = bar->Pages()->Doc();
 		TextStyle style;
 		uint32_t paragraph = 0;
@@ -418,7 +414,7 @@ public:
 			bool group = true;
 			for (size_t i = 0; i < doc.styles.styles.size(); i++) {
 				const Style& s = doc.styles.styles[i];
-				if (s.name.empty() || s.value10 != type)
+				if (s.name.empty() || s.value10 != type || (s.value8 & 0x400))
 					continue;
 				if (group && !first)
 					menu->AddSeparatorItem();
@@ -608,20 +604,10 @@ TFormatBar::Update()
 				size = GobeResources::IndexString(5, 15).String();
 			mixedInk = last.color != style.color;
 		}
-		// TStyleManager::GetActiveStyle: the named style the paragraph's is
-		// or is based on
-		uint32_t index = paragraph;
-		bool own = false;
-		for (int depth = 0; index < doc.styles.styles.size() && depth < 32; depth++) {
-			const Style& s = doc.styles.styles[index];
-			if (!s.name.empty()) {
-				name = s.name + (own ? "+" : "");
-				break;
-			}
-			own = own || !s.props.empty();
-			if (s.links[0] == index)
-				break;
-			index = s.links[0];
+		// TStyleManager::GetActiveStyle
+		if (const WPPart* wp = doc.WordPart(fPages->fCaret.part)) {
+			auto range = fPages->TextSelectionRange();
+			name = TextSelectionStyles(doc.styles, *wp, range.first, range.second).active;
 		}
 	}
 	for (auto [element, value] : {std::make_pair(fFont, font), std::make_pair(fSize, size),

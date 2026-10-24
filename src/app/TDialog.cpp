@@ -295,11 +295,14 @@ TDialog::MakeControl(const ItemData& item)
 			bool h = item.values.size() > 2 && item.values[2] != 0;
 			bool v = item.values.size() > 3 && item.values[3] != 0;
 			view = new BScrollView("list scroll", list, 0, h, v || !h);
-			// LIST params: rows (17 each) and a width (0: wide enough for a
-			// name)
+			// LIST params: rows (17 each) and a width in digits
+			// (ListEngineer::Recalc: that many "0"s, 10 more and the scroll
+			// bar's 15; 0: wide enough for a name)
 			if (item.values.size() >= 2 && item.values[0] > 0) {
-				BSize size(item.values[1] > 0 ? item.values[1] : 170,
-					item.values[0] * 17 + 4);
+				float width = 170;
+				if (item.values[1] > 0)
+					width = item.values[1] * be_plain_font->StringWidth("0") + 10 + (v ? 15 : 0);
+				BSize size(width, item.values[0] * 17 + 4);
 				view->SetExplicitMinSize(size);
 				view->SetExplicitPreferredSize(size);
 			}

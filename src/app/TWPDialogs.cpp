@@ -26,6 +26,7 @@
 #include "Measure.h"
 #include "SSEval.h"
 #include "SSStyle.h"
+#include "StyleEdit.h"
 #include "TFormatBar.h"
 #include "TWPRuler.h"
 
@@ -715,7 +716,8 @@ TDialogStyleNew::TDialogStyleNew(BLooper* window, const StyleMgr& styles)
 		{FourCC("Basi"), GobeResources::IndexString(13, 7).String()}};
 	fBases.resize(fTypes.size());
 	for (const Style& style : styles.styles) {
-		if (style.name.empty())
+		// (not the cleared ones: TStyleManager::FindNamedStyle)
+		if (style.name.empty() || (style.value8 & kStyleDeleted))
 			continue;
 		fNames.push_back(style.name);
 		for (size_t t = 0; t < fTypes.size(); t++)

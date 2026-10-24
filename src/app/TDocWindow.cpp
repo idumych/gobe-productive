@@ -50,6 +50,7 @@
 #include "TFindDialog.h"
 #include "TPreferences.h"
 #include "TWPDialogs.h"
+#include "TStylesEdit.h"
 #include "Find.h"
 #include "TWPRuler.h"
 #include "Styles.h"
@@ -525,10 +526,13 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 {
 	sWindows.insert(sWindows.begin(), this);
 	// the floaters' subsets take the new window (TFloaterMgr 'sE05')
-	if (TDialogHistory* history = TDialogHistory::Open()) {
+	for (BWindow* floater : {(BWindow*)TDialogHistory::Open(),
+			(BWindow*)TDialogStylesEdit::Open()}) {
+		if (floater == NULL)
+			continue;
 		BMessage add('sE05');
 		add.AddPointer("window", this);
-		history->PostMessage(&add);
+		floater->PostMessage(&add);
 	}
 	TMenuBar* menuBar = InstallBaseMenus();
 	// a test aid, not the original's: every DIAL resource, with
@@ -892,6 +896,7 @@ TDocWindow::MessageReceived(BMessage* message)
 				UpdateTitle();
 			}
 			TDialogHistory::Refresh();
+			TDialogStylesEdit::Refresh();
 			return;
 		// the zoom tool (TDocWindow::ScaleTo)
 		case 's003':
@@ -1309,6 +1314,35 @@ TDocWindow::MessageReceived(BMessage* message)
 	// HandleMessage): Set Undo Levels (with "value" the history's size, the
 	// document changed; else the dialog), Clear History (the document
 	// changed), Show Undo Steps
+	// Format > Edit Styles… (TStyleManager::HandleMessage: the floater,
+	// with "Name" or the active style first; if it's open, "Name" shown)
+	if (message->what == 'sM23') {
+		const char* name = NULL;
+		bool named = message->FindString("Name", &name) == B_OK;
+		if (TDialogStylesEdit* edit = TDialogStylesEdit::Open()) {
+			if (named) {
+				BMessage show('NAME');
+				show.AddString("Name", name);
+				edit->PostMessage(&show);
+			}
+			return;
+		}
+		std::string active;
+		if (!named) {
+			StylesSnapshot snapshot;
+			GetStylesSnapshot(snapshot);
+			active = snapshot.selection.active;
+			name = active.c_str();
+		}
+		(new TDialogStylesEdit(name))->RunDialog();
+		return;
+	}
+	// 'sD=L' (a floater changed): the format bar again
+	if (message->what == 'sD=L') {
+		if (fFormatBar != NULL)
+			fFormatBar->Update();
+		return;
+	}
 	if (message->what == 'sM24') {
 		if (TDialogHistory* history = TDialogHistory::Open())
 			history->Activate(true);
@@ -1857,6 +1891,7 @@ TDocWindow::WindowActivated(bool active)
 		if (TDialogFindChange* find = TDialogFindChange::Open())
 			find->PostMessage('sD=L');
 		TDialogHistory::Refresh();
+		TDialogStylesEdit::Refresh();
 	}
 }
 
@@ -1879,6 +1914,33 @@ TDocWindow::HistoryState(std::vector<std::string>& labels, size_t& done, bool& s
 		return;
 	labels = fPages->fUndo.Labels(done);
 	show = fPages->fShowUndoSteps;
+}
+
+
+// TStyleManager::GetActiveStyles' and GetActiveStyle's sources: the
+// active part (the caret's, else the main part) if it's text, its kinds
+// (TWPPart::ActiveStyles: paragraph, basic) and the selection's styles
+void
+TDocWindow::GetStylesSnapshot(StylesSnapshot& snapshot) const
+{
+	snapshot = StylesSnapshot();
+	if (fDocument == NULL || fPages == NULL)
+		return;
+	snapshot.document = fDocument;
+	snapshot.styles = fDocument->styles;
+	size_t part = fPages->fCaret.active ? fPages->fCaret.part : size_t(fDocument->MainPart());
+	const WPPart* wp = fDocument->MainPart() >= 0 || fPages->fCaret.active
+		? fDocument->WordPart(part) : NULL;
+	if (wp == NULL)
+		return;
+	snapshot.types = {Sig("Para"), Sig("Basi")};
+	TextPosition from, to;
+	if (fPages->fCaret.active) {
+		auto range = fPages->TextSelectionRange();
+		from = range.first;
+		to = range.second;
+	}
+	snapshot.selection = TextSelectionStyles(snapshot.styles, *wp, from, to);
 }
 
 

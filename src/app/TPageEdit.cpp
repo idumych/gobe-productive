@@ -19,6 +19,7 @@
 #include <Beep.h>
 #include <Clipboard.h>
 #include <MenuItem.h>
+#include <MessageRunner.h>
 #include <Path.h>
 #include <PopUpMenu.h>
 #include <ScrollBar.h>
@@ -30,12 +31,14 @@
 #include <ctime>
 
 #include "Editing.h"
+#include "StyleEdit.h"
 #include "Fields.h"
 #include "Notes.h"
 #include "GobeResources.h"
 #include "TDocView.h"
 #include "TTranslate.h"
 #include "TWPDialogs.h"
+#include "TStylesEdit.h"
 #include "SSStyle.h"
 #include "SSEval.h"
 #include "TDocWindow.h"
@@ -1973,9 +1976,8 @@ TPageView::MessageReceived(BMessage* message)
 			uint32_t type = uint32_t(message->GetInt32(kStyleTypeStr, int32(Sig("Para"))));
 			std::string baseName = message->GetString("Style Base", "");
 			uint32_t base = kNoPart;
-			for (size_t i = 0; i < fDocument.styles.styles.size(); i++)
-				if (!baseName.empty() && fDocument.styles.styles[i].name == baseName)
-					base = uint32_t(i);
+			if (!baseName.empty())
+				base = FindNamedStyle(fDocument.styles, baseName);
 			// "Copy formatting from selection": the text's style where the
 			// selection starts
 			uint32_t from = kNoPart;
@@ -2001,6 +2003,65 @@ TPageView::MessageReceived(BMessage* message)
 				Window()->PostMessage(kMsgDocumentChanged);
 			return;
 		}
+		// Edit Styles' Style > Modify Style… (TStyleManager::DoModifyStyle:
+		// with a "Style Name" TModifyStyleCommand, "Modify Style - " and the
+		// style; else the dialog) and Edit > Clear Style (DoDeleteStyle:
+		// TDeleteStyleCommand, "Delete Style - " and the style, if no style
+		// comes from it, else STR# 6, 43)
+		case 'sMB7':
+		case 'sMB5': {
+			const char* target = NULL;
+			if (message->FindString("Target Style", &target) != B_OK || target == NULL)
+				return;
+			uint32_t style = FindNamedStyle(fDocument.styles, target);
+			if (style >= fDocument.styles.styles.size()) {
+				if (message->what == 'sMB7')
+					(new BAlert("", GobeResources::IndexString(6, 36).String(), "OK"))->Go(NULL);
+				return;
+			}
+			if (message->what == 'sMB5') {
+				if (!CanDeleteStyle(fDocument.styles, style)) {
+					(new BAlert("", GobeResources::IndexString(6, 43).String(), "OK"))->Go(NULL);
+					return;
+				}
+				fUndo.BeginDocument(fDocument, std::string(GobeResources::IndexString(3, 9).String())
+					+ target, CurrentViewState());
+				DeleteNamedStyle(fDocument, target);
+				if (Window() != NULL)
+					Window()->PostMessage(kMsgDocumentChanged);
+				return;
+			}
+			const char* name = NULL;
+			if (message->FindString(kStyleNameStr, &name) != B_OK || name == NULL) {
+				if (Window() != NULL) {
+					StylesSnapshot snapshot;
+					if (TDocWindow* window = dynamic_cast<TDocWindow*>(Window()))
+						window->GetStylesSnapshot(snapshot);
+					(new TDialogStyleModify(Window(), target, fDocument.styles,
+						snapshot.types))->RunDialog();
+				}
+				return;
+			}
+			std::string base = message->GetString("Style Base", "");
+			// (TModifyStyleCommand: STR# 5, 4, "None", is no base)
+			if (base == GobeResources::IndexString(5, 4).String())
+				base.clear();
+			if (!CanModifyNamedStyle(fDocument.styles, target, name, base))
+				return;
+			fUndo.BeginDocument(fDocument, std::string(GobeResources::IndexString(3, 10).String())
+				+ target, CurrentViewState());
+			ModifyNamedStyle(fDocument, target, name, base);
+			TextChanged();
+			// TModifyStyleCommand::Swap: Edit Styles updated (UpdateFloaters),
+			// then showing it (SetEditStyle)
+			if (TDialogStylesEdit* edit = TDialogStylesEdit::Open()) {
+				TDialogStylesEdit::Refresh();
+				BMessage show('NAME');
+				show.AddString("Name", name);
+				edit->PostMessage(&show);
+			}
+			return;
+		}
 		// the format bar's Styles, a paragraph style ('sf0L' with "Style
 		// Name": TWPApplyStyleCmd, "Apply Style - " and the name)
 		case 'sf0L': {
@@ -2013,7 +2074,8 @@ TPageView::MessageReceived(BMessage* message)
 			uint32_t named = UINT32_MAX;
 			for (size_t i = 0; i < fDocument.styles.styles.size(); i++)
 				if (fDocument.styles.styles[i].name == name
-						&& fDocument.styles.styles[i].value10 == Sig("Para"))
+						&& fDocument.styles.styles[i].value10 == Sig("Para")
+						&& !(fDocument.styles.styles[i].value8 & kStyleDeleted))
 					named = uint32_t(i);
 			if (named == UINT32_MAX) {
 				beep();
@@ -2383,6 +2445,16 @@ TPageView::RunScript(const std::string& script, Document& document)
 		start = end + 1;
 		while (!command.empty() && command[0] == ' ')
 			command.erase(0, 1);
+		// "wait": the rest of the script a moment later, after what was
+		// posted (floaters, dialogs) is handled
+		if (command == "wait") {
+			if (Window() != NULL && start < script.size()) {
+				BMessage rest(kMsgRunScript);
+				rest.AddString("script", script.substr(start).c_str());
+				BMessageRunner::StartSending(BMessenger(Window()), &rest, 400000, 1);
+			}
+			return;
+		}
 		if (command.compare(0, 10, "formatbar ") == 0) {
 			// "formatbar show": the labels and the text ink shown;
 			// "formatbar color N", "formatbar style NAME": chosen
@@ -2548,6 +2620,22 @@ TPageView::RunScript(const std::string& script, Document& document)
 		} else if (command.compare(0, 8, "history ") == 0) {
 			// "history N": row N chosen in the History floater
 			TDialogHistory::Choose(atoi(command.c_str() + 8));
+		} else if (command.compare(0, 11, "editstyles ") == 0) {
+			// "editstyles row N" (or "invoke N", double-clicked): row N of
+			// the Edit Styles floater's list chosen; "editstyles cmd ABCD":
+			// one of its menus' commands; "editstyles dump": its rows and
+			// properties printed
+			std::string what = command.substr(11);
+			if (what.compare(0, 4, "row ") == 0)
+				TDialogStylesEdit::ChooseRow(atoi(what.c_str() + 4));
+			else if (what.compare(0, 7, "invoke ") == 0)
+				TDialogStylesEdit::ChooseRow(atoi(what.c_str() + 7), true);
+			else if (what.compare(0, 4, "cmd ") == 0 && what.size() >= 8)
+				TDialogStylesEdit::Command(uint32(uint8(what[4])) << 24
+					| uint32(uint8(what[5])) << 16 | uint32(uint8(what[6])) << 8
+					| uint8(what[7]));
+			else if (what == "dump")
+				TDialogStylesEdit::Dump();
 		} else if (command == "caret") {
 			// "caret": the caret and the anchor (part, paragraph, offset)
 			printf("caret %zu %zu.%zu anchor %zu.%zu\n", fCaret.part, fCaret.paragraph,
@@ -2633,13 +2721,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 			EndCellEdit(true);
 		} else if (command.compare(0, 5, "send ") == 0 && command.size() >= 9) {
 			// "send ABCD [name=value ...]": the command to the window with
-			// fields (digits an int32, true/false a bool, else a string)
+			// fields (digits an int32, true/false a bool, else a string);
+			// fields with spaces separated by '|' instead
 			const char* c = command.c_str() + 5;
 			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
 			std::string rest = command.size() > 10 ? command.substr(10) : "";
+			char separator = rest.find('|') != std::string::npos ? '|' : ' ';
 			size_t at = 0;
 			while (at < rest.size()) {
-				size_t space = rest.find(' ', at);
+				size_t space = rest.find(separator, at);
 				std::string field = rest.substr(at, space == std::string::npos ? std::string::npos
 					: space - at);
 				at = space == std::string::npos ? rest.size() : space + 1;
@@ -3676,6 +3766,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
 		case 'sf02': case 'sf0L': case 'sMB6':								// format bar
+		case 'sMB5': case 'sMB7':											// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells
 			return true;

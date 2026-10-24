@@ -112,6 +112,7 @@ private:
 };
 
 struct Document;
+struct StylesSnapshot;
 
 class TDocWindow : public BWindow {
 public:
@@ -131,6 +132,9 @@ public:
 	bool HasTextSelection() const;
 	// THistory: the steps' labels, how many are done, Show Undo Steps
 	void HistoryState(std::vector<std::string>& labels, size_t& done, bool& show) const;
+	// what Edit Styles shows: the document's styles, the active part's
+	// kinds, the selection's
+	void GetStylesSnapshot(StylesSnapshot& snapshot) const;
 
 	// Called from TPageView after text style changes to update marks.
 	// `family` is the current font family (empty = default).
