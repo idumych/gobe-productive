@@ -88,6 +88,14 @@ bool UpdateDependencies(Document& doc, size_t part);
 // users (runs, paragraphs, child styles) plus one for the manager, and is
 // kept up to date here.
 
+// TStyle::UpdateUnionSet: the properties a style inherits (its parents'
+// inherited and own ones, later replacing earlier), sorted as TPropsTable
+// keeps them (by type, tabs by position). Styles store it (props2) and the
+// original uses it as stored.
+std::vector<uint32_t> StyleUnionSet(const StyleMgr& styles, const Style& style);
+// Whether a property list is in TPropsTable's order.
+bool PropsSorted(const StyleMgr& styles, const std::vector<uint32_t>& props);
+
 // The style like `base` but with `property` set (replacing one of the
 // same type): an existing identical unnamed style, or a new one (added
 // with no users yet).

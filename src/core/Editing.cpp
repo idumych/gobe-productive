@@ -798,6 +798,66 @@ TabPosition(const Property& property)
 }
 
 
+// TProperty::Replaces: the same type; TPropParTab::Replaces: a tab at the
+// same position
+bool
+Replaces(const Property& a, const Property& b)
+{
+	return a.type == b.type && (a.type != Sig("PTab") || TabPosition(a) == TabPosition(b));
+}
+
+
+// TPropsTable keeps its properties sorted by type (tabs by position), and
+// TPropsTable::Read takes them in the file's order: write them sorted
+void
+SortProps(const StyleMgr& styles, std::vector<uint32_t>& props)
+{
+	auto key = [&](uint32_t i) {
+		if (i >= styles.properties.size())
+			return std::make_pair(uint64_t(1) << 32, 0.0f);
+		const Property& p = styles.properties[i];
+		return std::make_pair(uint64_t(p.type), p.type == Sig("PTab") ? TabPosition(p) : 0.0f);
+	};
+	std::stable_sort(props.begin(), props.end(),
+		[&](uint32_t a, uint32_t b) { return key(a) < key(b); });
+}
+
+
+// appends `props` to `set`, each replacing one it replaces
+void
+AppendProperties(const StyleMgr& styles, std::vector<uint32_t>& set,
+	const std::vector<uint32_t>& props)
+{
+	for (uint32_t p : props) {
+		if (p >= styles.properties.size())
+			continue;
+		set.erase(std::remove_if(set.begin(), set.end(), [&](uint32_t q) {
+				return q < styles.properties.size()
+					&& Replaces(styles.properties[p], styles.properties[q]);
+			}), set.end());
+		set.push_back(p);
+	}
+}
+
+
+// TStyle::UpdateUnionSet: what the style inherits, its parents' inherited
+// and own properties (the documents store it, and the original uses it
+// as stored)
+std::vector<uint32_t>
+UnionSet(const StyleMgr& styles, const Style& style)
+{
+	std::vector<uint32_t> set;
+	for (uint32_t link : style.links) {
+		if (link >= styles.styles.size())
+			continue;
+		AppendProperties(styles, set, styles.styles[link].props2);
+		AppendProperties(styles, set, styles.styles[link].props);
+	}
+	SortProps(styles, set);
+	return set;
+}
+
+
 uint32_t
 AddProperty(StyleMgr& styles, const Property& property)
 {
@@ -840,6 +900,22 @@ RunAt(const WPParagraph& p, size_t offset)
 } // namespace
 
 
+std::vector<uint32_t>
+StyleUnionSet(const StyleMgr& styles, const Style& style)
+{
+	return UnionSet(styles, style);
+}
+
+
+bool
+PropsSorted(const StyleMgr& styles, const std::vector<uint32_t>& props)
+{
+	std::vector<uint32_t> sorted = props;
+	SortProps(styles, sorted);
+	return sorted == props;
+}
+
+
 uint32_t
 StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 {
@@ -868,10 +944,8 @@ StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 				p = index;
 				replaced = true;
 			}
-		if (!replaced) {
+		if (!replaced)
 			style.props.push_back(index);
-			std::sort(style.props.begin(), style.props.end());
-		}
 	} else {
 		// a named style: an unnamed child holding the property
 		style = styles.styles[base];
@@ -880,6 +954,8 @@ StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 		style.links[0] = base;
 		style.props = {index};
 	}
+	SortProps(styles, style.props);
+	style.props2 = UnionSet(styles, style);
 	style.substyles.clear();
 	for (size_t i = 0; i < styles.styles.size(); i++)
 		if (SameStyle(styles.styles[i], style))
