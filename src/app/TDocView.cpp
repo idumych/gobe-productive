@@ -1,5 +1,9 @@
 #include "TDocView.h"
 
+#include <string.h>
+
+#include <unordered_map>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -10,6 +14,28 @@
 #include "ResourceFile.h"
 
 namespace gobe {
+
+float
+TDocView::TextWidth(const BFont& font, const std::string& text)
+{
+	// fonts by family and style, size, face and spacing
+	static std::unordered_map<uint64_t, std::unordered_map<std::string, float>> sWidths;
+	float size = font.Size();
+	uint32_t sizeBits;
+	memcpy(&sizeBits, &size, 4);
+	uint64_t key = uint64_t(font.FamilyAndStyle()) << 32
+		^ (uint64_t(sizeBits) * 0x9e3779b1u) ^ (uint64_t(font.Face()) << 20)
+		^ uint64_t(font.Spacing());
+	std::unordered_map<std::string, float>& widths = sWidths[key];
+	auto known = widths.find(text);
+	if (known != widths.end())
+		return known->second;
+	float width = font.StringWidth(text.c_str());
+	if (widths.size() < 100000)
+		widths.emplace(text, width);
+	return width;
+}
+
 
 BFont
 TDocView::MapFont(const TextStyle& style)

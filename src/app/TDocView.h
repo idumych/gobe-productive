@@ -5,6 +5,7 @@
 #ifndef GOBE_TDOCVIEW_H
 #define GOBE_TDOCVIEW_H
 
+#include <string>
 #include <Font.h>
 #include <View.h>
 
@@ -21,6 +22,9 @@ public:
 
 	// Gobe's fonts (BeOS-era Bitstream) mapped to the closest Haiku family
 	static BFont MapFont(const TextStyle& style);
+	// BFont::StringWidth, remembered per font and text (TFontInfo keeps
+	// its fonts' widths the same way): layout asks for every word again
+	static float TextWidth(const BFont& font, const std::string& text);
 
 private:
 	BTextView* fText;

@@ -581,10 +581,10 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 					if (toAlign) {
 						size_t at = tk.text.find(char(alignChar));
 						if (at != std::string::npos)
-							return w + tk.font.StringWidth(tk.text.substr(0, at).c_str());
+							return w + TDocView::TextWidth(tk.font, tk.text.substr(0, at));
 					}
-					w += tk.font.StringWidth(tk.text.c_str())
-						+ (tk.space ? tk.font.StringWidth(" ") : 0);
+					w += TDocView::TextWidth(tk.font, tk.text)
+						+ (tk.space ? TDocView::TextWidth(tk.font, " ") : 0);
 				}
 				return w;
 			};
@@ -638,7 +638,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 						float start = std::max(x, target - seg);
 						if (stop->fill != 0 && stop->fillChar >= 0x20 && stop->fillChar < 0x7f) {
 							char c[2] = {char(stop->fillChar), 0};
-							float cw = std::max(1.0f, tk.font.StringWidth(c));
+							float cw = std::max(1.0f, TDocView::TextWidth(tk.font, c));
 							int n = int((start - x - cw / 2) / cw);
 							if (n > 0)
 								leaders.push_back({std::string(n, c[0]), tk.font, tk.color,
@@ -650,14 +650,14 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 					t++;
 					continue;
 				}
-				float ww = tk.font.StringWidth(tk.text.c_str());
+				float ww = TDocView::TextWidth(tk.font, tk.text);
 				// the padding is the port's, not Gobe's: words may use it; a
 				// word at a tab stop inside the frame stays on the line
 				bool atTab = t > 0 && tokens[t - 1].kind == Token::kTab && x <= avail;
 				if (!placed.empty() && !atTab && x + ww > avail + 2 * pad)
 					break;
 				placed.push_back({t, x});
-				x += ww + (tk.space ? tk.font.StringWidth(" ") : 0);
+				x += ww + (tk.space ? TDocView::TextWidth(tk.font, " ") : 0);
 				measure(tk.font, tk.size);
 				t++;
 			}

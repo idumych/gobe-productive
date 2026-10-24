@@ -21,6 +21,7 @@
 #include "Fields.h"
 #include "Notes.h"
 #include "GobeResources.h"
+#include "TDocView.h"
 #include "TWPDialogs.h"
 #include "SSStyle.h"
 #include "SSEval.h"
@@ -92,7 +93,7 @@ SubstringWidth(const BFont& font, const std::string& text, size_t from, size_t t
 	for (size_t i = from; i < to && i < text.size(); i++)
 		if ((unsigned char)text[i] >= 0x20)
 			s += text[i];
-	return font.StringWidth(s.c_str());
+	return TDocView::TextWidth(font, s);
 }
 
 } // namespace
@@ -120,13 +121,13 @@ TPageView::OffsetX(size_t lineIndex, size_t offset) const
 		if (offset <= p.end) {
 			// a field is one character showing its text
 			if (p.field != 0)
-				at = p.x + (offset > p.start ? p.font.StringWidth(p.text.c_str()) : 0);
+				at = p.x + (offset > p.start ? TDocView::TextWidth(p.font, p.text) : 0);
 			else
 				at = p.x + SubstringWidth(p.font, text, p.start, offset);
 			break;
 		}
-		at = p.x + p.font.StringWidth(p.text.c_str())
-			+ (offset - p.end) * p.font.StringWidth(" ");
+		at = p.x + TDocView::TextWidth(p.font, p.text)
+			+ (offset - p.end) * TDocView::TextWidth(p.font, " ");
 	}
 	return line.frame.left + at;
 }
