@@ -124,15 +124,22 @@ This preview is about the word processor.
   Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
   formatting a style directly).
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
-- Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
-  charts (2D), images, tables, clocks and presentations.
+- Spreadsheets: formulas evaluated, cells editable, with the original's
+  Format and Options menus when cells are selected: Number… (the number
+  format categories), Lock and Unlock Cells, Column Width…, Row Height…,
+  Display Options… (grid, locked cells shaded, formulas, headings), Fill
+  Down, Right, Up and Left, Go To Cell…, Calculate Now; the cell context
+  menu.
+- Viewing: drawings, charts (2D), images, tables, clocks and presentations.
 
 **Not yet**
 
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; named selections; Import and Export Styles; New Window; Show
-Clipboard; creating and linking frames; drawing tools; most spreadsheet
-menus; new documents of other kinds; the Word, Excel, HTML and SYLK
+Clipboard; creating and linking frames; drawing tools; in spreadsheets
+Insert and Delete Cells' dialogs (for now they insert and delete the
+selected rows), Move and Sort Cells, Auto Calculate off, Select Dependents and marking circular
+references; new documents of other kinds; the Word, Excel, HTML and SYLK
 translators; the thesaurus and dictionary (they need data files that weren't part of
 Gobe Productive). Documents saved by the port open in the port; they
 haven't been tried in the original on BeOS.
