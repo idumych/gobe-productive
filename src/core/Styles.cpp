@@ -140,12 +140,12 @@ ApplyProperty(const Property& property, TextStyle& style)
 			case Sig("PRig"):
 				style.rightIndent = a.Float();
 				break;
-			case Sig("SpaB"):	// TParSpaceProperty: bool, value
-				a.Bool();
+			case Sig("SpaB"):	// TParSpaceProperty: in lines?, value
+				style.spaceBeforeLines = a.Bool();
 				style.spaceBefore = a.Float();
 				break;
 			case Sig("SpaA"):
-				a.Bool();
+				style.spaceAfterLines = a.Bool();
 				style.spaceAfter = a.Float();
 				break;
 			case Sig("LSpa"):	// TPropParLineSpacing: multiple?, value
@@ -278,10 +278,10 @@ IndentProperty(uint32_t type, float value)
 }
 
 Property
-SpacingProperty(uint32_t type, float value)
+SpacingProperty(uint32_t type, float value, bool lines)
 {
 	DocWriter w;
-	w.Bool(true);		// always set in the documents
+	w.Bool(lines);		// set in all the documents
 	w.Float(value);
 	Property p;
 	p.type = type;
@@ -320,6 +320,12 @@ TabsProperty(const std::vector<TabStop>& tabs)
 	p.type = Sig("PTab");
 	p.data = w.Data();
 	return p;
+}
+
+Property
+TabProperty(const TabStop& tab)
+{
+	return TabsProperty({tab});
 }
 
 } // namespace gobe

@@ -1,5 +1,7 @@
 #include "Editing.h"
 
+#include "Styles.h"
+
 #include <algorithm>
 #include <map>
 #include <set>
@@ -785,6 +787,17 @@ SameStyle(const Style& a, const Style& b)
 }
 
 
+// a PTab property's position (its first float)
+float
+TabPosition(const Property& property)
+{
+	TextStyle t;
+	if (!ApplyProperty(property, t) || t.tabs.empty())
+		return -1;
+	return t.tabs[0].position;
+}
+
+
 uint32_t
 AddProperty(StyleMgr& styles, const Property& property)
 {
@@ -843,11 +856,15 @@ StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 		style.links[0] = style.links[1] = style.links[2] = 0xffffffff;
 		style.props = {index};
 	} else if (styles.styles[base].name.empty()) {
-		// a copy with the property replaced or added
+		// a copy with the property replaced or added (TProperty::Replaces:
+		// one of the same type; TPropParTab::Replaces: a tab at the same
+		// position)
 		style = styles.styles[base];
 		bool replaced = false;
 		for (uint32_t& p : style.props)
-			if (p < styles.properties.size() && styles.properties[p].type == property.type) {
+			if (p < styles.properties.size() && styles.properties[p].type == property.type
+					&& (property.type != Sig("PTab")
+						|| TabPosition(styles.properties[p]) == TabPosition(property))) {
 				p = index;
 				replaced = true;
 			}
@@ -1002,6 +1019,53 @@ ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 			p.parStyle = style;
 			changed = true;
 		}
+	}
+	if (changed)
+		doc.stylesChanged = true;
+	return changed;
+}
+
+
+bool
+RemoveParagraphTab(Document& doc, size_t part, size_t first, size_t last, float position)
+{
+	WPPart* wp = doc.EditableWordPart(part);
+	if (wp == nullptr || first >= wp->paragraphs.size())
+		return false;
+	if (last < first)
+		std::swap(first, last);
+	last = std::min(last, wp->paragraphs.size() - 1);
+	StyleMgr& styles = doc.styles;
+	bool changed = false;
+	for (size_t k = first; k <= last; k++) {
+		WPParagraph& p = wp->paragraphs[k];
+		if (p.parStyle >= styles.styles.size() || !styles.styles[p.parStyle].name.empty())
+			continue;
+		Style style = styles.styles[p.parStyle];
+		size_t before = style.props.size();
+		style.props.erase(std::remove_if(style.props.begin(), style.props.end(),
+			[&](uint32_t i) {
+				return i < styles.properties.size() && styles.properties[i].type == Sig("PTab")
+					&& TabPosition(styles.properties[i]) == position;
+			}), style.props.end());
+		if (style.props.size() == before)
+			continue;
+		style.substyles.clear();
+		uint32_t index = uint32_t(styles.styles.size());
+		for (size_t i = 0; i < styles.styles.size(); i++)
+			if (SameStyle(styles.styles[i], style)) {
+				index = uint32_t(i);
+				break;
+			}
+		if (index == styles.styles.size()) {
+			style.value4 = 1;
+			Retain(styles, style.links[0]);
+			styles.styles.push_back(style);
+		}
+		Retain(styles, index);
+		Release(styles, p.parStyle);
+		p.parStyle = index;
+		changed = true;
 	}
 	if (changed)
 		doc.stylesChanged = true;

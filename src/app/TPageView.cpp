@@ -312,7 +312,6 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			flush(false);
 		}
 
-		y += parStyle.spaceBefore;
 		size_t t = 0;
 		bool firstLine = true;
 		size_t paragraphIndex = &par - &wp->paragraphs[0];
@@ -426,6 +425,16 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				}
 				leading = 0;
 			}
+			// TWPFrame: space before goes above the paragraph's first
+			// line, space after below its last; in lines, the value times
+			// that line's ascent + descent
+			float lineHeight = ascent + descent;
+			if (firstLine)
+				ascent += parStyle.spaceBeforeLines
+					? parStyle.spaceBefore * lineHeight : parStyle.spaceBefore;
+			if (t >= tokens.size())
+				descent += parStyle.spaceAfterLines
+					? parStyle.spaceAfter * lineHeight : parStyle.spaceAfter;
 			float height = ascent + descent + leading;
 			if (y + height > frame.bottom && y > frame.top) {
 				// frame full: continue in the next frame
@@ -472,7 +481,6 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			y += height;
 			firstLine = false;
 		} while (t < tokens.size());
-		y += parStyle.spaceAfter;
 		// each line runs to where the next one starts
 		for (size_t k = firstLineOfParagraph; k < fLines.size(); k++) {
 			if (k + 1 < fLines.size())

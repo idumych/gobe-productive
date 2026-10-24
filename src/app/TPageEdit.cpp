@@ -2148,16 +2148,10 @@ TPageView::RunScript(const std::string& script, Document& document)
 				type = 3;
 			// left = 0 is default
 
-			// Get the current tabs from the style at caret
-			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
-			if (wp == NULL) {
+			if (fDocument.EditableWordPart(fCaret.part) == NULL) {
 				fprintf(stderr, "tab: no word part\n");
 				continue;
 			}
-			const WPParagraph& par = wp->paragraphs[fCaret.paragraph];
-			uint32_t styleIdx = par.parStyle;
-			TextStyle style = ResolveTextStyle(fDocument.styles, styleIdx);
-
 			// Add a new tab stop
 			TabStop tab;
 			tab.position = xPoints;
@@ -2165,19 +2159,10 @@ TPageView::RunScript(const std::string& script, Document& document)
 			tab.fill = 0;
 			tab.alignChar = '.';
 			tab.fillChar = '.';
-			// Replace existing tab at same position, or add
-			auto it = std::find_if(style.tabs.begin(), style.tabs.end(),
-				[&](const TabStop& t) { return t.position == tab.position; });
-			if (it != style.tabs.end())
-				*it = tab;
-			else
-				style.tabs.push_back(tab);
-			std::sort(style.tabs.begin(), style.tabs.end(),
-				[](const TabStop& a, const TabStop& b) { return a.position < b.position; });
-
+			// one PTab per tab; it replaces a tab at the same position
 			fUndo.Begin(fDocument, fCaret.part, "Tab", CurrentViewState());
 			ApplyParagraphProperty(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
-				TabsProperty(style.tabs));
+				TabProperty(tab));
 			TextChanged();
 		} else if (command.compare(0, 9, "deletetab") == 0) {
 			// "deletetab <x points>" — remove the nearest tab stop to x points
@@ -2215,11 +2200,9 @@ TPageView::RunScript(const std::string& script, Document& document)
 				fprintf(stderr, "deletetab: no tabs found\n");
 				continue;
 			}
-			style.tabs.erase(style.tabs.begin() + nearestIdx);
-
 			fUndo.Begin(fDocument, fCaret.part, "Tab", CurrentViewState());
-			ApplyParagraphProperty(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
-				TabsProperty(style.tabs));
+			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
+				style.tabs[nearestIdx].position);
 			TextChanged();
 		} else if (command == "insertdate") {
 			// Insert current date as plain text in m/d/yyyy format

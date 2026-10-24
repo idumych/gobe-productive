@@ -44,6 +44,9 @@ struct TextStyle {
 	int alignment = 0;							// PAlg: 0 left, 1 center, 2 right, 3 justify (TLineRun)
 	float leftIndent = 0, firstIndent = 0, rightIndent = 0;	// PLef, PInd, PRig
 	float spaceBefore = 0, spaceAfter = 0;		// SpaB, SpaA
+	// TParSpaceProperty: the value is in lines (of the first or last line's
+	// height) when set, as in every document, else in points
+	bool spaceBeforeLines = true, spaceAfterLines = true;
 	// LSpa (TPropParLineSpacing): a multiple of the line height (adds
 	// (multiple - 1) x ascent of leading) or an exact height in points
 	float lineSpacing = 1;
@@ -94,9 +97,12 @@ Property TextFaceProperty(uint32_t faceFlags);
 Property TextColorProperty(Color color);
 Property AlignmentProperty(int alignment);
 Property IndentProperty(uint32_t type, float value);	// 'PLef', 'PInd' or 'PRig'
-Property SpacingProperty(uint32_t type, float value);	// 'SpaB' or 'SpaA'
+Property SpacingProperty(uint32_t type, float value, bool lines = true);	// 'SpaB' or 'SpaA'
 Property LineSpacingProperty(float value, bool multiple);
 Property TabsProperty(const std::vector<TabStop>& tabs);
+// One tab stop: a style holds one PTab property per tab (what TabsProperty
+// gives for a single tab).
+Property TabProperty(const TabStop& tab);
 
 // The effective style for a style index (TStyleID), following parents.
 TextStyle ResolveTextStyle(const StyleMgr& styles, uint32_t index);

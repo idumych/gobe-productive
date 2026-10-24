@@ -583,9 +583,10 @@ TParagraphDialog::TParagraphDialog(Document* doc, TPageView* view)
 	fFirstIndent->SetText(buf);
 	snprintf(buf, sizeof buf, "%.1f", style.rightIndent);
 	fRightIndent->SetText(buf);
-	snprintf(buf, sizeof buf, "%.1f", style.spaceBefore);
+	// TParSpaceProperty::GetDataStr: "<value> lines", or points
+	snprintf(buf, sizeof buf, style.spaceBeforeLines ? "%g lines" : "%g pt", style.spaceBefore);
 	fSpaceBefore->SetText(buf);
-	snprintf(buf, sizeof buf, "%.1f", style.spaceAfter);
+	snprintf(buf, sizeof buf, style.spaceAfterLines ? "%g lines" : "%g pt", style.spaceAfter);
 	fSpaceAfter->SetText(buf);
 
 	if (style.lineSpacingMultiple) {
@@ -670,18 +671,18 @@ TParagraphDialog::DoApply()
 			firstPar, lastPar,
 			IndentProperty(Sig("PRig"), rightIndent));
 
-	// Spacing
+	// Spacing: lines unless given in points ("pt")
 	float spaceBefore = strtof(fSpaceBefore->Text(), &end);
 	if (end != fSpaceBefore->Text())
 		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
 			firstPar, lastPar,
-			SpacingProperty(Sig("SpaB"), spaceBefore));
+			SpacingProperty(Sig("SpaB"), spaceBefore, strstr(end, "pt") == NULL));
 
 	float spaceAfter = strtof(fSpaceAfter->Text(), &end);
 	if (end != fSpaceAfter->Text())
 		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
 			firstPar, lastPar,
-			SpacingProperty(Sig("SpaA"), spaceAfter));
+			SpacingProperty(Sig("SpaA"), spaceAfter, strstr(end, "pt") == NULL));
 
 	// Line spacing
 	std::string ls = fLineSpacing->Text();
@@ -1707,31 +1708,18 @@ TDocWindow::MessageReceived(BMessage* message)
 			else if (message->what == kCmdTabRight) type = 2;
 			else if (message->what == kCmdTabAlign) type = 3;
 
-			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
-			if (wp == NULL) return;
-			const WPParagraph& par = wp->paragraphs[fPages->fCaret.paragraph];
-			TextStyle style = fPages->StyleAt({fPages->fCaret.paragraph, fPages->fCaret.offset});
-
 			TabStop tab;
 			tab.position = xPoints;
 			tab.type = type;
 			tab.fill = 0;
 			tab.alignChar = '.';
 			tab.fillChar = '.';
-			auto it = std::find_if(style.tabs.begin(), style.tabs.end(),
-				[&](const TabStop& t) { return t.position == tab.position; });
-			if (it != style.tabs.end())
-				*it = tab;
-			else
-				style.tabs.push_back(tab);
-			std::sort(style.tabs.begin(), style.tabs.end(),
-				[](const TabStop& a, const TabStop& b) { return a.position < b.position; });
-
+			// one PTab per tab; it replaces a tab at the same position
 			fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Tab",
 				fPages->CurrentViewState());
 			ApplyParagraphProperty(*fDocument, fPages->fCaret.part,
 				fPages->fCaret.paragraph, fPages->fCaret.paragraph,
-				TabsProperty(style.tabs));
+				TabProperty(tab));
 			fPages->TextChanged();
 		}
 		return;
@@ -1758,13 +1746,11 @@ TDocWindow::MessageReceived(BMessage* message)
 			}
 			if (nearestIdx == SIZE_MAX || nearestIdx >= style.tabs.size())
 				return;
-			style.tabs.erase(style.tabs.begin() + nearestIdx);
-
 			fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Tab",
 				fPages->CurrentViewState());
-			ApplyParagraphProperty(*fDocument, fPages->fCaret.part,
+			RemoveParagraphTab(*fDocument, fPages->fCaret.part,
 				fPages->fCaret.paragraph, fPages->fCaret.paragraph,
-				TabsProperty(style.tabs));
+				style.tabs[nearestIdx].position);
 			fPages->TextChanged();
 		}
 		return;

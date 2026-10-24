@@ -101,6 +101,10 @@ bool ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextP
 // for paragraphs first..last.
 bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 	const Property& property);
+// Removes the paragraphs' own tab stop at `position` (the PTab property of
+// their unnamed style); tabs of named styles stay. False if nothing changed.
+bool RemoveParagraphTab(Document& doc, size_t part, size_t first, size_t last,
+	float position);
 
 // Inserts `count` empty rows (or columns) before row (column) `at` of a
 // spreadsheet part, or deletes `count` of them from `at` if count < 0.
