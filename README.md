@@ -45,19 +45,43 @@ folder out of the image first (Haiku can mount it), and choose that.
 
 ## Install
 
-| System | Package | Install |
-|---|---|---|
-| Haiku R1/beta6, Renku OS (x86_64) | `gobeproductive-<version>-1-x86_64.hpkg` | `pkgman install ./gobeproductive-<version>-1-x86_64.hpkg` |
-| VitruvianOS 0.6 (amd64, arm64) | `gobeproductive_<version>-1_amd64.deb` (or `_arm64`) | `sudo apt install ./gobeproductive_<version>-1_amd64.deb` |
-| Linux, glibc 2.39+ (x86_64, aarch64) | `GobeProductive-<version>-x86_64.AppImage` (or `-aarch64`) | `chmod +x GobeProductive-<version>-x86_64.AppImage`, then run it |
+The current release is **0.1.0 (preview)**:
 
-Downloads are on the [releases page](https://github.com/idumych/gobe-productive/releases).
+| System | Download | Install |
+|---|---|---|
+| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.1.0-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.1.0/gobeproductive-0.1.0-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.1.0-1-x86_64.hpkg` |
+| VitruvianOS 0.6 (amd64) | [gobeproductive_0.1.0-1_amd64.deb](https://github.com/idumych/gobe-productive/releases/download/v0.1.0/gobeproductive_0.1.0-1_amd64.deb) | `sudo apt install ./gobeproductive_0.1.0-1_amd64.deb` |
+| VitruvianOS 0.6 (arm64) | [gobeproductive_0.1.0-1_arm64.deb](https://github.com/idumych/gobe-productive/releases/download/v0.1.0/gobeproductive_0.1.0-1_arm64.deb) | `sudo apt install ./gobeproductive_0.1.0-1_arm64.deb` |
+| Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.1.0-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.1.0/GobeProductive-0.1.0-x86_64.AppImage) | `chmod +x GobeProductive-0.1.0-x86_64.AppImage`, then run it |
+| Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.1.0-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.1.0/GobeProductive-0.1.0-aarch64.AppImage) | `chmod +x GobeProductive-0.1.0-aarch64.AppImage`, then run it |
+
+Checksums and release notes are on the
+[release page](https://github.com/idumych/gobe-productive/releases/tag/v0.1.0).
 On Haiku and VitruvianOS it appears in the Deskbar's Applications menu.
 The Command key is **Alt** on Haiku and **Ctrl** on VitruvianOS and Linux.
 
 Documents lay out best with the Liberation fonts (metrically like the
 Times, Helvetica and Courier designs of BeOS's Bitstream fonts): on Haiku
-`pkgman install liberation_fonts`; the AppImage brings them along.
+`pkgman install liberation_fonts`, on VitruvianOS
+`sudo apt install fonts-liberation`; the AppImage brings them along.
+Without them the port uses Noto, which is wider, so lines break in other
+places than they did in Gobe.
+
+### Where 0.1.0 was tested
+
+| System | What was tested |
+|---|---|
+| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed, saved, reopened, Edit Styles |
+| VitruvianOS 0.6.2 (amd64) | The same, with the amd64 package |
+| Linux x86_64, X11 | The same, with the AppImage (Xvfb and Openbox); choosing a CD image in the file panel |
+| Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
+| Linux aarch64, X11 | Started on an arm64 machine: the window appears |
+| VitruvianOS arm64 | Not run (no arm64 test system); the package was only checked |
+| Renku OS | Not tried; the Haiku package should install there |
+
+Also untested so far: real hardware, interactive Wayland desktops, real
+Gobe Productive CD images (only images made from the installer), and
+opening documents saved by the port in the original on BeOS.
 
 ## Screenshots
 
