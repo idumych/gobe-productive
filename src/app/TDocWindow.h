@@ -181,6 +181,11 @@ private:
 	Document* fDocument = NULL;
 	class TPageView* fPages = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
+	bool fCloseAfterSave = false;	// Save As chosen in the close alert
+public:
+	// the application is quitting (the close alert asks "before quitting?")
+	bool fAppQuitting = false;
+private:
 	BFilePanel* fSavePanel = NULL;
 	BMenuField* fFormatField = NULL;	// the Save panel's "File Format"
 	bool fModified = false;

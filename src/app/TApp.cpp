@@ -180,6 +180,18 @@ public:
 		(new TDialogSplash())->Show();
 	}
 
+	// quitting: the document windows ask "before quitting?"
+	virtual bool QuitRequested()
+	{
+		for (int32 i = 0; BWindow* w = WindowAt(i); i++)
+			if (TDocWindow* window = dynamic_cast<TDocWindow*>(w))
+				if (window->Lock()) {
+					window->fAppQuitting = true;
+					window->Unlock();
+				}
+		return BApplication::QuitRequested();
+	}
+
 	// the document windows open
 	int32 CountDocuments()
 	{

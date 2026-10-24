@@ -1129,6 +1129,11 @@ TDocWindow::MessageReceived(BMessage* message)
 			}
 			fSavePanel->Show();
 			return;
+		case B_CANCEL:
+			// the save panel closed (after a save, its B_SAVE_REQUESTED came
+			// first)
+			fCloseAfterSave = false;
+			return;
 		case B_SAVE_REQUESTED:
 		{
 			entry_ref directory;
@@ -1158,6 +1163,10 @@ TDocWindow::MessageReceived(BMessage* message)
 					else
 						targetInfo.SetType("application/x-vnd.gobe.productive-document");
 					SetTitle(path.Leaf());
+					if (fCloseAfterSave) {
+						fModified = false;
+						PostMessage(B_QUIT_REQUESTED);
+					}
 				}
 			}
 			return;
@@ -1799,17 +1808,38 @@ TDocWindow::MenusBeginning()
 bool
 TDocWindow::QuitRequested()
 {
-	if (fModified) {
-		BAlert* alert = new BAlert("Close", "Save changes to this document?",
-			"Cancel", "Don't save", "Save", B_WIDTH_AS_USUAL, B_WARNING_ALERT);
-		alert->SetShortcut(0, B_ESCAPE);
+	// TDoc::SaveChanges: "Save changes to “name” before closing?" (before
+	// quitting, when the application quits): Don't Save (d), Cancel (Esc),
+	// Save
+	if (fModified && fDocument != NULL) {
+		BString text = GobeResources::IndexString(2, 13);
+		text << fDocument->name.c_str() << GobeResources::IndexString(2, fAppQuitting ? 14 : 15);
+		BAlert* alert = new BAlert("Alert Thread", text.String(),
+			GobeResources::IndexString(2, 12).String(), GobeResources::IndexString(2, 1).String(),
+			GobeResources::IndexString(2, 11).String(), B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+		alert->SetShortcut(0, 'd');
+		alert->SetShortcut(1, B_ESCAPE);
 		int32 choice = alert->Go();
-		if (choice == 0)
+		fAppQuitting = false;
+		if (choice == 1)
 			return false;
-		if (choice == 2 && !Save(fDocument->path))
-			return false;
+		if (choice == 2) {
+			// an untitled document: Save As, then close
+			if (fDocument->path.empty()) {
+				fCloseAfterSave = true;
+				PostMessage(kCmdSaveAs);
+				return false;
+			}
+			if (!Save(fDocument->path))
+				return false;
+		}
 	}
-	be_app->PostMessage(B_QUIT_REQUESTED);
+	// the last document closed: the application quits
+	int32 documents = 0;
+	for (int32 i = 0; BWindow* w = be_app->WindowAt(i); i++)
+		documents += dynamic_cast<TDocWindow*>(w) != NULL;
+	if (documents <= 1)
+		be_app->PostMessage(B_QUIT_REQUESTED);
 	return true;
 }
 
