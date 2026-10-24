@@ -804,6 +804,14 @@ TextLexicon::Delete(const std::string& word)
 }
 
 
+bool
+TextLexicon::Clear()
+{
+	fEntries.clear();
+	return Write();
+}
+
+
 // #pragma mark - Block
 
 

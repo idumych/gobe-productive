@@ -183,6 +183,7 @@ private:
 	class TWPRuler* fRuler = NULL;
 	class TPartBar* fPartBar = NULL;
 	class TFormatBar* fFormatBar = NULL;
+	class TSpellBar* fSpellBar = NULL;
 	class TScaleSlider* fScaleSlider = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
 	bool fCloseAfterSave = false;	// Save As chosen in the close alert

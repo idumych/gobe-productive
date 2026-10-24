@@ -65,9 +65,11 @@ WordChar(const std::string& s, size_t at)
 
 
 // GetNextWordInBlock: the next word from `at` (false if none); the
-// characters it went over are counted
+// characters it went over are counted; `digits` stays true if it has no
+// letter or apostrophe
 bool
-NextWord(const std::string& s, size_t& at, size_t& length, int64_t& characters)
+NextWord(const std::string& s, size_t& at, size_t& length, int64_t& characters,
+	bool* digits = nullptr)
 {
 	while (at < s.size() && !IsLetter(s, at) && !IsDigit(s, at)) {
 		at += CharLength(s, at);
@@ -78,6 +80,8 @@ NextWord(const std::string& s, size_t& at, size_t& length, int64_t& characters)
 	size_t start = at, q = at;
 	int letters = 0;
 	bool dotted = false;
+	if (digits != nullptr)
+		*digits = true;
 	while (q < s.size()) {
 		char c = s[q];
 		if (c == '-' || c == '.') {
@@ -88,6 +92,8 @@ NextWord(const std::string& s, size_t& at, size_t& length, int64_t& characters)
 			dotted = dotted || c == '.';
 		} else if (!WordChar(s, q))
 			break;
+		else if (digits != nullptr && !IsDigit(s, q))
+			*digits = false;
 		q += CharLength(s, q);
 		letters++;
 		characters++;
@@ -110,6 +116,15 @@ NextWord(const std::string& s, size_t& at, size_t& length, int64_t& characters)
 }
 
 } // namespace
+
+
+bool
+NextWordInBlock(const std::string& text, size_t& at, size_t& length, bool& digits)
+{
+	int64_t characters = 0;
+	digits = false;
+	return NextWord(text, at, length, characters, &digits);
+}
 
 
 void

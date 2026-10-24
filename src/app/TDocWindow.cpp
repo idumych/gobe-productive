@@ -39,6 +39,7 @@
 #include "TFormatBar.h"
 #include "TPageBar.h"
 #include "TPartBar.h"
+#include "TSpellBar.h"
 #include "TWPRuler.h"
 #include "Styles.h"
 
@@ -788,6 +789,10 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		if (TPageView::CanShow(*document)) {
 			TPageView* pages = new TPageView(*document);
 			fPages = pages;
+			// the SpellBar (TNormalDocWinHelper: hidden until wanted)
+			fSpellBar = new TSpellBar(pages);
+			fSpellBar->Hide();
+			pages->fSpellBar = fSpellBar;
 			TDocScrollView* scroll = new TDocScrollView(pages);
 			fScaleSlider = scroll->Scale();
 			pages->fPageBar = scroll->Pages();
@@ -852,6 +857,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		layout.Add(fFormatBar);
 	if (fPartBar != NULL)
 		layout.Add(fPartBar);
+	if (fSpellBar != NULL)
+		layout.Add(fSpellBar);
 	if (fRuler != NULL)
 		layout.Add(fRuler);
 	layout
@@ -1504,6 +1511,13 @@ TDocWindow::MessageReceived(BMessage* message)
 		return;
 	}
 
+	// Document > Spell Check (TSpellBarHandler)
+	if (message->what >= 'sMC0' && message->what <= 'sMC5') {
+		if (fSpellBar != NULL)
+			fSpellBar->HandleCommand(message);
+		return;
+	}
+
 	// the commands of the parts' menus (text, cells): the page view's
 	// (menus send them to the window)
 	if (fPages != NULL && TPageView::HandlesCommand(message->what)) {
@@ -1868,6 +1882,29 @@ TDocWindow::MenusBeginning()
 		item->SetEnabled(paged);
 		item->SetMarked(paged && fPages->PageView());
 	}
+	// TNormalDocWinHelper::FixMenus: Hide or Show SpellBar (STR# 1); Skip,
+	// Learn and Replace as the bar's buttons; (Spell Dictionaries… isn't
+	// ported)
+	if (BMenuItem* item = KeyMenuBar()->FindItem('sMC5')) {
+		bool shown = fSpellBar != NULL && !fSpellBar->IsHidden(fSpellBar);
+		item->SetLabel(GobeResources::IndexString(1, shown ? 0 : 1).String());
+		item->SetEnabled(fSpellBar != NULL);
+	}
+	for (uint32 command = 'sMC0'; command <= 'sMC4'; command++) {
+		BMenuItem* item = KeyMenuBar()->FindItem(command);
+		if (item == NULL)
+			continue;
+		bool on = fSpellBar != NULL;
+		if (on && command == 'sMC2')
+			on = fSpellBar->SkipEnabled();
+		else if (on && command == 'sMC3')
+			on = fSpellBar->LearnEnabled();
+		else if (on && command == 'sMC4')
+			on = fSpellBar->ReplaceEnabled();
+		item->SetEnabled(on);
+	}
+	if (BMenuItem* item = KeyMenuBar()->FindItem('sMC6'))
+		item->SetEnabled(false);
 	// (New Window: a second window on a document isn't ported)
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMF0'))
 		item->SetEnabled(false);

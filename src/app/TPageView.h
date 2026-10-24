@@ -102,6 +102,7 @@ public:
 	class TRibbon* fPartBar = NULL;
 	class TRibbon* fFormatBar = NULL;
 	class TPageBar* fPageBar = NULL;
+	class TRibbon* fSpellBar = NULL;
 	// TDocWindow (TPageBar::SetPageNumbers): the pages in view, from 1
 	// (-1 for none)
 	void VisiblePages(int32& first, int32& last) const;
@@ -115,6 +116,15 @@ public:
 	// job's PrintableRect on the paper), in view coordinates
 	BRect PageArea(int32 index, BRect printable) const;
 	bool TextSelection(TextPosition& from, TextPosition& to) const;
+	// TWPTextIterator::SelectText (TTextAccessor: and
+	// TDocWindow::ScrollActiveOntoScreen): [from, to) of a paragraph of
+	// text part `part` selected, in view
+	void SelectText(size_t part, TextPosition from, size_t to);
+	// TWPTextIterator::ReplaceText (TWPReplaceTextCmd "Replace Text"):
+	// [from, to) replaced by `text`, which is selected
+	void ReplaceText(size_t part, TextPosition from, size_t to, const std::string& text);
+	// the caret's line scrolled into view
+	void ScrollCaretIntoView();
 	Caret fCaret;
 	Caret fAnchor;
 	UndoStack fUndo;

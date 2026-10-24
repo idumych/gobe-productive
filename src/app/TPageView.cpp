@@ -1916,6 +1916,8 @@ TPageView::Draw(BRect updateRect)
 		fPartBar->Update();
 	if (fFormatBar != NULL && !IsPrinting())
 		fFormatBar->Update();
+	if (fSpellBar != NULL && !IsPrinting())
+		fSpellBar->Update();
 	if (fPageBar != NULL && !IsPrinting()) {
 		int32 first, last;
 		VisiblePages(first, last);

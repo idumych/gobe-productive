@@ -8,6 +8,7 @@
 #include "TPageView.h"
 #include "TFormatBar.h"
 #include "TPartBar.h"
+#include "TSpellBar.h"
 #include "TWPRuler.h"
 
 #include <Alert.h>
@@ -388,6 +389,65 @@ TPageView::DrawCaret()
 	SetHighColor(0, 0, 0);
 	SetPenSize(1);
 	StrokeLine(BPoint(x, line.baseline - size * 0.95f), BPoint(x, line.baseline + size * 0.25f));
+}
+
+
+void
+TPageView::SelectText(size_t part, TextPosition from, size_t to)
+{
+	fAnchor = {true, part, from.paragraph, from.offset};
+	fCaret = {true, part, from.paragraph, to};
+	fUndo.Break();
+	Invalidate();
+	UpdateMarks();
+	ScrollCaretIntoView();
+}
+
+
+void
+TPageView::ReplaceText(size_t part, TextPosition from, size_t to, const std::string& text)
+{
+	WPPart* wp = fDocument.EditableWordPart(part);
+	if (wp == NULL)
+		return;
+	fUndo.Begin(fDocument, part, "Replace Text", CurrentViewState());
+	// (a word holds no anchor DeleteRange would refuse)
+	TextPosition at;
+	if (!DeleteRange(*wp, from, {from.paragraph, to}, at))
+		return;
+	InsertText(*wp, at, text);
+	fUndo.Break();
+	fAnchor = {true, part, at.paragraph, at.offset};
+	fCaret = {true, part, at.paragraph, at.offset + text.size()};
+	TextChanged();
+	ScrollCaretIntoView();
+}
+
+
+void
+TPageView::ScrollCaretIntoView()
+{
+	if (fLines.empty())
+		LayoutText();
+	size_t index;
+	float x;
+	if (!CaretLine(fCaret, index, x))
+		return;
+	BRect line = fLines[index].frame;
+	line.left = line.right = x;
+	line = BRect(line.left * fZoom, line.top * fZoom, line.right * fZoom, line.bottom * fZoom);
+	BRect bounds = Bounds();
+	float dx = 0, dy = 0;
+	if (line.top < bounds.top)
+		dy = line.top - bounds.top - 20;
+	else if (line.bottom > bounds.bottom)
+		dy = line.bottom - bounds.bottom + 20;
+	if (line.left < bounds.left)
+		dx = line.left - bounds.left - 20;
+	else if (line.right > bounds.right)
+		dx = line.right - bounds.right + 20;
+	if (dx != 0 || dy != 0)
+		ScrollBy(dx, dy);
 }
 
 
@@ -1947,6 +2007,9 @@ TPageView::MessageReceived(BMessage* message)
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
 // "formatbar show|color N|style NAME" — the format bar (TFormatBar).
+// "spell top|cursor|skip|learn|replace|toggle|check|choose N|show" — the
+// SpellBar (Spell Check's commands 'sMC0'..'sMC5', "check" the PartBar's
+// button; "show" prints it and the selection).
 void
 TPageView::RunScript(const std::string& script, Document& document)
 {
@@ -1974,6 +2037,38 @@ TPageView::RunScript(const std::string& script, Document& document)
 					bar->ChooseColor(atoi(what.c_str() + 6));
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
+			}
+		} else if (command.compare(0, 6, "spell ") == 0) {
+			TSpellBar* bar = dynamic_cast<TSpellBar*>(fSpellBar);
+			std::string what = command.substr(6);
+			static const char* const kCommands[] = {"top", "cursor", "skip", "learn", "replace",
+				"toggle", "check"};
+			for (int32 i = 0; bar != NULL && i < 7; i++) {
+				if (what != kCommands[i])
+					continue;
+				BMessage message('sMC0' + uint32(std::min<int32>(i, 5)));
+				if (i == 6)
+					message.AddBool("dospell", true);
+				bar->HandleCommand(&message);
+			}
+			if (bar != NULL && what.compare(0, 7, "choose ") == 0)
+				bar->ChooseReplacement(atoi(what.c_str() + 7));
+			if (bar != NULL && what == "show") {
+				bar->Update();
+				std::string replacements;
+				for (const std::string& r : bar->Replacements())
+					replacements += (replacements.empty() ? "" : "|") + r;
+				TextPosition from, to;
+				std::string selected;
+				const WPPart* wp = document.WordPart(fCaret.part);
+				if (wp != NULL && TextSelection(from, to))
+					selected = RangeText(*wp, from, to);
+				printf("spell %s status \"%s\" skip %d learn %d replace %d menu \"%s\" "
+					"selection %zu %zu %zu \"%s\"\n", bar->IsHidden(bar) ? "hidden" : "shown",
+					bar->Status().String(), bar->SkipEnabled(), bar->LearnEnabled(),
+					bar->ReplaceEnabled(), replacements.c_str(), fCaret.part, fCaret.paragraph,
+					fCaret.offset, selected.c_str());
+				fflush(stdout);
 			}
 		} else if (command.compare(0, 8, "partbar ") == 0) {
 			// "partbar ABCD": the part bar's element 'ABCD' clicked;

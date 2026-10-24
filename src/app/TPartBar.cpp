@@ -243,8 +243,6 @@ TPartBar::Build(bool text, uint16 kind)
 	spell->AddBool("dospell", true);
 	button = new TMICNButtonElement('SPCK', r.LeftTop(), 0x4ba, spell);
 	button->tip = tip(18);
-	// (spell checking isn't ported)
-	button->enabled = false;
 	AddElement(button);
 	r.OffsetBy(22, 0);
 	button = new TMICNButtonElement('INVS', r.LeftTop(), 0x4b9, new BMessage('sM5J'));

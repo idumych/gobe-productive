@@ -129,6 +129,8 @@ public:
 	// back to the file; false if writing failed
 	bool Add(const std::string& word, char action = 'i', const std::string& replacement = "");
 	bool Delete(const std::string& word);
+	// SSCE_ClearLex: no words (written back)
+	bool Clear();
 	// the file's text as FUN_002cfd1c writes it
 	std::string Text() const;
 
