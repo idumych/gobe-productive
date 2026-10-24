@@ -33,6 +33,7 @@
 #include "TDialogSplash.h"
 #include "TRecentDocs.h"
 #include "TTranslate.h"
+#include "TWindowArrange.h"
 
 namespace gobe {
 
@@ -203,6 +204,25 @@ public:
 
 	virtual void MessageReceived(BMessage* message)
 	{
+		switch (message->what) {
+			// the Window menu (TDocWindow::MessageReceived; TILE with no
+			// "horizontal" is the grid)
+			case 'sMF9':
+				CascadeWindows();
+				return;
+			case 'TILE':
+				TileWindows(false, false);
+				return;
+			case 'sMFB':
+				TileWindows(true, false);
+				return;
+			case 'sMFC':
+				TileWindows(false, true);
+				return;
+			case 'sMFE':
+				RotateWindows();
+				return;
+		}
 		if (message->what == 's001') {	// File > New…: the dialog, then the kind
 			int32 kind;
 			if (message->FindInt32("kind", &kind) != B_OK) {

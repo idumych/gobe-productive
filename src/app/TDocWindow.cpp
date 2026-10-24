@@ -1097,6 +1097,24 @@ TDocWindow::MessageReceived(BMessage* message)
 				UpdateTitle();
 			}
 			return;
+		// Window: the arrangements are the application's
+		case 'sMF9':
+		case 'TILE':
+		case 'sMFB':
+		case 'sMFC':
+		case 'sMFE':
+			be_app->PostMessage(message);
+			return;
+		// Window > Hide/Show PartBar: the part bar and the active part's
+		// ribbon (the ruler; the part bar isn't ported yet)
+		case 'sMF6':
+			if (fRuler != NULL) {
+				if (fRuler->IsHidden())
+					fRuler->Show();
+				else
+					fRuler->Hide();
+			}
+			return;
 		case 's00L':
 		{
 			// the ruler's unit menu, Set Ruler Divisions (TLeafSheet::
@@ -1753,6 +1771,31 @@ TDocWindow::MenusBeginning()
 		item->SetLabel(label.String());
 		item->SetEnabled(can);
 	}
+	// TNormalDocWinHelper::FixMenus: the Window menu's ribbons, Hide or
+	// Show (STR# 1); those not ported are off
+	static const struct {
+		uint32 command;
+		int32 string;
+	} kRibbons[] = {
+		{'sMF4', 2}, {'sMF6', 4}, {'sMF7', 6}, {'sMF8', 8}, {'sMF3', 10}, {'sMFD', 12}
+	};
+	for (const auto& ribbon : kRibbons) {
+		BMenuItem* item = KeyMenuBar()->FindItem(ribbon.command);
+		if (item == NULL)
+			continue;
+		bool shown = ribbon.command == 'sMF6' && fRuler != NULL && !fRuler->IsHidden();
+		item->SetLabel(GobeResources::IndexString(1, ribbon.string + (shown ? 0 : 1)).String());
+		item->SetEnabled(ribbon.command == 'sMF6' && fRuler != NULL);
+	}
+	if (BMenuItem* item = KeyMenuBar()->FindItem('sMFE')) {
+		int32 windows = 0;
+		for (int32 i = 0; BWindow* window = be_app->WindowAt(i); i++)
+			windows += dynamic_cast<TDocWindow*>(window) != NULL;
+		item->SetEnabled(windows > 1);
+	}
+	// (New Window: a second window on a document isn't ported)
+	if (BMenuItem* item = KeyMenuBar()->FindItem('sMF0'))
+		item->SetEnabled(false);
 	// TWPPart::SetupMenus: Show Invisibles or Hide Invisibles (STR# 1302)
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sM5J'))
 		item->SetLabel(GobeResources::IndexString(0x516,
