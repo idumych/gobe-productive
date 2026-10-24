@@ -26,6 +26,8 @@ public:
 	// let go over it (TRibbonElement::MouseDown returned true)
 	virtual void Invoke(TRibbon* ribbon) {}
 	virtual bool Clickable() const { return false; }
+	// pressed: true if the element handled it (a menu popped up)
+	virtual bool MouseDown(TRibbon* ribbon, BPoint where) { return false; }
 
 	uint32 id;
 	BRect rect;

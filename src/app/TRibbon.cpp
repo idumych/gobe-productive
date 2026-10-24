@@ -325,7 +325,9 @@ void
 TRibbon::MouseDown(BPoint where)
 {
 	TRibbonElement* element = FindElement(where);
-	if (element == NULL || !element->enabled || !element->Clickable())
+	if (element == NULL || !element->enabled)
+		return;
+	if (element->MouseDown(this, where) || !element->Clickable())
 		return;
 	fPressed = element;
 	fPressedDown = true;

@@ -6,6 +6,7 @@
 // the range; copy/cut/paste/clear/selectall work on ranges using
 // RangeInput/ClearRange/PasteInput from Editing.h.
 #include "TPageView.h"
+#include "TFormatBar.h"
 #include "TPartBar.h"
 #include "TWPRuler.h"
 
@@ -1508,6 +1509,60 @@ TPageView::MessageReceived(BMessage* message)
 			TextChanged();
 			return;
 		}
+		// the format bar's text ink, a color ('sf02', TFormatCommand::
+		// ParsePropertyMesg: TPropTextColor of the ink chosen; "color" for a
+		// solid one)
+		case 'sf02': {
+			const void* data;
+			ssize_t size;
+			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL
+					|| message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) != B_OK
+					|| size < 4) {
+				beep();
+				return;
+			}
+			const rgb_color* c = (const rgb_color*)data;
+			Color color;
+			color.r = c->red;
+			color.g = c->green;
+			color.b = c->blue;
+			color.a = 255;
+			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(5, 5).String())
+				+ GobeResources::IndexString(11, 0).String(), CurrentViewState());
+			auto sel = TextSelectionRange();
+			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
+				TextColorProperty(color));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
+		// the format bar's Styles, a paragraph style ('sf0L' with "Style
+		// Name": TWPApplyStyleCmd, "Apply Style - " and the name)
+		case 'sf0L': {
+			const char* name = NULL;
+			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL
+					|| message->FindString(kStyleNameStr, &name) != B_OK || name == NULL) {
+				beep();
+				return;
+			}
+			uint32_t named = UINT32_MAX;
+			for (size_t i = 0; i < fDocument.styles.styles.size(); i++)
+				if (fDocument.styles.styles[i].name == name
+						&& fDocument.styles.styles[i].value10 == Sig("Para"))
+					named = uint32_t(i);
+			if (named == UINT32_MAX) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(3, 0).String())
+				+ name, CurrentViewState());
+			auto range = TextSelectionRange();
+			if (ApplyParagraphStyle(fDocument, fCaret.part, range.first.paragraph,
+					range.second.paragraph, named))
+				TextChanged();
+			UpdateMarks();
+			return;
+		}
 		// Alignment menu (MENU 300, value message 300): 0 left, 1 center,
 		// 2 right, 3 justify; TextStyle has 1 right, 2 center
 		case 300: {
@@ -1847,6 +1902,7 @@ TPageView::MessageReceived(BMessage* message)
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
+// "formatbar show|color N|style NAME" — the format bar (TFormatBar).
 void
 TPageView::RunScript(const std::string& script, Document& document)
 {
@@ -1859,7 +1915,23 @@ TPageView::RunScript(const std::string& script, Document& document)
 		start = end + 1;
 		while (!command.empty() && command[0] == ' ')
 			command.erase(0, 1);
-		if (command.compare(0, 8, "partbar ") == 0) {
+		if (command.compare(0, 10, "formatbar ") == 0) {
+			// "formatbar show": the labels and the text ink shown;
+			// "formatbar color N", "formatbar style NAME": chosen
+			if (TFormatBar* bar = dynamic_cast<TFormatBar*>(fFormatBar)) {
+				bar->Update();
+				std::string what = command.substr(10);
+				if (what == "show") {
+					printf("formatbar font \"%s\" size \"%s\" style \"%s\" ink %s\n",
+						bar->Shown("font").c_str(), bar->Shown("size").c_str(),
+						bar->Shown("style").c_str(), bar->Shown("ink").c_str());
+					fflush(stdout);
+				} else if (what.compare(0, 6, "color ") == 0)
+					bar->ChooseColor(atoi(what.c_str() + 6));
+				else if (what.compare(0, 6, "style ") == 0)
+					bar->ChooseStyle(what.c_str() + 6);
+			}
+		} else if (command.compare(0, 8, "partbar ") == 0) {
 			// "partbar ABCD": the part bar's element 'ABCD' clicked;
 			// "partbar spacing text": the line spacing typed
 			if (TPartBar* bar = dynamic_cast<TPartBar*>(fPartBar)) {
@@ -2962,6 +3034,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM5I': case 'sM5J': case 'sM5K':
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
+		case 'sf02': case 'sf0L':											// format bar
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells
 			return true;

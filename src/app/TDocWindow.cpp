@@ -36,6 +36,7 @@
 #include "TDocView.h"
 #include "TPageView.h"
 #include "TTranslate.h"
+#include "TFormatBar.h"
 #include "TPartBar.h"
 #include "TWPRuler.h"
 #include "Styles.h"
@@ -792,6 +793,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			for (const auto& part : document->parts.parts)
 				text = text || part.kind == Sig("WORD");
 			if (text) {
+				fFormatBar = new TFormatBar(pages);
+				pages->fFormatBar = fFormatBar;
 				fPartBar = new TPartBar(pages);
 				pages->fPartBar = fPartBar;
 				fRuler = new TWPRuler(pages);
@@ -814,6 +817,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 
 	BLayoutBuilder::Group<> layout(this, B_VERTICAL, 0);
 	layout.Add(menuBar);
+	if (fFormatBar != NULL)
+		layout.Add(fFormatBar);
 	if (fPartBar != NULL)
 		layout.Add(fPartBar);
 	if (fRuler != NULL)
@@ -922,13 +927,6 @@ TDocWindow::InstallBaseMenus()
 	// the text part's Format menu (MENU 51)
 	bar->AddItem(new TMenu(51));
 
-	// Text menus (from the original's TTextMenuElement):
-	// Font (dynamic), Size (MENU 101), Face (MENU 102)
-	bar->AddItem(MakeFontMenu());
-	fSizeMenu = new TMenu(101);
-	bar->AddItem(fSizeMenu);
-	fFaceMenu = new TMenu(102);
-	bar->AddItem(fFaceMenu);
 
 	// the Spreadsheet part's Format menu (MENU 52 of Parts/Spreadsheet)
 	// and Options menu (MENU 53), with the items that work so far
@@ -1107,6 +1105,15 @@ TDocWindow::MessageReceived(BMessage* message)
 		case 'sMFC':
 		case 'sMFE':
 			be_app->PostMessage(message);
+			return;
+		// Window > Hide/Show FormatBar
+		case 'sMF4':
+			if (fFormatBar != NULL) {
+				if (fFormatBar->IsHidden())
+					fFormatBar->Show();
+				else
+					fFormatBar->Hide();
+			}
 			return;
 		// Window > Hide/Show PartBar: the part bar and the active part's
 		// ribbon (the ruler)
@@ -1791,9 +1798,11 @@ TDocWindow::MenusBeginning()
 		BMenuItem* item = KeyMenuBar()->FindItem(ribbon.command);
 		if (item == NULL)
 			continue;
-		bool shown = ribbon.command == 'sMF6' && fPartBar != NULL && !fPartBar->IsHidden();
+		BView* bar = ribbon.command == 'sMF6' ? (BView*)fPartBar
+			: ribbon.command == 'sMF4' ? (BView*)fFormatBar : NULL;
+		bool shown = bar != NULL && !bar->IsHidden();
 		item->SetLabel(GobeResources::IndexString(1, ribbon.string + (shown ? 0 : 1)).String());
-		item->SetEnabled(ribbon.command == 'sMF6' && fPartBar != NULL);
+		item->SetEnabled(bar != NULL);
 	}
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMFE')) {
 		int32 windows = 0;

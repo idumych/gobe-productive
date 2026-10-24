@@ -1274,6 +1274,63 @@ ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 }
 
 
+// the style like `base` (its properties) with `parent` as its parent: an
+// identical existing unnamed style or a new one
+static uint32_t
+StyleWithParent(StyleMgr& styles, uint32_t base, uint32_t parent)
+{
+	if (base >= styles.styles.size() || parent >= styles.styles.size() || base == parent)
+		return base;
+	Style style = styles.styles[base];
+	if (!style.name.empty()) {
+		// TStyleID::BeginModify of a named style: an unnamed child of it
+		style.name.clear();
+		style.value8 = 32;
+		style.props.clear();
+	}
+	style.links[0] = parent;
+	style.props2 = UnionSet(styles, style);
+	style.substyles.clear();
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (SameStyle(styles.styles[i], style))
+			return uint32_t(i);
+	style.value4 = 1;
+	Retain(styles, style.links[0]);
+	styles.styles.push_back(style);
+	return uint32_t(styles.styles.size() - 1);
+}
+
+
+bool
+ApplyParagraphStyle(Document& doc, size_t part, size_t first, size_t last, uint32_t named)
+{
+	WPPart* wp = doc.EditableWordPart(part);
+	if (wp == nullptr || first >= wp->paragraphs.size() || named >= doc.styles.styles.size()
+			|| doc.styles.styles[named].name.empty())
+		return false;
+	if (last < first)
+		std::swap(first, last);
+	last = std::min(last, wp->paragraphs.size() - 1);
+	bool changed = false;
+	for (size_t k = first; k <= last; k++) {
+		WPParagraph& p = wp->paragraphs[k];
+		if (p.parStyle < doc.styles.styles.size() && doc.styles.styles[p.parStyle].links[0] == named
+				&& doc.styles.styles[p.parStyle].name.empty())
+			continue;
+		uint32_t style = StyleWithParent(doc.styles, p.parStyle, named);
+		if (style != p.parStyle) {
+			Retain(doc.styles, style);
+			Release(doc.styles, p.parStyle);
+			p.parStyle = style;
+			changed = true;
+		}
+	}
+	if (changed)
+		doc.stylesChanged = true;
+	return changed;
+}
+
+
 bool
 RemoveParagraphTab(Document& doc, size_t part, size_t first, size_t last, float position)
 {

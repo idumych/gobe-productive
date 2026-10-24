@@ -79,12 +79,17 @@ Works:
   fields), Footnote and endnote (with Footnote Options), Separator Line,
   Line/Frame/Page Break; Writing Tools > Word Count; the text ruler
   (indents and tab stops dragged, added, removed, Edit Tab, the ruler's
-  unit and divisions).
+  unit and divisions); the FormatBar (font, size, face, text color from the
+  Standard color set, paragraph styles) and the PartBar (alignment, line
+  spacing, columns, invisibles); Window > Cascade, Tile, Cycle, Hide/Show
+  FormatBar and PartBar.
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
 - Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
   charts (2D), images, tables, clocks and presentations (slides).
 
-Not yet: the format bar and the other ribbons, spell checking, the thesaurus and dictionary,
+Not yet: the ToolBar and the other ribbons; in the FormatBar the pattern
+and gradient inks, fill, pen and transparency, character styles, New/Edit
+Styles and named selections; spell checking, the thesaurus and dictionary,
 Page View off (browse layout), zoom, Views & Layers, Preferences, Window
 menu commands, frames (creating, linking, autogrow), drawing tools,
 spreadsheet menus beyond a few, new documents of other kinds, and the HTML,

@@ -150,6 +150,14 @@ bool ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextP
 // for paragraphs first..last.
 bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 	const Property& property);
+// Format bar > Styles, a paragraph style (TWPApplyStyleCmd, TParFormatter,
+// TApplyStyleCommand::ChangeStyle: TStyleID::SetParentStyle): paragraphs
+// first..last get styles based on the named style `named`, keeping their
+// own properties (an unnamed copy of theirs with `named` as parent, or an
+// unnamed child of `named` for a paragraph in a named style). False if
+// nothing changed.
+bool ApplyParagraphStyle(Document& doc, size_t part, size_t first, size_t last,
+	uint32_t named);
 // Removes the paragraphs' own tab stop at `position` (the PTab property of
 // their unnamed style); tabs of named styles stay. False if nothing changed.
 bool RemoveParagraphTab(Document& doc, size_t part, size_t first, size_t last,

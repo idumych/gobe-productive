@@ -1764,6 +1764,8 @@ TPageView::Draw(BRect updateRect)
 		fRuler->Update();
 	if (fPartBar != NULL && !IsPrinting())
 		fPartBar->Update();
+	if (fFormatBar != NULL && !IsPrinting())
+		fFormatBar->Update();
 }
 
 

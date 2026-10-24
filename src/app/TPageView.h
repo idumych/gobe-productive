@@ -94,6 +94,7 @@ public:
 	// the window's text ruler (updated as the view draws), or NULL
 	TWPRuler* fRuler = NULL;
 	class TRibbon* fPartBar = NULL;
+	class TRibbon* fFormatBar = NULL;
 	const Document& Doc() const { return fDocument; }
 	// Show Invisibles: the marks on line `index`
 	void DrawInvisibles(size_t index);
