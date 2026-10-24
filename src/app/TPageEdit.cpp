@@ -2008,6 +2008,63 @@ TPageView::MessageReceived(BMessage* message)
 		// style; else the dialog) and Edit > Clear Style (DoDeleteStyle:
 		// TDeleteStyleCommand, "Delete Style - " and the style, if no style
 		// comes from it, else STR# 6, 43)
+		// Edit Styles' Edit > Copy Style, Cut Style (TStyleManager::
+		// DoCopyStyles: the "Target Style"s and what they come from kept;
+		// cut, then cleared as Clear Style) and Paste Style (DoPasteStyle: a
+		// copied style with a style's name replaces, renames or skips it,
+		// TDialogStyleReplaceRename; TPasteStylesCommand, "Paste Style(s)")
+		case 'sMB3':
+		case 'sMB2':
+		{
+			std::vector<std::string> names;
+			const char* name;
+			for (int32 i = 0; message->FindString("Target Style", i, &name) == B_OK; i++)
+				names.push_back(name);
+			if (names.empty())
+				return;
+			SetStyleClipboard(CopyStyles(fDocument.styles, names));
+			if (message->what == 'sMB3')
+				return;
+			message->what = 'sMB5';
+			MessageReceived(message);
+			return;
+		}
+		case 'sMB4':
+		{
+			std::vector<StyleDefinition> styles = StyleClipboard();
+			if (styles.empty())
+				return;
+			bool replace = message->GetBool("replace", false);
+			std::vector<std::pair<std::string, std::string>> renamed;
+			for (StyleDefinition& style : styles) {
+				if (!(style.flags & kStyleCopied) || replace
+						|| FindNamedStyle(fDocument.styles, style.name) >= fDocument.styles.styles.size())
+					continue;
+				std::string newName;
+				int32 choice = TDialogStyleReplaceRename::Ask(Window(), style.name, newName);
+				if (choice == 1)
+					return;
+				if (choice == 3)
+					style.flags &= ~uint32_t(kStyleCopied);
+				if (choice == 0) {
+					renamed.emplace_back(style.name, newName);
+					style.name = newName;
+				}
+			}
+			// the styles that come from a renamed one follow it -- only
+			// when their base, parent and owner all are it (the original
+			// writes the change back only then)
+			for (const auto& rename : renamed)
+				for (StyleDefinition& style : styles)
+					if (style.base == rename.first && style.parent == rename.first
+							&& style.owner == rename.first)
+						style.base = style.parent = style.owner = rename.second;
+			fUndo.BeginDocument(fDocument, GobeResources::IndexString(3, 11).String(),
+				CurrentViewState());
+			if (PasteStyles(fDocument, styles))
+				TextChanged();
+			return;
+		}
 		case 'sMB7':
 		case 'sMB5': {
 			const char* target = NULL;
@@ -3813,7 +3870,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
 		case 'sf02': case 'sf0L': case 'sMB6':								// format bar
-		case 'sMB5': case 'sMB7':											// Edit Styles
+		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells
 			return true;

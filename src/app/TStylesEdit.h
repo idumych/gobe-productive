@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "DocSections.h"
+#include "StyleEdit.h"
 #include "StyleText.h"
 #include "TDialog.h"
 
@@ -29,6 +30,10 @@ struct StylesSnapshot {
 	std::vector<uint32> types;
 	SelectionStyles selection;
 };
+
+// TApp +0x188: the styles Edit > Copy Style keeps for Paste Style
+void SetStyleClipboard(const std::vector<StyleDefinition>& styles);
+std::vector<StyleDefinition> StyleClipboard();
 
 // TDialogStylesEdit: Available Styles (1, TStyleListView: each kind's
 // named styles under a heading, the selection's marked) and the chosen
@@ -111,6 +116,32 @@ private:
 	std::string fName, fBase;
 	StyleMgr fStyles;
 	std::vector<uint32> fTypes;
+};
+
+// TDialogStyleReplaceRename (DIAL/Item 13): a style pasted has a style's
+// name: Rename (0, with New name, 5: on when it's another name), Cancel
+// (1), Replace (2) or Skip (3).
+class TDialogStyleReplaceRename : public TDialog {
+public:
+	// TDialog::BlockingRun: the button chosen (closed: Cancel), `window`
+	// drawn meanwhile
+	static int32 Ask(BWindow* window, const std::string& name, std::string& newName);
+
+	virtual ~TDialogStyleReplaceRename();
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	TDialogStyleReplaceRename(const std::string& name);
+
+	std::string fName;
+	std::string fNewName;
+	int32 fResult = 1;
+	int32* fResultOut = NULL;
+	std::string* fNewNameOut = NULL;
+	sem_id fDone = -1;
 };
 
 } // namespace gobe

@@ -251,4 +251,107 @@ RemoveStyleProperty(Document& doc, uint32_t style, const Property& property)
 	return true;
 }
 
+
+
+namespace {
+
+void
+ArchiveStyle(const StyleMgr& styles, uint32_t style, std::vector<bool>& archived,
+	const std::vector<bool>& copied, std::vector<StyleDefinition>& out, int depth = 0)
+{
+	if (!Valid(styles, style) || archived[style] || depth > 64)
+		return;
+	const Style& s = styles.styles[style];
+	ArchiveStyle(styles, s.links[0], archived, copied, out, depth + 1);
+	ArchiveStyle(styles, s.links[1], archived, copied, out, depth + 1);
+	StyleDefinition d;
+	d.name = s.name;
+	d.type = s.value10;
+	d.level = s.valueC;
+	d.flags = (s.value8 & ~uint32_t(0x300)) | (copied[style] ? kStyleCopied : 0);
+	auto nameOf = [&](uint32_t link) {
+		return Valid(styles, link) ? styles.styles[link].name : std::string();
+	};
+	d.base = nameOf(s.links[0]);
+	d.parent = nameOf(s.links[1]);
+	d.owner = nameOf(s.links[2]);
+	for (uint32_t p : s.props)
+		if (p < styles.properties.size())
+			d.properties.push_back(styles.properties[p]);
+	out.push_back(d);
+	archived[style] = true;
+}
+
+} // namespace
+
+
+std::vector<StyleDefinition>
+CopyStyles(const StyleMgr& styles, const std::vector<std::string>& names)
+{
+	std::vector<StyleDefinition> out;
+	std::vector<bool> archived(styles.styles.size(), false);
+	std::vector<bool> copied(styles.styles.size(), false);
+	for (const std::string& name : names) {
+		uint32_t style = FindNamedStyle(styles, name);
+		if (!Valid(styles, style))
+			continue;
+		copied[style] = true;
+		ArchiveStyle(styles, style, archived, copied, out);
+	}
+	return out;
+}
+
+
+bool
+PasteStyles(Document& doc, const std::vector<StyleDefinition>& definitions)
+{
+	StyleMgr& styles = doc.styles;
+	std::vector<uint32_t> changed;
+	for (const StyleDefinition& d : definitions) {
+		uint32_t existing = FindNamedStyle(styles, d.name);
+		std::vector<uint32_t> props;
+		for (const Property& p : d.properties)
+			props.push_back(PropertyIndex(styles, p));
+		SortProps(styles, props);
+		if (Valid(styles, existing)) {
+			// TStyleID::SetProperties
+			if (!(d.flags & kStyleCopied) || styles.styles[existing].props == props)
+				continue;
+			styles.styles[existing].props = props;
+			changed.push_back(existing);
+			continue;
+		}
+		// TStyleManager::RestoreStyle, TStyle::Restore: its links by name
+		Style style;
+		style.id = styles.styles.empty() ? 0 : styles.styles[0].id;
+		style.value8 = d.flags & ~uint32_t(0x300);
+		style.valueC = d.level;
+		style.value10 = d.type;
+		style.name = d.name;
+		bool found = true;
+		const std::string* names[3] = {&d.base, &d.parent, &d.owner};
+		for (int i = 0; i < 3; i++) {
+			style.links[i] = kNone;
+			if (names[i]->empty())
+				continue;
+			style.links[i] = FindNamedStyle(styles, *names[i]);
+			found = found && Valid(styles, style.links[i]);
+		}
+		if (!found)
+			continue;
+		style.props = props;
+		style.props2 = StyleUnionSet(styles, style);
+		style.value4 = 1;
+		for (uint32_t link : style.links)
+			Retain(styles, link);
+		styles.styles.push_back(style);
+		changed.push_back(uint32_t(styles.styles.size() - 1));
+	}
+	for (uint32_t style : changed)
+		UpdateDependents(styles, style);
+	if (!changed.empty())
+		doc.stylesChanged = true;
+	return !changed.empty();
+}
+
 } // namespace gobe

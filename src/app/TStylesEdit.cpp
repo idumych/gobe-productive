@@ -11,6 +11,7 @@
 #include <MenuItem.h>
 #include <OutlineListView.h>
 #include <ScrollView.h>
+#include <TextControl.h>
 
 #include <algorithm>
 #include <cstdio>
@@ -35,6 +36,8 @@ TDialogStylesEdit* sOpen = NULL;
 BLocker sEditingLock("edit style");
 const Document* sEditingDocument = NULL;
 std::string sEditingName;
+
+std::vector<StyleDefinition> sClipboard;
 
 const uint32 kChooseRow = 'Gsrw';
 const uint32 kDump = 'Gsdp';
@@ -189,6 +192,22 @@ SetSmallFont(BView* view)
 }
 
 } // namespace
+
+
+void
+SetStyleClipboard(const std::vector<StyleDefinition>& styles)
+{
+	BAutolock lock(sEditingLock);
+	sClipboard = styles;
+}
+
+
+std::vector<StyleDefinition>
+StyleClipboard()
+{
+	BAutolock lock(sEditingLock);
+	return sClipboard;
+}
 
 
 TDialogStylesEdit::TDialogStylesEdit(const char* name)
@@ -397,11 +416,11 @@ TDialogStylesEdit::MenusBeginning()
 			if (BMenuItem* item = menu->FindItem(command))
 				item->SetEnabled(on);
 	};
-	// (Cut, Copy, Paste, Import and Export Styles aren't ported yet)
 	enable(fEdit, 'sMB5', chosen && !locked);
-	enable(fEdit, 'sMB2', false);
-	enable(fEdit, 'sMB3', false);
-	enable(fEdit, 'sMB4', false);
+	enable(fEdit, 'sMB2', chosen && !locked);
+	enable(fEdit, 'sMB3', chosen);
+	enable(fEdit, 'sMB4', !StyleClipboard().empty());
+	// (Import and Export Styles aren't ported yet)
 	enable(fFile, 'sMB0', false);
 	enable(fFile, 'sMB1', false);
 	enable(fStyle, 'sMB7', chosen && !locked);
@@ -729,6 +748,80 @@ TDialogStyleModify::ItemHit(int32 index, BMessage* message)
 		}
 	}
 	return TDialog::ItemHit(index, message);
+}
+
+
+
+// #pragma mark - TDialogStyleReplaceRename
+
+
+TDialogStyleReplaceRename::TDialogStyleReplaceRename(const std::string& name)
+	:
+	TDialog(13, 13, 'APPL', NULL),
+	fName(name)
+{
+}
+
+
+TDialogStyleReplaceRename::~TDialogStyleReplaceRename()
+{
+	if (fResultOut != NULL)
+		*fResultOut = fResult;
+	if (fNewNameOut != NULL)
+		*fNewNameOut = fNewName;
+	if (fDone >= 0)
+		release_sem(fDone);
+}
+
+
+int32
+TDialogStyleReplaceRename::Ask(BWindow* window, const std::string& name, std::string& newName)
+{
+	int32 result = 1;
+	sem_id done = create_sem(0, "replace or rename");
+	TDialogStyleReplaceRename* dialog = new TDialogStyleReplaceRename(name);
+	dialog->fResultOut = &result;
+	dialog->fNewNameOut = &newName;
+	dialog->fDone = done;
+	dialog->RunDialog();
+	while (acquire_sem_etc(done, 1, B_RELATIVE_TIMEOUT, 50000) == B_TIMED_OUT)
+		if (window != NULL)
+			window->UpdateIfNeeded();
+	delete_sem(done);
+	return result;
+}
+
+
+// TDialogStyleReplaceRename::Init: New name the style's, each change
+// reported; Rename off
+void
+TDialogStyleReplaceRename::Init()
+{
+	SetTextItem(5, fName.c_str());
+	if (BTextControl* edit = dynamic_cast<BTextControl*>(Item(5))) {
+		BMessage* modified = new BMessage(*edit->Message());
+		edit->SetModificationMessage(modified);
+	}
+	MakeFocusItem(5);
+	SetItemEnabled(0, false);
+}
+
+
+bool
+TDialogStyleReplaceRename::ItemHit(int32 index, BMessage* message)
+{
+	if (index < 4) {
+		fResult = index;
+		if (index == 0)
+			fNewName = TextItem(5).String();
+		PostMessage(B_QUIT_REQUESTED);
+		return true;
+	}
+	if (index == 5) {
+		std::string name = TextItem(5).String();
+		SetItemEnabled(0, !name.empty() && name != fName);
+	}
+	return true;
 }
 
 } // namespace gobe

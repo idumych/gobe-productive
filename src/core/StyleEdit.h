@@ -7,6 +7,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "DocSections.h"
 
@@ -51,6 +52,28 @@ bool SetStyleProperty(Document& doc, uint32_t style, const Property& property);
 // the style's own properties that `property` replaces taken off (a tab at
 // its position), its dependents updated. False if it had none.
 bool RemoveStyleProperty(Document& doc, uint32_t style, const Property& property);
+
+// TStyle::Archive: what Edit > Copy Style keeps of a style, its links by
+// name
+struct StyleDefinition {
+	std::string name;
+	uint32_t type = 0;
+	uint16_t level = 0;
+	uint32_t flags = 0;			// kStyleCopied: one of the styles copied
+	std::string base, parent, owner;
+	std::vector<Property> properties;
+};
+enum {
+	kStyleCopied = 0x100
+};
+// TStyleManager::DoCopyStyles, ArchiveStyle: the named styles `names`,
+// each after the styles it comes from (its links 0 and 1), each style once
+std::vector<StyleDefinition> CopyStyles(const StyleMgr& styles,
+	const std::vector<std::string>& names);
+// TPasteStylesCommand::Perform: a definition whose name no style has a new
+// style (not if a style it names isn't there); a copied one whose name a
+// style has: that style's properties replaced. False if nothing changed.
+bool PasteStyles(Document& doc, const std::vector<StyleDefinition>& definitions);
 
 } // namespace gobe
 

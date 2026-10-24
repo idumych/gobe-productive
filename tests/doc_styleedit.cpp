@@ -4,6 +4,7 @@
 // in "Body" reaching what comes from it.
 #include <cstdio>
 #include <string>
+#include <vector>
 
 #include "Document.h"
 #include "Editing.h"
@@ -120,6 +121,47 @@ main(int argc, char** argv)
 	}
 	if (documents == 0)
 		Check(false, "no documents with Body and WP Default");
+
+	// Copy Style and Paste Style between the first two such documents
+	std::vector<Document> two;
+	for (int i = 1; i < argc && two.size() < 2; i++) {
+		Document doc;
+		std::string error;
+		if (LoadDocument(argv[i], doc, error) && FindNamedStyle(doc.styles, "Body") != kNo
+				&& FindNamedStyle(doc.styles, "WP Default") != kNo)
+			two.push_back(std::move(doc));
+	}
+	if (two.size() == 2) {
+		Document& a = two[0];
+		Document& b = two[1];
+		uint32_t aBody = FindNamedStyle(a.styles, "Body");
+		SetStyleProperty(a, aBody, TextSizeProperty(29));
+		uint32_t mine = NewNamedStyle(a, Sig("Para"), "Mine", aBody, kNoPart);
+		SetStyleProperty(a, mine, AlignmentProperty(2));
+		std::vector<StyleDefinition> copied = CopyStyles(a.styles, {"Mine"});
+		// Mine after what it comes from: Default, WP Default, Body
+		std::string order;
+		for (const StyleDefinition& d : copied)
+			order += d.name + ((d.flags & kStyleCopied) ? "*" : "") + ";";
+		Check(order == "Default;WP Default;Body;Mine*;", "the styles copied: " + order);
+		size_t before = b.styles.styles.size();
+		Check(PasteStyles(b, copied), "pasted");
+		uint32_t pasted = FindNamedStyle(b.styles, "Mine");
+		Check(pasted == before && b.styles.styles.size() == before + 1,
+			"one new style, Mine (B's own Body not replaced)");
+		Check(pasted != kNo && b.styles.styles[pasted].links[0] == FindNamedStyle(b.styles, "Body"),
+			"Mine based on B's Body");
+		Check(pasted != kNo && ResolveTextStyle(b.styles, pasted).alignment == 2,
+			"Mine's own alignment");
+		Check(ResolveTextStyle(b.styles, FindNamedStyle(b.styles, "Body")).size != 29,
+			"B's Body keeps its size");
+		// Body copied itself: B's Body takes its properties
+		Check(PasteStyles(b, CopyStyles(a.styles, {"Body"})), "Body pasted");
+		Check(ResolveTextStyle(b.styles, FindNamedStyle(b.styles, "Body")).size == 29,
+			"B's Body has A's size");
+		Check(!PasteStyles(b, CopyStyles(a.styles, {"Body"})), "the same again: no change");
+	} else
+		Check(false, "two documents for Copy and Paste Style");
 	printf(failures ? "%d failures\n" : "doc_styleedit: documents %d, ok %d\n",
 		failures ? failures : documents, checks);
 	return failures != 0;
