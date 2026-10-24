@@ -123,6 +123,9 @@ private:
 	};
 	void RebuildFrames();
 	bool Paginate(const LayoutResult& main);
+	// styles resolved during a layout (LayoutText starts afresh)
+	const std::pair<TextStyle, BFont>& CachedStyle(uint32_t style);
+	std::map<uint32_t, std::pair<TextStyle, BFont>> fStyleCache;
 	// footnote and endnote parts (laid out under their references' lines,
 	// not as frames of their own)
 	std::set<size_t> fNoteParts;

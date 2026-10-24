@@ -219,6 +219,8 @@ TPageView::LayoutText()
 {
 	bool paginated = false;
 	LayoutResult main;
+	// the styles may have changed since the last layout
+	fStyleCache.clear();
 	for (int pass = 0;; pass++) {
 		fLines.clear();
 		fRules.clear();
@@ -359,6 +361,19 @@ TPageView::Paginate(const LayoutResult& main)
 }
 
 
+// a style resolved and its font, kept for one layout
+const std::pair<TextStyle, BFont>&
+TPageView::CachedStyle(uint32_t style)
+{
+	auto known = fStyleCache.find(style);
+	if (known != fStyleCache.end())
+		return known->second;
+	TextStyle resolved = ResolveTextStyle(fDocument.styles, style);
+	BFont font = TDocView::MapFont(resolved);
+	return fStyleCache.emplace(style, std::make_pair(resolved, font)).first->second;
+}
+
+
 // Break characters (TWPPart::IsFrameBreak etc.): 0x02 and 0x05 end the
 // frame (column break), 0x0c ends the page, '\n' ends a paragraph, 0x01 is a
 // line break inside a paragraph.
@@ -459,7 +474,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			result.overflow = true;
 			return result;
 		}
-		TextStyle parStyle = ResolveTextStyle(fDocument.styles, par.parStyle);
+		const TextStyle& parStyle = CachedStyle(par.parStyle).first;
 
 		std::string text = par.text;
 		char terminator = 0;
@@ -470,13 +485,13 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 		}
 
 		std::vector<Token> tokens;
-		BFont lineFont = TDocView::MapFont(parStyle);
+		BFont lineFont = CachedStyle(par.parStyle).second;
 		for (size_t r = 0; r < std::max<size_t>(1, par.runs.size()); r++) {
 			size_t start = par.runs.empty() ? 0 : par.runs[r].position;
 			size_t end = r + 1 < par.runs.size() ? par.runs[r + 1].position : text.size();
-			TextStyle st = par.runs.empty() ? parStyle
-				: ResolveTextStyle(fDocument.styles, par.runs[r].style);
-			BFont font = TDocView::MapFont(st);
+			const auto& cached = CachedStyle(par.runs.empty() ? par.parStyle : par.runs[r].style);
+			const TextStyle& st = cached.first;
+			BFont font = cached.second;
 			if (r == 0)
 				lineFont = font;	// empty lines take the first run's font
 			// superscript (0x40), subscript (0x80): 0.66 of the size
