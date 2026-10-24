@@ -65,6 +65,11 @@ struct Document {
 
 	// editing: parts changed since loading (written by Save)
 	std::set<size_t> dirtyParts;
+	// parts whose frames changed (pages added or removed): their tails are
+	// written anew; for word processing parts in `layoutRanges` the frames'
+	// text ranges are the layout's, not mapped through the edits
+	std::set<size_t> dirtyTails;
+	std::set<size_t> layoutRanges;
 	bool stylesChanged = false;		// the StyleMgr (written by Save)
 	bool selectionsChanged = false;	// spreadsheet selections/names moved
 	WPPart* EditableWordPart(size_t part);
@@ -110,6 +115,22 @@ struct Document {
 
 	// index of the root part (PROT/BROT), or -1
 	int RootPart() const;
+
+	// Pages (Pages.cpp): a paged root shows a PAGE part with one frame per
+	// page (TPagePortal), each listing the frames on it (TPageFrame).
+	int PagePart() const;			// -1 if not paged
+	size_t PageCount() const;
+	// TPagePortal::NewPage: a page after the last, at TPagedRootPart::
+	// GetPaperPosition, with frames like the last page's for the header,
+	// the footer, the sheet's drawing (showing the drawing's next page) and
+	// the text columns (empty). False if the document isn't paged.
+	bool AddPage();
+	// TPagePortal::DeletePage of the last page and its frames; false if
+	// there is only one page.
+	bool RemoveLastPage();
+	// the text range a word processing frame shows (TWPFrame +0x4c, +0x50),
+	// as laid out
+	void SetFrameText(size_t part, size_t frame, uint32_t start, uint32_t length);
 	// the first sheet's main part (what Save As exports), or -1
 	int MainPart() const;
 };

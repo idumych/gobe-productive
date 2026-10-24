@@ -1,5 +1,7 @@
 #include "PartTail.h"
 
+#include "DocWriter.h"
+
 #include <cstring>
 
 namespace gobe {
@@ -46,6 +48,13 @@ ReadFrame(DocArchive& a, uint32_t kind, Frame& f)
 	f.container = a.UInt32();
 	for (uint32_t& v : f.values)
 		v = a.UInt32();
+	size_t subclass = a.Position();
+	struct Raw {
+		DocArchive& a;
+		Frame& f;
+		size_t from;
+		~Raw() { f.raw.assign(a.Data().begin() + from, a.Data().begin() + a.Position()); }
+	} raw{a, f, subclass};
 
 	switch (kind) {
 		case Sig("WORD"):	// TWPFrame
@@ -65,8 +74,13 @@ ReadFrame(DocArchive& a, uint32_t kind, Frame& f)
 		case Sig("PAGE"):	// TPageFrame: the frames placed on this page
 		{
 			uint32_t count = a.UInt32();
-			for (uint32_t i = 0; i < count; i++)
-				ReadFramePtr(a);
+			for (uint32_t i = 0; i < count; i++) {
+				Frame::Pointer p;
+				p.part = a.UInt32();
+				p.portal = a.UInt32();
+				p.frame = a.UInt32();
+				f.children.push_back(p);
+			}
 			break;
 		}
 		case Sig("PROT"):	// TPagedRootFrame
@@ -117,6 +131,13 @@ ReadPortal(DocArchive& a, uint32_t kind, Portal& p)
 		a.CheckSig(Sig("FraM"));
 		p.frames.push_back(f);
 	}
+	size_t subclass = a.Position();
+	struct Raw {
+		DocArchive& a;
+		Portal& p;
+		size_t from;
+		~Raw() { p.raw.assign(a.Data().begin() + from, a.Data().begin() + a.Position()); }
+	} raw{a, p, subclass};
 	switch (kind) {
 		case Sig("WORD"):	// TWPPortal
 			a.Float();
@@ -152,6 +173,7 @@ ReadPortal(DocArchive& a, uint32_t kind, Portal& p)
 void
 ReadTailAt(DocArchive& a, uint32_t kind, PartTail& out)
 {
+	size_t start = a.Position();
 	a.CheckSig(Sig("REFT"));
 	a.UInt32();
 	uint32_t refs = a.UInt32();
@@ -168,6 +190,7 @@ ReadTailAt(DocArchive& a, uint32_t kind, PartTail& out)
 		out.refs.push_back(r);
 	}
 	a.CheckSig(Sig("RefT"));
+	out.refsRaw.assign(a.Data().begin() + start, a.Data().begin() + a.Position());
 	uint32_t portals = a.UInt32();
 	for (uint32_t i = 0; i < portals; i++) {
 		a.CheckSig(Sig("PORT"));
@@ -204,6 +227,61 @@ ReadPartTail(const std::vector<uint8_t>& record, uint32_t kind,
 		}
 	}
 	return false;
+}
+
+std::vector<uint8_t>
+WritePartTail(const PartTail& tail, uint32_t kind)
+{
+	DocWriter w;
+	w.Bytes(tail.refsRaw);
+	w.UInt32(uint32_t(tail.portals.size()));
+	for (const Portal& p : tail.portals) {
+		w.Sig(Sig("PORT"));
+		w.UInt32(p.part);
+		for (uint32_t v : p.values)
+			w.UInt32(v);
+		w.UInt32(uint32_t(p.frames.size()));
+		for (const Frame& f : p.frames) {
+			w.Sig(Sig("FRAM"));
+			w.Float(f.angle);
+			w.Point(f.origin);
+			w.Point(f.extent);
+			w.UInt32(f.style);
+			for (uint32_t v : f.shape)
+				w.UInt32(v);
+			w.UInt32(f.part);
+			w.UInt32(f.container);
+			for (uint32_t v : f.values)
+				w.UInt32(v);
+			std::vector<uint8_t> raw = f.raw;
+			if (kind == Sig("WORD") && raw.size() >= 8) {
+				DocWriter range;
+				range.UInt32(f.textStart);
+				range.UInt32(f.textLength);
+				std::copy(range.Data().begin(), range.Data().end(), raw.begin());
+			} else if (kind == Sig("PAGE")) {
+				DocWriter children;
+				children.UInt32(uint32_t(f.children.size()));
+				for (const Frame::Pointer& c : f.children) {
+					children.UInt32(c.part);
+					children.UInt32(c.portal);
+					children.UInt32(c.frame);
+				}
+				raw = children.Data();
+			} else if ((kind == Sig("GRFX") || kind == Sig("BITS") || kind == Sig("chrt")
+					|| kind == Sig("PRES")) && raw.size() >= 16) {
+				DocWriter rect;
+				rect.Rect(f.sheetRect);
+				std::copy(rect.Data().begin(), rect.Data().end(), raw.begin());
+			}
+			w.Bytes(raw);
+			w.Sig(Sig("FraM"));
+		}
+		w.Bytes(p.raw);
+		w.Sig(Sig("PorT"));
+	}
+	w.Sig(Sig("ParT"));
+	return w.Data();
 }
 
 } // namespace gobe

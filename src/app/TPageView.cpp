@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include <algorithm>
+#include <cstdint>
 
 #include <AffineTransform.h>
 #include <GradientLinear.h>
@@ -45,6 +46,14 @@ TPageView::TPageView(Document& document)
 void
 TPageView::Rebuild()
 {
+	RebuildFrames();
+	LayoutText();
+}
+
+
+void
+TPageView::RebuildFrames()
+{
 	fFrames.clear();
 	fLines.clear();
 	for (const auto& f : fDocument.PlacedFrames())
@@ -77,7 +86,6 @@ TPageView::Rebuild()
 	}
 	if (first)
 		fBounds.Set(0, 0, 612, 792);
-	LayoutText();
 }
 
 
@@ -196,24 +204,86 @@ TPageView::GetPreferredSize(float* width, float* height)
 void
 TPageView::LayoutText()
 {
-	// group each word processing part's frames, in flow order
-	std::vector<std::pair<size_t, std::vector<FrameGeometry>>> flows;
-	for (const auto& f : fFrames) {
-		if (fDocument.parts.parts[f.part].kind != Sig("WORD"))
-			continue;
-		BRect r(f.x - fBounds.left + fMargin, f.y - fBounds.top + fMargin, 0, 0);
-		r.right = r.left + f.width;
-		r.bottom = r.top + f.height;
-		auto it = std::find_if(flows.begin(), flows.end(),
-			[&](const auto& fl) { return fl.first == f.part; });
-		FrameGeometry g{r, f.frame->angle, ContainerClip(f)};
-		if (it == flows.end())
-			flows.push_back({f.part, {g}});
-		else
-			it->second.push_back(g);
+	bool paginated = false;
+	LayoutResult main;
+	for (int pass = 0;; pass++) {
+		fLines.clear();
+		// group each word processing part's frames, in flow order
+		std::vector<std::pair<size_t, std::vector<FrameGeometry>>> flows;
+		for (const auto& f : fFrames) {
+			if (fDocument.parts.parts[f.part].kind != Sig("WORD"))
+				continue;
+			BRect r(f.x - fBounds.left + fMargin, f.y - fBounds.top + fMargin, 0, 0);
+			r.right = r.left + f.width;
+			r.bottom = r.top + f.height;
+			auto it = std::find_if(flows.begin(), flows.end(),
+				[&](const auto& fl) { return fl.first == f.part; });
+			FrameGeometry g{r, f.frame->angle, ContainerClip(f), f.index};
+			if (it == flows.end())
+				flows.push_back({f.part, {g}});
+			else
+				it->second.push_back(g);
+		}
+		main = LayoutResult();
+		for (const auto& [part, frames] : flows) {
+			LayoutResult result = LayoutPart(part, frames);
+			if (int(part) == fDocument.MainPart())
+				main = result;
+		}
+		// a runaway document stops at 2000 pages
+		if (pass >= 2000 || !Paginate(main))
+			break;
+		paginated = true;
+		RebuildFrames();
 	}
-	for (const auto& [part, frames] : flows)
-		LayoutPart(part, frames);
+	if (!paginated)
+		return;
+	// the main text's frames show what the layout put in them
+	int mainPart = fDocument.MainPart();
+	uint32_t total = 0;
+	if (const WPPart* wp = fDocument.WordPart(size_t(mainPart)))
+		for (const WPParagraph& p : wp->paragraphs)
+			total += uint32_t(p.text.size());
+	for (size_t k = 0; k < main.starts.size(); k++) {
+		uint32_t end = total;
+		for (size_t n = k + 1; n < main.starts.size(); n++)
+			if (main.starts[n] != UINT32_MAX) {
+				end = main.starts[n];
+				break;
+			}
+		uint32_t start = main.starts[k] == UINT32_MAX ? end : main.starts[k];
+		fDocument.SetFrameText(size_t(mainPart), k, start, end > start ? end - start : 0);
+	}
+	InvalidateLayout();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+}
+
+
+// Pages follow the main text once it has been edited (TWPPart: a page more
+// when the text runs past the last page, the last page goes when the text
+// ends before it); an unedited document keeps the pages it was saved with.
+// True if a page was added or removed.
+bool
+TPageView::Paginate(const LayoutResult& main)
+{
+	int mainPart = fDocument.MainPart();
+	int pagePart = fDocument.PagePart();
+	if (mainPart < 0 || pagePart < 0 || !fDocument.dirtyParts.count(size_t(mainPart)))
+		return false;
+	if (main.overflow)
+		return fDocument.AddPage();
+	if (fDocument.PageCount() < 2)
+		return false;
+	// the main text's frames on the last page
+	const gobe::Frame& last = fDocument.tails[pagePart].portals[0].frames.back();
+	int first = INT32_MAX;
+	for (const gobe::Frame::Pointer& c : last.children)
+		if (int(c.part) == mainPart)
+			first = std::min(first, int(c.frame));
+	if (first != INT32_MAX && main.lastFrame < first)
+		return fDocument.RemoveLastPage();
+	return false;
 }
 
 
@@ -232,15 +302,21 @@ IsFrameBreak(char c)
 // frame is full, or a paragraph ends with a frame/page break, the text
 // continues in the next frame. Tabs go to the next half inch for now (the
 // paragraph's PTab stops aren't decoded yet).
-void
+TPageView::LayoutResult
 TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 {
+	LayoutResult result;
 	const WPPart* wp = fDocument.WordPart(part);
 	if (wp == NULL || geometry.empty())
-		return;
+		return result;
 	std::vector<BRect> frames;
-	for (const FrameGeometry& g : geometry)
+	int maxIndex = 0;
+	for (const FrameGeometry& g : geometry) {
 		frames.push_back(g.rect);
+		maxIndex = std::max(maxIndex, g.index);
+	}
+	result.starts.assign(size_t(maxIndex + 1), UINT32_MAX);
+	uint32_t paragraphStart = 0;
 
 	size_t frameIndex = 0;
 	float y = frames[0].top;
@@ -257,8 +333,10 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 	};
 
 	for (const WPParagraph& par : wp->paragraphs) {
-		if (frameIndex >= frames.size())
-			return;
+		if (frameIndex >= frames.size()) {
+			result.overflow = true;
+			return result;
+		}
 		TextStyle parStyle = ResolveTextStyle(fDocument.styles, par.parStyle);
 
 		std::string text = par.text;
@@ -317,8 +395,10 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 		size_t paragraphIndex = &par - &wp->paragraphs[0];
 		size_t firstLineOfParagraph = fLines.size();
 		do {
-			if (frameIndex >= frames.size())
-				return;
+			if (frameIndex >= frames.size()) {
+				result.overflow = true;
+				return result;
+			}
 			const BRect& frame = frames[frameIndex];
 			float left = frame.left + pad + parStyle.leftIndent
 				+ (firstLine ? parStyle.firstIndent : 0);
@@ -439,8 +519,10 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			if (y + height > frame.bottom && y > frame.top) {
 				// frame full: continue in the next frame
 				frameIndex++;
-				if (frameIndex >= frames.size())
-					return;
+				if (frameIndex >= frames.size()) {
+					result.overflow = true;
+					return result;
+				}
 				y = frames[frameIndex].top;
 				if (!placed.empty())
 					t = placed.front().first;
@@ -477,6 +559,11 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				leader.x += shift;
 				line.pieces.push_back(std::move(leader));
 			}
+			// where each frame's text starts, the last frame with text
+			int index = geometry[frameIndex].index;
+			uint32_t at = paragraphStart + uint32_t(firstLine ? 0 : line.from);
+			result.starts[index] = std::min(result.starts[index], at);
+			result.lastFrame = std::max(result.lastFrame, index);
 			fLines.push_back(std::move(line));
 			y += height;
 			firstLine = false;
@@ -496,7 +583,9 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			if (frameIndex < frames.size())
 				y = frames[frameIndex].top;
 		}
+		paragraphStart += uint32_t(par.text.size());
 	}
+	return result;
 }
 
 

@@ -97,7 +97,17 @@ private:
 		BRect rect;					// in view coordinates, unrotated
 		float angle;				// degrees, counterclockwise, about the center
 		BRect clip;					// the containing frames (document coordinates)
+		int index;					// the frame's number in its part
 	};
+	// what laying out a flow found: text left over, the last frame used,
+	// where each frame's text starts (UINT32_MAX: no text)
+	struct LayoutResult {
+		bool overflow = false;
+		int lastFrame = -1;
+		std::vector<uint32_t> starts;
+	};
+	void RebuildFrames();
+	bool Paginate(const LayoutResult& main);
 
 	struct Line {
 		BRect frame;				// in view coordinates
@@ -158,7 +168,7 @@ private:
 	void FillInk(BRect rect, const Ink& ink, float opacity, BRect inkRect);
 	const CellStyle& SpreadsheetStyle(const std::vector<uint32_t>& stack);
 	bool SetInk(const Ink& ink, float opacity, BRect rect, BGradient** gradient);
-	void LayoutPart(size_t part, const std::vector<FrameGeometry>& frames);
+	LayoutResult LayoutPart(size_t part, const std::vector<FrameGeometry>& frames);
 	static BRect RotatedBounds(BRect rect, float angle);
 	// the area a frame may draw in: its containers' frames intersected
 	BRect ContainerClip(const Document::PlacedFrame& frame) const;

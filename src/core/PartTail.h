@@ -48,6 +48,19 @@ struct Frame {
 	uint16_t cells[4] = {};
 	float sheetRect[4] = {0, 0, -1, -1};
 	bool exact = true;			// false: the subclass fields were skipped by scanning
+	// TPageFrame: the frames on the page (TFrame pointers: part, portal,
+	// frame; 0xffffffff for none): the header, the footer, the sheet's
+	// drawing, then the text columns
+	struct Pointer {
+		uint32_t part = kNoPart, portal = kNoPart, frame = kNoPart;
+		bool operator==(const Pointer& o) const
+			{ return part == o.part && portal == o.portal && frame == o.frame; }
+	};
+	std::vector<Pointer> children;
+	// the frame class's fields as read (after the four values, up to
+	// 'FraM'), written back by WritePartTail with textStart/textLength
+	// (TWPFrame) and children (TPageFrame) updated
+	std::vector<uint8_t> raw;
 };
 
 // TPortal::TPortal(TInputArchive&, TPart*): part, three u32, the frames;
@@ -58,12 +71,14 @@ struct Portal {
 	std::vector<Frame> frames;
 	uint32_t view = 0;			// TGRPortal: the graphics view shown
 	bool exact = true;
+	std::vector<uint8_t> raw;	// the portal class's fields (after the frames)
 };
 
 struct PartTail {
 	size_t offset = 0;			// in the part record
 	std::vector<Reference> refs;
 	std::vector<Portal> portals;
+	std::vector<uint8_t> refsRaw;	// 'REFT' ... 'RefT' as read
 };
 
 // Finds and reads the tail of a part record (PartRecord::data). The part's
@@ -71,6 +86,9 @@ struct PartTail {
 // until one parses exactly to 'ParT'.
 bool ReadPartTail(const std::vector<uint8_t>& record, uint32_t kind,
 	const DocArchive& versions, PartTail& out);
+// The tail as the original writes it (the references, the portals and their
+// frames, 'ParT'); a tail read unchanged comes back byte for byte.
+std::vector<uint8_t> WritePartTail(const PartTail& tail, uint32_t kind);
 
 } // namespace gobe
 

@@ -345,17 +345,37 @@ Document::PlacedFrames() const
 		}
 	}
 
+	// frames placed on a page are relative to their page's frame
+	// (TPageFrame), not the page part's first one
+	int pagePart = PagePart();
+	auto pageOf = [&](size_t part, size_t portal, size_t frame, float& x, float& y) {
+		if (pagePart < 0 || root < 0 || !origin[root].known)
+			return false;
+		for (const Frame& page : tails[pagePart].portals[0].frames)
+			for (const Frame::Pointer& c : page.children)
+				if (c.part == part && c.portal == portal && c.frame == frame) {
+					x = origin[root].x + page.origin[0];
+					y = origin[root].y + page.origin[1];
+					return true;
+				}
+		return false;
+	};
+
 	std::vector<PlacedFrame> placed;
 	for (size_t i = 0; i < tails.size(); i++) {
 		if (!tailRead[i])
 			continue;
 		int index = 0;
-		for (const Portal& portal : tails[i].portals) {
-			for (const Frame& f : portal.frames) {
+		for (size_t pi = 0; pi < tails[i].portals.size(); pi++) {
+			const Portal& portal = tails[i].portals[pi];
+			for (size_t fi = 0; fi < portal.frames.size(); fi++) {
+				const Frame& f = portal.frames[fi];
 				uint32_t c = f.container;
 				float bx = 0, by = 0;
 				int depth = 0;
-				if (c < origin.size() && origin[c].known) {
+				if (int(c) == pagePart && pageOf(i, pi, fi, bx, by)) {
+					depth = origin[c].depth + 1;
+				} else if (c < origin.size() && origin[c].known) {
 					bx = origin[c].x;
 					by = origin[c].y;
 					depth = origin[c].depth + 1;
@@ -512,33 +532,46 @@ Document::Save(const std::string& to, std::string& error)
 		changes.sections["LinksMgr"] = WriteLinksMgr(links);
 	if (stylesChanged)
 		changes.sections["StyleMgr"] = WriteStyleMgr(styles);
-	for (size_t part : dirtyParts) {
+	std::set<size_t> written;
+	for (size_t part : dirtyParts) written.insert(part);
+	for (size_t part : dirtyTails) written.insert(part);
+	for (size_t part : written) {
 		const std::vector<uint8_t>& record = parts.parts[part].data;
-		if (const WPPart* wp = WordPart(part)) {
-			std::vector<uint8_t> written = WriteWPPart(*wp, record);
-			// TWPFrame +0x4c/+0x50 in the tail: each frame's text range after
-			// the edits (the tail moved with the body's new size)
-			int64_t shift = int64_t(written.size()) - int64_t(record.size());
-			if (tailRead[part])
-				for (const Portal& portal : tails[part].portals)
-					for (const Frame& f : portal.frames) {
+		const WPPart* wp = WordPart(part);
+		std::vector<uint8_t> out;
+		if (dirtyParts.count(part) && wp != nullptr)
+			out = WriteWPPart(*wp, record);
+		else if (dirtyParts.count(part) && SpreadsheetPart(part) != nullptr)
+			out = WriteSSPart(*SpreadsheetPart(part), record);
+		else
+			out = record;
+		// the tail (it moved with the body's new size): the frames as they
+		// are, word processing frames' text ranges after the edits unless
+		// the layout set them (TWPFrame +0x4c/+0x50)
+		if (tailRead[part] && (wp != nullptr || dirtyTails.count(part))) {
+			int64_t shift = int64_t(out.size()) - int64_t(record.size());
+			PartTail tail = tails[part];
+			if (wp != nullptr && !layoutRanges.count(part))
+				for (Portal& portal : tail.portals)
+					for (Frame& f : portal.frames) {
 						if (f.textAt == 0)
 							continue;
 						uint32_t start = MapTextOffset(*wp, f.textStart, false);
 						uint32_t end = MapTextOffset(*wp, f.textStart + f.textLength, true);
-						uint32_t values[2] = {start, end > start ? end - start : 0};
-						size_t at = size_t(int64_t(f.textAt) + shift);
-						for (int k = 0; k < 2; k++)
-							for (int b = 0; b < 4; b++)
-								written[at + k * 4 + b] = (values[k] >> (24 - 8 * b)) & 0xff;
+						f.textStart = start;
+						f.textLength = end > start ? end - start : 0;
 					}
-			changes.parts[part] = std::move(written);
+			std::vector<uint8_t> bytes = WritePartTail(tail, parts.parts[part].kind);
+			out.resize(size_t(int64_t(tail.offset) + shift));
+			out.insert(out.end(), bytes.begin(), bytes.end());
+		}
+		changes.parts[part] = std::move(out);
+		if (dirtyParts.count(part) && wp != nullptr) {
 			uint32_t length = 0;
 			for (const WPParagraph& p : wp->paragraphs)
 				length += uint32_t(p.text.size());
 			textLength[part] = length;
-		} else if (const SSPart* ss = SpreadsheetPart(part))
-			changes.parts[part] = WriteSSPart(*ss, record);
+		}
 	}
 	// text selections of edited parts follow the edits
 	if (!textLength.empty() || selectionsChanged) {
