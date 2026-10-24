@@ -289,20 +289,20 @@ TFindDialog::DoReplace()
 	}
 
 	// Replace the selection
-	fView->fUndo.Begin(*fDocument, fView->fCaret.part,
-		"Replace", fView->CurrentViewState());
-	WPPart* editWP = fDocument->EditableWordPart(fView->fCaret.part);
+	size_t part = fView->fCaret.part;
+	fView->fUndo.Begin(*fDocument, part, "Replace Text", fView->CurrentViewState());
+	WPPart* editWP = fDocument->EditableWordPart(part);
 	if (editWP) {
 		TextPosition result;
 		DeleteRange(*editWP, selFrom, selTo, result);
 		InsertText(*editWP, result, fReplaceText);
 		// Select the replacement
 		fView->fAnchor.active = true;
-		fView->fAnchor.part = result.paragraph;
+		fView->fAnchor.part = part;
 		fView->fAnchor.paragraph = result.paragraph;
 		fView->fAnchor.offset = result.offset;
 		fView->fCaret.active = true;
-		fView->fCaret.part = result.paragraph;
+		fView->fCaret.part = part;
 		fView->fCaret.paragraph = result.paragraph;
 		fView->fCaret.offset = result.offset + fReplaceText.size();
 		fView->TextChanged();
@@ -336,7 +336,7 @@ TFindDialog::DoReplaceAll()
 	opts.wholeWord = fEntireWord;
 	opts.wrap = fWrap;
 
-	fView->fUndo.Begin(*fDocument, fView->fCaret.part, "Replace All",
+	fView->fUndo.Begin(*fDocument, fView->fCaret.part, GobeResources::IndexString(3, 29).String(),
 		fView->CurrentViewState());
 	int count = ReplaceAll(*wp, fFindText, fReplaceText, opts);
 	fView->TextChanged();

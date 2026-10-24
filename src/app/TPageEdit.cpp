@@ -2729,7 +2729,8 @@ TPageView::RunScript(const std::string& script, Document& document)
 			opts.wholeWord = false;
 			opts.backwards = false;
 			opts.wrap = true;
-			fUndo.Begin(fDocument, fCaret.part, "Replace All", CurrentViewState());
+			fUndo.Begin(fDocument, fCaret.part, GobeResources::IndexString(3, 29).String(),
+				CurrentViewState());
 			int count = ReplaceAll(*wp, query, replacement, opts);
 			TextChanged();
 			fprintf(stderr, "replaceall: %d replacements\n", count);
