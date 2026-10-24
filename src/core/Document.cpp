@@ -613,22 +613,26 @@ Document::Save(const std::string& to, std::string& error)
 			size_t start = file.toc[s].offset;
 			size_t end = s + 1 < file.toc.size() ? file.toc[s + 1].offset : file.tocOffset;
 			std::vector<uint8_t> section(bytes.begin() + start, bytes.begin() + end);
-			auto put16 = [&](size_t at, uint16_t v) {
-				section[at] = uint8_t(v >> 8);
-				section[at + 1] = uint8_t(v);
-			};
+			// spreadsheet selections after cells moved: their active cell,
+			// ranges and flag, put in after the in-place changes (last first)
+			std::vector<std::pair<std::pair<size_t, size_t>, std::vector<uint8_t>>> splices;
 			for (const Selection& sel : selections.selections) {
-				// spreadsheet selections after rows/columns moved (same count)
-				if (selectionsChanged && sel.kind == Sig("SPRD") && sel.cellAt > start) {
-					size_t at = sel.cellAt - start;
-					put16(at, sel.cell[0]);
-					put16(at + 2, sel.cell[1]);
-					at += 8;
+				if (selectionsChanged && sel.kind == Sig("SPRD") && sel.cellAt > start
+						&& sel.cellsEnd > sel.cellAt) {
+					std::vector<uint8_t> record;
+					auto add = [&](uint32_t v, int bytes) {
+						for (int i = bytes - 1; i >= 0; i--)
+							record.push_back(uint8_t(v >> (8 * i)));
+					};
+					add(sel.cell[0], 2);
+					add(sel.cell[1], 2);
+					add(uint32_t(sel.ranges.size()), 4);
 					for (const auto& r : sel.ranges)
-						for (uint16_t v : r) {
-							put16(at, v);
-							at += 2;
-						}
+						for (uint16_t v : r)
+							add(v, 2);
+					add(sel.hasCell ? 1 : 0, 1);
+					splices.push_back({{sel.cellAt - start, sel.cellsEnd - start},
+						std::move(record)});
 				}
 				auto length = textLength.find(sel.part);
 				if (sel.kind != Sig("WORD") || length == textLength.end())
@@ -645,6 +649,12 @@ Document::Save(const std::string& to, std::string& error)
 							section[at + half * 4 + i] = (v >> (24 - 8 * i)) & 0xff;
 					}
 				}
+			}
+			std::sort(splices.begin(), splices.end(),
+				[](const auto& x, const auto& y) { return x.first.first > y.first.first; });
+			for (const auto& [where, record] : splices) {
+				section.erase(section.begin() + where.first, section.begin() + where.second);
+				section.insert(section.begin() + where.first, record.begin(), record.end());
 			}
 			// new parts' selections at the end (TSelectionMgr::Write: the
 			// count, the records, 'SelM')

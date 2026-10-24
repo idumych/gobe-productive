@@ -106,6 +106,8 @@ struct Selection {
 	uint16_t cell[2] = {};
 	std::vector<std::array<uint16_t, 4>> ranges;
 	size_t cellAt = 0;			// where cell[] is in the file (the ranges' count follows)
+	bool hasCell = false;		// TSSSelection +0x18: it has an active cell
+	size_t cellsEnd = 0;		// where the record ends (after hasCell)
 	// word processing: text ranges (start, end), and where they are in the
 	// file (to clamp them when the text gets shorter)
 	std::vector<std::pair<uint32_t, uint32_t>> textRanges;

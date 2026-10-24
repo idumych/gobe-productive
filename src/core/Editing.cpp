@@ -16,6 +16,7 @@
 
 #include "Document.h"
 #include "SSEval.h"
+#include "SSMove.h"
 
 namespace gobe {
 
@@ -2352,40 +2353,9 @@ LockCells(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1, uint16_t
 		part.locked.push_back(block);
 		return true;
 	}
-	// TCellsList::RemoveRange: the ranges it touches out, those it doesn't
-	// contain stacked to come back in pieces (last first)
-	std::vector<SSRange> stack;
-	bool changed = false;
-	for (size_t i = 0; i < part.locked.size(); i++) {
-		const SSRange& r = part.locked[i];
-		if (!RangesIntersect(block, r))
-			continue;
-		bool contained = block.from.a <= r.from.a && block.from.b <= r.from.b
-			&& r.to.a <= block.to.a && r.to.b <= block.to.b;
-		if (!contained)
-			stack.push_back(r);
-		part.locked.erase(part.locked.begin() + i);
-		i--;
-		changed = true;
-	}
-	while (!stack.empty()) {
-		SSRange r = stack.back();
-		stack.pop_back();
-		if (r.from.a < block.from.a) {		// above
-			part.locked.push_back({r.from, {uint16_t(block.from.a - 1), r.to.b}});
-			r.from.a = block.from.a;
-		}
-		if (r.from.b < block.from.b) {		// left
-			part.locked.push_back({r.from, {r.to.a, uint16_t(block.from.b - 1)}});
-			r.from.b = block.from.b;
-		}
-		if (block.to.a < r.to.a) {			// below
-			part.locked.push_back({{uint16_t(block.to.a + 1), r.from.b}, r.to});
-			r.to.a = block.to.a;
-		}
-		if (block.to.b < r.to.b)			// right
-			part.locked.push_back({{r.from.a, uint16_t(block.to.b + 1)}, r.to});
-	}
+	// TCellsList::RemoveRange
+	bool changed = RangeInList(part.locked, block);
+	RemoveRange(part.locked, block);
 	return changed;
 }
 

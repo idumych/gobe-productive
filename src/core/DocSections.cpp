@@ -196,7 +196,8 @@ ReadSelectionMgr(DocArchive& a, SelectionMgr& out)
 						v = a.UInt16();
 					s.ranges.push_back(r);
 				}
-				a.Bool();
+				s.hasCell = a.Bool();
+				s.cellsEnd = a.Position();
 				break;
 			}
 			case Sig("WORD"): {	// TWPSelection
