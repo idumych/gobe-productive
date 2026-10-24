@@ -79,10 +79,53 @@ TDialog::TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target
 }
 
 
+// An item's layout value is a BView resizing mode (B_FOLLOW_LEFT_TOP
+// 0x1212, B_FOLLOW_RIGHT_BOTTOM 0x3434, ...). In a group (ItemGroup::
+// Recalc) items following the far edge (the bottom of a column, the right
+// of a row) are stacked from it, the first outermost: OK, Cancel come out
+// bottom right as "Cancel OK". Those, and centred ones, are aligned so.
+static bool
+FollowsEnd(const ItemData& item, bool vertical)
+{
+	uint32 mode = item.layout[0];
+	return vertical ? (mode & 0xf0f0) == 0x3030 : (mode & 0x0f0f) == 0x0404;
+}
+
+
+static void
+AlignItem(BLayoutItem* layoutItem, const ItemData& item)
+{
+	uint32 mode = item.layout[0];
+	alignment horizontal = B_ALIGN_USE_FULL_WIDTH;
+	vertical_alignment vertical = B_ALIGN_USE_FULL_HEIGHT;
+	if ((mode & 0x0f0f) == 0x0404)
+		horizontal = B_ALIGN_RIGHT;
+	else if ((mode & 0x0f0f) == 0x0505)
+		horizontal = B_ALIGN_HORIZONTAL_CENTER;
+	if ((mode & 0xf0f0) == 0x3030)
+		vertical = B_ALIGN_BOTTOM;
+	else if ((mode & 0xf0f0) == 0x5050)
+		vertical = B_ALIGN_VERTICAL_CENTER;
+	if (layoutItem != NULL && (horizontal != B_ALIGN_USE_FULL_WIDTH
+			|| vertical != B_ALIGN_USE_FULL_HEIGHT))
+		layoutItem->SetExplicitAlignment(BAlignment(horizontal, vertical));
+}
+
+
 void
 TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int32 group)
 {
-	for (const ItemData& item : items) {
+	bool vertical = layout->Orientation() == B_VERTICAL;
+	std::vector<const ItemData*> order;
+	for (const ItemData& item : items)
+		if (!FollowsEnd(item, vertical))
+			order.push_back(&item);
+	for (auto i = items.rbegin(); i != items.rend(); i++)
+		if (FollowsEnd(*i, vertical))
+			order.push_back(&*i);
+
+	for (const ItemData* entry : order) {
+		const ItemData& item = *entry;
 		if (item.type == FourCC("GRUP") || item.type == FourCC("FGRP")) {
 			BGroupLayout* inner = new BGroupLayout(
 				item.vertical ? B_VERTICAL : B_HORIZONTAL,
@@ -91,6 +134,7 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int3
 				inner->SetInsets(item.insets[0], item.insets[1], item.insets[0],
 					item.insets[1]);
 			layout->AddItem(inner);
+			AlignItem(inner, item);
 			AddItems(inner, item.children, group);
 		} else if (item.type == FourCC("GBOX")) {
 			BBox* box = new BBox("box");
@@ -100,13 +144,13 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int3
 			box->SetLayout(inner);
 			inner->SetInsets(B_USE_SMALL_INSETS, B_USE_BIG_INSETS, B_USE_SMALL_INSETS,
 				B_USE_SMALL_INSETS);
-			layout->AddView(box);
+			AlignItem(layout->AddView(box), item);
 			fItems[item.index] = box;
 			AddItems(inner, item.children, item.index);
 		} else {
 			BView* view = MakeControl(item);
 			if (view != NULL) {
-				layout->AddView(view);
+				AlignItem(layout->AddView(view), item);
 				fItems[item.index] = view;
 				if (item.type == FourCC("RADI"))
 					fRadios[group].push_back(item.index);

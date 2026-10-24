@@ -1,7 +1,8 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
 // Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
 // Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions), Paragraph
-// (TDialogFormatParagraph).
+// (TDialogFormatParagraph), the ruler's Edit Tab (TDialogTabEdit) and Set
+// Ruler Divisions (TDialogSetRulerDivisions).
 #include "TWPDialogs.h"
 
 #include <stdio.h>
@@ -21,6 +22,7 @@
 #include "Measure.h"
 #include "SSEval.h"
 #include "SSStyle.h"
+#include "TWPRuler.h"
 
 namespace gobe {
 
@@ -515,6 +517,186 @@ TWordCountDialog::Init()
 	text = "";
 	text << fCount.pages;
 	SetTextItem(8, text.String());
+}
+
+
+
+TDialogTabEdit::TDialogTabEdit(BLooper* window, BHandler* ruler, int32 index,
+	const TabStop& tab, int unit, float start, float end)
+	:
+	TDialog(305, 305, 'APPL', NULL),
+	fWindow(window),
+	fRuler(ruler),
+	fIndex(index),
+	fTab(tab),
+	fUnit(unit),
+	fStart(start),
+	fEnd(end)
+{
+	fTab.position += start;
+	for (int32 i = 0; i < 6; i++)
+		fUnitNames.push_back(GobeResources::IndexString(7, i).String());
+}
+
+
+static std::string
+CharText(uint32 c)
+{
+	// (the characters are stored as their UTF-8 bytes, first byte lowest)
+	std::string text;
+	for (int i = 0; i < 4 && (c >> (8 * i)) != 0; i++)
+		text += char((c >> (8 * i)) & 0xff);
+	return text;
+}
+
+
+void
+TDialogTabEdit::Init()
+{
+	for (int32 i = 3; i <= 6; i++)
+		SetRadioItem(i, i == 3 + std::min(std::max(fTab.type, 0), 3));
+	SetTextItem(7, CharText(fTab.alignChar).c_str());
+	for (int32 i = 9; i <= 11; i++)
+		SetRadioItem(i, i == 9 + std::min(std::max(fTab.fill, 0), 2));
+	SetTextItem(12, CharText(fTab.fillChar).c_str());
+	SetTextItem(13, MeasureText(fTab.position, fUnit, kMeasureWithUnit | kMeasureTwoPlaces,
+		fUnitNames).c_str());
+}
+
+
+// items 7 and 12: the first character typed, if any
+void
+TDialogTabEdit::ReadChar(int32 index, uint32& c)
+{
+	BString text = TextItem(index);
+	if (text.Length() == 0)
+		return;
+	const unsigned char* bytes = (const unsigned char*)text.String();
+	int length = bytes[0] < 0x80 ? 1 : bytes[0] < 0xe0 ? 2 : bytes[0] < 0xf0 ? 3 : 4;
+	c = 0;
+	for (int i = 0; i < length && i < text.Length(); i++)
+		c |= uint32(bytes[i]) << (8 * i);
+}
+
+
+// item 13: a measure from the text's left to its right edge
+bool
+TDialogTabEdit::ValidPosition()
+{
+	float points;
+	int unit = fUnit;
+	if (!ParseMeasure(TextItem(13).String(), fUnit, fUnitNames, false, false, points, &unit)
+			|| points < fStart || fEnd < points) {
+		BString alert;
+		alert.SetToFormat(GobeResources::IndexString(6, 15).String(),
+			MeasureText(fStart, fUnit, kMeasureTwoPlaces, fUnitNames).c_str(),
+			MeasureText(fEnd, fUnit, kMeasureWithUnit, fUnitNames).c_str());
+		(new BAlert("", alert.String(), "OK"))->Go(NULL);
+		MakeFocusItem(13);
+		return false;
+	}
+	fUnit = unit;
+	fTab.position = points;
+	SetTextItem(13, MeasureText(points, fUnit, kMeasureWithUnit, fUnitNames).c_str());
+	return true;
+}
+
+
+bool
+TDialogTabEdit::ItemHit(int32 index, BMessage* message)
+{
+	switch (index) {
+		case 0:
+		{
+			// (the port checks the fields again: OK may come before their
+			// changes)
+			if (!ValidPosition())
+				return true;
+			ReadChar(7, fTab.alignChar);
+			ReadChar(12, fTab.fillChar);
+			BMessage modify(kMsgModifyTab);
+			modify.AddInt32("tab", fIndex);
+			modify.AddFloat("position", fTab.position - fStart);
+			modify.AddInt32("type", fTab.type);
+			modify.AddInt32("alignChar", int32(fTab.alignChar));
+			modify.AddInt32("fill", fTab.fill);
+			modify.AddInt32("fillChar", int32(fTab.fillChar));
+			fWindow->PostMessage(&modify, fRuler);
+			break;
+		}
+		case 3: case 4: case 5: case 6:
+			for (int32 i = 3; i <= 6; i++)
+				SetRadioItem(i, i == index);
+			fTab.type = index - 3;
+			return true;
+		case 7:
+			ReadChar(7, fTab.alignChar);
+			return true;
+		case 9: case 10: case 11:
+			for (int32 i = 9; i <= 11; i++)
+				SetRadioItem(i, i == index);
+			fTab.fill = index - 9;
+			return true;
+		case 12:
+			ReadChar(12, fTab.fillChar);
+			return true;
+		case 13:
+			ValidPosition();
+			return true;
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+
+TDialogSetRulerDivisions::TDialogSetRulerDivisions(BLooper* window, const char* title,
+	const char* label, const char* text)
+	:
+	TDialog(31, 31, 'APPL', NULL),
+	fWindow(window),
+	fTitle(title),
+	fLabel(label),
+	fText(text)
+{
+}
+
+
+// TDialogGenericGetString::Init
+void
+TDialogSetRulerDivisions::Init()
+{
+	SetTitle(fTitle.String());
+	SetLabelItem(2, fLabel.String());
+	SetTextItem(2, fText.String());
+	MakeFocusItem(2);
+}
+
+
+// TDialogGenericGetString::ItemHit, TDialogSetRulerDivisions::
+// ValidateAndSendMsg
+bool
+TDialogSetRulerDivisions::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 2) {
+		if (BButton* ok = dynamic_cast<BButton*>(Item(0)))
+			ok->SetEnabled(TextItem(2).Length() > 0);
+		return true;
+	}
+	if (index == 0) {
+		BString text = TextItem(2);
+		char* end;
+		long divisions = strtol(text.String(), &end, 10);
+		if (end == text.String() || *end != '\0' || divisions < 1 || divisions > 512) {
+			BString alert;
+			alert.SetToFormat(GobeResources::IndexString(6, 13).String(), 1, 512);
+			(new BAlert("", alert.String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		BMessage set('s00L');
+		set.AddInt32("rulerDivisions", int32(divisions));
+		fWindow->PostMessage(&set);
+	}
+	return TDialog::ItemHit(index, message);
 }
 
 } // namespace gobe

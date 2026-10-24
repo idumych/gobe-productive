@@ -1,7 +1,8 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
 // Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
 // Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions), Paragraph
-// (TDialogFormatParagraph).
+// (TDialogFormatParagraph), the ruler's Edit Tab (TDialogTabEdit) and Set
+// Ruler Divisions (TDialogSetRulerDivisions).
 #ifndef GOBE_TWP_DIALOGS_H
 #define GOBE_TWP_DIALOGS_H
 
@@ -10,9 +11,11 @@
 
 #include <String.h>
 
+#include "Styles.h"
 #include "TDialog.h"
 #include "WordCount.h"
 
+class BHandler;
 class BLooper;
 
 namespace gobe {
@@ -178,6 +181,50 @@ protected:
 private:
 	WordCount fCount;
 	bool fSelection;
+};
+
+// the ruler's Edit Tab (DIAL/Item 305): the type (3 Left, 4 Center, 5
+// Right, 6 Align To: 7), the fill (9 None, 10 With Pen, 11 With Char: 12)
+// and the position (13, in `unit`, from the document's edge: `start` to
+// `end`, else STR# 6, 15); OK sends `ruler` kMsgModifyTab for tab `index`
+// (the position from `start`)
+class TDialogTabEdit : public TDialog {
+public:
+	TDialogTabEdit(BLooper* window, BHandler* ruler, int32 index, const TabStop& tab,
+		int unit, float start, float end);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	bool ValidPosition();
+	void ReadChar(int32 index, uint32& c);
+
+	BLooper* fWindow;
+	BHandler* fRuler;
+	int32 fIndex;
+	TabStop fTab;			// the position from the document's edge
+	int fUnit;
+	float fStart, fEnd;
+	std::vector<std::string> fUnitNames;
+};
+
+// the ruler's Set Ruler Divisions… (TDialogGenericGetString, DIAL/Item 31):
+// a number 1 to 512 (else STR# 6, 13); OK sends the window 's00L' with
+// "rulerDivisions"
+class TDialogSetRulerDivisions : public TDialog {
+public:
+	TDialogSetRulerDivisions(BLooper* window, const char* title, const char* label,
+		const char* text);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	BString fTitle, fLabel, fText;
 };
 
 } // namespace gobe

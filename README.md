@@ -77,13 +77,14 @@ Works:
   come and go with the text; Document > Margins, Insert/Remove Header and
   Footer; Format > Columns, Insert Page #, Date, Time, Formula (live
   fields), Footnote and endnote (with Footnote Options), Separator Line,
-  Line/Frame/Page Break; Writing Tools > Word Count.
+  Line/Frame/Page Break; Writing Tools > Word Count; the text ruler
+  (indents and tab stops dragged, added, removed, Edit Tab, the ruler's
+  unit and divisions).
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
 - Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
   charts (2D), images, tables, clocks and presentations (slides).
 
-Not yet: the format bar and other ribbons, the text ruler (its tab commands
-are in a stand-in Tabs menu), spell checking, the thesaurus and dictionary,
+Not yet: the format bar and the other ribbons, spell checking, the thesaurus and dictionary,
 Page View off (browse layout), zoom, Views & Layers, Preferences, Window
 menu commands, frames (creating, linking, autogrow), drawing tools,
 spreadsheet menus beyond a few, new documents of other kinds, and the HTML,

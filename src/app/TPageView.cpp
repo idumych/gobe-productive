@@ -1,4 +1,5 @@
 #include "TPageView.h"
+#include "TWPRuler.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -419,7 +420,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 
 	size_t frameIndex = 0;
 	float y = frames[0].top;
-	const float pad = 2;
+	const float pad = kTextPad;
 	const float tabStop = 36;
 
 	struct Token {
@@ -588,8 +589,11 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				return result;
 			}
 			const BRect& frame = frames[frameIndex];
-			float left = frame.left + pad + parStyle.leftIndent
-				+ (firstLine ? parStyle.firstIndent : 0);
+			// PInd, like PLef, counts from the text's edge (the User's
+			// Guide: "the distance, from the left margin, that the first
+			// line of the paragraph is indented")
+			float left = frame.left + pad
+				+ (firstLine ? parStyle.firstIndent : parStyle.leftIndent);
 			float right = frame.right - pad - parStyle.rightIndent;
 			float avail = std::max(10.0f, right - left);
 
@@ -652,8 +656,13 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 							stop = &ts;
 							break;
 						}
+					// TParagraph::GetTabInfo: before the larger indent a tab
+					// goes there (a hanging indent) unless a stop comes first
+					float hang = std::max(parStyle.leftIndent, parStyle.firstIndent);
 					float target;
-					if (stop != NULL) {
+					if (x + indent < hang && (stop == NULL || stop->position >= hang))
+						x = hang - indent;
+					else if (stop != NULL) {
 						target = stop->position - indent;
 						float seg = 0;
 						if (stop->type == 1)
@@ -1750,6 +1759,8 @@ TPageView::Draw(BRect updateRect)
 		PopState();
 	}
 	DrawLines(updateRect, dx, dy);
+	if (fRuler != NULL && !IsPrinting())
+		fRuler->Update();
 }
 
 

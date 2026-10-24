@@ -28,6 +28,8 @@
 
 namespace gobe {
 
+class TWPRuler;
+
 // sent to the window when the slide changes ("slide" int32, "name")
 static const uint32 kMsgSlideChanged = 'Gsld';
 // sent to the window when the document was edited
@@ -80,6 +82,18 @@ public:
 	void ToggleHeaderFooter(int which);
 	// the width of the frame the caret is in (TWPPart::RulerBounds)
 	float CaretFrameWidth() const;
+	// the text ruler (TWPRuler::setRulerSize): the edges of the text the
+	// caret is in and the page it is on, in view coordinates; false if no
+	// text has the caret
+	bool RulerFrame(BRect& text, BRect& page) const;
+	// the ruler's changes to the selected paragraphs (TParFormatCmd): their
+	// tabs at `removeTabs` taken off, then `add` set; `newStep` starts an
+	// undo step called `label`
+	void FormatParagraphs(const std::vector<float>& removeTabs,
+		const std::vector<Property>& add, const std::string& label, bool newStep);
+	// the window's text ruler (updated as the view draws), or NULL
+	TWPRuler* fRuler = NULL;
+	const Document& Doc() const { return fDocument; }
 	// Show Invisibles: the marks on line `index`
 	void DrawInvisibles(size_t index);
 	// printing: page `index`'s area the printer prints (`printable` is the
@@ -124,6 +138,9 @@ private:
 		std::vector<uint32_t> starts;
 	};
 	void RebuildFrames();
+	const Document::PlacedFrame* CaretFrame() const;
+	// the port's room between a frame's edges and its text
+	static constexpr float kTextPad = 2;
 	bool Paginate(const LayoutResult& main);
 	// styles resolved during a layout (LayoutText starts afresh)
 	const std::pair<TextStyle, BFont>& CachedStyle(uint32_t style);

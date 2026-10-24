@@ -6,6 +6,7 @@
 // the range; copy/cut/paste/clear/selectall work on ranges using
 // RangeInput/ClearRange/PasteInput from Editing.h.
 #include "TPageView.h"
+#include "TWPRuler.h"
 
 #include <Alert.h>
 #include <Beep.h>
@@ -1781,6 +1782,7 @@ TPageView::MessageReceived(BMessage* message)
 // "copy", "cut", "paste", "selectall", "{sup}", "{sdown}", "{sleft}",
 // "{sright}" work for cell selection too.
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
+// "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 void
 TPageView::RunScript(const std::string& script, Document& document)
 {
@@ -1793,7 +1795,10 @@ TPageView::RunScript(const std::string& script, Document& document)
 		start = end + 1;
 		while (!command.empty() && command[0] == ' ')
 			command.erase(0, 1);
-		if (command.compare(0, 6, "click ") == 0) {
+		if (command.compare(0, 6, "ruler ") == 0) {
+			if (fRuler != NULL)
+				fRuler->RunScript(command.substr(6));
+		} else if (command.compare(0, 6, "click ") == 0) {
 			float x, y;
 			if (sscanf(command.c_str() + 6, "%f %f", &x, &y) == 2)
 				Click(BPoint(x, y), 1, B_PRIMARY_MOUSE_BUTTON);
@@ -2791,9 +2796,10 @@ TPageView::ToggleHeaderFooter(int which)
 }
 
 
-// TWPPart::RulerBounds: the width of the frame the caret is in
-float
-TPageView::CaretFrameWidth() const
+// the frame the caret is in (TWPPart::ActiveFrame): the one holding its
+// line, else the part's first; NULL if the part has none
+const Document::PlacedFrame*
+TPageView::CaretFrame() const
 {
 	size_t index;
 	float x;
@@ -2804,14 +2810,65 @@ TPageView::CaretFrameWidth() const
 			r.right = r.left + f.width;
 			r.bottom = r.top + f.height;
 			if (f.part == fCaret.part && r.Contains(center))
-				return f.width;
+				return &f;
 		}
 	}
 	for (const auto& f : fFrames)
 		if (f.part == fCaret.part)
-			return f.width;
-	return 468;
+			return &f;
+	return NULL;
 }
+
+
+// TWPPart::RulerBounds: the width of the frame the caret is in
+float
+TPageView::CaretFrameWidth() const
+{
+	const Document::PlacedFrame* f = CaretFrame();
+	return f != NULL ? f->width : 468;
+}
+
+
+bool
+TPageView::RulerFrame(BRect& text, BRect& page) const
+{
+	if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL)
+		return false;
+	const Document::PlacedFrame* f = CaretFrame();
+	if (f == NULL)
+		return false;
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	text.Set(f->x + dx, f->y + dy, f->x + dx + f->width, f->y + dy + f->height);
+	// (the port's padding: the text's edges)
+	text.InsetBy(kTextPad, 0);
+	page = text;
+	int pagePart = fDocument.PagePart();
+	for (const auto& p : fFrames)
+		if (int(p.part) == pagePart && p.index == f->page) {
+			page.Set(p.x + dx, p.y + dy, p.x + dx + p.width, p.y + dy + p.height);
+			break;
+		}
+	return true;
+}
+
+
+void
+TPageView::FormatParagraphs(const std::vector<float>& removeTabs,
+	const std::vector<Property>& add, const std::string& label, bool newStep)
+{
+	if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL)
+		return;
+	if (newStep)
+		fUndo.Begin(fDocument, fCaret.part, label, CurrentViewState());
+	auto range = TextSelectionRange();
+	size_t first = range.first.paragraph, last = range.second.paragraph;
+	for (float position : removeTabs)
+		RemoveParagraphTab(fDocument, fCaret.part, first, last, position);
+	for (const Property& property : add)
+		ApplyParagraphProperty(fDocument, fCaret.part, first, last, property);
+	TextChanged();
+}
+
 
 bool
 TPageView::HandlesCommand(uint32 what)

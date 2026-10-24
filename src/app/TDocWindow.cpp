@@ -36,6 +36,7 @@
 #include "TDocView.h"
 #include "TPageView.h"
 #include "TTranslate.h"
+#include "TWPRuler.h"
 #include "Styles.h"
 
 #include <ScrollView.h>
@@ -70,14 +71,6 @@ static const uint32 kMsgGoTo = 'gGOT';
 static const uint32 kCmdColWidth = 'sM64';
 static const uint32 kCmdRowHeight = 'sM65';
 static const uint32 kCmdGoToCell = 'sM77';
-
-// Tab menu commands (MENU 120)
-static const uint32 kCmdTabLeft = 3;
-static const uint32 kCmdTabCenter = 4;
-static const uint32 kCmdTabRight = 5;
-static const uint32 kCmdTabAlign = 6;
-static const uint32 kCmdDeleteTab = 8;
-static const uint32 kCmdEditTab = 9;
 
 // Format menu insert commands
 static const uint32 kCmdInsertDate = 'sM53';
@@ -793,6 +786,14 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			TPageView* pages = new TPageView(*document);
 			fPages = pages;
 			desk = new BScrollView("pages", pages, 0, true, true, B_NO_BORDER);
+			// the text ruler (TWPPart::ActivePartRibbon) for documents with text
+			bool text = false;
+			for (const auto& part : document->parts.parts)
+				text = text || part.kind == Sig("WORD");
+			if (text) {
+				fRuler = new TWPRuler(pages);
+				pages->fRuler = fRuler;
+			}
 		} else
 			desk = new TDocView(*document);
 		// (the status line is the port's: which slide a presentation shows,
@@ -808,8 +809,11 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	}
 	desk->SetExplicitMinSize(BSize(400, 300));
 
-	BLayoutBuilder::Group<>(this, B_VERTICAL, 0)
-		.Add(menuBar)
+	BLayoutBuilder::Group<> layout(this, B_VERTICAL, 0);
+	layout.Add(menuBar);
+	if (fRuler != NULL)
+		layout.Add(fRuler);
+	layout
 		.Add(desk)
 		.AddGroup(B_HORIZONTAL)
 			.SetInsets(B_USE_SMALL_INSETS, 2, B_USE_SMALL_INSETS, 2)
@@ -922,18 +926,6 @@ TDocWindow::InstallBaseMenus()
 	bar->AddItem(fFaceMenu);
 	fAlignmentMenu = new TMenu(300);
 	bar->AddItem(fAlignmentMenu);
-
-	// Tab menu (MENU 120 is the ruler's pop-up; the ruler isn't ported, so
-	// its items are here, without shortcuts: they took Copy's and others')
-	BMenu* tabMenu = new BMenu("Tabs");
-	tabMenu->AddItem(new BMenuItem("Left Tab", new BMessage(kCmdTabLeft)));
-	tabMenu->AddItem(new BMenuItem("Center Tab", new BMessage(kCmdTabCenter)));
-	tabMenu->AddItem(new BMenuItem("Right Tab", new BMessage(kCmdTabRight)));
-	tabMenu->AddItem(new BMenuItem("Align Tab", new BMessage(kCmdTabAlign)));
-	tabMenu->AddItem(new BSeparatorItem());
-	tabMenu->AddItem(new BMenuItem("Delete Tab", new BMessage(kCmdDeleteTab)));
-	tabMenu->AddItem(new BMenuItem("Edit Tab…", new BMessage(kCmdEditTab)));
-	bar->AddItem(tabMenu);
 
 	// the Spreadsheet part's Format menu (MENU 52 of Parts/Spreadsheet)
 	// and Options menu (MENU 53), with the items that work so far
@@ -1105,6 +1097,25 @@ TDocWindow::MessageReceived(BMessage* message)
 				UpdateTitle();
 			}
 			return;
+		case 's00L':
+		{
+			// the ruler's unit menu, Set Ruler Divisions (TLeafSheet::
+			// SetUnitAndRulerDivisions: the sheet's, saved with it; not a
+			// command, so the document isn't marked changed)
+			if (fDocument == NULL || fDocument->sheets.sheets.empty())
+				return;
+			LeafSheet& sheet = fDocument->sheets.sheets[0];
+			int32 unit = message->GetInt32(kValueString, int32(sheet.unit));
+			int32 divisions = message->GetInt32("rulerDivisions", int32(sheet.divisions));
+			if (uint32(unit) != sheet.unit || uint32(divisions) != sheet.divisions) {
+				sheet.unit = uint32(unit);
+				sheet.divisions = uint32(divisions);
+				fDocument->sheetsChanged = true;
+			}
+			if (fRuler != NULL)
+				fRuler->Update();
+			return;
+		}
 		case kCmdSave:
 			if (fDocument == NULL)
 				return;
@@ -1406,71 +1417,6 @@ TDocWindow::MessageReceived(BMessage* message)
 	if (message->what == kCmdInsertDate || message->what == kCmdInsertTime) {
 		if (fPages != NULL)
 			fPages->MessageReceived(message);
-		return;
-	}
-
-	// Tab menu: add tab of given type at caret position
-	if (message->what == kCmdTabLeft || message->what == kCmdTabCenter
-		|| message->what == kCmdTabRight || message->what == kCmdTabAlign) {
-		if (fPages != NULL && fPages->fCaret.active) {
-			// Get the x position of the caret in points
-			float xPoints = fPages->CaretX();
-
-			int type = 0;
-			if (message->what == kCmdTabCenter) type = 1;
-			else if (message->what == kCmdTabRight) type = 2;
-			else if (message->what == kCmdTabAlign) type = 3;
-
-			TabStop tab;
-			tab.position = xPoints;
-			tab.type = type;
-			tab.fill = 0;
-			tab.alignChar = '.';
-			tab.fillChar = '.';
-			// one PTab per tab; it replaces a tab at the same position
-			fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Tab",
-				fPages->CurrentViewState());
-			ApplyParagraphProperty(*fDocument, fPages->fCaret.part,
-				fPages->fCaret.paragraph, fPages->fCaret.paragraph,
-				TabProperty(tab));
-			fPages->TextChanged();
-		}
-		return;
-	}
-	// Delete Tab — remove nearest tab to caret's x position
-	if (message->what == kCmdDeleteTab) {
-		if (fPages != NULL && fPages->fCaret.active) {
-			float xPoints = fPages->CaretX();
-
-			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
-			if (wp == NULL) return;
-			const WPParagraph& par = wp->paragraphs[fPages->fCaret.paragraph];
-			uint32_t styleIdx = par.parStyle;
-			TextStyle style = ResolveTextStyle(fDocument->styles, styleIdx);
-
-			size_t nearestIdx = SIZE_MAX;
-			float nearestDist = 1e18f;
-			for (size_t i = 0; i < style.tabs.size(); i++) {
-				float dist = fabsf(style.tabs[i].position - xPoints);
-				if (dist < nearestDist) {
-					nearestDist = dist;
-					nearestIdx = i;
-				}
-			}
-			if (nearestIdx == SIZE_MAX || nearestIdx >= style.tabs.size())
-				return;
-			fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Tab",
-				fPages->CurrentViewState());
-			RemoveParagraphTab(*fDocument, fPages->fCaret.part,
-				fPages->fCaret.paragraph, fPages->fCaret.paragraph,
-				style.tabs[nearestIdx].position);
-			fPages->TextChanged();
-		}
-		return;
-	}
-	// Edit Tab… — placeholder (not implemented yet)
-	if (message->what == kCmdEditTab) {
-		fStatus->SetText("Edit Tab… not implemented yet");
 		return;
 	}
 
