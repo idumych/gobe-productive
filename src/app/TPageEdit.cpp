@@ -2507,6 +2507,59 @@ TPageView::MessageReceived(BMessage* message)
 						Invalidate();
 						return;
 					}
+					case 'sM64':	// Column Width… (TSetColumnWidthCommand)
+					case 'sM65': {	// Row Height… (TSetRowHeightCommand)
+						bool columns = message->what == 'sM64';
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						if (ss == NULL)
+							return;
+						float size;
+						if (message->FindFloat("value", &size) != B_OK) {
+							float current = columns
+								? ss->ColumnWidth(uint16_t(fSelectedCell.column))
+								: ss->RowHeight(uint16_t(fSelectedCell.row));
+							(new TDialogRowColSize(this, columns, current,
+								columns ? ss->defaultWidth : ss->defaultHeight))->RunDialog();
+							return;
+						}
+						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(columns ? 1 : 2),
+							CurrentViewState());
+						SetLineSize(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+							columns, uint16_t(columns ? c0 : r0), uint16_t(columns ? c1 : r1),
+							size);
+						fBook->Reset();
+						Rebuild();
+						Invalidate();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 'sM77': {	// Go To Cell… (TDialogGotoMove)
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						if (ss == NULL)
+							return;
+						const void* data = NULL;
+						ssize_t size = 0;
+						if (message->FindData("cellID", B_RAW_TYPE, &data, &size) != B_OK
+								|| size < 4) {
+							size_t part = fSelectedCell.part;
+							auto parse = [this, part](const std::string& text, uint16& row,
+									uint16& column) {
+								return ParseCellReference(part, text, row, column);
+							};
+							(new TDialogGotoMove(this, true, CellName({uint16_t(fSelectedCell.row),
+								uint16_t(fSelectedCell.column)}), parse))->RunDialog();
+							return;
+						}
+						const uint16* cell = (const uint16*)data;
+						fSelectedCell.row = fSelectedCell.anchorRow = cell[0];
+						fSelectedCell.column = fSelectedCell.anchorColumn = cell[1];
+						// ScrollActiveOntoScreen
+						BRect rect = CellViewRect(fSelectedCell.part, cell[0], cell[1]);
+						if (rect.IsValid() && !Bounds().Contains(rect))
+							ScrollTo(std::max(0.0f, rect.left - 20), std::max(0.0f, rect.top - 20));
+						Invalidate();
+						return;
+					}
 					case 'sM78':	// Calculate Now (ChangeAll: every formula again)
 						fBook->Reset();
 						Invalidate();
@@ -4076,6 +4129,60 @@ TPageView::FillLocked(FillKind kind, int r0, int c0, int r1, int c1)
 }
 
 
+// TParser::ParseReference as Go To Cell takes it: a cell, a one-cell range
+// or a name of one cell, inside the sheet
+bool
+TPageView::ParseCellReference(size_t part, const std::string& text, uint16& row,
+	uint16& column) const
+{
+	const SSPart* ss = fDocument.SpreadsheetPart(part);
+	if (ss == NULL)
+		return false;
+	bool found = false;
+	int r0 = 0, c0 = 0, r1 = 0, c1 = 0;
+	if (const Selection* name = fDocument.NamedSelection(text, int(part))) {
+		if (name->ranges.size() == 1) {
+			r0 = name->ranges[0][0];
+			c0 = name->ranges[0][1];
+			r1 = name->ranges[0][2];
+			c1 = name->ranges[0][3];
+			found = true;
+		}
+	} else {
+		std::vector<FormulaToken> tokens;
+		std::string error;
+		auto isName = [](const std::string&) { return false; };
+		// (the parser ends with an end token, 0x1d)
+		if (ParseFormula(text, CellID{0, 0}, isName, tokens, error) && !tokens.empty()
+				&& tokens.back().kind == 0x1d)
+			tokens.pop_back();
+		if (tokens.size() == 1) {
+			const FormulaToken& t = tokens[0];
+			auto resolve = [](const CellRef& r, int& row, int& column) {
+				if (r.flags & 1)
+					return false;	// another part's
+				row = int16_t(r.cell.a);
+				column = int16_t(r.cell.b);
+				return true;
+			};
+			if (t.kind == 0x19 && t.refs.size() >= 1 && resolve(t.refs[0], r0, c0)) {
+				r1 = r0;
+				c1 = c0;
+				found = true;
+			} else if (t.kind == 0x1a && t.refs.size() >= 2 && resolve(t.refs[0], r0, c0)
+					&& resolve(t.refs[1], r1, c1))
+				found = true;
+		}
+	}
+	if (!found || r0 != r1 || c0 != c1 || r0 < ss->used.from.a || r0 > ss->used.to.a
+			|| c0 < ss->used.from.b || c0 > ss->used.to.b)
+		return false;
+	row = uint16(r0);
+	column = uint16(c0);
+	return true;
+}
+
+
 // TPartSS::IsLocked for a block of the selected part (and its alert)
 bool
 TPageView::RangeLocked(int r0, int c0, int r1, int c1)
@@ -4105,7 +4212,8 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
-		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66':
+		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
+		case 'sM65': case 'sM77':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

@@ -2,6 +2,7 @@
 #ifndef GOBE_TSHEETDIALOGS_H
 #define GOBE_TSHEETDIALOGS_H
 
+#include <functional>
 #include <string>
 
 #include "NumberFormats.h"
@@ -61,6 +62,48 @@ protected:
 private:
 	BHandler* fTarget;
 	bool fOptions[6];
+};
+
+// Format > Column Width… and Row Height… (TDialogRowColSize; TSSDialog 5):
+// the size (0-512 points, else STR# 6, 13), Default (item 3) puts the
+// default one in. For rows the field's label and the title are STR# 1506, 0
+// ("Row Height:"). OK sends `target` 'sM64' (columns) or 'sM65' with the
+// float "value".
+class TDialogRowColSize : public TDialog {
+public:
+	TDialogRowColSize(BHandler* target, bool columns, float size, float defaultSize);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+	bool fColumns;
+	float fSize;
+	float fDefault;
+};
+
+// Options > Go To Cell… and Move Cells… (TDialogGotoMove; TSSDialog 21):
+// a cell, the active one's name to begin with. `parse` (TParser::
+// ParseReference) gives the single cell inside the sheet a text names, or
+// false (STR# 6, 4). OK sends `target` 'sM77' (go to) or 'sM76' (move)
+// with "cellID", the cell's row and column. Move Cells' title and label are
+// STR# 1501, 6 and STR# 1506, 1.
+class TDialogGotoMove : public TDialog {
+public:
+	TDialogGotoMove(BHandler* target, bool goTo, const std::string& cell,
+		std::function<bool(const std::string&, uint16&, uint16&)> parse);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+	bool fGoTo;
+	std::string fCell;
+	std::function<bool(const std::string&, uint16&, uint16&)> fParse;
 };
 
 } // namespace gobe

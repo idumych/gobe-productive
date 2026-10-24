@@ -320,4 +320,130 @@ TDialogDisplayOptions::ItemHit(int32 index, BMessage* message)
 	return false;
 }
 
+TDialogRowColSize::TDialogRowColSize(BHandler* target, bool columns, float size,
+		float defaultSize)
+	:
+	TDialog(5, 5, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
+	fTarget(target),
+	fColumns(columns),
+	fSize(size),
+	fDefault(defaultSize)
+{
+}
+
+
+static BString
+SizeText(float size)
+{
+	// (TDialog::SetTextItem with a float: no decimals when there are none)
+	BString text;
+	if (size == float(int32(size)))
+		text << int32(size);
+	else
+		text << size;
+	return text;
+}
+
+
+void
+TDialogRowColSize::Init()
+{
+	if (!fColumns) {
+		std::string label = IndexString(GobeResources::Part("Spreadsheet"), 1506, 0);
+		SetLabelItem(2, label.c_str());
+		if (!label.empty())
+			label.erase(label.size() - 1);
+		SetTitle(label.c_str());
+	}
+	SetTextItem(2, SizeText(fSize).String());
+	MakeFocusItem(2);
+}
+
+
+bool
+TDialogRowColSize::ItemHit(int32 index, BMessage* message)
+{
+	switch (index) {
+		case 0: {
+			BString text = TextItem(2);
+			char* end = NULL;
+			float size = strtof(text.String(), &end);
+			if (text.Length() == 0 || end == NULL || *end != '\0' || size < 0
+					|| size > 512) {
+				char buffer[256];
+				snprintf(buffer, sizeof(buffer),
+					GobeResources::IndexString(6, 13).String(), 0, 512);
+				(new BAlert("", buffer, "OK"))->Go(NULL);
+				MakeFocusItem(2);
+				return true;
+			}
+			fSize = size;
+			BMessage apply(fColumns ? 'sM64' : 'sM65');
+			apply.AddFloat("value", fSize);
+			if (fTarget != NULL && fTarget->Looper() != NULL)
+				fTarget->Looper()->PostMessage(&apply, fTarget);
+			break;
+		}
+		case 1:
+			break;
+		case 3:
+			SetTextItem(2, SizeText(fDefault).String());
+			MakeFocusItem(2);
+			return false;
+		default:
+			return false;
+	}
+	PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
+TDialogGotoMove::TDialogGotoMove(BHandler* target, bool goTo, const std::string& cell,
+		std::function<bool(const std::string&, uint16&, uint16&)> parse)
+	:
+	TDialog(21, 21, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
+	fTarget(target),
+	fGoTo(goTo),
+	fCell(cell),
+	fParse(parse)
+{
+}
+
+
+void
+TDialogGotoMove::Init()
+{
+	if (!fGoTo) {
+		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
+		SetTitle(IndexString(resources, 1501, 6).c_str());
+		SetLabelItem(2, IndexString(resources, 1506, 1).c_str());
+	}
+	SetTextItem(2, fCell.c_str());
+	MakeFocusItem(2);
+}
+
+
+bool
+TDialogGotoMove::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 1) {
+		PostMessage(B_QUIT_REQUESTED);
+		return false;
+	}
+	if (index != 0)
+		return false;
+	uint16 row = 0, column = 0;
+	if (!fParse || !fParse(TextItem(2).String(), row, column)) {
+		(new BAlert("", GobeResources::IndexString(6, 4).String(), "OK"))->Go(NULL);
+		MakeFocusItem(2);
+		return true;
+	}
+	BMessage apply(fGoTo ? 'sM77' : 'sM76');
+	uint16 cell[2] = {row, column};
+	apply.AddData("cellID", B_RAW_TYPE, cell, sizeof(cell));
+	if (fTarget != NULL && fTarget->Looper() != NULL)
+		fTarget->Looper()->PostMessage(&apply, fTarget);
+	PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
 } // namespace gobe

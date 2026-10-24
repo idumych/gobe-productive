@@ -60,59 +60,6 @@ private:
 	BMenuItem* fCurrentFamily = NULL;
 };
 
-// TColumnWidthDialog: the Column Width dialog.
-// A single text field (width in points) and OK/Cancel buttons.
-class TColumnWidthDialog : public BWindow {
-public:
-	TColumnWidthDialog(BHandler* target, Document* doc, TPageView* view);
-
-	virtual void MessageReceived(BMessage* message);
-	virtual bool QuitRequested();
-
-private:
-	void DoApply();
-
-	Document* fDocument;
-	TPageView* fView;
-	BTextControl* fField;
-	BButton* fOKBtn;
-};
-
-// TGoToCellDialog: the Go To Cell (DIAL 21) dialog.
-// A single text field (cell reference like "B12") and OK button.
-class TGoToCellDialog : public BWindow {
-public:
-	TGoToCellDialog(BHandler* target, Document* doc, TPageView* view);
-
-	virtual void MessageReceived(BMessage* message);
-	virtual bool QuitRequested();
-
-private:
-	void DoGoTo();
-
-	Document* fDocument;
-	TPageView* fView;
-	BTextControl* fField;
-	BButton* fOKBtn;
-};
-
-// TRowHeightDialog: similar to TColumnWidthDialog but for rows.
-class TRowHeightDialog : public BWindow {
-public:
-	TRowHeightDialog(BHandler* target, Document* doc, TPageView* view);
-
-	virtual void MessageReceived(BMessage* message);
-	virtual bool QuitRequested();
-
-private:
-	void DoApply();
-
-	Document* fDocument;
-	TPageView* fView;
-	BTextControl* fField;
-	BButton* fOKBtn;
-};
-
 struct Document;
 struct StylesSnapshot;
 
