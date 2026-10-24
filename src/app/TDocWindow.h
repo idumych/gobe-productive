@@ -220,6 +220,7 @@ private:
 	Document* fDocument = NULL;
 	class TPageView* fPages = NULL;
 	BFilePanel* fSavePanel = NULL;
+	BMenuField* fFormatField = NULL;	// the Save panel's "File Format"
 	bool fModified = false;
 	bool fBackedUp = false;
 

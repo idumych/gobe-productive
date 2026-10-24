@@ -33,6 +33,7 @@ struct Document {
 	PartMgr parts;
 	SelectionMgr selections;
 	LinksMgr links;
+	SheetMgr sheets;
 	// parsed word processing parts, index into parts.parts
 	std::vector<std::pair<size_t, WPPart>> wordParts;
 	std::vector<std::pair<size_t, GRPart>> graphicsParts;
@@ -109,6 +110,8 @@ struct Document {
 
 	// index of the root part (PROT/BROT), or -1
 	int RootPart() const;
+	// the first sheet's main part (what Save As exports), or -1
+	int MainPart() const;
 };
 
 bool LoadDocument(const std::string& path, Document& doc, std::string& error);

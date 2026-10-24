@@ -30,6 +30,7 @@
 #include "TDialog.h"
 #include "TDocView.h"
 #include "TPageView.h"
+#include "TTranslate.h"
 #include "Styles.h"
 
 #include <ScrollView.h>
@@ -523,12 +524,15 @@ TParagraphDialog::TParagraphDialog(Document* doc, TPageView* view)
 		style = fView->StyleAt({fView->fCaret.paragraph, fView->fCaret.offset});
 	}
 
-	// Build alignment popup with style codes: 0=left, 1=right, 2=center, 3=justify
+	// Alignment popup: MENU 300's items, the value is the PAlg value
+	// (TDialogFormatParagraph::initIndentSet: FindValue(alignment))
 	BPopUpMenu* alignMenu = new BPopUpMenu("alignment");
-	alignMenu->AddItem(new BMenuItem("Left", new BMessage(static_cast<uint32>(0))));
-	alignMenu->AddItem(new BMenuItem("Right", new BMessage(static_cast<uint32>(1))));
-	alignMenu->AddItem(new BMenuItem("Center", new BMessage(static_cast<uint32>(2))));
-	alignMenu->AddItem(new BMenuItem("Justify", new BMessage(static_cast<uint32>(3))));
+	static const char* kAlignLabels[] = { "Left", "Center", "Right", "Justify" };
+	for (int32 i = 0; i < 4; i++) {
+		BMessage* m = new BMessage('PAlg');
+		m->AddInt32("value", i);
+		alignMenu->AddItem(new BMenuItem(kAlignLabels[i], m));
+	}
 	alignMenu->SetLabelFromMarked(true);
 
 	// Build layout manually (older Haiku: BLayoutBuilder::End() returns void*)
@@ -1438,7 +1442,12 @@ TDocWindow::MessageReceived(BMessage* message)
 			}
 			return;
 		case kCmdSave:
-			if (fDocument != NULL)
+			if (fDocument == NULL)
+				return;
+			// an untitled document is saved through the Save panel
+			if (fDocument->path.empty())
+				PostMessage(kCmdSaveAs);
+			else
 				Save(fDocument->path);
 			return;
 		case kCmdSaveAs:
@@ -1446,7 +1455,11 @@ TDocWindow::MessageReceived(BMessage* message)
 				return;
 			if (fSavePanel == NULL) {
 				fSavePanel = new BFilePanel(B_SAVE_PANEL, new BMessenger(this));
-				fSavePanel->SetSaveText(BPath(fDocument->path.c_str()).Leaf());
+				fSavePanel->SetSaveText(fDocument->path.empty() ? fDocument->name.c_str()
+					: BPath(fDocument->path.c_str()).Leaf());
+				int main = fDocument->MainPart();
+				fFormatField = AddFormatField(fSavePanel,
+					main >= 0 && fDocument->WordPart(size_t(main)) != NULL);
 			}
 			fSavePanel->Show();
 			return;
@@ -1459,6 +1472,16 @@ TDocWindow::MessageReceived(BMessage* message)
 				BPath path(&directory);
 				path.Append(name);
 				std::string from = fDocument->path;
+
+				// the File Format popup: a translator's format writes the
+				// main part into a new file and leaves the document as it is
+				SaveFormat format = ChosenFormat(fFormatField);
+				if (format != kSaveGobe) {
+					BString error;
+					if (!ExportFile(*fDocument, path.Path(), format, error))
+						(new BAlert("Save", error.String(), "OK"))->Go(NULL);
+					return;
+				}
 				if (Save(path.Path())) {
 					// a new file: the original's file type
 					BNode source(from.c_str()), target(path.Path());
@@ -1466,6 +1489,8 @@ TDocWindow::MessageReceived(BMessage* message)
 					char type[B_MIME_TYPE_LENGTH];
 					if (sourceInfo.GetType(type) == B_OK)
 						targetInfo.SetType(type);
+					else
+						targetInfo.SetType("application/x-vnd.gobe.productive-document");
 					SetTitle(path.Leaf());
 				}
 			}
@@ -1898,7 +1923,7 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 	}
 
 	// Alignment: mark the item whose value matches alignment
-	// Note: MENU 300 has val 1=center, 2=right; style has 1=right, 2=center
+	// (MENU 300's values are the PAlg values: 1 center, 2 right)
 	if (fAlignmentMenu != NULL) {
 		for (int32 i = 0; i < fAlignmentMenu->CountItems(); i++) {
 			BMenuItem* item = fAlignmentMenu->ItemAt(i);
@@ -1906,11 +1931,7 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 			if (msg != NULL) {
 				int32 val = 0;
 				if (msg->FindInt32(kValueString, &val) == B_OK) {
-					// Remap: style 1=right -> menu 2, style 2=center -> menu 1
-					int markedVal = val;
-					if (val == 1) markedVal = 2;
-					else if (val == 2) markedVal = 1;
-					item->SetMarked(markedVal == alignment);
+					item->SetMarked(val == alignment);
 				}
 			}
 		}

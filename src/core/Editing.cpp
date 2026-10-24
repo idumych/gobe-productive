@@ -324,6 +324,20 @@ InsertMultiline(WPPart& part, TextPosition at, const std::string& text)
 }
 
 
+TextPosition
+InsertSpecialChar(WPPart& part, TextPosition at, char c)
+{
+	if (c != 0x02 && c != 0x05 && c != 0x0c)
+		return InsertText(part, at, std::string(1, c));
+	if (at.paragraph >= part.paragraphs.size())
+		return at;
+	TextPosition next = SplitParagraph(part, at);
+	if (next.paragraph > at.paragraph)
+		part.paragraphs[next.paragraph - 1].text.back() = c;
+	return next;
+}
+
+
 namespace {
 
 // 0: word character, 1: blank, 2: punctuation (a run by itself)

@@ -16,6 +16,12 @@ struct Color {
 	uint8_t r = 0, g = 0, b = 0, a = 255;
 	bool operator==(const Color& o) const
 		{ return r == o.r && g == o.g && b == o.b && a == o.a; }
+	bool operator!=(const Color& o) const
+		{ return !(*this == o); }
+	bool operator<(const Color& o) const
+		{ return r < o.r || (r == o.r && g < o.g)
+			|| (r == o.r && g == o.g && b < o.b)
+			|| (r == o.r && g == o.g && b == o.b && a < o.a); }
 };
 
 // TPropParTab: one tab stop (a style can hold several; one at the same
@@ -35,7 +41,7 @@ struct TextStyle {
 	float size = 12;							// TSiz
 	uint32_t faceFlags = 0;						// TFac: bold/italic/... bits
 	Color color;								// TCol
-	int alignment = 0;							// PAlg: 0 left, 1 right, 2 center, 3 justify
+	int alignment = 0;							// PAlg: 0 left, 1 center, 2 right, 3 justify (TLineRun)
 	float leftIndent = 0, firstIndent = 0, rightIndent = 0;	// PLef, PInd, PRig
 	float spaceBefore = 0, spaceAfter = 0;		// SpaB, SpaA
 	// LSpa (TPropParLineSpacing): a multiple of the line height (adds

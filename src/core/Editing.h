@@ -49,6 +49,11 @@ std::string RangeText(const WPPart& part, TextPosition from, TextPosition to);
 bool DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition& result);
 // InsertText for text with line breaks; returns the position after it.
 TextPosition InsertMultiline(WPPart& part, TextPosition at, const std::string& text);
+// TWPPart::InsertSpecialChar: 0x01 (line break, sM57) goes into the text;
+// 0x02 (column break, sM58) and 0x0c (page break, sM59) end the paragraph
+// like Enter, with that character as its terminator. Returns the position
+// after it.
+TextPosition InsertSpecialChar(WPPart& part, TextPosition at, char c);
 
 // Double click: [from, to) is the word, blank run or punctuation character
 // at `offset` (the one before it at the end of the text).

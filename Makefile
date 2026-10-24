@@ -5,7 +5,7 @@
 NAME := GobeProductive
 CXX ?= g++
 CXXFLAGS += -std=c++17 -O2 -g -Wall -Wno-multichar -Isrc/core -Isrc/app
-LIBS := -lbe -ltracker -ltranslation -lz
+LIBS := -lbe -ltracker -ltranslation -ltextencoding -lz
 
 CORE := $(wildcard src/core/*.cpp)
 APP := $(wildcard src/app/*.cpp)

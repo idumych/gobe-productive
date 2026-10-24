@@ -275,7 +275,7 @@ int main(int argc, char* argv[])
 				("refcount delta for style " + std::to_string(s) + " v4 " + std::to_string(v4Before[s]) + "->" + std::to_string(v4After[s]) + " uses " + std::to_string(countBefore[s]) + "->" + std::to_string(countAfter[s])).c_str());
 		}
 
-		// (d) Paragraph property: alignment = 2 (center) on paragraph k.
+		// (d) Paragraph property: alignment = 2 (right) on paragraph k.
 		std::vector<int> alignBefore;
 		for (const WPParagraph& par : part.paragraphs)
 			alignBefore.push_back(ResolveTextStyle(doc.styles, par.parStyle).alignment);

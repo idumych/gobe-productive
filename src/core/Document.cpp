@@ -41,6 +41,8 @@ LoadDocument(const std::string& path, Document& doc, std::string& error)
 				ReadSelectionMgr(a, doc.selections);
 			else if (e.name == "LinksMgr")
 				ReadLinksMgr(a, doc.links);
+			else if (e.name == "SheetMgr")
+				ReadSheetMgr(a, doc.sheets);
 			else if (e.name == "PartMgr")
 				ReadPartMgr(a, doc.parts);
 		} catch (const ArchiveError& x) {
@@ -275,6 +277,15 @@ Document::GraphicsPart(size_t part) const
 		if (index == part)
 			return &gr;
 	return nullptr;
+}
+
+
+int
+Document::MainPart() const
+{
+	if (!sheets.sheets.empty() && sheets.sheets[0].mainPart < parts.parts.size())
+		return int(sheets.sheets[0].mainPart);
+	return -1;
 }
 
 
@@ -613,7 +624,11 @@ BuildWordPart()
 	w.UInt32(0);	// length
 	w.UInt16(0);	// value12
 	w.UInt32(0);	// parStyle
-	w.UInt32(0);	// runs count
+	// one run at 0 in the paragraph's style: every paragraph in the
+	// documents has a run at 0 (2823 of 2823), and character styling needs it
+	w.UInt32(1);	// runs count
+	w.UInt32(0);	// position
+	w.UInt32(0);	// style
 	w.UInt32(0);	// misc count
 	w.Sig(Sig("par-"));
 
@@ -862,6 +877,7 @@ UntitledName(const std::vector<std::string>& existingNames)
 bool
 CreateBlankDocument(Document& doc, std::string& error)
 {
+	doc = Document();
 	try {
 		// Determine the name from existing document names (empty in production
 		// at this stage; the TApp tracks window count for naming).
@@ -942,6 +958,7 @@ CreateBlankDocument(Document& doc, std::string& error)
 				Style bas;
 				bas.id = 0x42617369u;	// 'Basi'
 				bas.valueC = 0xffff;
+				bas.value4 = 3;		// the manager, the paragraph and its run
 				bas.name = "Default";
 				styles.styles.push_back(std::move(bas));
 			}
@@ -950,6 +967,7 @@ CreateBlankDocument(Document& doc, std::string& error)
 				Style grfx;
 				grfx.id = 0x47524658u;	// 'GRFX'
 				grfx.valueC = 0xffff;
+				grfx.value4 = 1;	// the manager
 				grfx.name = "GR Default";
 				styles.styles.push_back(std::move(grfx));
 			}
@@ -957,9 +975,22 @@ CreateBlankDocument(Document& doc, std::string& error)
 			out.Bytes(WriteStyleMgr(styles));
 		}
 
-		// 8. SheetMgr (root sheet "Sheet 1")
-		addSection("SheetMgr");
-		out.Bytes(WriteSheetMgr());
+		// 8. SheetMgr: one sheet showing the WORD part, laid out like the
+		// samples' (Resume): US Letter with 1 inch margins. No print
+		// settings yet (Page Setup isn't ported).
+		{
+			SheetMgr sheets;
+			sheets.sheetCount = 1;
+			LeafSheet sheet;
+			sheet.name = "Sheet 1";
+			sheet.mainPart = 0;
+			sheet.value2d = true;
+			sheet.flags[0] = sheet.flags[1] = sheet.flags[2] = true;
+			sheet.divisions = 8;
+			sheets.sheets.push_back(sheet);
+			addSection("SheetMgr");
+			out.Bytes(WriteSheetMgr(sheets));
+		}
 
 		// 9. SelectionMgr (0 selections)
 		{
@@ -1031,6 +1062,8 @@ CreateBlankDocument(Document& doc, std::string& error)
 				ReadSelectionMgr(archive, doc.selections);
 			else if (e.name == "LinksMgr")
 				ReadLinksMgr(archive, doc.links);
+			else if (e.name == "SheetMgr")
+				ReadSheetMgr(archive, doc.sheets);
 			else if (e.name == "PartMgr")
 				ReadPartMgr(archive, doc.parts);
 		}

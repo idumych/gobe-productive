@@ -397,17 +397,70 @@ WritePenMgr()
 }
 
 
-std::vector<uint8_t>
-WriteSheetMgr()
+void
+ReadSheetMgr(DocArchive& a, SheetMgr& out)
 {
-	// TSheet::Write: TString name, u32 flags, u32 index,
-	// count of extra sheets, per-sheet data
-	// For a blank WORD document: the root sheet
+	out.name = a.String();
+	out.value4 = a.UInt32();
+	out.value8 = a.UInt32();
+	out.sheetCount = a.UInt32();
+	uint32_t count = a.UInt32();
+	for (uint32_t i = 0; i < count; i++) {
+		LeafSheet s;
+		s.name = a.String();
+		s.value4 = a.UInt32();
+		s.value8 = a.UInt32();
+		s.mainPart = a.UInt32();
+		s.graphicsPart = a.UInt32();
+		s.headerPart = a.UInt32();
+		s.footerPart = a.UInt32();
+		s.value24 = a.UInt32();
+		s.value28 = a.UInt32();
+		s.frameSheet = a.Bool();
+		s.value2d = a.Bool();
+		a.Rect(s.paper);
+		a.Rect(s.printable);
+		for (bool& f : s.flags)
+			f = a.Bool();
+		s.unit = a.UInt32();
+		s.divisions = a.UInt32();
+		uint32_t size = a.UInt32();
+		s.printSettings = a.Bytes(size);
+		out.sheets.push_back(std::move(s));
+	}
+}
+
+
+std::vector<uint8_t>
+WriteSheetMgr(const SheetMgr& mgr)
+{
 	DocWriter w;
-	w.String("Sheet 1");
-	w.UInt32(0);	// flags
-	w.UInt32(0);	// index (root)
-	w.UInt32(0);	// extra sheet count
+	w.String(mgr.name);
+	w.UInt32(mgr.value4);
+	w.UInt32(mgr.value8);
+	w.UInt32(mgr.sheetCount);
+	w.UInt32(uint32_t(mgr.sheets.size()));
+	for (const LeafSheet& s : mgr.sheets) {
+		w.String(s.name);
+		w.UInt32(s.value4);
+		w.UInt32(s.value8);
+		w.UInt32(s.mainPart);
+		w.UInt32(s.graphicsPart);
+		w.UInt32(s.headerPart);
+		w.UInt32(s.footerPart);
+		w.UInt32(s.value24);
+		w.UInt32(s.value28);
+		w.Bool(s.frameSheet);
+		w.Bool(s.value2d);
+		w.Rect(s.paper);
+		w.Rect(s.printable);
+		for (bool f : s.flags)
+			w.Bool(f);
+		w.UInt32(s.unit);
+		w.UInt32(s.divisions);
+		w.UInt32(uint32_t(s.printSettings.size()));
+		w.Bytes(s.printSettings);
+	}
 	return w.Data();
 }
 

@@ -22,6 +22,7 @@
 #include "SSStyle.h"
 #include "SSEval.h"
 #include "TDocWindow.h"
+#include "TTranslate.h"
 
 namespace gobe {
 
@@ -1077,9 +1078,6 @@ TPageView::MessageReceived(BMessage* message)
 				beep();
 				return;
 			}
-			// Remap MENU 300 codes to code's alignment codes
-			if (align == 1) align = 2;	// center -> right code
-			else if (align == 2) align = 1;	// right -> center code
 			fUndo.Begin(fDocument, fCaret.part, "Alignment", CurrentViewState());
 			auto range = TextSelectionRange();
 			ApplyParagraphProperty(fDocument, fCaret.part, range.first.paragraph,
@@ -2263,6 +2261,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 			InsertText(*wp, {fCaret.paragraph, fCaret.offset}, timeStr);
 			fCaret.offset += strlen(timeStr);
 			TextChanged();
+		} else if (command.compare(0, 11, "exporttext ") == 0
+				|| command.compare(0, 10, "exportrtf ") == 0) {
+			// "exporttext <path>", "exportrtf <path>": Save As in the
+			// Plain Text or RTF format
+			bool text = command[6] == 't';
+			BString error;
+			if (!ExportFile(fDocument, command.c_str() + (text ? 11 : 10),
+					text ? kSavePlainText : kSaveRTF, error))
+				fprintf(stderr, "%s: %s\n", text ? "exporttext" : "exportrtf", error.String());
 		}
 	}
 }

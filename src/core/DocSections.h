@@ -142,9 +142,37 @@ std::vector<uint8_t> WriteSetMgr();
 // double-passthrough, same data, 'PenM'. For blank: count 0.
 std::vector<uint8_t> WritePenMgr();
 
-// "SheetMgr" (unparseable): TSheet::Write format — name TString, u32 flags,
-// u32 index, count of extra sheets, per-sheet data. For blank: just the root.
-std::vector<uint8_t> WriteSheetMgr();
+// "SheetMgr" (TSheetMgr::TSheetMgr(TInputArchive&)): TSheet (name, two
+// u32s), +0x24 (TExportTranslation::DoExport's sheet count), a count, then each TLeafSheet: TSheet,
+// its main part, graphics part, header and footer parts (part indexes,
+// 0xffffffff for none), two u32s, two bools (+0x2c: a frame opened as a
+// sheet), the paper rectangle and the printable rectangle (TLeafSheet::
+// PaperRect, PrintableRect), four bools, the unit and ruler divisions, and
+// the flattened print settings BMessage (u32 size, bytes).
+struct LeafSheet {
+	std::string name;
+	uint32_t value4 = 0, value8 = 0;
+	uint32_t mainPart = 0xffffffff;		// +0x14
+	uint32_t graphicsPart = 0xffffffff;	// +0x18
+	uint32_t headerPart = 0xffffffff;	// +0x1c
+	uint32_t footerPart = 0xffffffff;	// +0x20
+	uint32_t value24 = 0, value28 = 0;
+	bool frameSheet = false;			// +0x2c
+	bool value2d = false;
+	float paper[4] = {0, 0, 612, 792};		// +0x34
+	float printable[4] = {72, 72, 540, 720};	// +0x44
+	bool flags[4] = {};					// +0x54..+0x57
+	uint32_t unit = 0, divisions = 0;	// +0x58, +0x5c
+	std::vector<uint8_t> printSettings;	// +0x30, flattened BMessage
+};
+struct SheetMgr {
+	std::string name;
+	uint32_t value4 = 0, value8 = 0;
+	uint32_t sheetCount = 0;			// +0x24 (the number of sheets in the documents)
+	std::vector<LeafSheet> sheets;
+};
+void ReadSheetMgr(DocArchive& a, SheetMgr& out);
+std::vector<uint8_t> WriteSheetMgr(const SheetMgr& mgr);
 
 // "CommandMgr" (unparseable): 'CMDM', count, per-command 'TCMD' blocks, 'CmdM'.
 std::vector<uint8_t> WriteCommandMgr();

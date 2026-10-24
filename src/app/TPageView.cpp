@@ -440,9 +440,10 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 
 			float width = x;
 			float shift = 0, extra = 0;
-			if (parStyle.alignment == 1)
+			// TLineRun: 2 right, 1 centered
+			if (parStyle.alignment == 2)
 				shift = avail - width;
-			else if (parStyle.alignment == 2)
+			else if (parStyle.alignment == 1)
 				shift = (avail - width) / 2;
 			else if (parStyle.alignment == 3 && t < tokens.size() && !forced
 					&& placed.size() > 1)

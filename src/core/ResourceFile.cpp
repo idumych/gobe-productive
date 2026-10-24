@@ -141,4 +141,22 @@ ResourceFile::All(uint32_t type) const
 	return res;
 }
 
+std::string
+IndexString(const ResourceFile& file, int32_t id, int index)
+{
+	const ResourceFile::Resource* r = file.Find(FourCC("STR#"), id);
+	if (r == nullptr)
+		return "";
+	size_t at = 0;
+	for (int i = 0; at < r->data.size(); i++) {
+		size_t end = at;
+		while (end < r->data.size() && r->data[end] != 0)
+			end++;
+		if (i == index)
+			return std::string(r->data.begin() + at, r->data.begin() + end);
+		at = end + 1;
+	}
+	return "";
+}
+
 } // namespace gobe

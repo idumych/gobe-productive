@@ -87,3 +87,13 @@ Milestone 3 (started): editing.
   edits. Saved files load in the port; they haven't been tried in BeOS
   Gobe.
 - Not yet: selections, undo, styling, frames/graphics editing.
+
+Milestone 5 (started): translators.
+- Plain text and RTF as the Gobe Text and RTF translators do them
+  (`core/TextImport`, `core/RTF`, `app/TTranslate`): File > Open reads text
+  and RTF files into untitled "<name> (converted)" documents (encoding
+  detection, StyledEdit attributes, the RTF reader's keyword table); Save
+  As has the original's "File Format" popup (Gobe Productive, Plain Text,
+  RTF). Not yet: the translators' Settings, delimited text as a
+  spreadsheet, RTF headers/footers, pictures and page number fields, and
+  the HTML, Word, Excel and SYLK translators.

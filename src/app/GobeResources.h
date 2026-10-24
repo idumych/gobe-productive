@@ -22,6 +22,8 @@ public:
 
 	static const ResourceFile& File();
 	static const BString& Path();
+	// GetIndexString: string `index` (from 0) of STR# `id`
+	static BString IndexString(int32 id, int32 index);
 };
 
 } // namespace gobe

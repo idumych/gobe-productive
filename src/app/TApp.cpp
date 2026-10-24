@@ -27,6 +27,7 @@
 #include "GobeResources.h"
 #include "TDocWindow.h"
 #include "TPageView.h"
+#include "TTranslate.h"
 
 namespace gobe {
 
@@ -188,15 +189,34 @@ public:
 		try {
 			Document* doc = new Document;	// owned by the app for now
 			std::string error;
-			if (!LoadDocument(path, *doc, error)) {
-				if (fRenderPath.empty()) {
-					BString text;
-					text << "Could not open \"" << path.c_str() << "\":\n" << error.c_str();
-					(new BAlert("Open", text.String(), "OK"))->Go(NULL);
-				} else
-					fprintf(stderr, "error opening %s: %s\n", path.c_str(), error.c_str());
+			// TApp::RefsReceived: a Gobe document, else the translator that
+			// reads it best (a new untitled document)
+			FileKind kind = IdentifyFile(path.c_str());
+			bool ok;
+			BString message, warning;
+			if (kind == kGobeDocument) {
+				ok = LoadDocument(path, *doc, error);
+				message << "Could not open \"" << path.c_str() << "\":\n" << error.c_str();
+			} else if (kind == kUnknownFile) {
+				// "Unable to import the file “%s”."
+				ok = false;
+				message.SetToFormat(GobeResources::IndexString(6, 17).String(),
+					BPath(path.c_str()).Leaf());
+			} else
+				ok = ImportFile(path.c_str(), kind, *doc, message, warning);
+			if (!ok) {
+				if (fRenderPath.empty())
+					(new BAlert("Open", message.String(), "OK"))->Go(NULL);
+				else
+					fprintf(stderr, "error opening %s: %s\n", path.c_str(), message.String());
 				delete doc;
 				return;
+			}
+			if (warning.Length() > 0) {
+				if (fRenderPath.empty())
+					(new BAlert("Bad RTF Alert", warning.String(), "OK"))->Go(NULL);
+				else
+					fprintf(stderr, "%s: %s\n", path.c_str(), warning.String());
 			}
 			fHasDocument = true;
 			for (const std::string& w : doc->warnings)
@@ -212,7 +232,9 @@ public:
 			BRect frame(80, 60, 720, 620);
 			frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
 			fWindowCount++;
-			TDocWindow* window = new TDocWindow(frame, p.Leaf(), doc);
+			// an imported document is untitled: "<name> (converted)"
+			TDocWindow* window = new TDocWindow(frame,
+				doc->path.empty() ? doc->name.c_str() : p.Leaf(), doc);
 			window->Show();
 		} catch (const std::exception& e) {
 			fprintf(stderr, "%s: %s\n", path.c_str(), e.what());
@@ -229,6 +251,7 @@ public:
 			return;
 		}
 		fReady = true;
+		InstallTextConverter();
 		if (!fPending.empty()) {
 			OpenPending();
 			if (!fRenderPath.empty() && !fHasDocument) {

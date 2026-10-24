@@ -45,6 +45,10 @@ constexpr uint32_t FourCC(const char (&s)[5])
 
 std::string FourCCString(uint32_t code);
 
+// GetIndString / GetIndexString: string `index` (from 0) of the 'STR#'
+// resource `id` (NUL-terminated strings back to back); "" if there is none.
+std::string IndexString(const ResourceFile& file, int32_t id, int index);
+
 } // namespace gobe
 
 #endif

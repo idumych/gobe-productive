@@ -73,4 +73,11 @@ GobeResources::Path()
 	return sPath;
 }
 
+
+BString
+GobeResources::IndexString(int32 id, int32 index)
+{
+	return BString(gobe::IndexString(sFile, id, index).c_str());
+}
+
 } // namespace gobe
