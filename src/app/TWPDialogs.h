@@ -249,6 +249,23 @@ private:
 	std::vector<std::vector<std::string>> fBases;	// per type
 };
 
+// Document > Document Size… for text (DIAL/Item 301, TDialogWPDocSize):
+// Pages Across (2; 1 to 100, else STR# 6, 13) and Title Page (3); OK sends
+// `window` 'sM21' with "PagesAcross" and "TitlePage"
+class TDialogWPDocSize : public TDialog {
+public:
+	TDialogWPDocSize(BLooper* window, int32 across, bool titlePage);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	int32 fAcross;
+	bool fTitlePage;
+};
+
 } // namespace gobe
 
 #endif

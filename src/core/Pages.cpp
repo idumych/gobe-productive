@@ -39,6 +39,26 @@ PagesAcross(const Document& doc)
 	}
 }
 
+// where a part record's TPart +0x58 flags are (after 'PART', a value and
+// the message: the header's first value)
+size_t
+FlagsOffset(const std::vector<uint8_t>& record)
+{
+	DocArchive a(record);
+	a.CheckSig(Sig("PART"));
+	a.UInt32();
+	a.Message();
+	return a.Position();
+}
+
+
+void
+PutU32(std::vector<uint8_t>& record, size_t at, uint32_t value)
+{
+	for (int i = 0; i < 4 && at + size_t(i) < record.size(); i++)
+		record[at + size_t(i)] = uint8_t(value >> (24 - 8 * i));
+}
+
 // TPagePortal::Write: the main part and its portal, the drawing part and
 // its portal, then the header and footer frames (part, portal, frame)
 const size_t kHeaderFrameAt = 16;
@@ -705,6 +725,62 @@ Document::SetColumnCount(size_t part, size_t section, int count)
 	dirtyTails.insert(size_t(pagePart));
 	RepositionPages();
 	return true;
+}
+
+uint32_t
+Document::PagesAcrossCount() const
+{
+	return PagesAcross(*this);
+}
+
+
+bool
+Document::TitlePage(size_t part) const
+{
+	const WPPart* wp = WordPart(part);
+	return wp != nullptr && (wp->header.values[0] & 8) != 0;
+}
+
+
+bool
+Document::SetDocumentSize(size_t part, uint32_t across, bool titlePage)
+{
+	int root = RootPart();
+	const WPPart* wp = WordPart(part);
+	if (root < 0 || parts.parts[root].kind != Sig("PROT") || wp == nullptr || across < 1)
+		return false;
+	bool changed = false;
+	try {
+		// the paged root: its sheet, page part, a value, then pages across
+		std::vector<uint8_t>& record = parts.parts[root].data;
+		DocArchive a(record);
+		a.CheckSig(Sig("PART"));
+		a.UInt32();
+		PartHeader header;
+		ReadPartHeader(a, header);
+		a.UInt32();
+		a.UInt32();
+		a.UInt32();
+		size_t at = a.Position();
+		if (a.UInt32() != across) {
+			PutU32(record, at, across);
+			dirtyParts.insert(size_t(root));
+			changed = true;
+		}
+		uint32_t flags = wp->header.values[0];
+		uint32_t newFlags = titlePage ? flags | 8 : flags & ~uint32_t(8);
+		if (newFlags != flags) {
+			std::vector<uint8_t>& text = parts.parts[part].data;
+			PutU32(text, FlagsOffset(text), newFlags);
+			EditableWordPart(part)->header.values[0] = newFlags;
+			changed = true;
+		}
+	} catch (const ArchiveError&) {
+		return false;
+	}
+	if (changed)
+		RepositionPages();
+	return changed;
 }
 
 } // namespace gobe

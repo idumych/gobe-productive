@@ -792,4 +792,45 @@ TDialogStyleNew::ItemHit(int32 index, BMessage* message)
 	return TDialog::ItemHit(index, message);
 }
 
+TDialogWPDocSize::TDialogWPDocSize(BLooper* window, int32 across, bool titlePage)
+	:
+	TDialog(301, 301, 'APPL', NULL),
+	fWindow(window),
+	fAcross(across),
+	fTitlePage(titlePage)
+{
+}
+
+
+void
+TDialogWPDocSize::Init()
+{
+	SetTextItem(2, std::to_string(fAcross).c_str());
+	MakeFocusItem(2);
+	SetCheckBoxItem(3, fTitlePage);
+}
+
+
+bool
+TDialogWPDocSize::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		BString text = TextItem(2);
+		char* end;
+		long across = strtol(text.String(), &end, 10);
+		if (end == text.String() || *end != '\0' || across < 1 || across > 100) {
+			BString alert;
+			alert.SetToFormat(GobeResources::IndexString(6, 13).String(), 1, 100);
+			(new BAlert("", alert.String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		BMessage size('sM21');
+		size.AddInt32("PagesAcross", int32(across));
+		size.AddBool("TitlePage", CheckBoxItem(3));
+		fWindow->PostMessage(&size);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
 } // namespace gobe

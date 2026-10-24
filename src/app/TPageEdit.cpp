@@ -2631,6 +2631,31 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 		} else if (command == "commit") {
 			EndCellEdit(true);
+		} else if (command.compare(0, 5, "send ") == 0 && command.size() >= 9) {
+			// "send ABCD [name=value ...]": the command to the window with
+			// fields (digits an int32, true/false a bool, else a string)
+			const char* c = command.c_str() + 5;
+			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
+			std::string rest = command.size() > 10 ? command.substr(10) : "";
+			size_t at = 0;
+			while (at < rest.size()) {
+				size_t space = rest.find(' ', at);
+				std::string field = rest.substr(at, space == std::string::npos ? std::string::npos
+					: space - at);
+				at = space == std::string::npos ? rest.size() : space + 1;
+				size_t equals = field.find('=');
+				if (equals == std::string::npos)
+					continue;
+				std::string key = field.substr(0, equals), value = field.substr(equals + 1);
+				if (value == "true" || value == "false")
+					msg.AddBool(key.c_str(), value == "true");
+				else if (!value.empty() && value.find_first_not_of("-0123456789") == std::string::npos)
+					msg.AddInt32(key.c_str(), atoi(value.c_str()));
+				else
+					msg.AddString(key.c_str(), value.c_str());
+			}
+			if (Window() != NULL)
+				Window()->MessageReceived(&msg);
 		} else if (command.compare(0, 8, "findcmd ") == 0 && command.size() >= 12) {
 			// "findcmd ABCD [find=..|replace=..|case=0/1|word=0/1|wrap=0/1]":
 			// Find/Change's command 'ABCD' with TFindReplace::DoMessage's

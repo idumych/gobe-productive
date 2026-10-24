@@ -49,6 +49,7 @@
 #include "TSpellDialogs.h"
 #include "TFindDialog.h"
 #include "TPreferences.h"
+#include "TWPDialogs.h"
 #include "Find.h"
 #include "TWPRuler.h"
 #include "Styles.h"
@@ -1277,6 +1278,31 @@ TDocWindow::MessageReceived(BMessage* message)
 			(new BAlert("", text.String(), "OK"))->Go(NULL);
 		} else if (fStatus != NULL)
 			fStatus->SetText("The thesaurus and dictionary dialogs are not ported yet");
+		return;
+	}
+	// Document > Document Size… (the main part's HandleMessage: for text,
+	// TWPPart: the dialog, then TWPSetDocSizeCmd, STR# 3, 12)
+	if (message->what == 'sM21') {
+		if (fPages == NULL || fDocument == NULL || fDocument->PagePart() < 0
+				|| fDocument->MainPart() < 0
+				|| fDocument->WordPart(size_t(fDocument->MainPart())) == NULL)
+			return;
+		size_t main = size_t(fDocument->MainPart());
+		int32 across;
+		if (message->FindInt32("PagesAcross", &across) != B_OK) {
+			(new TDialogWPDocSize(this, int32(fDocument->PagesAcrossCount()),
+				fDocument->TitlePage(main)))->RunDialog();
+			return;
+		}
+		bool title = message->GetBool("TitlePage", false);
+		if (uint32(across) == fDocument->PagesAcrossCount() && title == fDocument->TitlePage(main))
+			return;
+		fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 12).String(),
+			fPages->CurrentViewState());
+		if (fDocument->SetDocumentSize(main, uint32(across), title)) {
+			fPages->GeometryChanged();
+			PostMessage(kMsgDocumentChanged);
+		}
 		return;
 	}
 	// Document > History… (a floater) and its Options (THistory::

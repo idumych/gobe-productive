@@ -150,6 +150,14 @@ struct Document {
 	// top of the printable area, the footer at its bottom, the drawing over
 	// it and the text columns between header and footer
 	void RepositionPages();
+	// Document > Document Size… for text (TDialogWPDocSize,
+	// TWPSetDocSizeCmd): the pages across (TPagedRootPart +0x6c) and the
+	// text part's Title Page (TPart +0x58 flag 8); setting them moves the
+	// pages (TPagedRootPart::GetPaperPosition). False if nothing changed
+	// or the document isn't paged.
+	uint32_t PagesAcrossCount() const;
+	bool TitlePage(size_t part) const;
+	bool SetDocumentSize(size_t part, uint32_t across, bool titlePage);
 	// Document > Insert Header / Insert Footer (TDocHeaderFooterCommand;
 	// `which` 0 header, 1 footer): the sheet's header or footer part, -1 if
 	// none; inserting makes a new text part in a paragraph style based on
