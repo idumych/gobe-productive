@@ -27,6 +27,7 @@
 #include "GobeResources.h"
 #include "TDocWindow.h"
 #include "TPageView.h"
+#include "TRecentDocs.h"
 #include "TTranslate.h"
 
 namespace gobe {
@@ -229,6 +230,8 @@ public:
 					fprintf(stderr, "%s: %s\n", path.c_str(), warning.String());
 			}
 			fHasDocument = true;
+			if (fRenderPath.empty())
+				RecentDocs::Add(path.c_str());
 			for (const std::string& w : doc->warnings)
 				printf("%s: %s\n", path.c_str(), w.c_str());
 			if (fSlide >= 0)

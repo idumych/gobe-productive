@@ -32,6 +32,7 @@
 #include "GobeResources.h"
 #include "TDialog.h"
 #include "TDocumentDialogs.h"
+#include "TRecentDocs.h"
 #include "TDocView.h"
 #include "TPageView.h"
 #include "TTranslate.h"
@@ -1621,6 +1622,7 @@ TDocWindow::Save(const std::string& path)
 		(new BAlert("Save", text.String(), "OK"))->Go(NULL);
 		return false;
 	}
+	RecentDocs::Add(path.c_str());
 	if (fPages != NULL) {
 		fPages->DocumentSaved();
 		fPages->DocumentReloaded();
@@ -1753,6 +1755,21 @@ TDocWindow::MenusBeginning()
 		bool has = paged && fDocument->HeaderPart(which) >= 0;
 		item->SetEnabled(paged);
 		item->SetLabel(GobeResources::IndexString(3, 0x16 + 2 * which + (has ? 1 : 0)).String());
+	}
+	// TNormalDocWinHelper::SetupMenus: Open Recent (RecentDocsMenu), Undo
+	// and Redo with what they would do (STR# 5, 28/29 and THistory)
+	if (BMenuItem* recent = KeyMenuBar()->FindItem('sM1C'))
+		RecentDocs::FillMenu(recent->Submenu());
+	for (int redo = 0; redo < 2; redo++) {
+		BMenuItem* item = KeyMenuBar()->FindItem(redo ? 'sM11' : 'sM10');
+		if (item == NULL)
+			continue;
+		bool can = fPages != NULL && (redo ? fPages->fUndo.CanRedo() : fPages->fUndo.CanUndo());
+		BString label = GobeResources::IndexString(5, redo ? 29 : 28);
+		if (fPages != NULL)
+			label << (redo ? fPages->fUndo.RedoLabel() : fPages->fUndo.UndoLabel()).c_str();
+		item->SetLabel(label.String());
+		item->SetEnabled(can);
 	}
 	// TWPPart::SetupMenus: Show Invisibles or Hide Invisibles (STR# 1302)
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sM5J'))
