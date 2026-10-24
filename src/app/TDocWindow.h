@@ -58,29 +58,6 @@ private:
 	BMenuItem* fCurrentFamily = NULL;
 };
 
-// TFontDialog: Font dialog with family, size, face checkboxes (Bold, Italic,
-// Underline) and a ColorControl. OK applies changed properties to the
-// selection as one undo step.
-class TFontDialog : public BWindow {
-public:
-	TFontDialog(Document* doc, TPageView* view);
-
-	virtual void MessageReceived(BMessage* message);
-	virtual bool QuitRequested();
-
-private:
-	void DoApply();
-
-	Document* fDocument;
-	TPageView* fView;
-	BTextControl* fFamily;
-	BTextControl* fSize;
-	BCheckBox* fBold;
-	BCheckBox* fItalic;
-	BCheckBox* fUnderline;
-	BColorControl* fColor;
-};
-
 // TFindDialog: the Find/Replace (DIAL 7) dialog, made functional.
 // Controls: 0=Find text, 1=Replace text, 2=Ignore Case, 3=Entire Word,
 // 4=Wrap, 5=Insert Special, 6=Find, 7=Replace, 8=Replace & Find,

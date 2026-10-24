@@ -1267,15 +1267,29 @@ TPageView::MessageReceived(BMessage* message)
 				beep();
 				return;
 			}
-			int32 size = 0;
-			if (message->FindInt32(kValueString, &size) != B_OK) {
+			// a size, Other… ('sM0U': TDialogGRSize with the size at the
+			// selection, which sends a size back as a float)
+			int32 value = 0;
+			float size = 0;
+			if (message->FindInt32(kValueString, &value) == B_OK) {
+				if (value == 'sM0U') {
+					BString text;
+					text << int32(StyleAt(TextSelectionRange().first).size);
+					BString title = GobeResources::IndexString(2, 7);
+					if (Window() != NULL)
+						(new TDialogGRSize(Window(), 'sf0K', title.String(), title.String(),
+							text.String()))->RunDialog();
+					return;
+				}
+				size = float(value);
+			} else if (message->FindFloat(kValueString, &size) != B_OK) {
 				beep();
 				return;
 			}
 			fUndo.Begin(fDocument, fCaret.part, "Size", CurrentViewState());
 			auto sel = TextSelectionRange();
 			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
-				TextSizeProperty((float)size));
+				TextSizeProperty(size));
 			TextChanged();
 			UpdateMarks();
 			return;

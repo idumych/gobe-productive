@@ -8,6 +8,8 @@
 #include <string>
 #include <vector>
 
+#include <String.h>
+
 #include "TDialog.h"
 
 class BLooper;
@@ -142,6 +144,25 @@ private:
 	int32 fAlign;
 	float fWidth;
 	std::vector<std::string> fUnitNames;
+};
+
+// A size typed in (DIAL/Item 31, TDialogGenericGetString with
+// TDialogGRSize::ValidateAndSendMsg): for 'sf0K' (Size > Other…) 2 to 510,
+// else STR# 6, 13; OK sends the window the command with the size as a
+// float "value".
+class TDialogGRSize : public TDialog {
+public:
+	TDialogGRSize(BLooper* window, uint32 command, const char* title, const char* label,
+		const char* text);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	uint32 fCommand;
+	BString fTitle, fLabel, fText;
 };
 
 } // namespace gobe

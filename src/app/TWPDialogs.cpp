@@ -434,4 +434,55 @@ TDialogFormatParagraph::ItemHit(int32 index, BMessage* message)
 	return TDialog::ItemHit(index, message);
 }
 
+TDialogGRSize::TDialogGRSize(BLooper* window, uint32 command, const char* title,
+	const char* label, const char* text)
+	:
+	TDialog(31, 31, 'APPL', NULL),
+	fWindow(window),
+	fCommand(command),
+	fTitle(title),
+	fLabel(label),
+	fText(text)
+{
+}
+
+
+void
+TDialogGRSize::Init()
+{
+	SetTitle(fTitle.String());
+	SetLabelItem(2, fLabel.String());
+	SetTextItem(2, fText.String());
+	MakeFocusItem(2);
+	if (BButton* ok = dynamic_cast<BButton*>(Item(0)))
+		ok->SetEnabled(fText.Length() > 0);
+}
+
+
+bool
+TDialogGRSize::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 2) {
+		if (BButton* ok = dynamic_cast<BButton*>(Item(0)))
+			ok->SetEnabled(TextItem(2).Length() > 0);
+		return true;
+	}
+	if (index == 0) {
+		BString text = TextItem(2);
+		char* end;
+		float size = strtof(text.String(), &end);
+		if (end == text.String() || size < 2 || size > 510) {
+			BString alert;
+			alert.SetToFormat(GobeResources::IndexString(6, 13).String(), 2, 510);
+			(new BAlert("", alert.String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		BMessage set(fCommand);
+		set.AddFloat(kValueString, size);
+		fWindow->PostMessage(&set);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
 } // namespace gobe
