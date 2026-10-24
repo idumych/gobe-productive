@@ -40,8 +40,10 @@ PASS when: OCR of the window (`{p}-open.txt`) shows the resume's text:
 "Ernie", "Objective" or "Qualifications".
 
 ### type-save-reopen
-Steps: click at the start of the word "Objective" in the document; type
-`hello from {p} `; save with Command+S (Alt+S on Haiku, Ctrl+S on V\OS and
+Steps: click just after "Pan" at the end of the name "Ernie G. Pan" at the
+top (a wide line: the columns below are one narrow text flow, where an
+extra line pushes the rest out of the frames); type ` hello from {p}`;
+save with Command+S (Alt+S on Haiku, Ctrl+S on V\OS and
 Linux); quit with Command+Q. Launch the app again with
 `"$HOME/resume-{p}"` (no GOBE_ORIGINAL: the unpacked original is
 remembered) and take a screenshot.
