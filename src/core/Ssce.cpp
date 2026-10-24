@@ -737,20 +737,14 @@ TextLexicon::Suggest(const std::string& word, int depth,
 }
 
 
-// FUN_002cfd1c: "#LID n" and "word<tab>action..." lines, or the plain
-// words
+// FUN_002cfd1c: "#LID n" (the language as kept) and "word<tab>action..."
+// lines, or the plain words
 std::string
 TextLexicon::Text() const
 {
 	std::string text;
-	if (!fPlain) {
-		static const int16_t kIds[][2] = {{1033, 0x616d}, {2057, 0x6272}};
-		int id = language;
-		for (const auto& pair : kIds)
-			if (pair[1] == language)
-				id = pair[0];
-		text += "#LID " + std::to_string(id) + "\n";
-	}
+	if (!fPlain)
+		text += "#LID " + std::to_string(language) + "\n";
 	for (const Entry& e : fEntries) {
 		if (fPlain)
 			text += e.word + "\n";

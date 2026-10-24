@@ -79,6 +79,17 @@ private:
 	std::string fAuto;
 };
 
+// TSpellSession::BuildLexPopUps: the Dictionaries folder's language
+// folders (whose first lexicon, the folder's name and 1, opens:
+// isValidMainFolder) and user dictionaries (files that open as text
+// lexicons: isValidLex), by name as the folder lists them
+void DictionaryChoices(const std::string& dictionaries, std::vector<std::string>& languages,
+	std::vector<std::string>& users);
+// TSpellSession::CreateNewUserLex (TLex_Create): an empty text lexicon
+// ("#LID" line only) in the folder; false if the name is empty, taken, or
+// it can't be written
+bool CreateUserDictionary(const std::string& dictionaries, const std::string& name);
+
 // Latin-1 and UTF-8 (convert_from_utf8 B_ISO1_CONVERSION substitutes 0x1a
 // for what Latin-1 lacks)
 std::string Latin1FromUtf8(const std::string& text);

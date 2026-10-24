@@ -40,6 +40,7 @@
 #include "TPageBar.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
+#include "TSpellDialogs.h"
 #include "TWPRuler.h"
 #include "Styles.h"
 
@@ -1517,6 +1518,10 @@ TDocWindow::MessageReceived(BMessage* message)
 			fSpellBar->HandleCommand(message);
 		return;
 	}
+	if (message->what == 'sMC6') {
+		(new TDialogSpellDictionaries())->RunDialog();
+		return;
+	}
 
 	// the commands of the parts' menus (text, cells): the page view's
 	// (menus send them to the window)
@@ -1883,8 +1888,7 @@ TDocWindow::MenusBeginning()
 		item->SetMarked(paged && fPages->PageView());
 	}
 	// TNormalDocWinHelper::FixMenus: Hide or Show SpellBar (STR# 1); Skip,
-	// Learn and Replace as the bar's buttons; (Spell Dictionaries… isn't
-	// ported)
+	// Learn and Replace as the bar's buttons
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMC5')) {
 		bool shown = fSpellBar != NULL && !fSpellBar->IsHidden(fSpellBar);
 		item->SetLabel(GobeResources::IndexString(1, shown ? 0 : 1).String());
@@ -1903,8 +1907,6 @@ TDocWindow::MenusBeginning()
 			on = fSpellBar->ReplaceEnabled();
 		item->SetEnabled(on);
 	}
-	if (BMenuItem* item = KeyMenuBar()->FindItem('sMC6'))
-		item->SetEnabled(false);
 	// (New Window: a second window on a document isn't ported)
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMF0'))
 		item->SetEnabled(false);

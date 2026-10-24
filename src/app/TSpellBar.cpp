@@ -40,34 +40,50 @@ TSpellBar::AppSpeller()
 }
 
 
-// TSpellSession::StartSession, GetDictFolder: the Dictionaries folder (STR#
-// 9's first string) beside the original binary, the preferences (PREF 42)
+SpellPrefs&
+TSpellBar::Prefs()
+{
+	static SpellPrefs sPrefs;
+	static bool sRead = false;
+	if (!sRead) {
+		sRead = true;
+		if (const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("PREF"), 42))
+			sPrefs.Read(r->data);
+		// TApp: one kind of suggestion at least
+		if (!sPrefs.suggestTypo && !sPrefs.suggestPhonetic)
+			sPrefs.suggestTypo = sPrefs.suggestPhonetic = true;
+	}
+	return sPrefs;
+}
+
+
+BString
+TSpellBar::DictionariesFolder()
+{
+	BPath path(GobeResources::Path().String());
+	if (path.InitCheck() == B_OK && path.GetParent(&path) == B_OK
+			&& path.Append(GobeResources::IndexString(9, 0).String()) == B_OK
+			&& BEntry(path.Path()).IsDirectory())
+		return path.Path();
+	SimpleAlert(1);
+	return "";
+}
+
+
+// TSpellSession::StartSession
 bool
 TSpellBar::StartSession(bool quiet)
 {
 	Speller& speller = AppSpeller();
 	if (speller.Started())
 		return true;
-	BPath path(GobeResources::Path().String());
-	BString dictionaries;
-	if (path.InitCheck() == B_OK && path.GetParent(&path) == B_OK
-			&& path.Append(GobeResources::IndexString(9, 0).String()) == B_OK
-			&& BEntry(path.Path()).IsDirectory())
-		dictionaries = path.Path();
-	if (dictionaries.IsEmpty()) {
-		SimpleAlert(1);
+	BString dictionaries = DictionariesFolder();
+	if (dictionaries.IsEmpty())
 		return false;
-	}
-	SpellPrefs prefs;
-	if (const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("PREF"), 42))
-		prefs.Read(r->data);
-	// TApp: one kind of suggestion at least
-	if (!prefs.suggestTypo && !prefs.suggestPhonetic)
-		prefs.suggestTypo = prefs.suggestPhonetic = true;
 	std::vector<std::string> languages;
 	for (int32 i = 0; i < 4; i++)
 		languages.push_back(GobeResources::IndexString(18, i).String());
-	int error = speller.Start(dictionaries.String(), prefs, languages);
+	int error = speller.Start(dictionaries.String(), Prefs(), languages);
 	if (error != 0) {
 		if (!quiet)
 			SimpleAlert(error);

@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 
 #include "Document.h"
 #include "WordCount.h"
@@ -258,6 +260,58 @@ Speller::ClearSkipped()
 	if (auto* temp = fSession != nullptr ? dynamic_cast<TextLexicon*>(fSession->Lex(fTemp))
 			: nullptr)
 		temp->Clear();
+}
+
+
+void
+DictionaryChoices(const std::string& dictionaries, std::vector<std::string>& languages,
+	std::vector<std::string>& users)
+{
+	namespace fs = std::filesystem;
+	languages.clear();
+	users.clear();
+	std::error_code error;
+	std::vector<fs::path> entries;
+	for (const auto& entry : fs::directory_iterator(dictionaries, error))
+		entries.push_back(entry.path());
+	// (BFS lists a folder by name)
+	std::sort(entries.begin(), entries.end());
+	for (const fs::path& path : entries) {
+		std::string name = path.filename().string();
+		// (the attributes a copy of the original keeps beside its files
+		// aren't lexicons)
+		if (name.size() > 11 && name.compare(name.size() - 11, 11, ".attrs.json") == 0)
+			continue;
+		Session session;
+		std::string message;
+		if (fs::is_directory(path, error)) {
+			if (session.OpenLex((path / (name + "1")).string(), message) >= 0)
+				languages.push_back(name);
+		} else if (fs::is_regular_file(path, error)) {
+			int lex = session.OpenLex(path.string(), message);
+			if (lex >= 0 && dynamic_cast<TextLexicon*>(session.Lex(lex)) != nullptr)
+				users.push_back(name);
+		}
+	}
+}
+
+
+bool
+CreateUserDictionary(const std::string& dictionaries, const std::string& name)
+{
+	if (name.empty())
+		return false;
+	std::string path = dictionaries + "/" + name;
+	if (FILE* f = fopen(path.c_str(), "rb")) {
+		fclose(f);
+		return false;
+	}
+	// (the original passes SSCE_CreateLex no language: whatever its stack
+	// holds; the session's is written)
+	TextLexicon lexicon;
+	std::ofstream file(path, std::ios::binary);
+	file << lexicon.Text();
+	return bool(file);
 }
 
 

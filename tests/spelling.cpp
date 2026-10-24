@@ -148,6 +148,33 @@ main(int argc, char** argv)
 	Check(Utf8FromLatin1("Jo\xebl") == "Jo\xc3\xabl", "Latin-1 to UTF-8");
 	Check(speller.CheckWord("Jo\xc3\xabl") == Speller::kGood, "Jo\xc3\xabl (the user dictionary's)");
 
+	// the folder's choices: the original's (as ls shows them) and the copy's
+	std::vector<std::string> languageFolders, users;
+	DictionaryChoices((install / "Dictionaries").string(), languageFolders, users);
+	Check(languageFolders == std::vector<std::string>({"British", "Dutch", "French", "German",
+		"Spanish", "Swedish", "USEnglish"}), "the original's languages");
+	Check(users == std::vector<std::string>({"UserDictionary"}), "the original's user dictionary");
+	Check(CreateUserDictionary(dicts.string(), "Mine"), "a new user dictionary");
+	Check(!CreateUserDictionary(dicts.string(), "Mine"), "not twice");
+	Check(!CreateUserDictionary(dicts.string(), ""), "not unnamed");
+	{
+		std::ifstream mine(dicts / "Mine");
+		std::string text((std::istreambuf_iterator<char>(mine)), std::istreambuf_iterator<char>());
+		// USEnglish1's first line is "#LID 24941"
+		Check(text == "#LID 24941\n", "it has a #LID line only (" + text + ")");
+	}
+	DictionaryChoices(dicts.string(), languageFolders, users);
+	Check(languageFolders == std::vector<std::string>({"USEnglish"})
+		&& users == std::vector<std::string>({"Mine", "UserDictionary"}), "the copy's choices");
+	// a change lexicon written back keeps its #LID line
+	{
+		ssce::TextLexicon changes;
+		std::string error;
+		Check(changes.Open((dicts / "USEnglish" / "USEnglish1").string(), error)
+			&& changes.Text().compare(0, 11, "#LID 24941\n") == 0, "USEnglish1 is written back "
+			"with its own #LID");
+	}
+
 	// the walk
 	int docs = 0;
 	for (int i = 1; i < argc; i++) {

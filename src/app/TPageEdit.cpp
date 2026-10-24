@@ -2007,9 +2007,9 @@ TPageView::MessageReceived(BMessage* message)
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
 // "formatbar show|color N|style NAME" — the format bar (TFormatBar).
-// "spell top|cursor|skip|learn|replace|toggle|check|choose N|show" — the
-// SpellBar (Spell Check's commands 'sMC0'..'sMC5', "check" the PartBar's
-// button; "show" prints it and the selection).
+// "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
+// dictionaries" — the SpellBar (Spell Check's commands 'sMC0'..'sMC6',
+// "check" the PartBar's button; "show" prints it and the selection).
 void
 TPageView::RunScript(const std::string& script, Document& document)
 {
@@ -2051,6 +2051,8 @@ TPageView::RunScript(const std::string& script, Document& document)
 					message.AddBool("dospell", true);
 				bar->HandleCommand(&message);
 			}
+			if (what == "dictionaries" && Window() != NULL)
+				Window()->PostMessage('sMC6');
 			if (bar != NULL && what.compare(0, 7, "choose ") == 0)
 				bar->ChooseReplacement(atoi(what.c_str() + 7));
 			if (bar != NULL && what == "show") {
