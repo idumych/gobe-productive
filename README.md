@@ -70,8 +70,11 @@ Works:
   Document dialog; word processing documents so far), Open Recent, Revert,
   Insert… (text and RTF files), Page Setup, Print, Help (the original's
   User's Guide), About.
-- Word processing: typing, selection, cut/copy/paste with styles, undo and
-  redo, Find/Replace, fonts, sizes (and Other…), faces (superscript and
+- Word processing: typing, selection (double, triple and quadruple clicks;
+  Command, Option and Control with the arrows, Home/End, Page Up/Down),
+  cut/copy/paste with styles, undo and redo, Find/Change (across the text
+  parts, with Wrap, Entire Word and special characters), the context menu
+  (copy/paste format, Open URL, suggested spellings), fonts, sizes (and Other…), faces (superscript and
   subscript too), colors, alignment, Paragraph Format, tabs, line and
   paragraph spacing, Copy/Paste Format, Show/Hide Invisibles; pages that
   come and go with the text; Document > Margins, Insert/Remove Header and
