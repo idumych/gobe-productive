@@ -28,6 +28,7 @@
 #include "Document.h"
 #include "GobeResources.h"
 #include "TDocWindow.h"
+#include "TPreferences.h"
 #include "TPageView.h"
 #include "TDialogNewDoc.h"
 #include "TDialogSplash.h"
@@ -36,6 +37,20 @@
 #include "TWindowArrange.h"
 
 namespace gobe {
+
+// TLeafSheet::TLeafSheet: a new sheet's units and ruler divisions are the
+// preferences'
+static void
+NewSheetPreferences(Document& document)
+{
+	if (document.sheets.sheets.empty())
+		return;
+	LeafSheet& sheet = document.sheets.sheets[0];
+	sheet.unit = uint32_t(AppPreferences().measureUnits);
+	sheet.divisions = uint32_t(AppPreferences().rulerDivisions);
+	document.sheetsChanged = true;
+}
+
 
 static const char* kSignature = "application/x-vnd.gobe-port.productive";
 
@@ -237,6 +252,7 @@ public:
 				delete document;
 				return;
 			}
+			NewSheetPreferences(*document);
 			BRect frame(80, 60, 720, 620);
 			frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
 			fWindowCount++;
@@ -443,6 +459,7 @@ public:
 			Document* document = new Document;
 			std::string error;
 			if (CreateBlankDocument(*document, error)) {
+				NewSheetPreferences(*document);
 				if (!fRenderPath.empty()) {
 					Render(*document, fRenderPath);
 					PostMessage(B_QUIT_REQUESTED);
