@@ -795,14 +795,11 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			desk = new BScrollView("pages", pages, 0, true, true, B_NO_BORDER);
 		} else
 			desk = new TDocView(*document);
+		// (the status line is the port's: which slide a presentation shows,
+		// and commands not ported yet)
 		BString status;
-		status << document->parts.parts.size() << " parts, "
-			<< document->wordParts.size() << " with text, "
-			<< document->styles.styles.size() << " styles";
-		if (!document->warnings.empty())
-			status << "; " << document->warnings.size() << " warnings";
 		if (!document->slides.empty())
-			status << "; slide " << document->currentSlide + 1 << " of "
+			status << "Slide " << document->currentSlide + 1 << " of "
 				<< document->slides.size() << " (arrows, space or click to change)";
 		fStatus->SetText(status.String());
 	} else {
