@@ -1,4 +1,5 @@
-// Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat).
+// Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
+// Insert Formula (TDialogWPFormula).
 #ifndef GOBE_TWP_DIALOGS_H
 #define GOBE_TWP_DIALOGS_H
 
@@ -31,6 +32,26 @@ private:
 	uint32 fCommand;
 	std::string fFormat;
 	bool fStatic;
+};
+
+// Format > Insert Formula… (DIAL/Item 300): the formula and whether the
+// field shows its result, its formula or both; OK (only with a formula)
+// checks that it parses ("=" put in front if missing) and sends the window
+// 'sM55' with "formula", "format" ("General"), "displayFormula" and
+// "displayResult".
+class TDialogWPFormula : public TDialog {
+public:
+	TDialogWPFormula(BLooper* window, const std::string& formula, bool displayResult,
+		bool displayFormula);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	std::string fFormula;
+	bool fDisplayResult, fDisplayFormula;
 };
 
 } // namespace gobe

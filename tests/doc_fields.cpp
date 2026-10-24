@@ -9,6 +9,7 @@
 #include <cstring>
 #include <ctime>
 #include <string>
+#include <vector>
 
 #include "Document.h"
 #include "Editing.h"
@@ -94,7 +95,7 @@ main(int argc, char** argv)
 					if (m.kind != Sig("FORM"))
 						continue;
 					WPMiscInfo made;
-					Check(FormulaField(book, part, "=Now()", "mmmm d, yyyy", Sig("sM53"), false,
+					Check(FormulaField(d, book, part, "=Now()", "mmmm d, yyyy", Sig("sM53"), false,
 						true, false, made, error), "FormulaField " + error);
 					std::vector<uint8_t> expected = m.raw;
 					std::string bytes(expected.begin(), expected.end());
@@ -114,6 +115,45 @@ main(int argc, char** argv)
 				}
 	}
 	Check(compared == 1, "TheWidget's date field");
+
+	// the samples' formula fields made again from their formulas: the
+	// same tokens, links (to the names' references) and results
+	int remade = 0;
+	for (int i = 1; i < argc; i++) {
+		Document d;
+		std::string error;
+		if (!LoadDocument(argv[i], d, error))
+			continue;
+		SSBook book(d);
+		size_t links = d.links.links.size();
+		const char* leaf = strrchr(argv[i], '/') + 1;
+		std::vector<std::pair<size_t, WPMiscInfo>> fields;
+		for (const auto& [part, w] : d.wordParts)
+			for (const WPParagraph& p : w.paragraphs)
+				for (const WPMiscInfo& m : p.misc)
+					if (m.kind == Sig("FORM") && m.command == Sig("sM55"))
+						fields.emplace_back(part, m);
+		for (const auto& [part, m] : fields) {
+			WPMiscInfo made;
+			bool ok = FormulaField(d, book, part, m.text, m.expression.format, m.command,
+				m.isStatic, m.displayResult, m.displayFormula, made, error);
+			const Expression& a = made.expression;
+			const Expression& b = m.expression;
+			bool same = ok && a.formula.size() == b.formula.size() && a.links == b.links
+				&& a.result.type == b.result.type && a.result.text == b.result.text
+				&& a.result.number == b.result.number;
+			for (size_t k = 0; same && k < a.formula.size(); k++)
+				same = a.formula[k].kind == b.formula[k].kind
+					&& a.formula[k].number == b.formula[k].number
+					&& a.formula[k].value == b.formula[k].value
+					&& a.formula[k].strings == b.formula[k].strings;
+			Check(same, std::string(leaf) + ": " + m.text + " made again " + error);
+			remade++;
+		}
+		Check(d.links.links.size() == links && !d.linksChanged,
+			std::string(leaf) + ": the links were there");
+	}
+	Check(remade >= 30, "formula fields made again: " + std::to_string(remade));
 
 	// inserting: "Page #" and a separator line in the middle of "abcd"
 	Document doc;

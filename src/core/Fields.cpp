@@ -1,6 +1,7 @@
 // Fields in word processing text.
 #include "Fields.h"
 
+#include "Document.h"
 #include "DocWriter.h"
 #include "Editing.h"
 #include "SSEval.h"
@@ -85,7 +86,7 @@ ResultOf(const SSValue& value)
 
 
 bool
-FormulaField(SSBook& book, size_t part, const std::string& formula, const std::string& format,
+FormulaField(Document& doc, SSBook& book, size_t part, const std::string& formula, const std::string& format,
 	uint32_t command, bool isStatic, bool displayResult, bool displayFormula, WPMiscInfo& field,
 	std::string& error)
 {
@@ -103,6 +104,18 @@ FormulaField(SSBook& book, size_t part, const std::string& formula, const std::s
 	if (!ParseFormula(body, CellID(), isName, e.formula, error))
 		return false;
 	e.result = ResultOf(book.EvaluateField(e.formula, int(part)));
+	// TExpression: a link for each name, in the order they come (a name
+	// used twice is listed twice)
+	for (const FormulaToken& t : e.formula) {
+		size_t source, reference;
+		if (t.kind != 0x1b || t.strings.size() < 2
+				|| !doc.FindName(t.strings[1], int(part), source, reference))
+			continue;
+		size_t links = doc.links.links.size();
+		uint32_t link = LinkFor(doc, source, reference, part);
+		doc.linksChanged |= doc.links.links.size() != links;
+		e.links.push_back(link);
+	}
 	field.text = formula;
 	field.command = command;
 	field.isStatic = isStatic;

@@ -29,9 +29,11 @@ EvalResult ResultOf(const SSValue& value);
 // TMiscFormulaInfo::TMiscFormulaInfo(TPart*, BMessage*): a formula field
 // for text part `part` (`formula` with its "="), evaluated, with its
 // number format, the command that makes it ('sM53' date, 'sM54' time:
-// "=Now()"; 'sM55' formula) and its flags. False, with the parser's
+// "=Now()"; 'sM55' formula) and its flags; the names it uses get links to
+// the part (added to the document if new). False, with the parser's
 // message, if the formula doesn't parse.
-bool FormulaField(SSBook& book, size_t part, const std::string& formula,
+struct Document;
+bool FormulaField(Document& doc, SSBook& book, size_t part, const std::string& formula,
 	const std::string& format, uint32_t command, bool isStatic, bool displayResult,
 	bool displayFormula, WPMiscInfo& field, std::string& error);
 

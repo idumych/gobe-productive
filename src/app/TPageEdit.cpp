@@ -1061,9 +1061,42 @@ TPageView::MessageReceived(BMessage* message)
 			}
 			WPMiscInfo field;
 			std::string error;
-			if (!FormulaField(*fBook, fCaret.part, GobeResources::IndexString(0x516, 8).String(),
+			if (!FormulaField(fDocument, *fBook, fCaret.part, GobeResources::IndexString(0x516, 8).String(),
 					format, message->what, message->GetBool("static", false), true, false, field,
 					error)) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Insert Special", CurrentViewState());
+			TextPosition at = InsertField(*fDocument.EditableWordPart(fCaret.part),
+				{fCaret.paragraph, fCaret.offset}, field);
+			fCaret.paragraph = at.paragraph;
+			fCaret.offset = at.offset;
+			fAnchor = fCaret;
+			TextChanged();
+			return;
+		}
+		// Format > Insert Formula… (TWPPart::InsertSpecial): the dialog,
+		// which sends the command back with the formula and how to show it
+		case 'sM55': {
+			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL) {
+				beep();
+				return;
+			}
+			const char* formula;
+			if (message->FindString("formula", &formula) != B_OK
+					|| !message->HasBool("displayFormula")) {
+				if (Window() != NULL)
+					(new TDialogWPFormula(Window(), "", true, false))->RunDialog();
+				return;
+			}
+			const char* format = "";
+			message->FindString("format", &format);
+			WPMiscInfo field;
+			std::string error;
+			if (!FormulaField(fDocument, *fBook, fCaret.part, formula, format, 'sM55',
+					message->GetBool("static", false), message->GetBool("displayResult", true),
+					message->GetBool("displayFormula", false), field, error)) {
 				beep();
 				return;
 			}
@@ -2291,6 +2324,16 @@ TPageView::RunScript(const std::string& script, Document& document)
 			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
 				style.tabs[nearestIdx].position);
 			TextChanged();
+		} else if (command.compare(0, 13, "formulafield ") == 0) {
+			// "formulafield <r|f|b> <formula>": Insert Formula… showing the
+			// result, the formula or both
+			const char* c = command.c_str() + 13;
+			BMessage insert('sM55');
+			insert.AddString("formula", c + 2);
+			insert.AddString("format", "General");
+			insert.AddBool("displayFormula", c[0] != 'r');
+			insert.AddBool("displayResult", c[0] != 'f');
+			MessageReceived(&insert);
 		} else if (command.compare(0, 10, "datefield ") == 0
 				|| command.compare(0, 10, "timefield ") == 0) {
 			// "datefield <format>": Insert Date… with that format chosen

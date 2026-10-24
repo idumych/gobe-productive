@@ -538,7 +538,7 @@ Document::Save(const std::string& to, std::string& error)
 	DocChanges changes;
 	std::map<size_t, uint32_t> textLength;
 	// spreadsheets: dependency tables (and possibly new links) first
-	bool linksChanged = false;
+	bool linksChanged = this->linksChanged;
 	for (size_t part : dirtyParts)
 		if (SpreadsheetPart(part) != nullptr)
 			linksChanged |= UpdateDependencies(*this, part);

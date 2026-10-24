@@ -73,6 +73,7 @@ struct Document {
 	bool stylesChanged = false;		// the StyleMgr (written by Save)
 	bool sheetsChanged = false;		// the SheetMgr (page setup, margins)
 	bool selectionsChanged = false;	// spreadsheet selections/names moved
+	bool linksChanged = false;		// links added (the LinksMgr, written by Save)
 	WPPart* EditableWordPart(size_t part);
 	SSPart* EditableSpreadsheetPart(size_t part);
 	// writes the document (changed parts written, everything else copied)

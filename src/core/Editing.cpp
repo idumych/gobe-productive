@@ -332,6 +332,26 @@ InsertMultiline(WPPart& part, TextPosition at, const std::string& text)
 }
 
 
+uint32_t
+LinkFor(Document& doc, size_t sourcePart, size_t reference, size_t dependentPart)
+{
+	for (size_t l = 0; l < doc.links.links.size(); l++) {
+		const Link& k = doc.links.links[l];
+		if (k.sourcePart == uint32_t(sourcePart) && k.reference == uint32_t(reference)
+				&& k.dependentPart == uint32_t(dependentPart))
+			return uint32_t(l);
+	}
+	Link k;
+	k.value20 = 1;
+	k.sourcePart = uint32_t(sourcePart);
+	k.dependentPart = uint32_t(dependentPart);
+	k.reference = uint32_t(reference);
+	k.value1c = uint32_t(doc.links.links.size());
+	doc.links.links.push_back(k);
+	return uint32_t(doc.links.links.size() - 1);
+}
+
+
 bool
 IsField(const WPMiscInfo& info)
 {
@@ -1931,25 +1951,9 @@ UpdateDependencies(Document& doc, size_t partIndex)
 			size_t sourcePart, sourceRef;
 			if (!doc.FindName(t.strings[1], int(partIndex), sourcePart, sourceRef))
 				continue;
-			int source = int(sourcePart), reference = int(sourceRef);
-			int link = -1;
-			for (size_t l = 0; l < doc.links.links.size(); l++) {
-				const Link& k = doc.links.links[l];
-				if (k.sourcePart == uint32_t(source) && k.reference == uint32_t(reference)
-					&& k.dependentPart == partIndex)
-					link = int(l);
-			}
-			if (link < 0) {
-				Link k;
-				k.value20 = 1;
-				k.sourcePart = uint32_t(source);
-				k.dependentPart = uint32_t(partIndex);
-				k.reference = uint32_t(reference);
-				k.value1c = uint32_t(doc.links.links.size());
-				link = int(doc.links.links.size());
-				doc.links.links.push_back(k);
-				linksChanged = true;
-			}
+			size_t links = doc.links.links.size();
+			int link = int(LinkFor(doc, sourcePart, sourceRef, partIndex));
+			linksChanged |= doc.links.links.size() != links;
 			if (linked.insert(uint32_t(link)).second)
 				users[uint32_t(link)].push_back(c.id);
 		}

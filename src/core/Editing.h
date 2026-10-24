@@ -55,6 +55,11 @@ TextPosition InsertMultiline(WPPart& part, TextPosition at, const std::string& t
 // like Enter, with that character as its terminator. Returns the position
 // after it.
 TextPosition InsertSpecialChar(WPPart& part, TextPosition at, char c);
+// the link from reference `reference` of part `sourcePart` to part
+// `dependentPart` (TDoc::FindLink, AddLink): the existing one's index, or
+// a new one added to the document's LinksMgr
+struct Document;
+uint32_t LinkFor(Document& doc, size_t sourcePart, size_t reference, size_t dependentPart);
 // a paragraph info that is a field (formula, page number, separator line):
 // it goes when its character is deleted
 bool IsField(const WPMiscInfo& info);
