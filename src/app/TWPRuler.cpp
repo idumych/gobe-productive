@@ -150,6 +150,7 @@ TWPRuler::Update()
 	BRect text, page;
 	bool active = fPages->RulerFrame(text, page);
 	float scroll = fPages->Bounds().left;
+	float zoom = fPages->Zoom();
 	TextStyle style;
 	if (active) {
 		const Document& doc = fPages->Doc();
@@ -162,7 +163,8 @@ TWPRuler::Update()
 	bool sameTabs = style.tabs.size() == fStyle.tabs.size();
 	for (size_t i = 0; sameTabs && i < style.tabs.size(); i++)
 		sameTabs = SameTab(style.tabs[i], fStyle.tabs[i]);
-	if (active == fActive && scroll == fScroll && Unit() == fUnit && Divisions() == fDivisions
+	if (active == fActive && scroll == fScroll && zoom == fZoom && Unit() == fUnit
+		&& Divisions() == fDivisions
 		&& (!active || (text.left == fStart && text.right == fEnd && page.left == fPageLeft
 			&& page.right == fPageRight && style.leftIndent == fStyle.leftIndent
 			&& style.firstIndent == fStyle.firstIndent
@@ -171,6 +173,7 @@ TWPRuler::Update()
 
 	fActive = active;
 	fScroll = scroll;
+	fZoom = zoom;
 	fUnit = Unit();
 	fDivisions = Divisions();
 	fStyle = style;
@@ -200,16 +203,16 @@ TWPRuler::Update()
 float
 TWPRuler::RulerX(float position) const
 {
-	return fStart + position - fScroll;
+	return (fStart + position) * fZoom - fScroll;
 }
 
 
-// TWPRulerElement::FixRect: 10 wide about the position, 16 to 21 high
-// (the first line indent to 24); a tab dragged off 3 lower
+// TWPRulerElement::FixRect: 10 wide about the (zoomed) position, 16 to 21
+// high (the first line indent to 24); a tab dragged off 3 lower
 BRect
 TWPRuler::ElementRect(const Element& e) const
 {
-	float x = e.x - fScroll - 5;
+	float x = e.x * fZoom - fScroll - 5;
 	BRect r(x, 16, x + 10, e.kind == kIndent ? 24 : 21);
 	if (e.deleteState)
 		r.OffsetBy(0, 3);
@@ -343,7 +346,7 @@ TWPRuler::DrawTicks(float start, float end)
 {
 	float major, minor;
 	int32 count, divisions;
-	Ticks(1, major, minor, count, divisions);
+	Ticks(fZoom, major, minor, count, divisions);
 	BRect bounds = Bounds();
 	float limit = std::min(bounds.right + major, end);
 
@@ -424,7 +427,7 @@ TWPRuler::Draw(BRect updateRect)
 	SetHighColor(255, 255, 255);
 	FillRect(bounds);
 	if (fActive) {
-		DrawTicks(fPageLeft - fScroll, fPageRight - fScroll);
+		DrawTicks(fPageLeft * fZoom - fScroll, fPageRight * fZoom - fScroll);
 		for (const Element& e : fElements)
 			DrawElement(e);
 	}
@@ -626,7 +629,7 @@ TWPRuler::Drag(BPoint from, BPoint to, int32 clicks, uint32 buttons, uint32 mods
 	}
 	if (buttons == B_PRIMARY_MOUSE_BUTTON) {
 		if (index < 0) {
-			float x = from.x + fScroll;
+			float x = (from.x + fScroll) / fZoom;
 			if ((mods & B_COMMAND_KEY) == 0)
 				x = GridTo(x);
 			if (fStart <= x && x <= fEnd)
@@ -659,7 +662,7 @@ TWPRuler::Track(BPoint where, uint32 mods)
 	if (fTracking < 0 || fTracking >= int(fElements.size()))
 		return;
 	Element& e = fElements[fTracking];
-	float x = where.x + fScroll;
+	float x = (where.x + fScroll) / fZoom;
 	if ((mods & B_COMMAND_KEY) == 0)
 		x = GridTo(x);
 	Pin(e, x);
@@ -850,14 +853,14 @@ TWPRuler::RunScript(const std::string& command)
 		if (!fActive || index < 0 || index >= int(fElements.size()))
 			return;
 		// from the middle of the marker (the first line indent's bar)
-		BPoint from(fElements[index].x - fScroll, index == kIndent ? 23 : 18);
+		BPoint from(fElements[index].x * fZoom - fScroll, index == kIndent ? 23 : 18);
 		Drag(from, from + BPoint(a, b), 1, B_PRIMARY_MOUSE_BUTTON, mods, false);
 	} else if (sscanf(command.c_str(), "click %f %u", &a, &mods) >= 1) {
 		BPoint where(RulerX(a), 10);
 		Drag(where, where, 1, B_PRIMARY_MOUSE_BUTTON, mods, false);
 	} else if (sscanf(command.c_str(), "edit %d", &index) == 1) {
 		if (fActive && kTab + index < int(fElements.size())) {
-			BPoint where(fElements[kTab + index].x - fScroll, 18);
+			BPoint where(fElements[kTab + index].x * fZoom - fScroll, 18);
 			Drag(where, where, 2, B_PRIMARY_MOUSE_BUTTON, 0, false);
 		}
 	} else if (sscanf(command.c_str(), "tabmenu %d %d", &index, &value) == 2)

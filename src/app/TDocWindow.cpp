@@ -37,6 +37,7 @@
 #include "TPageView.h"
 #include "TTranslate.h"
 #include "TFormatBar.h"
+#include "TPageBar.h"
 #include "TPartBar.h"
 #include "TWPRuler.h"
 #include "Styles.h"
@@ -787,7 +788,10 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		if (TPageView::CanShow(*document)) {
 			TPageView* pages = new TPageView(*document);
 			fPages = pages;
-			desk = new BScrollView("pages", pages, 0, true, true, B_NO_BORDER);
+			TDocScrollView* scroll = new TDocScrollView(pages);
+			fScaleSlider = scroll->Scale();
+			pages->fPageBar = scroll->Pages();
+			desk = scroll;
 			// the text ruler (TWPPart::ActivePartRibbon) for documents with text
 			bool text = false;
 			for (const auto& part : document->parts.parts)
@@ -1124,6 +1128,17 @@ TDocWindow::MessageReceived(BMessage* message)
 				fModified = true;
 				UpdateTitle();
 			}
+			return;
+		// the zoom tool (TDocWindow::ScaleTo)
+		case 's003':
+			if (fPages != NULL)
+				fPages->SetZoom(message->GetFloat("scale", 1));
+			return;
+		// Document > Fit to Window (TPart::FitToWindow: through the zoom
+		// tool, TDocWindow::ChangeScale)
+		case 'sM39':
+			if (fPages != NULL && fScaleSlider != NULL)
+				fScaleSlider->SetScale(fPages->FitZoom(), true);
 			return;
 		// Window: the arrangements are the application's
 		case 'sMF9':

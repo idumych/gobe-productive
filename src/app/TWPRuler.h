@@ -56,7 +56,7 @@ private:
 	enum { kLeft = 0, kIndent = 1, kRight = 2, kTab = 3 };
 	struct Element {
 		int kind;
-		float x;			// view coordinates of the page view
+		float x;			// the page view's (unzoomed) coordinates
 		TabStop tab;		// kTab: position from the text's edge
 		bool deleteState;	// a tab dragged off the ruler
 	};
@@ -91,6 +91,7 @@ private:
 	float fStart = 0, fEnd = 0;			// the text's edges (TWPRuler +0xdc, +0xe0)
 	float fPageLeft = 0, fPageRight = 0;
 	float fScroll = 0;
+	float fZoom = 1;
 	std::vector<Element> fElements;		// left, indent, right, then the tabs
 	// what Update last saw
 	TextStyle fStyle;

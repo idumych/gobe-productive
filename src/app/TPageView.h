@@ -91,10 +91,20 @@ public:
 	// undo step called `label`
 	void FormatParagraphs(const std::vector<float>& removeTabs,
 		const std::vector<Property>& add, const std::string& label, bool newStep);
+	// the zoom (TDocWindow::Scale, 1/64 to 64)
+	float Zoom() const { return fZoom; }
+	void SetZoom(float zoom);
 	// the window's text ruler (updated as the view draws), or NULL
 	TWPRuler* fRuler = NULL;
 	class TRibbon* fPartBar = NULL;
 	class TRibbon* fFormatBar = NULL;
+	class TPageBar* fPageBar = NULL;
+	// TDocWindow (TPageBar::SetPageNumbers): the pages in view, from 1
+	// (-1 for none)
+	void VisiblePages(int32& first, int32& last) const;
+	// Document > Fit to Window (TWPPart::FitToWindow): the zoom that shows
+	// a page with 20 points around it
+	float FitZoom() const;
 	const Document& Doc() const { return fDocument; }
 	// Show Invisibles: the marks on line `index`
 	void DrawInvisibles(size_t index);
@@ -141,6 +151,8 @@ private:
 	};
 	void RebuildFrames();
 	const Document::PlacedFrame* CaretFrame() const;
+	float fZoom = 1;
+	BRect fDrawBounds;				// what Draw shows, in the document's coordinates
 	// the port's room between a frame's edges and its text
 	static constexpr float kTextPad = 2;
 	bool Paginate(const LayoutResult& main);

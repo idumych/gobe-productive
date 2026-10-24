@@ -700,7 +700,8 @@ TPageView::BeginCellEdit(size_t part, int row, int column, BRect rect)
 	fSelectedCell.column = column;
 	rect.right = std::max(rect.right, rect.left + 120);	// room for formulas
 	rect.bottom = std::max(rect.bottom, rect.top + 16);
-	fCellEditor = new TCellEditor(rect);
+	fCellEditor = new TCellEditor(BRect(rect.left * fZoom, rect.top * fZoom,
+		rect.right * fZoom, rect.bottom * fZoom));
 	AddChild(fCellEditor);
 	fCellEditor->SetText(CellInput(*ss, row, column).c_str());
 	fCellEditor->SelectAll();
@@ -762,7 +763,7 @@ TPageView::MouseDown(BPoint where)
 		Window()->CurrentMessage()->FindInt32("clicks", &clicks);
 		Window()->CurrentMessage()->FindInt32("buttons", &buttons);
 	}
-	Click(where, clicks, buttons);
+	Click(BPoint(where.x / fZoom, where.y / fZoom), clicks, buttons);
 }
 
 
@@ -853,6 +854,9 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 void
 TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 {
+	// (the document's coordinates; the mouse's are the zoomed view's)
+	where.x /= fZoom;
+	where.y /= fZoom;
 	if (fDragging) {
 		Caret c;
 		if (HitText(where, c) && c.part == fCaret.part) {

@@ -1,4 +1,5 @@
 #include "TPageView.h"
+#include "TPageBar.h"
 #include "TRibbon.h"
 #include "TWPRuler.h"
 
@@ -215,7 +216,71 @@ TPageView::MinSize()
 BSize
 TPageView::PreferredSize()
 {
-	return BSize(fBounds.Width() + 2 * fMargin, fBounds.Height() + 2 * fMargin);
+	return BSize((fBounds.Width() + 2 * fMargin) * fZoom, (fBounds.Height() + 2 * fMargin) * fZoom);
+}
+
+
+void
+TPageView::VisiblePages(int32& first, int32& last) const
+{
+	first = last = -1;
+	int page = fDocument.PagePart();
+	BRect bounds = Bounds();
+	BRect visible(bounds.left / fZoom, bounds.top / fZoom, bounds.right / fZoom,
+		bounds.bottom / fZoom);
+	for (const auto& f : fFrames) {
+		if (int(f.part) != page)
+			continue;
+		BRect r(f.x - fBounds.left + fMargin, f.y - fBounds.top + fMargin, 0, 0);
+		r.right = r.left + f.width;
+		r.bottom = r.top + f.height;
+		if (!r.Intersects(visible))
+			continue;
+		if (first < 0 || f.index + 1 < first)
+			first = f.index + 1;
+		last = std::max(last, int32(f.index + 1));
+	}
+}
+
+
+// TWPPart::FitToWindow, TDocWindow::CalcScaleFromSize: the paper and 20
+// points (one page across), as large as fits the view
+float
+TPageView::FitZoom() const
+{
+	BRect bounds = Bounds();
+	float width = 612, height = 792;
+	if (!fDocument.sheets.sheets.empty()) {
+		const float* paper = fDocument.sheets.sheets[0].paper;
+		width = paper[2] - paper[0];
+		height = paper[3] - paper[1];
+	}
+	width += 20;
+	height += 20;
+	if (bounds.Width() / bounds.Height() < width / height)
+		return bounds.Width() / width;
+	return bounds.Height() / height;
+}
+
+
+// TDocWindow::ScaleTo: the view's middle stays on the same point of the
+// document
+void
+TPageView::SetZoom(float zoom)
+{
+	zoom = std::max(0.015625f, std::min(64.0f, zoom));
+	if (zoom == fZoom)
+		return;
+	BRect bounds = Bounds();
+	BPoint middle((bounds.left + bounds.Width() / 2) / fZoom,
+		(bounds.top + bounds.Height() / 2) / fZoom);
+	fZoom = zoom;
+	InvalidateLayout();
+	if (Parent() != NULL)
+		Parent()->Layout(false);
+	ScrollTo(std::max(0.0f, middle.x * fZoom - bounds.Width() / 2),
+		std::max(0.0f, middle.y * fZoom - bounds.Height() / 2));
+	Invalidate();
 }
 
 
@@ -1737,6 +1802,18 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 void
 TPageView::Draw(BRect updateRect)
 {
+	// the zoom (TDocWindow::Scale): drawn larger or smaller; the update
+	// rectangle in the document's coordinates (printing at 100%)
+	float zoom = IsPrinting() ? 1 : fZoom;
+	// (restored when done: Invalidate() and the children follow the scale)
+	PushState();
+	SetScale(zoom);
+	updateRect.Set(updateRect.left / zoom, updateRect.top / zoom, updateRect.right / zoom,
+		updateRect.bottom / zoom);
+	BRect bounds = Bounds();
+	bounds.Set(bounds.left / zoom, bounds.top / zoom, bounds.right / zoom, bounds.bottom / zoom);
+	fDrawBounds = bounds;
+
 	// printing (TPageFrame::Draw): the pages' contents only
 	if (!IsPrinting()) {
 		SetHighColor(152, 152, 152);
@@ -1754,18 +1831,24 @@ TPageView::Draw(BRect updateRect)
 		uint32_t kind = fDocument.parts.parts[f.part].kind;
 		BRect r(f.x + dx, f.y + dy, f.x + dx + f.width, f.y + dy + f.height);
 		PushState();
-		BRegion frameClip(ContainerClip(f).OffsetByCopy(dx, dy) & Bounds());
+		BRegion frameClip(ContainerClip(f).OffsetByCopy(dx, dy) & bounds);
 		ConstrainClippingRegion(&frameClip);
 		DrawFrame(f, r, kind, dx, dy);
 		PopState();
 	}
 	DrawLines(updateRect, dx, dy);
+	PopState();
 	if (fRuler != NULL && !IsPrinting())
 		fRuler->Update();
 	if (fPartBar != NULL && !IsPrinting())
 		fPartBar->Update();
 	if (fFormatBar != NULL && !IsPrinting())
 		fFormatBar->Update();
+	if (fPageBar != NULL && !IsPrinting()) {
+		int32 first, last;
+		VisiblePages(first, last);
+		fPageBar->SetPageNumbers(first, last);
+	}
 }
 
 
@@ -1846,7 +1929,7 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 		if (line.angle == 0 && !line.frame.Intersects(updateRect))
 			continue;
 		PushState();
-		BRegion lineClip(line.clip.OffsetByCopy(dx, dy) & Bounds());
+		BRegion lineClip(line.clip.OffsetByCopy(dx, dy) & fDrawBounds);
 		ConstrainClippingRegion(&lineClip);
 		if (line.angle != 0)
 			SetTransform(FrameRotation(line.center, line.angle));
@@ -1868,7 +1951,7 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 	}
 	for (const Rule& rule : fRules) {
 		PushState();
-		BRegion clip(rule.clip.OffsetByCopy(dx, dy) & Bounds());
+		BRegion clip(rule.clip.OffsetByCopy(dx, dy) & fDrawBounds);
 		ConstrainClippingRegion(&clip);
 		SetHighColor(0, 0, 0);
 		SetPenSize(rule.width);
