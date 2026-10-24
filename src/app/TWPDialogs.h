@@ -1,5 +1,5 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
-// Insert Formula (TDialogWPFormula).
+// Insert Formula (TDialogWPFormula), Columns (TDialogSection).
 #ifndef GOBE_TWP_DIALOGS_H
 #define GOBE_TWP_DIALOGS_H
 
@@ -52,6 +52,22 @@ private:
 	BLooper* fWindow;
 	std::string fFormula;
 	bool fDisplayResult, fDisplayFormula;
+};
+
+// Format > Columns… (DIAL/Item 303): the number of columns of the
+// section, 1 to 10 (else STR# 6, 13); OK sends the window 'sM51' with it
+// as "value".
+class TDialogSection : public TDialog {
+public:
+	TDialogSection(BLooper* window, int32 columns);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	int32 fColumns;
 };
 
 } // namespace gobe

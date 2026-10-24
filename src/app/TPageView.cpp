@@ -294,9 +294,11 @@ TPageView::LayoutText()
 		paginated = true;
 		RebuildFrames();
 	}
-	if (!paginated)
+	// once pages came or went or the frames were made anew (Columns), the
+	// main text's frames show what the layout put in them
+	int mainIndex = fDocument.MainPart();
+	if (!paginated && (mainIndex < 0 || !fDocument.dirtyTails.count(size_t(mainIndex))))
 		return;
-	// the main text's frames show what the layout put in them
 	int mainPart = fDocument.MainPart();
 	uint32_t total = 0;
 	if (const WPPart* wp = fDocument.WordPart(size_t(mainPart)))

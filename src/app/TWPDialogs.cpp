@@ -1,7 +1,9 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
-// Insert Formula (TDialogWPFormula).
+// Insert Formula (TDialogWPFormula), Columns (TDialogSection).
 #include "TWPDialogs.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 #include <Alert.h>
@@ -129,6 +131,46 @@ TDialogWPFormula::ItemHit(int32 index, BMessage* message)
 	insert.AddBool("displayFormula", shown);
 	insert.AddBool("displayResult", result);
 	fWindow->PostMessage(&insert);
+	return TDialog::ItemHit(index, message);
+}
+
+TDialogSection::TDialogSection(BLooper* window, int32 columns)
+	:
+	TDialog(303, 303, 'APPL', NULL),
+	fWindow(window),
+	fColumns(columns)
+{
+}
+
+
+void
+TDialogSection::Init()
+{
+	BString text;
+	text << fColumns;
+	SetTextItem(2, text.String());
+	MakeFocusItem(2);
+}
+
+
+bool
+TDialogSection::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		BString text = TextItem(2);
+		char* end;
+		long columns = strtol(text.String(), &end, 10);
+		if (end == text.String() || columns < 1 || columns > 10) {
+			BString alert;
+			alert.SetToFormat(GobeResources::IndexString(6, 13).String(), 1, 10);
+			(new BAlert("", alert.String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		BMessage set('sM51');
+		set.AddInt32("value", int32(columns));
+		fWindow->PostMessage(&set);
+	}
 	return TDialog::ItemHit(index, message);
 }
 

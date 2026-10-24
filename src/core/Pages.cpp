@@ -623,4 +623,53 @@ Document::SetHeaderHeight(int which, float height)
 	return false;
 }
 
+bool
+Document::SetColumnCount(size_t part, size_t section, int count)
+{
+	WPPart* wp = EditableWordPart(part);
+	if (wp == nullptr || section >= wp->sections.size() || count < 1 || count > 10)
+		return false;
+	// TColumnData::SetColumnCount
+	std::vector<std::array<float, 4>> columns;
+	float width = 1.0f / float(count) - (float(count - 1) * 0.033333335f) / float(count);
+	for (int i = 0; i < count; i++) {
+		float left = (width + 0.033333335f) * float(i);
+		columns.push_back({left, 0.0f, width + left, 1.0f});
+	}
+	if (wp->sections[section].columns == columns)
+		return false;
+	wp->sections[section].columns = columns;
+	dirtyParts.insert(part);
+
+	int pagePart = PagePart();
+	if (int(part) != MainPart() || section != 0 || pagePart < 0)
+		return true;
+	// the text frames on the pages: `count` per page, like the first one
+	Portal& pages = tails[pagePart].portals[0];
+	if (pages.frames.empty() || pages.frames[0].children.size() < 4)
+		return true;
+	Frame::Pointer first = pages.frames[0].children[3];
+	if (first.part != part || first.portal >= tails[part].portals.size())
+		return true;
+	Portal& portal = tails[part].portals[first.portal];
+	if (first.frame >= portal.frames.size())
+		return true;
+	Frame column = portal.frames[first.frame];
+	column.textStart = column.textLength = 0;
+	portal.frames.clear();
+	for (Frame& page : pages.frames) {
+		page.children.resize(3);
+		for (int i = 0; i < count; i++) {
+			page.children.push_back({uint32_t(part), first.portal,
+				uint32_t(portal.frames.size())});
+			portal.frames.push_back(column);
+		}
+	}
+	portal.values[2] = uint32_t(portal.frames.size());
+	dirtyTails.insert(part);
+	dirtyTails.insert(size_t(pagePart));
+	RepositionPages();
+	return true;
+}
+
 } // namespace gobe

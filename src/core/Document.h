@@ -156,6 +156,12 @@ struct Document {
 	int HeaderPart(int which) const;
 	bool InsertHeaderFooter(int which);
 	bool RemoveHeaderFooter(int which);
+	// Format > Columns… (TWPSetColumnsCmd, TColumnData::SetColumnCount): a
+	// section of a text part gets `count` columns (1-10), equally wide with
+	// 1/30 of the width between them; for the main text's first section
+	// every page gets that many text frames (TPart::PaginateAllPortals(2):
+	// the pages laid out anew). False if nothing changed.
+	bool SetColumnCount(size_t part, size_t section, int count);
 	// the header or footer frame's height (it grows with its text); the
 	// pages' frames move to match. False if it didn't change.
 	bool SetHeaderHeight(int which, float height);

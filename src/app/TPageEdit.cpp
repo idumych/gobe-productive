@@ -1076,6 +1076,39 @@ TPageView::MessageReceived(BMessage* message)
 			TextChanged();
 			return;
 		}
+		// Format > Columns… (TWPPart, TWPSetColumnsCmd): the dialog with the
+		// caret's section's column count; "value" -1 is a column more, less
+		// than -1 one less (the ribbon's buttons)
+		case 'sM51': {
+			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
+			if (wp == NULL || int(fCaret.part) != fDocument.MainPart()
+					|| fDocument.PagePart() < 0 || wp->sections.empty()) {
+				beep();
+				return;
+			}
+			uint32_t at = 0;
+			for (size_t p = 0; p < fCaret.paragraph && p < wp->paragraphs.size(); p++)
+				at += uint32_t(wp->paragraphs[p].text.size());
+			at += uint32_t(fCaret.offset);
+			size_t section = 0;
+			for (size_t k = 0; k < wp->sections.size(); k++)
+				if (wp->sections[k].start <= at)
+					section = k;
+			int32 columns = int32(wp->sections[section].columns.size());
+			int32 value;
+			if (message->FindInt32(kValueString, &value) != B_OK) {
+				if (Window() != NULL)
+					(new TDialogSection(Window(), columns))->RunDialog();
+				return;
+			}
+			if (value < 1)
+				value = value < -1 ? columns - 1 : columns + 1;
+			fUndo.BeginDocument(fDocument, GobeResources::IndexString(0x515, 0).String(),
+				CurrentViewState());
+			if (fDocument.SetColumnCount(fCaret.part, section, value))
+				GeometryChanged();
+			return;
+		}
 		// Format > Insert Formula… (TWPPart::InsertSpecial): the dialog,
 		// which sends the command back with the formula and how to show it
 		case 'sM55': {
@@ -2324,6 +2357,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
 				style.tabs[nearestIdx].position);
 			TextChanged();
+		} else if (command.compare(0, 8, "columns ") == 0) {
+			// "columns N": Format > Columns… with N
+			BMessage set('sM51');
+			set.AddInt32(kValueString, atoi(command.c_str() + 8));
+			MessageReceived(&set);
 		} else if (command.compare(0, 13, "formulafield ") == 0) {
 			// "formulafield <r|f|b> <formula>": Insert Formula… showing the
 			// result, the formula or both
