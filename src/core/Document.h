@@ -115,11 +115,12 @@ struct Document {
 };
 
 bool LoadDocument(const std::string& path, Document& doc, std::string& error);
+// The same for a document's bytes (its path stays empty).
+bool LoadDocumentBytes(std::vector<uint8_t> data, Document& doc, std::string& error);
 
-// Creates a blank WORD document: header + all 13 sections, 1 WORD part with
-// an empty paragraph, "Bas" and "GRFX" styles, proper TOC.  On success the
-// document is fully populated and `path` is empty (it's unnamed).  On failure
-// returns false and sets `error`.
+// File > New for word processing (BlankDocument.cpp): the document the
+// original makes for a new WORD sheet, laid out like its saved documents.
+// `path` is empty and `name` is "untitled N".
 bool CreateBlankDocument(Document& doc, std::string& error);
 
 } // namespace gobe
