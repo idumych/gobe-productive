@@ -11,6 +11,7 @@
 #include "TSpellBar.h"
 #include "Url.h"
 #include "Find.h"
+#include "TPreferences.h"
 #include "TWPRuler.h"
 
 #include <Alert.h>
@@ -799,6 +800,22 @@ TPageView::EditText(const char* bytes, int32 count)
 			bool control = (mods & B_CONTROL_KEY) != 0;
 			bool option = (mods & B_OPTION_KEY) != 0;
 			char key = bytes[0];
+			// the preferences off: TDocWindow::DoSpecialKey scrolls (Home and
+			// End to the start or end, the page keys a page), the caret
+			// stays
+			const Preferences& prefs = AppPreferences();
+			if (!control && (((key == B_HOME || key == B_END) && !prefs.pcHomeEnd)
+					|| ((key == B_PAGE_UP || key == B_PAGE_DOWN) && !prefs.pcPageKeys))) {
+				BScrollBar* bar = ScrollBar(B_VERTICAL);
+				float minimum = 0, maximum = 0;
+				if (bar != NULL)
+					bar->GetRange(&minimum, &maximum);
+				if (key == B_HOME || key == B_END)
+					ScrollTo(Bounds().left, key == B_HOME ? minimum : maximum);
+				else
+					ScrollBy(0, (key == B_PAGE_DOWN ? 1 : -1) * Bounds().Height());
+				break;
+			}
 			TextPosition from, to;
 			bool selection = TextSelection(from, to);
 			if (shift) {
@@ -2508,6 +2525,16 @@ TPageView::RunScript(const std::string& script, Document& document)
 				else
 					fprintf(stderr, "cellrect %d %d (not visible)\n", row, column);
 			}
+		} else if (command.compare(0, 6, "prefs ") == 0) {
+			// "prefs N": the Preferences dialog shows panel N; "prefs
+			// press S": its control S pressed; "prefs button B"
+			std::string what = command.substr(6);
+			if (what.compare(0, 6, "press ") == 0)
+				TDialogPrefs::Press(atoi(what.c_str() + 6));
+			else if (what.compare(0, 7, "button ") == 0)
+				TDialogPrefs::Press(-1, atoi(what.c_str() + 7));
+			else
+				TDialogPrefs::SelectPanel(atoi(what.c_str()));
 		} else if (command == "caret") {
 			// "caret": the caret and the anchor (part, paragraph, offset)
 			printf("caret %zu %zu.%zu anchor %zu.%zu\n", fCaret.part, fCaret.paragraph,

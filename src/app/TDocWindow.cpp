@@ -47,6 +47,7 @@
 #include "TSpellBar.h"
 #include "TSpellDialogs.h"
 #include "TFindDialog.h"
+#include "TPreferences.h"
 #include "Find.h"
 #include "TWPRuler.h"
 #include "Styles.h"
@@ -1226,6 +1227,11 @@ TDocWindow::MessageReceived(BMessage* message)
 			be_roster->Launch(strncmp(url, "mailto:", 7) == 0 ? "text/x-email" : "text/html", 1,
 				argv);
 		}
+		return;
+	}
+	// File > Preferences… (TDocWindow: TDialogPrefs)
+	if (message->what == 'sM07') {
+		(new TDialogPrefs())->RunDialog();
 		return;
 	}
 	if (message->what == 'sMC6') {

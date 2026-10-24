@@ -136,21 +136,31 @@ Speller::Start(const std::string& dictionaries, const SpellPrefs& prefs,
 	if (opened == 0)
 		return 3;
 
-	SetOption(*session, kIgnoreMixedCase, prefs.ignoreMixedCase);
-	SetOption(*session, kIgnoreMixedDigits, prefs.ignoreMixedDigits);
-	SetOption(*session, kIgnoreAllCaps, prefs.ignoreAllCaps);
-	SetOption(*session, kSuggestTypographical, prefs.suggestTypo);
-	SetOption(*session, kSuggestPhonetic, prefs.suggestPhonetic);
-	SetOption(*session, kIgnoreCappedWord, prefs.ignoreCapitalized);
-	fDepth = prefs.depth == 0 ? 20 : prefs.depth == 2 ? 100 : 50;
-	auto is = [&](size_t i) { return i < languages.size() && languages[i] == prefs.mainDict; };
-	SetOption(*session, kSplitContracted, is(0) || is(1));
-	bool compounds = is(2) || is(3);
-	SetOption(*session, kSplitWords, compounds);
-	if (!compounds)
-		SetOption(*session, kSuggestSplitWords, true);
 	fSession = std::move(session);
+	SetUserOptions(prefs);
+	auto is = [&](size_t i) { return i < languages.size() && languages[i] == prefs.mainDict; };
+	SetOption(*fSession, kSplitContracted, is(0) || is(1));
+	bool compounds = is(2) || is(3);
+	SetOption(*fSession, kSplitWords, compounds);
+	if (!compounds)
+		SetOption(*fSession, kSuggestSplitWords, true);
 	return 0;
+}
+
+
+void
+Speller::SetUserOptions(const SpellPrefs& prefs)
+{
+	if (fSession == nullptr)
+		return;
+	ssce::Session& session = *fSession;
+	SetOption(session, kIgnoreMixedCase, prefs.ignoreMixedCase);
+	SetOption(session, kIgnoreMixedDigits, prefs.ignoreMixedDigits);
+	SetOption(session, kIgnoreAllCaps, prefs.ignoreAllCaps);
+	SetOption(session, kSuggestTypographical, prefs.suggestTypo);
+	SetOption(session, kSuggestPhonetic, prefs.suggestPhonetic);
+	SetOption(session, kIgnoreCappedWord, prefs.ignoreCapitalized);
+	fDepth = prefs.depth == 0 ? 20 : prefs.depth == 2 ? 100 : 50;
 }
 
 

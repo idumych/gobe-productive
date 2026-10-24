@@ -1,5 +1,7 @@
 #include "TDialog.h"
 
+#include <Bitmap.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -17,12 +19,14 @@
 #include <RadioButton.h>
 #include <ScrollView.h>
 #include <Slider.h>
+#include <SpaceLayoutItem.h>
 #include <String.h>
 #include <StringView.h>
 #include <TextControl.h>
 #include <TextView.h>
 
 #include "GobeResources.h"
+#include "TRibbon.h"
 #include "TMenu.h"
 
 namespace gobe {
@@ -145,15 +149,15 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int3
 			inner->SetInsets(B_USE_SMALL_INSETS, B_USE_BIG_INSETS, B_USE_SMALL_INSETS,
 				B_USE_SMALL_INSETS);
 			AlignItem(layout->AddView(box), item);
-			fItems[item.index] = box;
+			(fBuildingSet >= 0 ? fSetItems : fItems)[item.index] = box;
 			AddItems(inner, item.children, item.index);
 		} else {
 			BView* view = MakeControl(item);
 			if (view != NULL) {
 				AlignItem(layout->AddView(view), item);
-				fItems[item.index] = view;
+				(fBuildingSet >= 0 ? fSetItems : fItems)[item.index] = view;
 				if (item.type == FourCC("RADI"))
-					fRadios[group].push_back(item.index);
+					(fBuildingSet >= 0 ? fSetRadios : fRadios)[group].push_back(item.index);
 			}
 		}
 	}
@@ -163,9 +167,13 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int3
 BMessage*
 TDialog::ControlMessage(const ItemData& item) const
 {
-	BMessage* message = new BMessage(fCommand + item.index);
+	// an item set's controls: the set's command, their index as "SubID"
+	int32 index = fBuildingSet >= 0 ? fBuildingSet : item.index;
+	BMessage* message = new BMessage(fCommand + index);
 	message->AddInt32("dialog", fDialogId);
-	message->AddInt32("index", item.index);
+	message->AddInt32("index", index);
+	if (fBuildingSet >= 0)
+		message->AddInt32("SubID", item.index);
 	return message;
 }
 
@@ -253,8 +261,17 @@ TDialog::MakeControl(const ItemData& item)
 				TMenu source(item.menu, true);
 				while (source.CountItems() > 0) {
 					BMenuItem* mi = source.RemoveItem((int32)0);
-					if (mi->Message() != NULL)
+					if (mi->Message() != NULL) {
 						mi->Message()->what = fCommand + item.index;
+						// an item set's: to the dialog with the set and
+						// "SubID"
+						if (fBuildingSet >= 0) {
+							mi->Message()->what = fCommand + fBuildingSet;
+							mi->Message()->AddInt32("dialog", fDialogId);
+							mi->Message()->AddInt32("index", fBuildingSet);
+							mi->Message()->AddInt32("SubID", item.index);
+						}
+					}
 					popup->AddItem(mi);
 				}
 			}
@@ -325,15 +342,52 @@ TDialog::MakeControl(const ItemData& item)
 				BSize size(item.values[0], item.values[1]);
 				user->SetExplicitMinSize(size);
 				user->SetExplicitPreferredSize(size);
+				user->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, size.height));
 			}
 			user->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
 			view = user;
 			break;
 		}
+		case FourCC("ICON"):
+		{
+			// a 16 x 16 icon (MICN)
+			BBitmap* icon = item.values.size() >= 2 && uint32(item.values[0]) == FourCC("MICN")
+				? TMICNElement::LoadIcon(item.values[1]) : NULL;
+			class IconView : public BView {
+			public:
+				IconView(BBitmap* icon)
+					: BView("icon", B_WILL_DRAW), fIcon(icon)
+				{
+					SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+					SetExplicitMinSize(BSize(15, 15));
+					SetExplicitMaxSize(BSize(15, 15));
+				}
+				~IconView() { delete fIcon; }
+				virtual void Draw(BRect)
+				{
+					if (fIcon == NULL)
+						return;
+					SetDrawingMode(B_OP_OVER);
+					DrawBitmap(fIcon, BPoint(0, 0));
+				}
+			private:
+				BBitmap* fIcon;
+			};
+			view = new IconView(icon);
+			break;
+		}
+		case FourCC("ISET"):
+		{
+			// TItemSet: the controls LoadItemSet puts in it
+			BGroupView* set = new BGroupView("itemset", B_VERTICAL, B_USE_SMALL_SPACING);
+			set->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+			view = set;
+			break;
+		}
 		default:
 		{
-			// IBUT, ICON, 256P, PIKR, CUST, ISET: Gobe-specific views, not
-			// ported yet
+			// IBUT, ICON, 256P, PIKR, CUST: Gobe-specific views, not ported
+			// yet
 			BString text;
 			text << "[" << FourCCString(item.type).c_str() << "]";
 			if (!item.label.empty())
@@ -387,79 +441,81 @@ TDialog::ItemHit(int32 index, BMessage* message)
 
 
 BView*
-TDialog::Item(int32 index) const
+TDialog::Item(int32 index, int32 set) const
 {
-	auto it = fItems.find(index);
-	return it == fItems.end() ? NULL : it->second;
+	const std::map<int32, BView*>& items = set >= 0 ? fSetItems : fItems;
+	auto it = items.find(index);
+	return it == items.end() ? NULL : it->second;
 }
 
 
 void
-TDialog::SetTextItem(int32 index, const char* text)
+TDialog::SetTextItem(int32 index, const char* text, int32 set)
 {
-	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index)))
+	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index, set)))
 		control->SetText(text);
-	else if (BStringView* label = dynamic_cast<BStringView*>(Item(index)))
+	else if (BStringView* label = dynamic_cast<BStringView*>(Item(index, set)))
 		label->SetText(text);
 }
 
 
 BString
-TDialog::TextItem(int32 index) const
+TDialog::TextItem(int32 index, int32 set) const
 {
-	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index)))
+	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index, set)))
 		return control->Text();
 	return BString();
 }
 
 
 void
-TDialog::SetCheckBoxItem(int32 index, bool on)
+TDialog::SetCheckBoxItem(int32 index, bool on, int32 set)
 {
-	if (BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index)))
+	if (BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index, set)))
 		box->SetValue(on ? B_CONTROL_ON : B_CONTROL_OFF);
 }
 
 
 bool
-TDialog::CheckBoxItem(int32 index) const
+TDialog::CheckBoxItem(int32 index, int32 set) const
 {
-	BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index));
+	BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index, set));
 	return box != NULL && box->Value() == B_CONTROL_ON;
 }
 
 
 void
-TDialog::MakeFocusItem(int32 index)
+TDialog::MakeFocusItem(int32 index, int32 set)
 {
-	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index)))
+	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index, set)))
 		control->MakeFocus(true);
 }
 
 void
-TDialog::SetLabelItem(int32 index, const char* label)
+TDialog::SetLabelItem(int32 index, const char* label, int32 set)
 {
-	if (BControl* control = dynamic_cast<BControl*>(Item(index)))
+	if (BControl* control = dynamic_cast<BControl*>(Item(index, set)))
 		control->SetLabel(label);
 }
 
 
 void
-TDialog::SetRadioItem(int32 index, bool on)
+TDialog::SetRadioItem(int32 index, bool on, int32 set)
 {
-	if (BRadioButton* radio = dynamic_cast<BRadioButton*>(Item(index)))
+	if (BRadioButton* radio = dynamic_cast<BRadioButton*>(Item(index, set)))
 		radio->SetValue(on ? B_CONTROL_ON : B_CONTROL_OFF);
 }
 
 
 int32
-TDialog::RadioValue(int32 group) const
+TDialog::RadioValue(int32 group, int32 set) const
 {
-	auto radios = fRadios.find(group);
-	if (radios == fRadios.end())
+	const std::map<int32, std::vector<int32>>& sets = set >= 0 ? fSetRadios : fRadios;
+	auto radios = sets.find(group);
+	if (radios == sets.end())
 		return -1;
 	for (size_t i = 0; i < radios->second.size(); i++) {
-		BRadioButton* radio = dynamic_cast<BRadioButton*>(Item(radios->second[i]));
+		BRadioButton* radio = dynamic_cast<BRadioButton*>(Item(radios->second[i], set));
 		if (radio != NULL && radio->Value() == B_CONTROL_ON)
 			return int32(i);
 	}
@@ -475,9 +531,9 @@ PopUp(BView* view)
 
 
 void
-TDialog::SetPopUpItem(int32 index, int32 value)
+TDialog::SetPopUpItem(int32 index, int32 value, int32 set)
 {
-	BMenu* menu = PopUp(Item(index));
+	BMenu* menu = PopUp(Item(index, set));
 	if (menu == NULL)
 		return;
 	for (int32 i = 0; i < menu->CountItems(); i++) {
@@ -493,9 +549,9 @@ TDialog::SetPopUpItem(int32 index, int32 value)
 
 
 int32
-TDialog::PopUpValue(int32 index) const
+TDialog::PopUpValue(int32 index, int32 set) const
 {
-	BMenu* menu = PopUp(Item(index));
+	BMenu* menu = PopUp(Item(index, set));
 	BMenuItem* marked = menu != NULL ? menu->FindMarked() : NULL;
 	int32 v;
 	if (marked == NULL || marked->Message() == NULL
@@ -506,11 +562,47 @@ TDialog::PopUpValue(int32 index) const
 
 
 void
-TDialog::RemoveLastPopUpItems(int32 index, int32 count)
+TDialog::RemoveLastPopUpItems(int32 index, int32 count, int32 set)
 {
-	BMenu* menu = PopUp(Item(index));
+	BMenu* menu = PopUp(Item(index, set));
 	for (int32 i = 0; menu != NULL && i < count && menu->CountItems() > 0; i++)
 		delete menu->RemoveItem(menu->CountItems() - 1);
+}
+
+void
+TDialog::SetItemEnabled(int32 index, bool on, int32 set)
+{
+	if (BControl* control = dynamic_cast<BControl*>(Item(index, set)))
+		control->SetEnabled(on);
+	else if (BMenuField* field = dynamic_cast<BMenuField*>(Item(index, set)))
+		field->SetEnabled(on);
+}
+
+
+void
+TDialog::LoadItemSet(int32 index, int32 itemsId)
+{
+	BGroupView* set = dynamic_cast<BGroupView*>(Item(index));
+	if (set == NULL)
+		return;
+	while (BView* child = set->ChildAt(0)) {
+		child->RemoveSelf();
+		delete child;
+	}
+	// (and what isn't a view: glue, groups)
+	while (BLayoutItem* item = set->GroupLayout()->RemoveItem(int32(0)))
+		delete item;
+	fSetItems.clear();
+	fSetRadios.clear();
+	ItemList list;
+	const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("Item"), itemsId);
+	if (r == NULL || !ParseItems(r->data, list))
+		return;
+	fBuildingSet = index;
+	AddItems(set->GroupLayout(), list.items);
+	fBuildingSet = -1;
+	// the controls at the top of the set's room
+	set->GroupLayout()->AddItem(BSpaceLayoutItem::CreateGlue());
 }
 
 } // namespace gobe

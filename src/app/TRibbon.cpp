@@ -1,5 +1,7 @@
 #include "TRibbon.h"
 
+#include "TPreferences.h"
+
 #include <Window.h>
 
 #include <cmath>
@@ -350,6 +352,9 @@ TRibbon::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 	// the element's tip
 	TRibbonElement* element = transit == B_EXITED_VIEW ? NULL : FindElement(where);
 	std::string tip = element != NULL ? element->tip : std::string();
+	// the Tool Tips preference
+	if (!AppPreferences().toolTips)
+		tip.clear();
 	if (tip != fTip) {
 		fTip = tip;
 		SetToolTip(tip.empty() ? (const char*)NULL : tip.c_str());

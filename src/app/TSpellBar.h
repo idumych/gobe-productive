@@ -46,8 +46,7 @@ public:
 	// TSpellSession::StartSession (alerts unless `quiet`)
 	static bool StartSession(bool quiet = false);
 	static Speller& AppSpeller();
-	// the spelling preferences (TAppPrefs: PREF 42's, then as Spell
-	// Dictionaries… sets them; not saved yet)
+	// the spelling preferences (TAppPrefs' Spell Checking)
 	static SpellPrefs& Prefs();
 	// TSpellSession::GetDictFolder: the Dictionaries folder (STR# 9's first
 	// string) beside the original binary; empty (and an alert) if none

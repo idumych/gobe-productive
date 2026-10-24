@@ -16,6 +16,7 @@
 #include "Formats.h"
 #include "GobeResources.h"
 #include "TPageView.h"
+#include "TPreferences.h"
 
 namespace gobe {
 
@@ -43,17 +44,7 @@ TSpellBar::AppSpeller()
 SpellPrefs&
 TSpellBar::Prefs()
 {
-	static SpellPrefs sPrefs;
-	static bool sRead = false;
-	if (!sRead) {
-		sRead = true;
-		if (const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("PREF"), 42))
-			sPrefs.Read(r->data);
-		// TApp: one kind of suggestion at least
-		if (!sPrefs.suggestTypo && !sPrefs.suggestPhonetic)
-			sPrefs.suggestTypo = sPrefs.suggestPhonetic = true;
-	}
-	return sPrefs;
+	return AppPreferences().spelling;
 }
 
 

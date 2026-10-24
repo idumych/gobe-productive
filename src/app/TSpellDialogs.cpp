@@ -20,6 +20,7 @@
 
 #include "GobeResources.h"
 #include "Spelling.h"
+#include "TPreferences.h"
 #include "TSpellBar.h"
 #include "WordCount.h"
 
@@ -147,6 +148,7 @@ TDialogSpellDictionaries::ItemHit(int32 index, BMessage* message)
 					prefs.userDict = fUser.String();
 				TSpellBar::AppSpeller().Close();
 				TSpellBar::StartSession();
+				SavePreferences();
 			}
 			break;
 		case 3:

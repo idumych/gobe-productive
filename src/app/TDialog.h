@@ -40,24 +40,31 @@ protected:
 	// and Cancel (1).
 	virtual bool ItemHit(int32 index, BMessage* message);
 
-	// the controls by their item index (TDialog::SetTextItem, ...)
-	BView* Item(int32 index) const;
-	void SetTextItem(int32 index, const char* text);
-	BString TextItem(int32 index) const;
-	void SetCheckBoxItem(int32 index, bool on);
-	bool CheckBoxItem(int32 index) const;
-	void MakeFocusItem(int32 index);
+	// the controls by their item index (TDialog::SetTextItem, ...); with
+	// `set`, those of the item set (ISET) of that index
+	BView* Item(int32 index, int32 set = -1) const;
+	void SetTextItem(int32 index, const char* text, int32 set = -1);
+	BString TextItem(int32 index, int32 set = -1) const;
+	void SetCheckBoxItem(int32 index, bool on, int32 set = -1);
+	bool CheckBoxItem(int32 index, int32 set = -1) const;
+	void MakeFocusItem(int32 index, int32 set = -1);
 	// a control's label (BControl::SetLabel)
-	void SetLabelItem(int32 index, const char* label);
+	void SetLabelItem(int32 index, const char* label, int32 set = -1);
+	// TDialog::SetItemEnabled
+	void SetItemEnabled(int32 index, bool on, int32 set = -1);
 	// radio buttons (TDialog::SetRadioItem, GetRadioValue: which of the
 	// radios in box `group` is on, from 0; -1 if none)
-	void SetRadioItem(int32 index, bool on);
-	int32 RadioValue(int32 group) const;
+	void SetRadioItem(int32 index, bool on, int32 set = -1);
+	int32 RadioValue(int32 group, int32 set = -1) const;
 	// pop-up menus (TPopUpMenu::FindValue, the marked item's value; -1 if
 	// none) and taking items off their end
-	void SetPopUpItem(int32 index, int32 value);
-	int32 PopUpValue(int32 index) const;
-	void RemoveLastPopUpItems(int32 index, int32 count);
+	void SetPopUpItem(int32 index, int32 value, int32 set = -1);
+	int32 PopUpValue(int32 index, int32 set = -1) const;
+	void RemoveLastPopUpItems(int32 index, int32 count, int32 set = -1);
+	// TItemSet::LoadItems: the item set `index` shows the controls of Item
+	// resource `itemsId` (they send the set's command with "SubID", their
+	// index)
+	void LoadItemSet(int32 index, int32 itemsId);
 
 private:
 	void AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int32 group = -1);
@@ -69,6 +76,10 @@ private:
 	BHandler* fTarget;
 	std::map<int32, BView*> fItems;
 	std::map<int32, std::vector<int32>> fRadios;	// box index: its radios, in order
+	// the item set's
+	int32 fBuildingSet = -1;
+	std::map<int32, BView*> fSetItems;
+	std::map<int32, std::vector<int32>> fSetRadios;
 };
 
 } // namespace gobe

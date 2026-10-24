@@ -45,6 +45,9 @@ public:
 		const std::vector<std::string>& languages);
 	bool Started() const { return fSession != nullptr; }
 	void Close();
+	// TSpellSession::SetUserOptions: the preferences' ignore and suggest
+	// options and search depth for the session going
+	void SetUserOptions(const SpellPrefs& prefs);
 
 	// TSpeller::CheckWord: 0 good, 2 questionable, 3 wants a capital, 4
 	// mixed case, 5 letters and digits, 6 to be replaced by AutoReplacement()
