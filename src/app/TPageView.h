@@ -82,6 +82,8 @@ public:
 	// TSSFillCommand::IsLocked (and its alert)
 	bool FillLocked(FillKind kind, int r0, int c0, int r1, int c1);
 	bool RangeLocked(int r0, int c0, int r1, int c1);
+	// TPartSS::SetUpContextMenu
+	BPopUpMenu* CellContextMenu(size_t part, int row, int column);
 	// TParser::ParseReference for Go To Cell
 	bool ParseCellReference(size_t part, const std::string& text, uint16& row,
 		uint16& column) const;

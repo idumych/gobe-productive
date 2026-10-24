@@ -6,6 +6,7 @@
 // the range; copy/cut/paste/clear/selectall work on ranges using
 // RangeInput/ClearRange/PasteInput from Editing.h.
 #include "TPageView.h"
+#include "TMenu.h"
 #include "TSheetDialogs.h"
 #include "TFormatBar.h"
 #include "TPartBar.h"
@@ -442,6 +443,67 @@ TPageView::DrawCaret()
 	SetHighColor(0, 0, 0);
 	SetPenSize(1);
 	StrokeLine(BPoint(x, line.baseline - size * 0.95f), BPoint(x, line.baseline + size * 0.25f));
+}
+
+
+// TPartSS::SetUpContextMenu: Move Cells Here (STR# 1505, 0); with the
+// clicked cell selected Lock Cells and Unlock Cells (STR# 1501, 8 and 9) and
+// Chart Cells (1501, 15); the display options (MENU 304), each marked when on
+// and sending 'sM66' with the options it toggled
+BPopUpMenu*
+TPageView::CellContextMenu(size_t part, int row, int column)
+{
+	const SSPart* ss = fDocument.SpreadsheetPart(part);
+	if (ss == NULL)
+		return NULL;
+	const ResourceFile& resources = GobeResources::Part("Spreadsheet");
+	BPopUpMenu* menu = new BPopUpMenu("context", false, false);
+	BMessage* message = new BMessage('sM76');
+	uint16 cell[2] = {uint16(row), uint16(column)};
+	message->AddData("cellID", B_RAW_TYPE, cell, sizeof(cell));
+	BMenuItem* move = new BMenuItem(IndexString(resources, 1505, 0).c_str(), message);
+	// (moving cells isn't ported yet)
+	move->SetEnabled(false);
+	menu->AddItem(move);
+	int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+	int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+	int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+	int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+	if (fSelectedCell.active && fSelectedCell.part == part && row >= r0 && row <= r1
+			&& column >= c0 && column <= c1) {
+		menu->AddSeparatorItem();
+		menu->AddItem(new BMenuItem(IndexString(resources, 1501, 8).c_str(),
+			new BMessage('sM62')));
+		menu->AddItem(new BMenuItem(IndexString(resources, 1501, 9).c_str(),
+			new BMessage('sM63')));
+		// (with a chart part: making charts isn't ported yet)
+		menu->AddSeparatorItem();
+		BMessage* chart = new BMessage('s00T');
+		chart->AddInt32("Kind", 'chrt');
+		BMenuItem* item = new BMenuItem(IndexString(resources, 1501, 15).c_str(), chart);
+		item->SetEnabled(false);
+		menu->AddItem(item);
+	}
+	menu->AddSeparatorItem();
+	TMenu* options = new TMenu(304, resources);
+	for (int32 i = 0; i < options->CountItems(); i++) {
+		BMenuItem* item = options->ItemAt(i);
+		if (item->Message() == NULL)
+			continue;
+		int32 value = item->Message()->GetInt32(kValueString, 0);
+		if (value < 1 || value > 6)
+			continue;
+		uint8 toggled[6];
+		for (int k = 0; k < 6; k++)
+			toggled[k] = ss->options[k] ? 1 : 0;
+		toggled[value - 1] ^= 1;
+		item->SetMarked(ss->options[value - 1]);
+		item->Message()->AddData("displayOptions", B_RAW_TYPE, toggled, sizeof(toggled));
+	}
+	menu->AddItem(options);
+	menu->SetTargetForItems(Window());
+	options->SetTargetForItems(Window());
+	return menu;
 }
 
 
@@ -1187,6 +1249,18 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	size_t part;
 	int row, column;
 	BRect rect;
+	if (HitCell(where, part, row, column, rect)
+			&& (buttons & B_SECONDARY_MOUSE_BUTTON) != 0) {
+		// TPartSS::SetUpContextMenu: the selection stays
+		BPopUpMenu* menu = CellContextMenu(part, row, column);
+		if (menu != NULL && menu->CountItems() > 0 && Window() != NULL) {
+			BPoint screen = ConvertToScreen(BPoint(where.x * fZoom, where.y * fZoom));
+			menu->Go(screen, true, false, BRect(screen.x - 5, screen.y - 5, screen.x + 5,
+				screen.y + 5), false);
+		}
+		delete menu;
+		return;
+	}
 	if (HitCell(where, part, row, column, rect)) {
 		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
 		bool same = fSelectedCell.active && fSelectedCell.part == part
@@ -2768,7 +2842,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 			if (sscanf(command.c_str() + (pick ? 12 : 8), "%f %f %n", &x, &y, &n) < 2)
 				continue;
 			std::string label = pick ? command.substr((pick ? 12 : 8) + size_t(n)) : "";
-			BPopUpMenu* menu = ContextMenu(BPoint(x, y));
+			size_t cellPart;
+			int cellRow, cellColumn;
+			BRect cellRect;
+			BPopUpMenu* menu = HitCell(BPoint(x, y), cellPart, cellRow, cellColumn, cellRect)
+				? CellContextMenu(cellPart, cellRow, cellColumn) : ContextMenu(BPoint(x, y));
 			std::string shown;
 			BMenuItem* chosen = NULL;
 			for (int32 i = 0; menu != NULL && i < menu->CountItems(); i++) {
