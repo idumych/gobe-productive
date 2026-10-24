@@ -5,6 +5,8 @@
 #ifndef GOBE_TDOCWINDOW_H
 #define GOBE_TDOCWINDOW_H
 
+#include <vector>
+
 #include <MenuBar.h>
 #include <Menu.h>
 #include <PopUpMenu.h>
@@ -141,8 +143,11 @@ public:
 	void UpdateTextMarks(const char* family, uint32_t faceFlags,
 		float textSize, int alignment);
 
+	virtual void DispatchMessage(BMessage* message, BHandler* handler);
+
 private:
 	TMenuBar* InstallBaseMenus();
+	void InstallPartMenus();
 	BMenu* MakeDialogsMenu();
 	BMenu* MakeFontMenu();
 	bool Save(const std::string& path);
@@ -156,6 +161,9 @@ private:
 	void GeometryChanged();
 
 	BStringView* fStatus;
+	TMenuBar* fBar = NULL;
+	std::vector<BMenu*> fPartMenus;	// the active part's (InstallPartMenus)
+	bool fSheetMenus = false;
 	Document* fDocument = NULL;
 	class TPageView* fPages = NULL;
 	class TWPRuler* fRuler = NULL;

@@ -47,6 +47,15 @@
 
 namespace gobe {
 
+// TSSCommand::NameStr: a spreadsheet command's name, for Undo and History
+// (STR# 1501 of Parts/Spreadsheet: 3 Fill Cells, 8 Lock Cells, ...)
+static std::string
+SSCommandName(int32 index)
+{
+	return IndexString(GobeResources::Part("Spreadsheet"), 1501, index);
+}
+
+
 // Copy Format's properties (the application's, TApp +0x184)
 static std::vector<Property> sCopiedFormat;
 // the text last copied with its styles (the clipboard has its plain text)
@@ -2360,7 +2369,7 @@ TPageView::MessageReceived(BMessage* message)
 					}
 					// Fill Down / Fill Right
 					case 'sM70': {	// Fill Down
-						fUndo.Begin(fDocument, fSelectedCell.part, "Fill Down",
+						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
 						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
 							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
@@ -2370,11 +2379,23 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case 'sM71': {	// Fill Right
-						fUndo.Begin(fDocument, fSelectedCell.part, "Fill Right",
+						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
 						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
 							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
 							true);
+						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 'sM7B':	// Fill Up
+					case 'sM7C': {	// Fill Left
+						bool up = message->what == 'sM7B';
+						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
+							CurrentViewState());
+						FillCells(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							up ? FillKind::up : FillKind::left);
 						fBook->Reset();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -2946,6 +2967,12 @@ TPageView::RunScript(const std::string& script, Document& document)
 			MessageReceived(&msg);
 		} else if (command == "fillright") {
 			BMessage msg('sM71');
+			MessageReceived(&msg);
+		} else if (command == "fillup") {
+			BMessage msg('sM7B');
+			MessageReceived(&msg);
+		} else if (command == "fillleft") {
+			BMessage msg('sM7C');
 			MessageReceived(&msg);
 		} else if (command.compare(0, 11, "cellformat ") == 0) {
 			// "cellformat <format>" — apply number format to selection
@@ -3918,7 +3945,8 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf02': case 'sf0L': case 'sf0V': case 'sMB6':				// format bar
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
-		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells
+		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
+		case 'sM73': case 'sM74':
 			return true;
 		default:
 			return false;

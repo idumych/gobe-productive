@@ -8,6 +8,7 @@
 #include <MenuItem.h>
 
 #include "Formats.h"
+#include "ResourceFile.h"
 
 namespace gobe {
 
@@ -20,8 +21,11 @@ public:
 
 class TMenu : public BMenu {
 public:
-	// TMenu(unsigned long id, bool loadItems, BResources*, bool)
+	// TMenu(unsigned long id, bool loadItems, BResources*, bool): from the
+	// application's resources, or from `resources` (a part's, such as the
+	// Spreadsheet's SSResources); submenus come from the same file
 	TMenu(int32 id, bool loadItems = true);
+	TMenu(int32 id, const ResourceFile& resources, bool loadItems = true);
 
 	int32 ID() const { return fID; }
 	const MenuData& Data() const { return fData; }
@@ -39,6 +43,7 @@ public:
 
 private:
 	int32 fID;
+	const ResourceFile* fResources;
 	MenuData fData;
 };
 

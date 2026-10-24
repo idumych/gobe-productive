@@ -1,5 +1,6 @@
 #include "GobeResources.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #ifdef APP_COSMOE
 #include <spawn.h>
@@ -19,6 +20,8 @@ extern char** environ;
 #include <Volume.h>
 #include <VolumeRoster.h>
 
+#include <map>
+#include <string>
 #include <vector>
 
 #include "OriginalImport.h"
@@ -203,6 +206,22 @@ const ResourceFile&
 GobeResources::File()
 {
 	return sFile;
+}
+
+
+const ResourceFile&
+GobeResources::Part(const char* name)
+{
+	static std::map<std::string, ResourceFile> sParts;
+	auto found = sParts.find(name);
+	if (found != sParts.end())
+		return found->second;
+	ResourceFile& file = sParts[name];
+	BPath path(sPath.String());
+	if (path.GetParent(&path) == B_OK && path.Append("Parts") == B_OK
+		&& path.Append(name) == B_OK && !file.Load(path.Path()))
+		fprintf(stderr, "Parts/%s: %s\n", name, file.Error().c_str());
+	return file;
 }
 
 

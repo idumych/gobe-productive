@@ -535,6 +535,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		floater->PostMessage(&add);
 	}
 	TMenuBar* menuBar = InstallBaseMenus();
+	InstallPartMenus();
 	// a test aid, not the original's: every DIAL resource, with
 	// GOBE_DEBUG_MENUS set
 	if (getenv("GOBE_DEBUG_MENUS") != NULL)
@@ -722,150 +723,50 @@ TDocWindow::InstallBaseMenus()
 
 	bar->AddItem(new TMenu(6));
 
-	// the text part's Format menu (MENU 51)
-	bar->AddItem(new TMenu(51));
-
-
-	// the Spreadsheet part's Format menu (MENU 52 of Parts/Spreadsheet)
-	// and Options menu (MENU 53), with the items that work so far
-	if (fDocument != NULL && !fDocument->spreadsheetParts.empty()) {
-		// Format menu: Column Width, Row Height, Display Options
-		BMenu* format = new BMenu("Format");
-		format->AddItem(new BMenuItem("Column Width…", new BMessage(kCmdColWidth)));
-		format->AddItem(new BMenuItem("Row Height…", new BMessage(kCmdRowHeight)));
-		BMenuItem* displayOpts = new BMenuItem("Display Options", NULL);
-		displayOpts->SetEnabled(false);
-		format->AddItem(displayOpts);
-		bar->AddItem(format);
-
-		BMenu* options = new BMenu("Options");
-		options->AddItem(new BMenuItem("Fill Down", new BMessage('sM70'), 'D'));
-		options->AddItem(new BMenuItem("Fill Right", new BMessage('sM71'), 'R'));
-		options->AddSeparatorItem();
-
-		// Cell Format submenu
-		BMenu* formatMenu = new BMenu("Cell Format");
-		{
-			BMessage* m = new BMessage('GcNF');
-			m->AddString("value", "");
-			formatMenu->AddItem(new BMenuItem("None", m));
-		}
-		{
-			BMessage* m = new BMessage('GcNF');
-			m->AddString("value", "0.00");
-			formatMenu->AddItem(new BMenuItem("0.00", m));
-		}
-		{
-			BMessage* m = new BMessage('GcNF');
-			m->AddString("value", "0.00%");
-			formatMenu->AddItem(new BMenuItem("0.00%", m));
-		}
-		{
-			BMessage* m = new BMessage('GcNF');
-			m->AddString("value", "0E+00");
-			formatMenu->AddItem(new BMenuItem("0E+00", m));
-		}
-		{
-			BMessage* m = new BMessage('GcNF');
-			m->AddString("value", "$#,##0");
-			formatMenu->AddItem(new BMenuItem("$#,##0", m));
-		}
-		{
-			BMessage* m = new BMessage('GcNF');
-			m->AddString("value", "#,##0.00");
-			formatMenu->AddItem(new BMenuItem("#,##0.00", m));
-		}
-		options->AddItem(new BMenuItem(formatMenu));
-
-		// Cell Fill submenu
-		BMenu* fillMenu = new BMenu("Cell Fill");
-		{
-			BMessage* m = new BMessage('GcFL');
-			m->AddInt32("red", 255); m->AddInt32("green", 255); m->AddInt32("blue", 255);
-			fillMenu->AddItem(new BMenuItem("None", m));
-		}
-		{
-			BMessage* m = new BMessage('GcFL');
-			m->AddInt32("red", 255); m->AddInt32("green", 0); m->AddInt32("blue", 0);
-			fillMenu->AddItem(new BMenuItem("Red", m));
-		}
-		{
-			BMessage* m = new BMessage('GcFL');
-			m->AddInt32("red", 255); m->AddInt32("green", 255); m->AddInt32("blue", 0);
-			fillMenu->AddItem(new BMenuItem("Yellow", m));
-		}
-		{
-			BMessage* m = new BMessage('GcFL');
-			m->AddInt32("red", 0); m->AddInt32("green", 255); m->AddInt32("blue", 0);
-			fillMenu->AddItem(new BMenuItem("Green", m));
-		}
-		{
-			BMessage* m = new BMessage('GcFL');
-			m->AddInt32("red", 0); m->AddInt32("green", 0); m->AddInt32("blue", 255);
-			fillMenu->AddItem(new BMenuItem("Blue", m));
-		}
-		{
-			BMessage* m = new BMessage('GcFL');
-			m->AddInt32("red", 255); m->AddInt32("green", 255); m->AddInt32("blue", 255);
-			fillMenu->AddItem(new BMenuItem("White", m));
-		}
-		options->AddItem(new BMenuItem(fillMenu));
-
-		// Cell Align Horizontal
-		BMenu* hAlignMenu = new BMenu("Align Horizontal");
-		{
-			BMessage* m = new BMessage('GcHA');
-			m->AddInt32("value", 0);
-			hAlignMenu->AddItem(new BMenuItem("Left", m));
-		}
-		{
-			BMessage* m = new BMessage('GcHA');
-			m->AddInt32("value", 1);
-			hAlignMenu->AddItem(new BMenuItem("Center", m));
-		}
-		{
-			BMessage* m = new BMessage('GcHA');
-			m->AddInt32("value", 2);
-			hAlignMenu->AddItem(new BMenuItem("Right", m));
-		}
-		options->AddItem(new BMenuItem(hAlignMenu));
-
-		// Cell Align Vertical
-		BMenu* vAlignMenu = new BMenu("Align Vertical");
-		{
-			BMessage* m = new BMessage('GcVA');
-			m->AddInt32("value", 0);
-			vAlignMenu->AddItem(new BMenuItem("Top", m));
-		}
-		{
-			BMessage* m = new BMessage('GcVA');
-			m->AddInt32("value", 1);
-			vAlignMenu->AddItem(new BMenuItem("Center", m));
-		}
-		{
-			BMessage* m = new BMessage('GcVA');
-			m->AddInt32("value", 2);
-			vAlignMenu->AddItem(new BMenuItem("Bottom", m));
-		}
-		options->AddItem(new BMenuItem(vAlignMenu));
-
-		options->AddSeparatorItem();
-		// Wrap Text toggle
-		{
-			BMessage* m = new BMessage('GcWR');
-			m->AddInt32("value", 1);
-			options->AddItem(new BMenuItem("Wrap Text", m));
-		}
-		options->AddSeparatorItem();
-
-		options->AddItem(new BMenuItem("Insert Cells…", new BMessage('sM73')));
-		options->AddItem(new BMenuItem("Delete Cells…", new BMessage('sM74')));
-		options->AddSeparatorItem();
-		options->AddItem(new BMenuItem("Go To Cell…", new BMessage(kCmdGoToCell)));
-		bar->AddItem(options);
-	}
-
+	fBar = bar;
+	// the active part's menus follow (InstallPartMenus)
 	return bar;
+}
+
+
+// TPart::InstallMenus for the active part, after the base menus: the
+// text part's Format menu (MENU 51; TWPPart), or with cells selected the
+// Spreadsheet's Format and Options (MENU 52, 53 of Parts/Spreadsheet;
+// TPartSS::InstallMenus). Swapped when the active part changes.
+void
+TDocWindow::InstallPartMenus()
+{
+	if (fBar == NULL)
+		return;
+	bool sheet = fPages != NULL && fPages->fSelectedCell.active;
+	if (!fPartMenus.empty() && sheet == fSheetMenus)
+		return;
+	for (BMenu* menu : fPartMenus) {
+		fBar->RemoveItem(menu);
+		delete menu;
+	}
+	fPartMenus.clear();
+	fSheetMenus = sheet;
+	if (sheet) {
+		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
+		fPartMenus.push_back(new TMenu(52, resources));
+		fPartMenus.push_back(new TMenu(53, resources));
+	} else
+		fPartMenus.push_back(new TMenu(51));
+	// after MENU 2-6
+	int32 at = 5;
+	for (BMenu* menu : fPartMenus)
+		fBar->AddItem(menu, at++);
+}
+
+
+// the part menus are right before a shortcut is looked up
+void
+TDocWindow::DispatchMessage(BMessage* message, BHandler* handler)
+{
+	if (message->what == B_KEY_DOWN)
+		InstallPartMenus();
+	BWindow::DispatchMessage(message, handler);
 }
 
 
@@ -1684,7 +1585,27 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 void
 TDocWindow::MenusBeginning()
 {
+	InstallPartMenus();
 	BWindow::MenusBeginning();
+	// TPartSS::FixMenus: Fill Down and Up with a block more than one cell
+	// high, Fill Right and Left more than one wide, Sort Cells either way.
+	// (Commands not ported yet are off.)
+	if (fSheetMenus && fPages != NULL && KeyMenuBar() != NULL) {
+		const auto& cell = fPages->fSelectedCell;
+		int height = abs(cell.row - cell.anchorRow) + 1;
+		int width = abs(cell.column - cell.anchorColumn) + 1;
+		auto enable = [&](uint32 command, bool on) {
+			if (BMenuItem* item = KeyMenuBar()->FindItem(command))
+				item->SetEnabled(on);
+		};
+		enable('sM70', height > 1);
+		enable('sM7B', height > 1);
+		enable('sM71', width > 1);
+		enable('sM7C', width > 1);
+		for (uint32 command : {'sM60', 'sM62', 'sM63', 'sM66', 'sM75', 'sM76', 'sM78',
+				'sM79', 'sM7A'})
+			enable(command, false);
+	}
 	if (KeyMenuBar() == NULL)
 		return;
 	for (int which = 0; which < 2; which++) {

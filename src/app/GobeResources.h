@@ -30,6 +30,10 @@ public:
 	static bool Import(const char* source, BString& error);
 
 	static const ResourceFile& File();
+	// the resources of the add-on Parts/`name` next to the binary (as the
+	// part's own resources: SSResources and the like), loaded on first use;
+	// empty if it isn't there
+	static const ResourceFile& Part(const char* name);
 	static const BString& Path();
 	// GetIndexString: string `index` (from 0) of STR# `id`
 	static BString IndexString(int32 id, int32 index);

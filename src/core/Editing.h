@@ -276,12 +276,21 @@ bool PasteInput(SSPart& part, uint16_t row, uint16_t column, const std::string& 
 	const std::function<bool(const std::string&)>& isName, std::string& error,
 	uint16_t& rows, uint16_t& columns);
 
-// Fill Down / Fill Right: copies the first row (column) of the block
-// into the rest of it — value, formula and style. Relative references
-// are stored as offsets from their cell, so copied formulas follow.
-// False if nothing changed.
+// Fill Down / Fill Right: FillCells with FillKind::down or right.
 bool FillRange(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
 	uint16_t column1, bool right);
+
+// Options > Fill Down, Fill Right, Fill Up, Fill Left (TSSFillCommand::
+// DoFillDown etc.): the block, pinned to the sheet (part.used, which Document
+// Size sets), gets in each column its top (Up: bottom) cell, or in each row
+// its left (Left: right) cell, cloned into the others: value, formula and
+// style, as TDataCell::Clone does. Relative references are stored as offsets
+// from their cell, so copied formulas follow. A block one cell high (Down,
+// Up) or wide (Right, Left) isn't filled; an empty source empties the
+// others. False if nothing changed.
+enum class FillKind { down, right, up, left };
+bool FillCells(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
+	uint16_t column1, FillKind kind);
 
 } // namespace gobe
 

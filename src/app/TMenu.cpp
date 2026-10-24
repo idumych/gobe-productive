@@ -15,10 +15,10 @@ TMenuItem::TMenuItem(const char* label, BMessage* message, char shortcut,
 
 
 static MenuData
-LoadMenuData(int32 id)
+LoadMenuData(int32 id, const ResourceFile& resources)
 {
 	MenuData data;
-	const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("MENU"), id);
+	const ResourceFile::Resource* r = resources.Find(FourCC("MENU"), id);
 	if (r == NULL || !ParseMenu(r->data, data))
 		fprintf(stderr, "TMenu: MENU %d missing or malformed\n", (int)id);
 	return data;
@@ -27,9 +27,17 @@ LoadMenuData(int32 id)
 
 TMenu::TMenu(int32 id, bool loadItems)
 	:
-	BMenu(LoadMenuData(id).title.c_str(), B_ITEMS_IN_COLUMN),
+	TMenu(id, GobeResources::File(), loadItems)
+{
+}
+
+
+TMenu::TMenu(int32 id, const ResourceFile& resources, bool loadItems)
+	:
+	BMenu(LoadMenuData(id, resources).title.c_str(), B_ITEMS_IN_COLUMN),
 	fID(id),
-	fData(LoadMenuData(id))
+	fResources(&resources),
+	fData(LoadMenuData(id, resources))
 {
 	if (loadItems)
 		LoadMenuItems();
@@ -51,7 +59,7 @@ TMenu::LoadMenuItems()
 		}
 		// a submenu: its own MENU resource; the item's command, if any,
 		// becomes the superitem's message
-		TMenu* sub = new TMenu(item.submenu, true);
+		TMenu* sub = new TMenu(item.submenu, *fResources, true);
 		AddItem(sub);
 		if (item.command != 0 && sub->Superitem() != NULL)
 			sub->Superitem()->SetMessage(new BMessage(item.command));

@@ -2261,53 +2261,71 @@ bool
 FillRange(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
 	uint16_t column1, bool right)
 {
+	return FillCells(part, row0, column0, row1, column1,
+		right ? FillKind::right : FillKind::down);
+}
+
+
+// TSSFillCommand::FillRangeWithCell for one cell: the source's data cell
+// cloned into (row, column), or the cell emptied if there is none
+static bool
+FillOneCell(SSPart& part, uint16_t sourceRow, uint16_t sourceColumn, uint16_t row,
+	uint16_t column)
+{
+	const SSCell* source = part.Cell(sourceRow, sourceColumn);
+	auto at = std::find_if(part.cells.begin(), part.cells.end(),
+		[&](const SSCell& c) { return c.id.a == row && c.id.b == column; });
+	if (source == nullptr) {
+		if (at == part.cells.end())
+			return false;
+		part.cells.erase(at);
+		return true;
+	}
+	SSCell cell = *source;
+	cell.id = {row, column};
+	if (at != part.cells.end()) {
+		*at = cell;
+		return true;
+	}
+	// (cells sorted by column, then row)
+	auto before = std::find_if(part.cells.begin(), part.cells.end(),
+		[&](const SSCell& c) {
+			return std::make_pair(c.id.b, c.id.a) > std::make_pair(column, row);
+		});
+	part.cells.insert(before, cell);
+	return true;
+}
+
+
+bool
+FillCells(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
+	uint16_t column1, FillKind kind)
+{
+	// TRange::Pin to the sheet
+	row0 = std::max(row0, part.used.from.a);
+	column0 = std::max(column0, part.used.from.b);
+	row1 = std::min(row1, part.used.to.a);
+	column1 = std::min(column1, part.used.to.b);
 	if (row0 > row1 || column0 > column1)
 		return false;
-	if (row1 == 0 && column1 == 0 && row0 == 0 && column0 == 0)
+	bool vertical = kind == FillKind::down || kind == FillKind::up;
+	if (vertical ? row0 == row1 : column0 == column1)
 		return false;
 
 	bool changed = false;
-	// For fill down: source = row0, target = row0+1..row1
-	// For fill right: source = column0, target = column0+1..column1
-	uint16_t start = right ? uint16_t(column0 + 1) : uint16_t(row0 + 1);
-	uint16_t end = right ? column1 : row1;
-	// If nothing to fill, return false
-	if (start > end)
-		return false;
-
-	for (uint16_t col = column0; col <= column1; col++) {
-		for (uint16_t target = start; target <= end; target++) {
-			uint16_t src = right ? column0 : row0;
-			uint16_t tgt = target;
-			uint16_t srcRow = right ? row0 : src;
-			uint16_t srcCol = right ? col : col;
-			uint16_t tgtRow = right ? row0 : tgt;
-			uint16_t tgtCol = right ? tgt : col;
-
-			const SSCell* srcCell = part.Cell(srcRow, srcCol);
-			if (srcCell == nullptr) {
-				// Source has no cell: clear target
-				std::string error;
-				SetCellInput(part, tgtRow, tgtCol, "", nullptr, error);
-				changed = true;
-			} else {
-				// Copy source cell to target
-				SSCell cell = *srcCell;
-				cell.id = {tgtRow, tgtCol};
-				// Find or insert in sorted part.cells
-				auto it = std::find_if(part.cells.begin(), part.cells.end(),
-					[&](const SSCell& c) { return c.id.a == tgtRow && c.id.b == tgtCol; });
-				if (it != part.cells.end())
-					*it = cell;
-				else {
-					auto at = std::find_if(part.cells.begin(), part.cells.end(),
-						[&](const SSCell& c) {
-							return std::make_pair(c.id.b, c.id.a) > std::make_pair(tgtCol, tgtRow);
-						});
-					part.cells.insert(at, cell);
-				}
-				changed = true;
+	for (uint16_t row = row0; row <= row1; row++) {
+		for (uint16_t column = column0; column <= column1; column++) {
+			uint16_t sourceRow = row, sourceColumn = column;
+			switch (kind) {
+				case FillKind::down: sourceRow = row0; break;
+				case FillKind::up: sourceRow = row1; break;
+				case FillKind::right: sourceColumn = column0; break;
+				case FillKind::left: sourceColumn = column1; break;
 			}
+			if (sourceRow == row && sourceColumn == column)
+				continue;
+			if (FillOneCell(part, sourceRow, sourceColumn, row, column))
+				changed = true;
 		}
 	}
 	return changed;
