@@ -55,39 +55,6 @@ NewSheetPreferences(Document& document)
 static const char* kSignature = "application/x-vnd.gobe-port.productive";
 
 
-// receives the "Locate…" file panel's choice (or its closing) while the
-// application thread waits
-class TLocateLooper : public BLooper {
-public:
-	TLocateLooper()
-		:
-		BLooper("locate original")
-	{
-	}
-
-	virtual void MessageReceived(BMessage* message)
-	{
-		sem_id done;
-		if (message->FindInt32("sem", &done) != B_OK)
-			done = fDone;
-		if (message->what == 'Gloc') {
-			entry_ref ref;
-			if (message->FindRef("refs", &ref) == B_OK)
-				fPath.SetTo(&ref);
-			release_sem(done);
-			return;
-		}
-		if (message->what == B_CANCEL) {
-			release_sem(fDone);
-			return;
-		}
-		BLooper::MessageReceived(message);
-	}
-
-	BPath fPath;
-	sem_id fDone = -1;
-};
-
 class TApp : public BApplication {
 public:
 	TApp()
@@ -220,6 +187,22 @@ public:
 	virtual void MessageReceived(BMessage* message)
 	{
 		switch (message->what) {
+			// finding the original (LocateOriginal)
+			case 'Galt':
+				LocateChoice(message);
+				return;
+			case 'Gloc':
+				LocateChosen(message);
+				return;
+			case B_CANCEL:
+				// the locate panel closed without a choice: the alert again
+				if (!fReady && !fLocateChosen) {
+					BString error;
+					GobeResources::Init(error);
+					LocateOriginal(error);
+					return;
+				}
+				break;
 			// the Window menu (TDocWindow::MessageReceived; TILE with no
 			// "horizontal" is the grid)
 			case 'sMF9':
@@ -310,49 +293,58 @@ public:
 		delete bitmap;
 	}
 
-	// The original binary wasn't found: the user shows where it is (a
-	// file panel, waited for here), or quits.
-	bool LocateOriginal(BString error)
+	// The original wasn't found: an alert says so (Quit or Locate…), then
+	// the user shows where it is in a file panel ('Galt', 'Gloc'). Both
+	// asynchronous: the application thread keeps running (Cosmoe's Wayland
+	// backend needs it).
+	void LocateOriginal(const BString& error)
 	{
-		while (true) {
-			// (titled with the app's name: on Linux it's the window title
-			// the desktop and the release smoke tests see)
-			BAlert* alert = new BAlert("GobeProductive", error.String(), "Quit", "Locate…",
-				NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
-			if (alert->Go() != 1)
-				return false;
-			TLocateLooper* looper = new TLocateLooper();
-			looper->fDone = create_sem(0, "locate");
-			looper->Run();
-			BMessage message('Gloc');
-			message.AddInt32("sem", looper->fDone);
-			// (a file or a folder: the program, the installer, the CD image
-			// or a folder from the CD)
-			BFilePanel* panel = new BFilePanel(B_OPEN_PANEL, NULL, NULL,
-				B_FILE_NODE | B_DIRECTORY_NODE, false, NULL, NULL, true, true);
-			panel->SetTarget(BMessenger(looper));
-			panel->SetMessage(&message);
-			panel->Window()->SetTitle("Where is Gobe Productive (CD image, installer or folder)?");
-			panel->Show();
-			acquire_sem(looper->fDone);
-			BPath located = looper->fPath;
-			delete panel;
-			delete_sem(looper->fDone);
-			looper->Lock();
-			looper->Quit();
-			if (located.InitCheck() != B_OK)
-				continue;
-			error = "";
-			BString useError;
-			if (GobeResources::Use(located.Path(), useError)) {
-				GobeResources::Remember();
-				return true;
-			}
-			// the CD image, the installer or a folder: unpacked
-			if (GobeResources::Import(located.Path(), error))
-				return true;
-			error.Prepend("The original Gobe Productive couldn't be found there:\n");
+		// (titled with the app's name: on Linux it's the window title the
+		// desktop and the release smoke tests see)
+		BAlert* alert = new BAlert("GobeProductive", error.String(), "Quit", "Locate…",
+			NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+		alert->Go(new BInvoker(new BMessage('Galt'), this));
+	}
+
+	void LocateChoice(BMessage* message)
+	{
+		int32 which = message->GetInt32("which", 0);
+		if (which != 1) {
+			PostMessage(B_QUIT_REQUESTED);
+			return;
 		}
+		// (a file or a folder: the program, the installer, the CD image or
+		// a folder from the CD)
+		if (fLocatePanel == NULL) {
+			fLocatePanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), NULL,
+				B_FILE_NODE | B_DIRECTORY_NODE, false, new BMessage('Gloc'), NULL, true, true);
+			fLocatePanel->Window()->SetTitle(
+				"Where is Gobe Productive (CD image, installer or folder)?");
+		}
+		fLocateChosen = false;
+		fLocatePanel->Show();
+	}
+
+	void LocateChosen(BMessage* message)
+	{
+		entry_ref ref;
+		if (message->FindRef("refs", &ref) != B_OK)
+			return;
+		fLocateChosen = true;
+		BPath located(&ref);
+		BString error, useError;
+		if (GobeResources::Use(located.Path(), useError)) {
+			GobeResources::Remember();
+			StartUp();
+			return;
+		}
+		// the CD image, the installer or a folder: unpacked
+		if (GobeResources::Import(located.Path(), error)) {
+			StartUp();
+			return;
+		}
+		error.Prepend("The original Gobe Productive couldn't be found there:\n");
+		LocateOriginal(error);
 	}
 
 	// TApp::DoHelp, GetHelpFile: the application folder's "Help" (STR# 30,
@@ -447,10 +439,18 @@ public:
 	virtual void ReadyToRun()
 	{
 		BString error;
-		if (!GobeResources::Init(error) && !LocateOriginal(error)) {
-			PostMessage(B_QUIT_REQUESTED);
+		if (!GobeResources::Init(error)) {
+			LocateOriginal(error);
 			return;
 		}
+		StartUp();
+	}
+
+	// the original found: the documents asked for, else File > New…
+	void StartUp()
+	{
+		if (fReady)
+			return;
 		fReady = true;
 		InstallTextConverter();
 		if (!fPending.empty()) {
@@ -520,6 +520,8 @@ private:
 	std::string fScript;		// --do
 	std::vector<std::string> fPending;
 	std::string fRenderPath;
+	BFilePanel* fLocatePanel = NULL;
+	bool fLocateChosen = false;
 };
 
 } // namespace gobe

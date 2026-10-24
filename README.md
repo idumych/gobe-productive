@@ -61,7 +61,17 @@ Times, Helvetica and Courier designs of BeOS's Bitstream fonts): on Haiku
 
 ## Screenshots
 
-(added with the release)
+On Haiku, with the History floater:
+
+![Gobe Productive on Haiku: a document and the History floater](docs/screenshots/haiku-history.png)
+
+On VitruvianOS, finding a word:
+
+![Gobe Productive on VitruvianOS: Find/Replace](docs/screenshots/vitruvianos-find.png)
+
+On Linux (X11), with Edit Styles:
+
+![Gobe Productive on Linux: the Edit Styles floater](docs/screenshots/linux-edit-styles.png)
 
 ## Status
 
