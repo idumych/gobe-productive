@@ -6,6 +6,7 @@
 // the range; copy/cut/paste/clear/selectall work on ranges using
 // RangeInput/ClearRange/PasteInput from Editing.h.
 #include "TPageView.h"
+#include "TSheetDialogs.h"
 #include "TFormatBar.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
@@ -2407,6 +2408,7 @@ TPageView::MessageReceived(BMessage* message)
 							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
 							false);
 						fBook->Reset();
+						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
@@ -2419,6 +2421,7 @@ TPageView::MessageReceived(BMessage* message)
 							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
 							true);
 						fBook->Reset();
+						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
@@ -2433,9 +2436,53 @@ TPageView::MessageReceived(BMessage* message)
 							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
 							up ? FillKind::up : FillKind::left);
 						fBook->Reset();
+						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 'sM60': {	// Format > Number… (TDialogNumFormat), its OK
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						if (ss == NULL)
+							return;
+						const char* format = NULL;
+						if (message->FindString("format", &format) != B_OK) {
+							// the active cell's format and number
+							int row = fSelectedCell.row, column = fSelectedCell.column;
+							std::vector<uint32_t> stack = {ss->style};
+							if (const SSHeader* h = ss->Column(uint16_t(column)))
+								stack.push_back(h->cell.style);
+							if (const SSHeader* h = ss->Row(uint16_t(row)))
+								stack.push_back(h->cell.style);
+							if (const SSCell* cell = ss->Cell(uint16_t(row), uint16_t(column)))
+								stack.push_back(cell->style);
+							CellStyle resolved = ResolveCellStyle(fDocument.styles, stack);
+							SSEvaluator eval(*ss, fBook.get(), int(fSelectedCell.part));
+							SSValue value = eval.Value(uint16_t(row), uint16_t(column));
+							double sample = value.type == SSValue::kNumber ? value.number
+								: -1234.1234;
+							(new TDialogNumFormat(this, resolved.format, sample))->RunDialog();
+							return;
+						}
+						if (RangeLocked(r0, c0, r1, c1))
+							return;
+						// TFormatCommand::CommandName: "Set " and the property's
+						// name (STR# 5, 5 and STR# 11, 35)
+						BString name = GobeResources::IndexString(5, 5);
+						name << GobeResources::IndexString(11, 35);
+						fUndo.Begin(fDocument, fSelectedCell.part, name.String(),
+							CurrentViewState());
+						ApplyCellProperty(fDocument, fSelectedCell.part,
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
+							NumberFormatProperty(format));
+						fBook->Reset();
+						Invalidate();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 'sM78':	// Calculate Now (ChangeAll: every formula again)
+						fBook->Reset();
+						Invalidate();
+						return;
 					case 'sM62':	// Lock Cells
 					case 'sM63': {	// Unlock Cells (TSSLockCommand)
 						bool lock = message->what == 'sM62';
@@ -4030,7 +4077,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
-		case 'sM62': case 'sM63':
+		case 'sM62': case 'sM63': case 'sM78': case 'sM60':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

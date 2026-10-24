@@ -1602,9 +1602,16 @@ TDocWindow::MenusBeginning()
 		enable('sM7B', height > 1);
 		enable('sM71', width > 1);
 		enable('sM7C', width > 1);
-		for (uint32 command : {'sM60', 'sM66', 'sM75', 'sM76', 'sM78',
-				'sM79', 'sM7A'})
+		for (uint32 command : {'sM66', 'sM75', 'sM76', 'sM7A'})
 			enable(command, false);
+		// Auto Calculate marked when on; off, the original recalculates only
+		// on Calculate Now, which the port can't yet (it evaluates after every
+		// change), so it can't be turned off here
+		if (BMenuItem* item = KeyMenuBar()->FindItem('sM79')) {
+			const SSPart* ss = fDocument->SpreadsheetPart(cell.part);
+			item->SetMarked(ss != NULL && ss->autoCalculate);
+			item->SetEnabled(false);
+		}
 	}
 	if (KeyMenuBar() == NULL)
 		return;
