@@ -57,6 +57,8 @@ public:
 
 	static const size_t kMaxSteps = 100;
 	static const int kDocumentChanged = -2;
+	// THistory::SetMaxSize: the steps kept (0: all)
+	void SetLimit(size_t steps);
 
 private:
 	struct Step;
@@ -65,6 +67,7 @@ private:
 
 	std::vector<std::unique_ptr<Step>> fUndo, fRedo;
 	uint64_t fMerge = 0;
+	size_t fLimit = kMaxSteps;
 };
 
 } // namespace gobe

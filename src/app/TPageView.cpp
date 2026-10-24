@@ -1,4 +1,5 @@
 #include "TPageView.h"
+#include "TPreferences.h"
 #include "TPageBar.h"
 #include "TRibbon.h"
 #include "TWPRuler.h"
@@ -44,6 +45,9 @@ TPageView::TPageView(Document& document)
 	fMargin(kDesk)
 {
 	SetViewColor(B_TRANSPARENT_COLOR);
+	// TDoc: the history keeps the Undo Levels preference's steps
+	fUndo.SetLimit(AppPreferences().unlimitedUndo ? 0
+		: size_t(std::max<int32>(1, AppPreferences().undoCount)));
 	// TLeafSheet +0x2d: the sheet shown in page view (a paged document
 	// with it off opens in browse view)
 	fBrowse = fDocument.PagePart() >= 0 && fDocument.WordPart(size_t(std::max(0,

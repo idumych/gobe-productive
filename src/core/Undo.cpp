@@ -92,7 +92,7 @@ UndoStack::Begin(const Document& doc, size_t part, const std::string& label,
 	step->view = view;
 	step->Take(doc);
 	fUndo.push_back(std::move(step));
-	if (fUndo.size() > kMaxSteps)
+	if (fLimit != 0 && fUndo.size() > fLimit)
 		fUndo.erase(fUndo.begin());
 }
 
@@ -109,7 +109,7 @@ UndoStack::BeginDocument(const Document& doc, const std::string& label, const Vi
 	step->whole.emplace();
 	step->Take(doc);
 	fUndo.push_back(std::move(step));
-	if (fUndo.size() > kMaxSteps)
+	if (fLimit != 0 && fUndo.size() > fLimit)
 		fUndo.erase(fUndo.begin());
 }
 
@@ -175,6 +175,14 @@ UndoStack::Clear()
 	fUndo.clear();
 	fRedo.clear();
 	fMerge = 0;
+}
+
+void
+UndoStack::SetLimit(size_t steps)
+{
+	fLimit = steps;
+	if (fLimit != 0 && fUndo.size() > fLimit)
+		fUndo.erase(fUndo.begin(), fUndo.begin() + long(fUndo.size() - fLimit));
 }
 
 } // namespace gobe
