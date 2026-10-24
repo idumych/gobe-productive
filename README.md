@@ -73,7 +73,7 @@ places than they did in Gobe.
 |---|---|
 | Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed, saved, reopened, Edit Styles |
 | VitruvianOS 0.6.2 (amd64) | The same, with the amd64 package |
-| Linux x86_64, X11 | The same, with the AppImage (Xvfb and Openbox); choosing a CD image in the file panel |
+| Linux x86_64, X11 | The same, with the AppImage (Xvfb and Openbox). Choosing a CD image in the file panel was tried during development, not on the release build |
 | Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
 | Linux aarch64, X11 | Started on an arm64 machine: the window appears |
 | VitruvianOS arm64 | Not run (no arm64 test system); the package was only checked |
