@@ -349,15 +349,20 @@ Document::PlacedFrames() const
 	// (TPageFrame), not the page part's first one; the header and footer
 	// frames are on every page
 	int pagePart = PagePart();
+	struct PageAt {
+		float x, y;
+		int page;
+	};
 	auto pagesOf = [&](size_t part, size_t portal, size_t frame) {
-		std::vector<std::pair<float, float>> at;
+		std::vector<PageAt> at;
 		if (pagePart < 0 || root < 0 || !origin[root].known)
 			return at;
-		for (const Frame& page : tails[pagePart].portals[0].frames)
-			for (const Frame::Pointer& c : page.children)
+		const std::vector<Frame>& pages = tails[pagePart].portals[0].frames;
+		for (size_t k = 0; k < pages.size(); k++)
+			for (const Frame::Pointer& c : pages[k].children)
 				if (c.part == part && c.portal == portal && c.frame == frame) {
-					at.emplace_back(origin[root].x + page.origin[0],
-						origin[root].y + page.origin[1]);
+					at.push_back({origin[root].x + pages[k].origin[0],
+						origin[root].y + pages[k].origin[1], int(k)});
 					break;
 				}
 		return at;
@@ -375,13 +380,13 @@ Document::PlacedFrames() const
 				uint32_t c = f.container;
 				float bx = 0, by = 0;
 				int depth = 0;
-				std::vector<std::pair<float, float>> pages;
+				std::vector<PageAt> pages;
 				if (int(c) == pagePart)
 					pages = pagesOf(i, pi, fi);
 				if (!pages.empty()) {
-					for (const auto& [x, y] : pages)
-						placed.push_back({i, &f, x + f.origin[0], y + f.origin[1],
-							f.extent[0], f.extent[1], origin[c].depth + 1, index});
+					for (const PageAt& p : pages)
+						placed.push_back({i, &f, p.x + f.origin[0], p.y + f.origin[1],
+							f.extent[0], f.extent[1], origin[c].depth + 1, index, p.page});
 					index++;
 					continue;
 				} else if (c < origin.size() && origin[c].known) {

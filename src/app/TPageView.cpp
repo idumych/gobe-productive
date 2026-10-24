@@ -15,6 +15,7 @@
 #include <Window.h>
 #include <Shape.h>
 
+#include "Fields.h"
 #include "ResourceFile.h"
 #include "TDocView.h"
 
@@ -216,6 +217,7 @@ TPageView::LayoutText()
 		struct Repeat {
 			size_t part;
 			float dx, dy;
+			int page;
 		};
 		std::vector<Repeat> repeats;
 		for (const auto& f : fFrames) {
@@ -227,14 +229,15 @@ TPageView::LayoutText()
 			r.bottom = r.top + ((f.frame->values[3] & 8) != 0 ? 1e6f : f.height);
 			auto it = std::find_if(flows.begin(), flows.end(),
 				[&](const auto& fl) { return fl.first == f.part; });
-			FrameGeometry g{r, f.frame->angle, ContainerClip(f), f.index};
+			FrameGeometry g{r, f.frame->angle, ContainerClip(f), f.index, f.page};
 			if (it == flows.end())
 				flows.push_back({f.part, {g}});
 			else {
 				auto same = std::find_if(it->second.begin(), it->second.end(),
 					[&](const FrameGeometry& o) { return o.index == f.index; });
 				if (same != it->second.end())
-					repeats.push_back({f.part, r.left - same->rect.left, r.top - same->rect.top});
+					repeats.push_back({f.part, r.left - same->rect.left, r.top - same->rect.top,
+						f.page});
 				else
 					it->second.push_back(g);
 			}
@@ -257,6 +260,10 @@ TPageView::LayoutText()
 					line.baseline += repeat.dy;
 					line.center += BPoint(repeat.dx, repeat.dy);
 					line.clip.OffsetBy(repeat.dx, repeat.dy);
+					// a page number shows this page's
+					for (Line::Piece& piece : line.pieces)
+						if (piece.field == Sig("PAGE"))
+							piece.text = repeat.page < 0 ? "#" : std::to_string(repeat.page + 1);
 					fLines.push_back(line);
 				}
 			}
@@ -375,12 +382,13 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 	const float tabStop = 36;
 
 	struct Token {
-		enum Kind { kWord, kTab, kLineBreak } kind;
+		enum Kind { kWord, kTab, kLineBreak, kRule } kind;
 		std::string text;
 		BFont font;
 		rgb_color color;
 		bool space;			// a space follows
 		size_t start, end;	// bytes of the paragraph's text it shows
+		uint32_t field = 0;	// a field: its kind
 	};
 
 	for (const WPParagraph& par : wp->paragraphs) {
@@ -432,6 +440,23 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				} else if (c == 0x01) {
 					flush(false);
 					tokens.push_back({Token::kLineBreak, "", font, color, false, i, i + 1});
+				} else if (c == 0x04) {
+					// a field (TParagraph's misc info at this offset): what it
+					// shows, or a line across the frame
+					flush(false);
+					const WPMiscInfo* misc = NULL;
+					for (const WPMiscInfo& m : par.misc)
+						if (m.position == i)
+							misc = &m;
+					if (misc != NULL && misc->kind == Sig("LINE"))
+						tokens.push_back({Token::kRule, "", font, color, false, i, i + 1,
+							misc->kind});
+					else if (misc != NULL && (misc->kind == Sig("FORM")
+							|| misc->kind == Sig("PAGE")))
+						tokens.push_back({Token::kWord,
+							FieldText(*fBook, part, *misc, geometry[0].page), font, color, false,
+							i, i + 1, misc->kind});
+					wordStart = i + 1;
 				} else if ((unsigned char)c >= 0x20) {
 					if (word.empty())
 						wordStart = i;
@@ -490,6 +515,16 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			bool forced = false;
 			while (t < tokens.size()) {
 				const Token& tk = tokens[t];
+				// TMiscLineInfo::Width: the frame's width, a line of its own
+				if (tk.kind == Token::kRule) {
+					if (!placed.empty())
+						break;
+					placed.push_back({t, x});
+					x = avail;
+					measure(tk.font);
+					t++;
+					break;
+				}
 				if (tk.kind == Token::kLineBreak) {
 					measure(tk.font);
 					t++;
@@ -603,8 +638,20 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			line.clip = geometry[frameIndex].clip;
 			for (size_t k = 0; k < placed.size(); k++) {
 				const Token& tk = tokens[placed[k].first];
-				line.pieces.push_back({tk.text, tk.font, tk.color,
-					shift + placed[k].second + extra * k, tk.start, tk.end});
+				Line::Piece piece{tk.text, tk.font, tk.color,
+					shift + placed[k].second + extra * k, tk.start, tk.end, tk.field};
+				// a page number: the page this frame is on
+				if (tk.field == Sig("PAGE")) {
+					int page = geometry[frameIndex].page;
+					piece.text = page < 0 ? "#" : std::to_string(page + 1);
+				}
+				// TMiscLineInfo::Draw: from 10 past where it is to 10 before
+				// the frame's right edge
+				if (tk.kind == Token::kRule) {
+					piece.x = placed[k].second + 10;
+					piece.ruleEnd = frame.right - 10 - left;
+				}
+				line.pieces.push_back(piece);
 			}
 			for (Line::Piece& leader : leaders) {
 				leader.x += shift;
@@ -1612,6 +1659,13 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 		for (const Line::Piece& p : line.pieces) {
 			SetFont(&p.font);
 			SetHighColor(p.color);
+			if (p.field == Sig("LINE")) {
+				// half the ascent above the baseline
+				float y = line.baseline - p.font.Size() * 0.95f / 2;
+				StrokeLine(BPoint(line.frame.left + p.x, y),
+					BPoint(line.frame.left + p.ruleEnd, y));
+				continue;
+			}
 			DrawString(p.text.c_str(), BPoint(line.frame.left + p.x, line.baseline));
 		}
 		PopState();

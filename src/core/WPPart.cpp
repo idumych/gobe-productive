@@ -52,13 +52,12 @@ ReadParagraph(DocArchive& a, WPParagraph& p)
 			case Sig("FORM"):
 			{
 				// TMiscFormulaInfo: an expression, a u32, three bools
-				Expression e;
-				ReadExpression(a, e);
-				m.text = e.source;
-				a.UInt32();
-				a.Bool();
-				a.Bool();
-				a.Bool();
+				ReadExpression(a, m.expression);
+				m.text = m.expression.text;
+				m.command = a.UInt32();
+				m.isStatic = a.Bool();
+				m.displayResult = a.Bool();
+				m.displayFormula = a.Bool();
 				break;
 			}
 			case Sig("FREF"):

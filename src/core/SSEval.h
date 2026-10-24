@@ -59,6 +59,8 @@ public:
 	// evaluates every formula, top to bottom, so chains of references to
 	// the cells above don't recurse deeply
 	void EvaluateAll();
+	// a formula outside the cells (none: no value)
+	SSValue Evaluate(const std::vector<FormulaToken>& formula);
 
 private:
 	struct Iter;
@@ -88,6 +90,9 @@ public:
 	// after cells changed: evaluate everything again
 	void Reset();
 	bool ResolveName(const std::string& name, int fromPart, int& part, SSRange& range) const;
+	// a field's formula in a text part (TMiscFormulaInfo), its names
+	// resolved from part `fromPart`
+	SSValue EvaluateField(const std::vector<FormulaToken>& formula, int fromPart);
 
 private:
 	const Document& fDoc;

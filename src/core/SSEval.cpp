@@ -366,6 +366,16 @@ SSEvaluator::SSEvaluator(const SSPart& part, SSBook* book, int index)
 
 
 SSValue
+SSEvaluator::Evaluate(const std::vector<FormulaToken>& formula)
+{
+	if (formula.empty())
+		return SSValue();
+	Iter it{formula, 0, CellID()};
+	return Eval(it, true);
+}
+
+
+SSValue
 SSEvaluator::Value(uint16_t row, uint16_t column)
 {
 	uint32_t key = Key(row, column);
@@ -2573,6 +2583,14 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 		return finish(c);
 	}
 	return finish(SSValue::Error(kErrName));
+}
+
+SSValue
+SSBook::EvaluateField(const std::vector<FormulaToken>& formula, int fromPart)
+{
+	static const SSPart kNoCells;
+	SSEvaluator evaluator(kNoCells, this, fromPart);
+	return evaluator.Evaluate(formula);
 }
 
 } // namespace gobe

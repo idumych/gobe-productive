@@ -112,7 +112,11 @@ TPageView::OffsetX(size_t lineIndex, size_t offset) const
 		if (offset < p.start)
 			break;
 		if (offset <= p.end) {
-			at = p.x + SubstringWidth(p.font, text, p.start, offset);
+			// a field is one character showing its text
+			if (p.field != 0)
+				at = p.x + (offset > p.start ? p.font.StringWidth(p.text.c_str()) : 0);
+			else
+				at = p.x + SubstringWidth(p.font, text, p.start, offset);
 			break;
 		}
 		at = p.x + p.font.StringWidth(p.text.c_str())
@@ -714,6 +718,9 @@ TPageView::EndCellEdit(bool commit, int moveRows, int moveColumns)
 			return;
 		}
 		fBook->Reset();
+		// fields in the text show the new values (TPartMgr::CheckDependencies)
+		if (!fDocument.wordParts.empty())
+			LayoutText();
 		if (Window() != NULL)
 			Window()->PostMessage(kMsgDocumentChanged);
 	}

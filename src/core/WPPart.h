@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "DocArchive.h"
+#include "Formula.h"
 
 namespace gobe {
 
@@ -25,8 +26,15 @@ struct WPMiscInfo {
 	uint32_t kind;				// 'FRAM', 'FMRK', 'FORM', 'LINE', 'FREF', 'PAGE'
 	uint32_t position;			// TMiscInfo: offset in the paragraph
 	uint32_t frame[3] = {};		// FRAM, FREF: ReadFramePtr
-	std::string text;			// FREF text, FORM formula source
+	std::string text;			// FREF text, FORM formula as typed
 	std::vector<uint8_t> raw;	// the payload after kind and position (for writing)
+	// FORM (TMiscFormulaInfo): the expression (formula, last result,
+	// number format), the command that made it ('sM53' date, 'sM54' time,
+	// 'sM55' formula) and whether it keeps its value, shows its result,
+	// shows its formula
+	Expression expression;
+	uint32_t command = 0;
+	bool isStatic = false, displayResult = true, displayFormula = false;
 };
 
 struct WPStyleRun {

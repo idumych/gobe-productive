@@ -97,6 +97,7 @@ struct Document {
 		int depth;			// nesting level (root = 0)
 		int index;			// the frame's number among its part's frames (a header or
 							// footer frame comes once per page, the same number)
+		int page = -1;		// the page it is on (from 0), -1 if not on a page
 	};
 	std::vector<PlacedFrame> PlacedFrames() const;
 

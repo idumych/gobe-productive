@@ -105,6 +105,7 @@ private:
 		float angle;				// degrees, counterclockwise, about the center
 		BRect clip;					// the containing frames (document coordinates)
 		int index;					// the frame's number in its part
+		int page;					// the page it is on (-1: none)
 	};
 	// what laying out a flow found: text left over, the last frame used,
 	// where each frame's text starts (UINT32_MAX: no text)
@@ -130,6 +131,11 @@ private:
 			rgb_color color;
 			float x;				// relative to the line
 			size_t start = SIZE_MAX, end = SIZE_MAX;	// in the paragraph (none: tab leader)
+			// a field's character (0x04): its paragraph info kind ('FORM',
+			// 'PAGE', 'LINE'); the text shows what the field shows, a line
+			// (TMiscLineInfo) is drawn from x to `ruleEnd`
+			uint32_t field = 0;
+			float ruleEnd = 0;
 		};
 		std::vector<Piece> pieces;
 	};
