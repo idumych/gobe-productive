@@ -1456,6 +1456,11 @@ TDocWindow::MessageReceived(BMessage* message)
 		return;
 	}
 
+	// the system's own messages ('_UKU', ...) are the window's business
+	if ((message->what >> 24) == '_') {
+		BWindow::MessageReceived(message);
+		return;
+	}
 	BString text;
 	BString code = FourCCString(message->what).c_str();
 	text << "Command '" << code << "'";

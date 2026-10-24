@@ -17,6 +17,7 @@
 
 #include "Fields.h"
 #include "Notes.h"
+#include "TextImport.h"
 #include "ResourceFile.h"
 #include "TDocView.h"
 
@@ -41,6 +42,17 @@ TPageView::TPageView(Document& document)
 {
 	SetViewColor(B_TRANSPARENT_COLOR);
 	Rebuild();
+	// a word processing document opens with the insertion point in its
+	// main text, where its selection was (at the start of a new one)
+	int main = fDocument.MainPart();
+	if (const WPPart* wp = main >= 0 ? fDocument.WordPart(size_t(main)) : NULL) {
+		TextPosition at{0, 0};
+		const Selection* selection = fDocument.selections.Find(wp->header.selection);
+		if (selection != NULL && !selection->textRanges.empty())
+			at = PositionAt(*wp, selection->textRanges[0].first);
+		fCaret = {true, size_t(main), at.paragraph, at.offset};
+		fAnchor = fCaret;
+	}
 }
 
 

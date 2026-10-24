@@ -616,8 +616,9 @@ TPageView::EditText(const char* bytes, int32 count)
 			}
 			break;
 	}
-	// edits leave no selection; moves set the anchor themselves
-	if (changed && !shift)
+	// edits leave no selection (whether Shift was down, as for a capital,
+	// or not); moves set the anchor themselves
+	if (changed)
 		fAnchor = fCaret;
 	if (changed)
 		TextChanged();
