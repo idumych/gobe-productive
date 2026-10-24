@@ -36,6 +36,7 @@
 #include "TDocView.h"
 #include "TPageView.h"
 #include "TTranslate.h"
+#include "TPartBar.h"
 #include "TWPRuler.h"
 #include "Styles.h"
 
@@ -791,6 +792,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			for (const auto& part : document->parts.parts)
 				text = text || part.kind == Sig("WORD");
 			if (text) {
+				fPartBar = new TPartBar(pages);
+				pages->fPartBar = fPartBar;
 				fRuler = new TWPRuler(pages);
 				pages->fRuler = fRuler;
 			}
@@ -811,6 +814,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 
 	BLayoutBuilder::Group<> layout(this, B_VERTICAL, 0);
 	layout.Add(menuBar);
+	if (fPartBar != NULL)
+		layout.Add(fPartBar);
 	if (fRuler != NULL)
 		layout.Add(fRuler);
 	layout
@@ -918,14 +923,12 @@ TDocWindow::InstallBaseMenus()
 	bar->AddItem(new TMenu(51));
 
 	// Text menus (from the original's TTextMenuElement):
-	// Font (dynamic), Size (MENU 101), Face (MENU 102), Alignment (MENU 300)
+	// Font (dynamic), Size (MENU 101), Face (MENU 102)
 	bar->AddItem(MakeFontMenu());
 	fSizeMenu = new TMenu(101);
 	bar->AddItem(fSizeMenu);
 	fFaceMenu = new TMenu(102);
 	bar->AddItem(fFaceMenu);
-	fAlignmentMenu = new TMenu(300);
-	bar->AddItem(fAlignmentMenu);
 
 	// the Spreadsheet part's Format menu (MENU 52 of Parts/Spreadsheet)
 	// and Options menu (MENU 53), with the items that work so far
@@ -1106,13 +1109,18 @@ TDocWindow::MessageReceived(BMessage* message)
 			be_app->PostMessage(message);
 			return;
 		// Window > Hide/Show PartBar: the part bar and the active part's
-		// ribbon (the ruler; the part bar isn't ported yet)
+		// ribbon (the ruler)
 		case 'sMF6':
-			if (fRuler != NULL) {
-				if (fRuler->IsHidden())
-					fRuler->Show();
-				else
-					fRuler->Hide();
+			if (fPartBar != NULL) {
+				bool hide = !fPartBar->IsHidden();
+				for (BView* view : {(BView*)fPartBar, (BView*)fRuler}) {
+					if (view == NULL)
+						continue;
+					if (hide)
+						view->Hide();
+					else
+						view->Show();
+				}
 			}
 			return;
 		case 's00L':
@@ -1783,9 +1791,9 @@ TDocWindow::MenusBeginning()
 		BMenuItem* item = KeyMenuBar()->FindItem(ribbon.command);
 		if (item == NULL)
 			continue;
-		bool shown = ribbon.command == 'sMF6' && fRuler != NULL && !fRuler->IsHidden();
+		bool shown = ribbon.command == 'sMF6' && fPartBar != NULL && !fPartBar->IsHidden();
 		item->SetLabel(GobeResources::IndexString(1, ribbon.string + (shown ? 0 : 1)).String());
-		item->SetEnabled(ribbon.command == 'sMF6' && fRuler != NULL);
+		item->SetEnabled(ribbon.command == 'sMF6' && fPartBar != NULL);
 	}
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMFE')) {
 		int32 windows = 0;

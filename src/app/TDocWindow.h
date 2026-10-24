@@ -181,6 +181,7 @@ private:
 	Document* fDocument = NULL;
 	class TPageView* fPages = NULL;
 	class TWPRuler* fRuler = NULL;
+	class TPartBar* fPartBar = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
 	bool fCloseAfterSave = false;	// Save As chosen in the close alert
 public:

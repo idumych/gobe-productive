@@ -6,6 +6,7 @@
 // the range; copy/cut/paste/clear/selectall work on ranges using
 // RangeInput/ClearRange/PasteInput from Editing.h.
 #include "TPageView.h"
+#include "TPartBar.h"
 #include "TWPRuler.h"
 
 #include <Alert.h>
@@ -1445,6 +1446,68 @@ TPageView::MessageReceived(BMessage* message)
 			UpdateMarks();
 			return;
 		}
+		// the part bar's alignments (TParFormatCmd::ParsePropertyMesg:
+		// 'sM5B' "be:value" below 4 is PAlg)
+		case 'sM5B': {
+			int32 align = message->GetInt32(kValueString, 0);
+			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL || align > 3) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(5, 5).String())
+				+ GobeResources::IndexString(1304, 0).String(), CurrentViewState());
+			auto range = TextSelectionRange();
+			ApplyParagraphProperty(fDocument, fCaret.part, range.first.paragraph,
+				range.second.paragraph, AlignmentProperty(align));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
+		// the part bar's line spacing (TWPPart 'sM5D'): with "isLines" the
+		// value typed (lines, at least 1, or points); else TLineSpaceCmd:
+		// each paragraph's half a line (to 10 lines) or a point (to 160)
+		// more or less
+		case 'sM5D': {
+			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
+			if (wp == NULL) {
+				beep();
+				return;
+			}
+			float value = message->GetFloat(kValueString, 1);
+			auto range = TextSelectionRange();
+			size_t first = range.first.paragraph, last = range.second.paragraph;
+			bool lines;
+			if (message->FindBool("isLines", &lines) == B_OK) {
+				if (lines)
+					value = std::max(1.0f, value);
+				fUndo.Begin(fDocument, fCaret.part,
+					std::string(GobeResources::IndexString(5, 5).String())
+						+ GobeResources::IndexString(1304, 14).String(), CurrentViewState());
+				ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+					LineSpacingProperty(value, lines));
+			} else {
+				fUndo.Begin(fDocument, fCaret.part,
+					GobeResources::IndexString(0x515, value > 0 ? 4 : 5).String(),
+					CurrentViewState());
+				for (size_t p = first; p <= last && p < wp->paragraphs.size(); p++) {
+					TextStyle style = ResolveTextStyle(fDocument.styles,
+						fDocument.WordPart(fCaret.part)->paragraphs[p].parStyle);
+					float spacing;
+					if (!style.lineSpacingMultiple)
+						spacing = std::min(style.lineSpacing + value, 160.0f);
+					else {
+						float half = value == 1 ? floorf(style.lineSpacing * 2)
+							: ceilf(style.lineSpacing * 2);
+						spacing = std::min(value * 0.5f + 0.5f * half, 10.0f);
+					}
+					if (spacing > 0)
+						ApplyParagraphProperty(fDocument, fCaret.part, p, p,
+							LineSpacingProperty(spacing, style.lineSpacingMultiple));
+				}
+			}
+			TextChanged();
+			return;
+		}
 		// Alignment menu (MENU 300, value message 300): 0 left, 1 center,
 		// 2 right, 3 justify; TextStyle has 1 right, 2 center
 		case 300: {
@@ -1783,6 +1846,7 @@ TPageView::MessageReceived(BMessage* message)
 // "{sright}" work for cell selection too.
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
+// "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
 void
 TPageView::RunScript(const std::string& script, Document& document)
 {
@@ -1795,7 +1859,24 @@ TPageView::RunScript(const std::string& script, Document& document)
 		start = end + 1;
 		while (!command.empty() && command[0] == ' ')
 			command.erase(0, 1);
-		if (command.compare(0, 6, "ruler ") == 0) {
+		if (command.compare(0, 8, "partbar ") == 0) {
+			// "partbar ABCD": the part bar's element 'ABCD' clicked;
+			// "partbar spacing text": the line spacing typed
+			if (TPartBar* bar = dynamic_cast<TPartBar*>(fPartBar)) {
+				bar->Update();
+				if (command.compare(8, 8, "spacing ") == 0)
+					bar->TypeSpacing(command.c_str() + 16);
+				else if (command.size() == 12) {
+					const char* c = command.c_str() + 8;
+					uint32 id = uint32(uint8(c[0])) << 24 | uint32(uint8(c[1])) << 16
+						| uint32(uint8(c[2])) << 8 | uint8(c[3]);
+					if (!bar->Click(id)) {
+						printf("partbar %s: not clickable\n", c);
+						fflush(stdout);
+					}
+				}
+			}
+		} else if (command.compare(0, 6, "ruler ") == 0) {
 			if (fRuler != NULL)
 				fRuler->RunScript(command.substr(6));
 		} else if (command.compare(0, 6, "click ") == 0) {
@@ -2880,6 +2961,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM55': case 'sM56': case 'sM57': case 'sM58': case 'sM59':
 		case 'sM5I': case 'sM5J': case 'sM5K':
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
+		case 'sM5B': case 'sM5D':											// part bar
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells
 			return true;

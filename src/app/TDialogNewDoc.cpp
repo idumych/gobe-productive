@@ -158,8 +158,8 @@ TDialogNewDoc::Init()
 	if (list == NULL)
 		return;
 	// the part factories that make documents: the main binary's and the
-	// add-ons' in Parts (PART: kind, version, makes documents, ..., small
-	// icon id, large icon id, name)
+	// add-ons' in Parts (PART: kind, version, makes documents, two flags,
+	// large icon id, small icon id, name; TPartFactory::TPartFactory)
 	std::vector<std::string> files = {GobeResources::Path().String()};
 	BPath parts(GobeResources::Path().String());
 	parts.GetParent(&parts);
@@ -188,7 +188,7 @@ TDialogNewDoc::Init()
 			std::string name;
 			for (size_t i = 28; i < d.size() && d[i] != 0; i++)
 				name += char(d[i]);
-			TIconStringItem* item = new TIconStringItem(name, SmallIcon(file, int32(u32(20))),
+			TIconStringItem* item = new TIconStringItem(name, SmallIcon(file, int32(u32(24))),
 				kind);
 			item->SetHeight(16);
 			item->SetEnabled(CanMake(kind));

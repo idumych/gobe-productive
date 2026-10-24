@@ -1,4 +1,5 @@
 #include "TPageView.h"
+#include "TRibbon.h"
 #include "TWPRuler.h"
 
 #include <math.h>
@@ -1761,6 +1762,8 @@ TPageView::Draw(BRect updateRect)
 	DrawLines(updateRect, dx, dy);
 	if (fRuler != NULL && !IsPrinting())
 		fRuler->Update();
+	if (fPartBar != NULL && !IsPrinting())
+		fPartBar->Update();
 }
 
 
