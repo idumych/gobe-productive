@@ -1274,6 +1274,28 @@ ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 }
 
 
+uint32_t
+NewNamedStyle(Document& doc, uint32_t type, const std::string& name, uint32_t base,
+	uint32_t fromStyle)
+{
+	if (name.empty())
+		return kNoPart;
+	for (const Style& s : doc.styles.styles)
+		if (s.name == name)
+			return kNoPart;
+	// (its own and inherited properties: the character ones and the
+	// paragraph ones)
+	std::vector<Property> properties;
+	if (fromStyle < doc.styles.styles.size()) {
+		properties = CharacterFormat(doc.styles, fromStyle);
+		for (const Property& p : ParagraphFormat(doc.styles, fromStyle))
+			properties.push_back(p);
+	}
+	return doc.NewStyle(type, name, 0x822, base < doc.styles.styles.size() ? base : kNoPart,
+		properties);
+}
+
+
 // the style like `base` (its properties) with `parent` as its parent: an
 // identical existing unnamed style or a new one
 static uint32_t

@@ -1540,6 +1540,46 @@ TPageView::MessageReceived(BMessage* message)
 			UpdateMarks();
 			return;
 		}
+		// Styles > New Style… ('sMB6': the dialog; with a "Style Name" from
+		// it, TNewStyleCommand: "New Style - " and the name)
+		case 'sMB6': {
+			const char* name = NULL;
+			if (message->FindString(kStyleNameStr, &name) != B_OK || name == NULL) {
+				if (Window() != NULL)
+					(new TDialogStyleNew(Window(), fDocument.styles))->RunDialog();
+				return;
+			}
+			uint32_t type = uint32_t(message->GetInt32(kStyleTypeStr, int32(Sig("Para"))));
+			std::string baseName = message->GetString("Style Base", "");
+			uint32_t base = kNoPart;
+			for (size_t i = 0; i < fDocument.styles.styles.size(); i++)
+				if (!baseName.empty() && fDocument.styles.styles[i].name == baseName)
+					base = uint32_t(i);
+			// "Copy formatting from selection": the text's style where the
+			// selection starts
+			uint32_t from = kNoPart;
+			if (message->GetBool("Inherit", false) && fCaret.active) {
+				if (const WPPart* wp = fDocument.WordPart(fCaret.part)) {
+					TextPosition at = TextSelectionRange().first;
+					if (at.paragraph < wp->paragraphs.size()) {
+						const WPParagraph& p = wp->paragraphs[at.paragraph];
+						from = p.parStyle;
+						for (const WPStyleRun& r : p.runs)
+							if (r.position <= at.offset)
+								from = r.style;
+					}
+				}
+			}
+			fUndo.BeginDocument(fDocument, std::string(GobeResources::IndexString(3, 8).String())
+				+ name, CurrentViewState());
+			if (NewNamedStyle(fDocument, type, name, base, from) == kNoPart) {
+				beep();
+				return;
+			}
+			if (Window() != NULL)
+				Window()->PostMessage(kMsgDocumentChanged);
+			return;
+		}
 		// the format bar's Styles, a paragraph style ('sf0L' with "Style
 		// Name": TWPApplyStyleCmd, "Apply Style - " and the name)
 		case 'sf0L': {
@@ -3038,7 +3078,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM5I': case 'sM5J': case 'sM5K':
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
-		case 'sf02': case 'sf0L':											// format bar
+		case 'sf02': case 'sf0L': case 'sMB6':								// format bar
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells
 			return true;

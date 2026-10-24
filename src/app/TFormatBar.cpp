@@ -399,9 +399,10 @@ public:
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
 	{
 		AddMenuItems(menu, 100);
-		// (New Style… and Edit Styles… aren't ported yet)
+		// (Edit Styles… isn't ported yet)
 		for (int32 i = 0; i < menu->CountItems(); i++)
-			if (menu->ItemAt(i)->Message() != NULL)
+			if (menu->ItemAt(i)->Message() != NULL
+					&& menu->ItemAt(i)->Message()->what != 'sMB6')
 				menu->ItemAt(i)->SetEnabled(false);
 		const Document& doc = bar->Pages()->Doc();
 		TextStyle style;
@@ -410,24 +411,27 @@ public:
 		std::string active = label;
 		if (!active.empty() && active.back() == '+')
 			active.pop_back();
-		uint32_t lastType = 0;
+		// (TWPPart::ActiveStyles: paragraph, then basic styles; applying a
+		// basic one to text isn't ported yet)
 		bool first = true;
-		for (size_t i = 0; i < doc.styles.styles.size(); i++) {
-			const Style& s = doc.styles.styles[i];
-			if (s.name.empty() || s.value10 != Sig("Para"))
-				continue;
-			if (!first && s.value10 != lastType)
-				menu->AddSeparatorItem();
-			first = false;
-			lastType = s.value10;
-			BMessage* message = new BMessage('sf0L');
-			message->AddInt32(kStyleLevelStr, -1);
-			message->AddString(kStyleNameStr, s.name.c_str());
-			message->AddInt32(kStyleTypeStr, int32(s.value10));
-			BMenuItem* item = new BMenuItem(s.name.c_str(), message);
-			item->SetMarked(text && s.name == active);
-			item->SetEnabled(text);
-			menu->AddItem(item);
+		for (uint32_t type : {Sig("Para"), Sig("Basi")}) {
+			bool group = true;
+			for (size_t i = 0; i < doc.styles.styles.size(); i++) {
+				const Style& s = doc.styles.styles[i];
+				if (s.name.empty() || s.value10 != type)
+					continue;
+				if (group && !first)
+					menu->AddSeparatorItem();
+				group = first = false;
+				BMessage* message = new BMessage('sf0L');
+				message->AddInt32(kStyleLevelStr, -1);
+				message->AddString(kStyleNameStr, s.name.c_str());
+				message->AddInt32(kStyleTypeStr, int32(s.value10));
+				BMenuItem* item = new BMenuItem(s.name.c_str(), message);
+				item->SetMarked(text && s.name == active);
+				item->SetEnabled(text && type == Sig("Para"));
+				menu->AddItem(item);
+			}
 		}
 	}
 };

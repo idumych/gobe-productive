@@ -1,8 +1,9 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
 // Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
 // Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions), Paragraph
-// (TDialogFormatParagraph), the ruler's Edit Tab (TDialogTabEdit) and Set
-// Ruler Divisions (TDialogSetRulerDivisions).
+// (TDialogFormatParagraph), the ruler's Edit Tab (TDialogTabEdit), Set
+// Ruler Divisions (TDialogSetRulerDivisions) and New Style
+// (TDialogStyleNew).
 #ifndef GOBE_TWP_DIALOGS_H
 #define GOBE_TWP_DIALOGS_H
 
@@ -225,6 +226,27 @@ protected:
 private:
 	BLooper* fWindow;
 	BString fTitle, fLabel, fText;
+};
+
+// Styles > New Style… (DIAL/Item 11): the name (2, "Style N" the first
+// free), Based On (3: MENU 213's None, then the named styles of each type
+// after a separator), Style Type (4: Paragraph, Basic) and "Copy formatting
+// from selection" (5); OK (a name no style has, else STR# 6, 36) sends the
+// window 'sMB6' with "Style Type", "Style Name", "Style Base" (empty for
+// None) and "Inherit"
+class TDialogStyleNew : public TDialog {
+public:
+	TDialogStyleNew(BLooper* window, const StyleMgr& styles);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	std::vector<std::string> fNames;			// the styles' names
+	std::vector<std::pair<uint32, std::string>> fTypes;
+	std::vector<std::vector<std::string>> fBases;	// per type
 };
 
 } // namespace gobe

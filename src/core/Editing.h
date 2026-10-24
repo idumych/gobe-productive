@@ -150,6 +150,14 @@ bool ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextP
 // for paragraphs first..last.
 bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 	const Property& property);
+// Styles > New Style… (TNewStyleCommand, TStyleManager::NewStyle): a named
+// style of `type` ('Para', 'Basi') based on `base` (kNoPart for none), with
+// flags 0x822 like the documents' own; with `fromStyle` (not kNoPart) it
+// holds that style's properties, own and inherited (TStyleManager::
+// CurrentProps: "Copy formatting from selection"). Its index, or kNoPart
+// if the name is taken or empty.
+uint32_t NewNamedStyle(Document& doc, uint32_t type, const std::string& name, uint32_t base,
+	uint32_t fromStyle);
 // Format bar > Styles, a paragraph style (TWPApplyStyleCmd, TParFormatter,
 // TApplyStyleCommand::ChangeStyle: TStyleID::SetParentStyle): paragraphs
 // first..last get styles based on the named style `named`, keeping their

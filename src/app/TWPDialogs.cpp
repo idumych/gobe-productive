@@ -1,8 +1,9 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
 // Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
 // Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions), Paragraph
-// (TDialogFormatParagraph), the ruler's Edit Tab (TDialogTabEdit) and Set
-// Ruler Divisions (TDialogSetRulerDivisions).
+// (TDialogFormatParagraph), the ruler's Edit Tab (TDialogTabEdit), Set
+// Ruler Divisions (TDialogSetRulerDivisions) and New Style
+// (TDialogStyleNew).
 #include "TWPDialogs.h"
 
 #include <stdio.h>
@@ -12,9 +13,12 @@
 #include <Alert.h>
 #include <Button.h>
 #include <Looper.h>
+#include <MenuField.h>
+#include <MenuItem.h>
 #include <Message.h>
 #include <TextControl.h>
 
+#include <algorithm>
 #include <functional>
 
 #include "Editing.h"
@@ -22,6 +26,7 @@
 #include "Measure.h"
 #include "SSEval.h"
 #include "SSStyle.h"
+#include "TFormatBar.h"
 #include "TWPRuler.h"
 
 namespace gobe {
@@ -695,6 +700,94 @@ TDialogSetRulerDivisions::ItemHit(int32 index, BMessage* message)
 		BMessage set('s00L');
 		set.AddInt32("rulerDivisions", int32(divisions));
 		fWindow->PostMessage(&set);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+TDialogStyleNew::TDialogStyleNew(BLooper* window, const StyleMgr& styles)
+	:
+	TDialog(11, 11, 'APPL', NULL),
+	fWindow(window)
+{
+	// TWPPart::ActiveStyles: paragraph and basic styles (their names:
+	// TWPPartFactory's STR# 1309, TStyleManager's STR# 13)
+	fTypes = {{FourCC("Para"), GobeResources::IndexString(1309, 0).String()},
+		{FourCC("Basi"), GobeResources::IndexString(13, 7).String()}};
+	fBases.resize(fTypes.size());
+	for (const Style& style : styles.styles) {
+		if (style.name.empty())
+			continue;
+		fNames.push_back(style.name);
+		for (size_t t = 0; t < fTypes.size(); t++)
+			if (style.value10 == fTypes[t].first)
+				fBases[t].push_back(style.name);
+	}
+}
+
+
+void
+TDialogStyleNew::Init()
+{
+	// TStyleManager::NewStyleName: "Style " and the first free number
+	std::string name;
+	for (int32 n = 1; ; n++) {
+		name = std::string(GobeResources::IndexString(13, 9).String()) + std::to_string(n);
+		if (std::find(fNames.begin(), fNames.end(), name) == fNames.end())
+			break;
+	}
+	SetTextItem(2, name.c_str());
+	// TStyleManager::FillBaseStyleMenu
+	if (BMenuField* field = dynamic_cast<BMenuField*>(Item(3))) {
+		BMenu* menu = field->Menu();
+		for (const auto& bases : fBases) {
+			if (bases.empty())
+				continue;
+			menu->AddSeparatorItem();
+			for (const std::string& base : bases)
+				menu->AddItem(new BMenuItem(base.c_str(), NULL));
+		}
+		if (menu->ItemAt(0) != NULL)
+			menu->ItemAt(0)->SetMarked(true);
+	}
+	if (BMenuField* field = dynamic_cast<BMenuField*>(Item(4))) {
+		BMenu* menu = field->Menu();
+		for (const auto& type : fTypes)
+			menu->AddItem(new BMenuItem(type.second.c_str(), NULL));
+		if (menu->ItemAt(0) != NULL)
+			menu->ItemAt(0)->SetMarked(true);
+	}
+	MakeFocusItem(2);
+}
+
+
+// TDialogStyleNew::ItemHit
+bool
+TDialogStyleNew::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		BString name = TextItem(2);
+		if (std::find(fNames.begin(), fNames.end(), name.String()) != fNames.end()) {
+			(new BAlert("", GobeResources::IndexString(6, 36).String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		uint32 type = fTypes[0].first;
+		if (BMenuField* field = dynamic_cast<BMenuField*>(Item(4)))
+			if (BMenuItem* marked = field->Menu()->FindMarked())
+				for (const auto& t : fTypes)
+					if (t.second == marked->Label())
+						type = t.first;
+		std::string base;
+		if (BMenuField* field = dynamic_cast<BMenuField*>(Item(3)))
+			if (BMenuItem* marked = field->Menu()->FindMarked())
+				if (field->Menu()->IndexOf(marked) > 1)
+					base = marked->Label();
+		BMessage style('sMB6');
+		style.AddInt32(kStyleTypeStr, int32(type));
+		style.AddString(kStyleNameStr, name.String());
+		style.AddString("Style Base", base.c_str());
+		style.AddBool("Inherit", CheckBoxItem(5));
+		fWindow->PostMessage(&style);
 	}
 	return TDialog::ItemHit(index, message);
 }
