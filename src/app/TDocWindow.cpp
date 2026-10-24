@@ -1597,6 +1597,37 @@ TDocWindow::MenusBeginning()
 		item->SetEnabled(paged);
 		item->SetMarked(paged && fPages->PageView());
 	}
+	// TNormalDocWinHelper::FixMenus: Save when the document changed, Revert
+	// then if it was saved before; Paste Special and Duplicate off (a
+	// drawing's part turns Duplicate on: not ported); Cut, Copy and Clear
+	// with something selected; Copy Format in a part, Paste Format with a
+	// format copied; Views & Layers in drawings only; the Frame menu with a
+	// frame selected (the port selects none)
+	{
+		auto enable = [&](uint32 command, bool on) {
+			if (BMenuItem* item = KeyMenuBar()->FindItem(command))
+				item->SetEnabled(on);
+		};
+		bool saved = fDocument != NULL && !fDocument->path.empty();
+		enable('sM02', fModified);
+		enable('sM04', fModified && saved);
+		enable('sM13', false);
+		enable('sM15', false);
+		bool cells = fPages != NULL && fPages->fSelectedCell.active;
+		bool part = cells || (fPages != NULL && fPages->fCaret.active);
+		enable('CCUT', HasTextSelection() || cells);
+		enable('COPY', HasTextSelection() || cells);
+		enable('sM12', HasTextSelection() || cells);
+		enable('sM16', part);
+		enable('sM17', part && TPageView::HasCopiedFormat());
+		bool drawing = false;
+		if (fDocument != NULL && fDocument->MainPart() >= 0
+				&& size_t(fDocument->MainPart()) < fDocument->parts.parts.size())
+			drawing = fDocument->parts.parts[size_t(fDocument->MainPart())].kind == Sig("GRFX");
+		enable('sM25', drawing);
+		for (uint32 command : {'sM30', 'sM32', 'sM33', 'sM34', 'sM35', 'sM36'})
+			enable(command, false);
+	}
 	// TNormalDocWinHelper::FixMenus: Find Again and Replace All with a find
 	// string, Find Selection with text selected, Replace & Find with both
 	{

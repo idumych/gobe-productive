@@ -558,6 +558,13 @@ TPageView::ReplaceRange(size_t part, uint32_t start, uint32_t end, const std::st
 }
 
 
+bool
+TPageView::HasCopiedFormat()
+{
+	return !sCopiedFormat.empty();
+}
+
+
 void
 TPageView::ScrollCaretIntoView()
 {

@@ -130,6 +130,8 @@ public:
 	void ReplaceRange(size_t part, uint32_t start, uint32_t end, const std::string& text);
 	// the caret's line scrolled into view
 	void ScrollCaretIntoView();
+	// Edit > Copy Format has kept a format (OurApp +0x184 not empty)
+	static bool HasCopiedFormat();
 	// TWPPart::SetUpContextMenu: the menu for a context click at `where`
 	// (document coordinates) in text (NULL elsewhere); the caret moves
 	// there unless it's in the selection
