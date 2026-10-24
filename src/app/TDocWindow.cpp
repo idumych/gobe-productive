@@ -2,11 +2,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include <Alert.h>
 #include <Application.h>
 #include <Messenger.h>
 #include <PrintJob.h>
+#include <Roster.h>
 #include <Button.h>
 #include <CheckBox.h>
 #include <ColorControl.h>
@@ -1516,6 +1518,17 @@ TDocWindow::MessageReceived(BMessage* message)
 	if (message->what >= 'sMC0' && message->what <= 'sMC5') {
 		if (fSpellBar != NULL)
 			fSpellBar->HandleCommand(message);
+		return;
+	}
+	// a text part's context menu's Open URL (TDocWindow 'sE03'): mail to
+	// the e-mail program, the rest to the browser
+	if (message->what == 'sE03') {
+		const char* url;
+		if (message->FindString("URL", &url) == B_OK) {
+			char* argv[1] = {const_cast<char*>(url)};
+			be_roster->Launch(strncmp(url, "mailto:", 7) == 0 ? "text/x-email" : "text/html", 1,
+				argv);
+		}
 		return;
 	}
 	if (message->what == 'sMC6') {

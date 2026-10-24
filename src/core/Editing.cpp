@@ -2394,4 +2394,26 @@ PasteInput(SSPart& part, uint16_t row, uint16_t column, const std::string& text,
 	return true;
 }
 
+uint32_t
+PartPosition(const WPPart& part, TextPosition at)
+{
+	uint32_t position = 0;
+	for (size_t i = 0; i < at.paragraph && i < part.paragraphs.size(); i++)
+		position += uint32_t(part.paragraphs[i].text.size());
+	return position + uint32_t(at.offset);
+}
+
+
+TextPosition
+FromPartPosition(const WPPart& part, uint32_t position)
+{
+	for (size_t i = 0; i < part.paragraphs.size(); i++) {
+		size_t size = part.paragraphs[i].text.size();
+		if (position < size || i + 1 == part.paragraphs.size())
+			return {i, std::min<size_t>(position, size)};
+		position -= uint32_t(size);
+	}
+	return {0, 0};
+}
+
 } // namespace gobe

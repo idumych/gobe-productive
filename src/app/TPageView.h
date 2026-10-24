@@ -11,6 +11,7 @@
 #include <Bitmap.h>
 #include <Font.h>
 #include <Gradient.h>
+#include <PopUpMenu.h>
 #include <TextView.h>
 #include <View.h>
 
@@ -125,6 +126,10 @@ public:
 	void ReplaceText(size_t part, TextPosition from, size_t to, const std::string& text);
 	// the caret's line scrolled into view
 	void ScrollCaretIntoView();
+	// TWPPart::SetUpContextMenu: the menu for a context click at `where`
+	// (document coordinates) in text (NULL elsewhere); the caret moves
+	// there unless it's in the selection
+	BPopUpMenu* ContextMenu(BPoint where);
 	Caret fCaret;
 	Caret fAnchor;
 	UndoStack fUndo;

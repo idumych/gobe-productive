@@ -9,12 +9,15 @@
 #include "TFormatBar.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
+#include "Url.h"
 #include "TWPRuler.h"
 
 #include <Alert.h>
 #include <Beep.h>
 #include <Clipboard.h>
+#include <MenuItem.h>
 #include <Path.h>
+#include <PopUpMenu.h>
 #include <Window.h>
 
 #include <algorithm>
@@ -389,6 +392,103 @@ TPageView::DrawCaret()
 	SetHighColor(0, 0, 0);
 	SetPenSize(1);
 	StrokeLine(BPoint(x, line.baseline - size * 0.95f), BPoint(x, line.baseline + size * 0.25f));
+}
+
+
+// TWPPart::SetUpContextMenu: Copy Character Format ('sM16', the clicked
+// position), Copy Paragraph Format ('sM5E', its paragraph), Paste Format
+// ('sM17', when a format was copied; STR# 1302, 2-4); Open URL ('sE03')
+// when the selection or the click is in one (ParseURL); the clicked
+// word's Suggested Spelling ('sM5L', TSpellMenuInit) when it isn't good
+// (a good word's Synonyms need the thesaurus, not ported)
+BPopUpMenu*
+TPageView::ContextMenu(BPoint where)
+{
+	Caret click;
+	if (!HitText(where, click))
+		return NULL;
+	const WPPart* wp = fDocument.WordPart(click.part);
+	if (wp == NULL || click.paragraph >= wp->paragraphs.size())
+		return NULL;
+	TextPosition from, to;
+	bool selection = TextSelection(from, to) && fCaret.part == click.part;
+	TextPosition at = {click.paragraph, click.offset};
+	auto before = [](TextPosition a, TextPosition b) {
+		return a.paragraph < b.paragraph || (a.paragraph == b.paragraph && a.offset < b.offset);
+	};
+	// TWPSelection::Contains
+	bool inside = selection && !before(at, from) && !before(to, at);
+	if (!inside) {
+		fCaret = fAnchor = click;
+		fUndo.Break();
+		Invalidate();
+		UpdateMarks();
+		selection = false;
+	}
+	uint32_t position = PartPosition(*wp, at);
+
+	BPopUpMenu* menu = new BPopUpMenu("context", false, false);
+	BMessage* message = new BMessage('sM16');
+	message->AddInt32(kValueString, int32(position));
+	menu->AddItem(new BMenuItem(GobeResources::IndexString(0x516, 2).String(), message));
+	message = new BMessage('sM5E');
+	message->AddInt32(kValueString, int32(click.paragraph));
+	menu->AddItem(new BMenuItem(GobeResources::IndexString(0x516, 3).String(), message));
+	message = new BMessage('sM17');
+	message->AddBool("replace", true);
+	BMenuItem* paste = new BMenuItem(GobeResources::IndexString(0x516, 4).String(), message);
+	paste->SetEnabled(!sCopiedFormat.empty());
+	menu->AddItem(paste);
+
+	// a URL: the selection's, if it's in the paragraph, else the click's
+	const std::string& text = wp->paragraphs[click.paragraph].text;
+	size_t start = click.offset, end = click.offset;
+	bool url = true;
+	if (selection) {
+		url = from.paragraph == click.paragraph && to.paragraph == click.paragraph;
+		start = from.offset;
+		end = to.offset;
+	}
+	std::string address;
+	if (url && ParseURL(text, start, end, address)) {
+		message = new BMessage('sE03');
+		message->AddString("URL", address.c_str());
+		menu->AddSeparatorItem();
+		menu->AddItem(new BMenuItem(GobeResources::IndexString(0x516, 5).String(), message));
+	}
+
+	// the clicked word (WordBounds) unless it starts with a break, a tab
+	// or a space
+	size_t wordFrom, wordTo;
+	WordRange(text, click.offset, wordFrom, wordTo);
+	static const char kBreaks[] = {1, '\n', 2, '\f', 5, '\t', ' '};
+	bool skip = wordFrom >= text.size()
+		|| std::find(kBreaks, kBreaks + sizeof(kBreaks), text[wordFrom]) != kBreaks + sizeof(kBreaks);
+	if (!skip && wordTo > wordFrom && TSpellBar::StartSession(true)) {
+		Speller& speller = TSpellBar::AppSpeller();
+		if (speller.CheckWord(text.substr(wordFrom, wordTo - wordFrom)) != Speller::kGood) {
+			BMenu* suggestions = new BMenu(GobeResources::IndexString(0x516, 14).String());
+			// TSpeller::RebuildAltWordPopUp with a message: "text" added
+			BMessage replace('sM5L');
+			replace.AddInt32("startPos", int32(PartPosition(*wp, {click.paragraph, wordFrom})));
+			replace.AddInt32("endPos", int32(PartPosition(*wp, {click.paragraph, wordTo})));
+			std::vector<std::string> words = speller.Alternatives();
+			for (const std::string& word : words) {
+				BMessage* item = new BMessage(replace);
+				item->AddString("text", word.c_str());
+				suggestions->AddItem(new BMenuItem(word.c_str(), item));
+			}
+			if (words.empty()) {
+				BMenuItem* none = new BMenuItem(GobeResources::IndexString(5, 4).String(), NULL);
+				none->SetEnabled(false);
+				suggestions->AddItem(none);
+			}
+			suggestions->SetTargetForItems(Window());
+			menu->AddItem(suggestions);
+		}
+	}
+	menu->SetTargetForItems(Window());
+	return menu;
 }
 
 
@@ -869,6 +969,18 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		return;
 	}
 	Caret caret;
+	// TDocView::MouseDown: a context click (the secondary button) shows
+	// the clicked frame's menu (TFrame, TWPPart::SetUpContextMenu)
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) != 0 && HitText(where, caret)) {
+		BPopUpMenu* menu = ContextMenu(where);
+		if (menu != NULL && menu->CountItems() > 0 && Window() != NULL) {
+			BPoint screen = ConvertToScreen(BPoint(where.x * fZoom, where.y * fZoom));
+			menu->Go(screen, true, false, BRect(screen.x - 5, screen.y - 5, screen.x + 5,
+				screen.y + 5), false);
+		}
+		delete menu;
+		return;
+	}
 	if (HitText(where, caret)) {
 		fSelectedCell.active = false;
 		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
@@ -1201,12 +1313,18 @@ TPageView::MessageReceived(BMessage* message)
 				beep();
 				return;
 			}
-			// the first selected character's, else the one before the caret
+			// the first selected character's, else the one before the caret;
+			// the context menu's: the one at "value" (a position in the part)
 			auto sel = TextSelectionRange();
 			size_t at = sel.first.offset;
 			if (sel.first.paragraph == sel.second.paragraph && sel.first.offset == sel.second.offset
 					&& at > 0)
 				at--;
+			int32 value;
+			if (message->FindInt32(kValueString, &value) == B_OK) {
+				sel.first = FromPartPosition(*wp, uint32(value));
+				at = sel.first.offset;
+			}
 			const WPParagraph& p = wp->paragraphs[sel.first.paragraph];
 			uint32_t style = p.parStyle;
 			for (const WPStyleRun& r : p.runs)
@@ -1228,6 +1346,38 @@ TPageView::MessageReceived(BMessage* message)
 				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second, property);
 			TextChanged();
 			UpdateMarks();
+			return;
+		}
+		// the context menu's Copy Paragraph Format (TWPPart 'sM5E',
+		// TPart::CopyFormat(TStyleID&, false)): paragraph "value"'s style
+		// (else the caret's); Paste Format puts the properties on the text
+		// (TWPFormatCmd's TCharFormatter), so its character ones are kept
+		case 'sM5E': {
+			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
+			if (wp == NULL)
+				return;
+			int32 value = int32(fCaret.paragraph);
+			message->FindInt32(kValueString, &value);
+			if (value < 0 || size_t(value) >= wp->paragraphs.size())
+				return;
+			sCopiedFormat = CharacterFormat(fDocument.styles, wp->paragraphs[size_t(value)].parStyle);
+			return;
+		}
+		// the context menu's Suggested Spelling (TWPPart 'sM5L'): "startPos"
+		// to "endPos" replaced by "text" (TWPReplaceTextCmd)
+		case 'sM5L': {
+			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
+			int32 start, end;
+			const char* text = "";
+			if (wp == NULL || message->FindInt32("startPos", &start) != B_OK
+					|| message->FindInt32("endPos", &end) != B_OK)
+				return;
+			message->FindString("text", &text);
+			TextPosition from = FromPartPosition(*wp, uint32(start));
+			TextPosition to = FromPartPosition(*wp, uint32(end));
+			if (to.paragraph != from.paragraph)
+				return;
+			ReplaceText(fCaret.part, from, to.offset, text);
 			return;
 		}
 		// Format > Show/Hide Invisibles (TWPPart: TDoc +0x70 bit 2)
@@ -2038,6 +2188,46 @@ TPageView::RunScript(const std::string& script, Document& document)
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
 			}
+		} else if (command.compare(0, 8, "context ") == 0
+				|| command.compare(0, 12, "contextpick ") == 0) {
+			// "context x y": the context menu there printed; "contextpick
+			// x y label": its item (or a submenu's) chosen
+			bool pick = command[7] == 'p';
+			float x, y;
+			int n = 0;
+			if (sscanf(command.c_str() + (pick ? 12 : 8), "%f %f %n", &x, &y, &n) < 2)
+				continue;
+			std::string label = pick ? command.substr((pick ? 12 : 8) + size_t(n)) : "";
+			BPopUpMenu* menu = ContextMenu(BPoint(x, y));
+			std::string shown;
+			BMenuItem* chosen = NULL;
+			for (int32 i = 0; menu != NULL && i < menu->CountItems(); i++) {
+				BMenuItem* item = menu->ItemAt(i);
+				shown += std::string(i > 0 ? "|" : "") + (item->Label()[0] != '\0' ? item->Label()
+					: "-") + (item->IsEnabled() ? "" : "(off)");
+				if (label == item->Label())
+					chosen = item;
+				if (BMenu* sub = item->Submenu()) {
+					shown += "[";
+					for (int32 j = 0; j < sub->CountItems(); j++) {
+						shown += std::string(j > 0 ? "," : "") + sub->ItemAt(j)->Label();
+						if (label == sub->ItemAt(j)->Label())
+							chosen = sub->ItemAt(j);
+					}
+					shown += "]";
+				}
+			}
+			if (!pick) {
+				printf("context %s\n", shown.c_str());
+				fflush(stdout);
+			} else if (chosen != NULL && chosen->Message() != NULL) {
+				BMessage copy(*chosen->Message());
+				if (HandlesCommand(copy.what))
+					MessageReceived(&copy);
+				else if (Window() != NULL)
+					Window()->PostMessage(&copy);
+			}
+			delete menu;
 		} else if (command.compare(0, 6, "spell ") == 0) {
 			TSpellBar* bar = dynamic_cast<TSpellBar*>(fSpellBar);
 			std::string what = command.substr(6);
@@ -3169,6 +3359,7 @@ TPageView::HandlesCommand(uint32 what)
 {
 	switch (what) {
 		case 'sM10': case 'sM11': case 'sM12': case 'sM16': case 'sM17':	// Edit
+		case 'sM5E': case 'sM5L':											// context menu
 		case 'sM29':														// Word Count
 		case 'sM50': case 'sM51': case 'sM52': case 'sM53': case 'sM54':	// Format
 		case 'sM55': case 'sM56': case 'sM57': case 'sM58': case 'sM59':
