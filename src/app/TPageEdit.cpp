@@ -2264,6 +2264,8 @@ TPageView::RunScript(const std::string& script, Document& document)
 				float paper[4], printable[4] = {sheet.paper[0] + m[0], sheet.paper[1] + m[1],
 					sheet.paper[2] - m[2], sheet.paper[3] - m[3]};
 				std::copy(sheet.paper, sheet.paper + 4, paper);
+				fUndo.BeginDocument(fDocument, GobeResources::IndexString(3, 0x15).String(),
+					CurrentViewState());
 				fDocument.SetPageGeometry(paper, printable);
 				GeometryChanged();
 			}

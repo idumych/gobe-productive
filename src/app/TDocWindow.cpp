@@ -1543,6 +1543,10 @@ TDocWindow::MessageReceived(BMessage* message)
 					margins[i] = current[i];
 			float printable[4] = {sheet.paper[0] + margins[0], sheet.paper[1] + margins[1],
 				sheet.paper[2] - margins[2], sheet.paper[3] - margins[3]};
+			// TDocMarginsCommand: "Change Margins"
+			if (fPages != NULL)
+				fPages->fUndo.BeginDocument(*fDocument,
+					GobeResources::IndexString(3, 0x15).String(), fPages->CurrentViewState());
 			bool guides;
 			if (message->FindBool("ShowPageGuides", &guides) == B_OK && guides != sheet.flags[1]) {
 				sheet.flags[1] = guides;
