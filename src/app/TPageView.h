@@ -74,6 +74,8 @@ public:
 	void TextChanged();
 	// the page geometry changed (Page Setup, Margins): frames, layout
 	void GeometryChanged();
+	// the menu commands MessageReceived handles (the window passes them on)
+	static bool HandlesCommand(uint32 what);
 	// Document > Insert/Remove Header (0) or Footer (1)
 	void ToggleHeaderFooter(int which);
 	// the width of the frame the caret is in (TWPPart::RulerBounds)

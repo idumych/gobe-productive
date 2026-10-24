@@ -1456,6 +1456,12 @@ TDocWindow::MessageReceived(BMessage* message)
 		return;
 	}
 
+	// the commands of the parts' menus (text, cells): the page view's
+	// (menus send them to the window)
+	if (fPages != NULL && TPageView::HandlesCommand(message->what)) {
+		fPages->MessageReceived(message);
+		return;
+	}
 	// the system's own messages ('_UKU', ...) are the window's business
 	if ((message->what >> 24) == '_') {
 		BWindow::MessageReceived(message);

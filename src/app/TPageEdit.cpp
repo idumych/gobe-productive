@@ -2804,4 +2804,22 @@ TPageView::CaretFrameWidth() const
 	return 468;
 }
 
+bool
+TPageView::HandlesCommand(uint32 what)
+{
+	switch (what) {
+		case 'sM10': case 'sM11': case 'sM12': case 'sM16': case 'sM17':	// Edit
+		case 'sM29':														// Word Count
+		case 'sM50': case 'sM51': case 'sM52': case 'sM53': case 'sM54':	// Format
+		case 'sM55': case 'sM56': case 'sM57': case 'sM58': case 'sM59':
+		case 'sM5I': case 'sM5J': case 'sM5K':
+		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
+		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
+		case 'sM70': case 'sM71': case 'sM73': case 'sM74':				// cells
+			return true;
+		default:
+			return false;
+	}
+}
+
 } // namespace gobe
