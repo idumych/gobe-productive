@@ -78,6 +78,8 @@ public:
 	void ToggleHeaderFooter(int which);
 	// the width of the frame the caret is in (TWPPart::RulerBounds)
 	float CaretFrameWidth() const;
+	// Show Invisibles: the marks on line `index`
+	void DrawInvisibles(size_t index);
 	// printing: page `index`'s area the printer prints (`printable` is the
 	// job's PrintableRect on the paper), in view coordinates
 	BRect PageArea(int32 index, BRect printable) const;

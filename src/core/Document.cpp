@@ -55,6 +55,11 @@ LoadDocumentBytes(std::vector<uint8_t> data, Document& doc, std::string& error)
 				ReadSheetMgr(a, doc.sheets);
 			else if (e.name == "PartMgr")
 				ReadPartMgr(a, doc.parts);
+			else if (e.name == "Document Misc") {
+				DocumentMisc misc;
+				ReadDocumentMisc(a, misc);
+				doc.documentFlags = misc.value70;
+			}
 		} catch (const ArchiveError& x) {
 			doc.warnings.push_back(e.name + ": " + x.what());
 		}
@@ -548,6 +553,17 @@ Document::Save(const std::string& to, std::string& error)
 		changes.sections["StyleMgr"] = WriteStyleMgr(styles);
 	if (sheetsChanged)
 		changes.sections["SheetMgr"] = WriteSheetMgr(sheets);
+	// the flags after the window count, the rest as read
+	for (size_t s = 0; documentFlagsChanged && s < file.toc.size(); s++) {
+		if (file.toc[s].name != "Document Misc")
+			continue;
+		size_t start = file.toc[s].offset;
+		size_t end = s + 1 < file.toc.size() ? file.toc[s + 1].offset : file.tocOffset;
+		std::vector<uint8_t> section(bytes.begin() + start, bytes.begin() + end);
+		for (int i = 0; i < 4 && section.size() >= 8; i++)
+			section[4 + i] = uint8_t(documentFlags >> (24 - 8 * i));
+		changes.sections["Document Misc"] = std::move(section);
+	}
 	std::set<size_t> written;
 	for (size_t part : dirtyParts) written.insert(part);
 	for (size_t part : dirtyTails) written.insert(part);

@@ -1819,6 +1819,8 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 			}
 			DrawString(p.text.c_str(), BPoint(line.frame.left + p.x, line.baseline + p.dy));
 		}
+		if ((fDocument.documentFlags & 4) && !IsPrinting())
+			DrawInvisibles(size_t(&line - &fLines[0]));
 		PopState();
 	}
 	for (const Rule& rule : fRules) {
@@ -1833,6 +1835,72 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 	SetDrawingMode(B_OP_COPY);
 	if (!IsPrinting())
 		DrawCaret();
+}
+
+
+// Show Invisibles (TLineRun::drawSpaceInvisibles, drawInvisible): in dark
+// gray, a dot halfway across each space at the middle of the text's height
+// (a small square for a non-breaking space), an arrow halfway across each
+// tab, and at the end of a line the mark of what ends it: a return arrow
+// for a paragraph (shorter for a line break), a down arrow for a frame or
+// page break, a square for 0x05
+void
+TPageView::DrawInvisibles(size_t index)
+{
+	const Line& line = fLines[index];
+	const WPPart* wp = fDocument.WordPart(line.part);
+	if (wp == NULL || line.paragraph >= wp->paragraphs.size())
+		return;
+	const std::string& text = wp->paragraphs[line.paragraph].text;
+	float size = line.pieces.empty() ? 12 : line.pieces[0].font.Size();
+	float y = line.baseline, mid = line.baseline - 0.35f * size;
+	SetHighColor(96, 96, 96);
+	SetPenSize(1);
+	size_t end = std::min(line.to, text.size());
+	for (size_t o = line.from; o < end; o++) {
+		unsigned char c = text[o];
+		if (c == ' ') {
+			float x = (OffsetX(index, o) + OffsetX(index, o + 1)) / 2;
+			FillRect(BRect(floorf(x), floorf(mid), floorf(x), floorf(mid)));
+		} else if (c == 0xc2 && o + 1 < end && (unsigned char)text[o + 1] == 0xa0) {
+			float x = (OffsetX(index, o) + OffsetX(index, o + 2)) / 2;
+			FillRect(BRect(x - 1, mid - 1, x + 1, mid + 1));
+		} else if (c == '\t') {
+			float m = (OffsetX(index, o) + OffsetX(index, o + 1)) / 2;
+			StrokeLine(BPoint(m - 2, y - 3), BPoint(m + 2, y - 3));
+			StrokeLine(BPoint(m, y - 5), BPoint(m + 2, y - 3));
+			StrokeLine(BPoint(m, y - 1), BPoint(m + 2, y - 3));
+		}
+	}
+	// what ends the line: the paragraph's terminator after its last line
+	// (the lines' ranges stop before it), or a line break in it
+	size_t at;
+	if (end + 1 == text.size() && end < text.size())
+		at = end;
+	else if (end > 0 && text[end - 1] == 0x01)
+		at = end - 1;
+	else
+		return;
+	unsigned char last = text[at];
+	float x = OffsetX(index, at);
+	switch (last) {
+		case 0x01:
+		case '\n':
+			StrokeLine(BPoint(x, y - 2), BPoint(x + 2, y - 4));
+			StrokeLine(BPoint(x, y - 2), BPoint(x + 2, y));
+			StrokeLine(BPoint(x, y - 2), BPoint(x + 4, y - 2));
+			StrokeLine(BPoint(x + 4, y - (last == 0x01 ? 4 : 6)), BPoint(x + 4, y - 2));
+			break;
+		case 0x02:
+		case 0x0c:
+			StrokeLine(BPoint(x, y - 2), BPoint(x + 2, y));
+			StrokeLine(BPoint(x + 4, y - 2), BPoint(x + 2, y));
+			StrokeLine(BPoint(x + 2, y - (last == 0x02 ? 4 : 6)), BPoint(x + 2, y));
+			break;
+		case 0x05:
+			StrokeRect(BRect(x, y - 4, x + 4, y));
+			break;
+	}
 }
 
 

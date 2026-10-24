@@ -74,6 +74,9 @@ struct Document {
 	bool sheetsChanged = false;		// the SheetMgr (page setup, margins)
 	bool selectionsChanged = false;	// spreadsheet selections/names moved
 	bool linksChanged = false;		// links added (the LinksMgr, written by Save)
+	// TDoc +0x70 ("Document Misc"): bit 2 shows invisibles in text
+	uint32_t documentFlags = 0;
+	bool documentFlagsChanged = false;
 	WPPart* EditableWordPart(size_t part);
 	SSPart* EditableSpreadsheetPart(size_t part);
 	// writes the document (changed parts written, everything else copied)

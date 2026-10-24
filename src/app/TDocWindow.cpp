@@ -1268,7 +1268,7 @@ TDocWindow::MessageReceived(BMessage* message)
 			|| what == 'sM24' || what == 'sM52' || what == 'sM56' || what == 'sM57'
 			|| what == 'sM58' || what == 'sM59' || what == 'sM55' || what == 'sM51'
 			|| what == 'sM5I' || what == 'sM5K' || what == 'sM16' || what == 'sM17'
-			|| what == 'sM29') {
+			|| what == 'sM29' || what == 'sM5J') {
 			fPages->MessageReceived(message);
 			return;
 		}
@@ -1750,6 +1750,10 @@ TDocWindow::MenusBeginning()
 		item->SetEnabled(paged);
 		item->SetLabel(GobeResources::IndexString(3, 0x16 + 2 * which + (has ? 1 : 0)).String());
 	}
+	// TWPPart::SetupMenus: Show Invisibles or Hide Invisibles (STR# 1302)
+	if (BMenuItem* item = KeyMenuBar()->FindItem('sM5J'))
+		item->SetLabel(GobeResources::IndexString(0x516,
+			fDocument != NULL && (fDocument->documentFlags & 4) ? 1 : 0).String());
 }
 
 

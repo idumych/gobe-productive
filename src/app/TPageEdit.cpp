@@ -1152,6 +1152,12 @@ TPageView::MessageReceived(BMessage* message)
 			UpdateMarks();
 			return;
 		}
+		// Format > Show/Hide Invisibles (TWPPart: TDoc +0x70 bit 2)
+		case 'sM5J':
+			fDocument.documentFlags ^= 4;
+			fDocument.documentFlagsChanged = true;
+			Invalidate();
+			return;
 		// Writing Tools > Word Count… (TDocWindow, TWordCountDialog): the
 		// selected text's, else the whole document's
 		case 'sM29': {
