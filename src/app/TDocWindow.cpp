@@ -511,222 +511,6 @@ TFontDialog::QuitRequested()
 	return true;
 }
 
-// #pragma mark - TParagraphDialog
-
-TParagraphDialog::TParagraphDialog(Document* doc, TPageView* view)
-	:
-	BWindow(BRect(100, 100, 350, 420), "Paragraph",
-		B_TITLED_WINDOW_LOOK, B_NORMAL_WINDOW_FEEL, B_NOT_RESIZABLE
-		| B_NOT_ZOOMABLE | B_AUTO_UPDATE_SIZE_LIMITS),
-	fDocument(doc),
-	fView(view)
-{
-	BView* top = new BView("top", B_WILL_DRAW);
-	top->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
-	SetLayout(new BGroupLayout(B_VERTICAL, 0));
-	GetLayout()->AddView(top);
-
-	// Get the style at the caret's paragraph for prefilling
-	TextStyle style;
-	if (fView != NULL && fView->fCaret.active && fDocument != NULL) {
-		style = fView->StyleAt({fView->fCaret.paragraph, fView->fCaret.offset});
-	}
-
-	// Alignment popup: MENU 300's items, the value is the PAlg value
-	// (TDialogFormatParagraph::initIndentSet: FindValue(alignment))
-	BPopUpMenu* alignMenu = new BPopUpMenu("alignment");
-	static const char* kAlignLabels[] = { "Left", "Center", "Right", "Justify" };
-	for (int32 i = 0; i < 4; i++) {
-		BMessage* m = new BMessage('PAlg');
-		m->AddInt32("value", i);
-		alignMenu->AddItem(new BMenuItem(kAlignLabels[i], m));
-	}
-	alignMenu->SetLabelFromMarked(true);
-
-	// Build layout manually (older Haiku: BLayoutBuilder::End() returns void*)
-	BGroupLayout* outerLayout = new BGroupLayout(B_VERTICAL, B_USE_SMALL_SPACING);
-	top->SetLayout(outerLayout);
-
-	BGroupLayout* alignLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
-	outerLayout->AddView(new BStringView("align_label", "Alignment:"));
-	outerLayout->AddView(fAlignmentField = new BMenuField("alignment", "", alignMenu));
-
-	BGroupLayout* leftLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
-	outerLayout->AddView(new BStringView("left_label", "Left indent:"));
-	outerLayout->AddView(fLeftIndent = new BTextControl("left_indent", NULL, "", NULL));
-
-	BGroupLayout* firstLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
-	outerLayout->AddView(new BStringView("first_label", "First indent:"));
-	outerLayout->AddView(fFirstIndent = new BTextControl("first_indent", NULL, "", NULL));
-
-	BGroupLayout* rightLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
-	outerLayout->AddView(new BStringView("right_label", "Right indent:"));
-	outerLayout->AddView(fRightIndent = new BTextControl("right_indent", NULL, "", NULL));
-
-	BGroupLayout* beforeLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
-	outerLayout->AddView(new BStringView("before_label", "Space before:"));
-	outerLayout->AddView(fSpaceBefore = new BTextControl("space_before", NULL, "", NULL));
-
-	BGroupLayout* afterLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
-	outerLayout->AddView(new BStringView("after_label", "Space after:"));
-	outerLayout->AddView(fSpaceAfter = new BTextControl("space_after", NULL, "", NULL));
-
-	BGroupLayout* lineLayout = new BGroupLayout(B_HORIZONTAL, B_USE_SMALL_SPACING);
-	outerLayout->AddView(new BStringView("linespacing_label", "Line spacing:"));
-	outerLayout->AddView(fLineSpacing = new BTextControl("line_spacing", NULL, "", NULL));
-
-	BGroupLayout* btnLayout = new BGroupLayout(B_HORIZONTAL, B_USE_DEFAULT_SPACING);
-	BView* spacer = new BView(NULL, B_WILL_DRAW);
-	spacer->SetExplicitSize(BSize(9999, B_SIZE_UNSET));
-	outerLayout->AddView(spacer);
-	outerLayout->AddView(new BButton("ok", "OK", new BMessage(kMsgParagraphOK)));
-	outerLayout->AddView(new BButton("cancel", "Cancel", new BMessage(B_QUIT_REQUESTED)));
-
-	// Pre-fill with current values
-	char buf[32];
-
-	snprintf(buf, sizeof buf, "%.1f", style.leftIndent);
-	fLeftIndent->SetText(buf);
-	snprintf(buf, sizeof buf, "%.1f", style.firstIndent);
-	fFirstIndent->SetText(buf);
-	snprintf(buf, sizeof buf, "%.1f", style.rightIndent);
-	fRightIndent->SetText(buf);
-	// TParSpaceProperty::GetDataStr: "<value> lines", or points
-	snprintf(buf, sizeof buf, style.spaceBeforeLines ? "%g lines" : "%g pt", style.spaceBefore);
-	fSpaceBefore->SetText(buf);
-	snprintf(buf, sizeof buf, style.spaceAfterLines ? "%g lines" : "%g pt", style.spaceAfter);
-	fSpaceAfter->SetText(buf);
-
-	if (style.lineSpacingMultiple) {
-		snprintf(buf, sizeof buf, "%.1f", style.lineSpacing);
-	} else {
-		snprintf(buf, sizeof buf, "%.1f pt", style.lineSpacing);
-	}
-	fLineSpacing->SetText(buf);
-
-	// Mark the alignment item
-	for (int32_t i = 0; i < alignMenu->CountItems(); i++) {
-		BMenuItem* item = alignMenu->ItemAt(i);
-		int32_t val = 0;
-		if (item->Message() != NULL &&
-			item->Message()->FindInt32("value", &val) == B_OK) {
-			if (val == style.alignment) {
-				item->SetMarked(true);
-				break;
-			}
-		}
-	}
-
-	CenterOnScreen();
-}
-
-
-void
-TParagraphDialog::DoApply()
-{
-	if (fView == NULL || fDocument == NULL)
-		return;
-
-	if (!fView->fCaret.active) {
-		beep();
-		return;
-	}
-
-	// Determine the paragraph range
-	int32_t firstPar = fView->fCaret.paragraph;
-	int32_t lastPar = fView->fCaret.paragraph;
-
-	if (fView->fAnchor.active && fView->fAnchor.part == fView->fCaret.part) {
-		int32_t aPar = std::min(fView->fCaret.paragraph, fView->fAnchor.paragraph);
-		int32_t bPar = std::max(fView->fCaret.paragraph, fView->fAnchor.paragraph);
-		firstPar = aPar;
-		lastPar = bPar;
-	}
-
-	fView->fUndo.Begin(*fDocument, fView->fCaret.part, "Paragraph",
-		fView->CurrentViewState());
-
-	// Alignment
-	if (fAlignmentField != NULL) {
-		BMenuItem* marked = fAlignmentField->Menu()->FindMarked();
-		if (marked != NULL && marked->Message() != NULL) {
-			int32_t align = 0;
-			if (marked->Message()->FindInt32("value", &align) == B_OK) {
-				ApplyParagraphProperty(*fDocument, fView->fCaret.part,
-					firstPar, lastPar,
-					AlignmentProperty(align));
-			}
-		}
-	}
-
-	// Indents
-	char* end;
-	float leftIndent = strtof(fLeftIndent->Text(), &end);
-	if (end != fLeftIndent->Text())
-		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
-			firstPar, lastPar,
-			IndentProperty(Sig("PLef"), leftIndent));
-
-	float firstIndent = strtof(fFirstIndent->Text(), &end);
-	if (end != fFirstIndent->Text())
-		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
-			firstPar, lastPar,
-			IndentProperty(Sig("PInd"), firstIndent));
-
-	float rightIndent = strtof(fRightIndent->Text(), &end);
-	if (end != fRightIndent->Text())
-		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
-			firstPar, lastPar,
-			IndentProperty(Sig("PRig"), rightIndent));
-
-	// Spacing: lines unless given in points ("pt")
-	float spaceBefore = strtof(fSpaceBefore->Text(), &end);
-	if (end != fSpaceBefore->Text())
-		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
-			firstPar, lastPar,
-			SpacingProperty(Sig("SpaB"), spaceBefore, strstr(end, "pt") == NULL));
-
-	float spaceAfter = strtof(fSpaceAfter->Text(), &end);
-	if (end != fSpaceAfter->Text())
-		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
-			firstPar, lastPar,
-			SpacingProperty(Sig("SpaA"), spaceAfter, strstr(end, "pt") == NULL));
-
-	// Line spacing
-	std::string ls = fLineSpacing->Text();
-	float lineSpacing = strtof(ls.c_str(), &end);
-	if (end != ls.c_str()) {
-		bool multiple = true;
-		if (ls.find("pt") != std::string::npos)
-			multiple = false;
-		ApplyParagraphProperty(*fDocument, fView->fCaret.part,
-			firstPar, lastPar,
-			LineSpacingProperty(lineSpacing, multiple));
-	}
-
-	fView->TextChanged();
-	PostMessage(B_QUIT_REQUESTED);
-}
-
-
-void
-TParagraphDialog::MessageReceived(BMessage* message)
-{
-	if (message->what == kMsgParagraphOK) {
-		DoApply();
-		return;
-	}
-	BWindow::MessageReceived(message);
-}
-
-
-bool
-TParagraphDialog::QuitRequested()
-{
-	delete this;
-	return true;
-}
-
 // #pragma mark - TDocWindow
 
 
@@ -1554,6 +1338,15 @@ TDocWindow::MessageReceived(BMessage* message)
 			GeometryChanged();
 			return;
 		}
+		case kMsgRunScript:
+		{
+			// test hook: --do in a window
+			const char* script;
+			if (fPages != NULL && fDocument != NULL
+					&& message->FindString("script", &script) == B_OK && script != NULL)
+				fPages->RunScript(script, *fDocument);
+			return;
+		}
 		case kCmdInsertHeader:
 		case kCmdInsertFooter:
 			if (fPages != NULL)
@@ -1712,12 +1505,10 @@ TDocWindow::MessageReceived(BMessage* message)
 		}
 		return;
 	}
+	// Paragraph… (sM50): the text part's
 	if (message->what == 'sM50') {
-		// Paragraph dialog from the Format menu
-		if (fPages != NULL) {
-			TParagraphDialog* dialog = new TParagraphDialog(fDocument, fPages);
-			dialog->Show();
-		}
+		if (fPages != NULL)
+			fPages->MessageReceived(message);
 		return;
 	}
 	// Insert Date…, Insert Time… (sM53, sM54): the text part's

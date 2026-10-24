@@ -396,4 +396,51 @@ TDialog::RadioValue(int32 group) const
 	return -1;
 }
 
+static BMenu*
+PopUp(BView* view)
+{
+	BMenuField* field = dynamic_cast<BMenuField*>(view);
+	return field != NULL ? field->Menu() : NULL;
+}
+
+
+void
+TDialog::SetPopUpItem(int32 index, int32 value)
+{
+	BMenu* menu = PopUp(Item(index));
+	if (menu == NULL)
+		return;
+	for (int32 i = 0; i < menu->CountItems(); i++) {
+		BMenuItem* item = menu->ItemAt(i);
+		int32 v;
+		if (item->Message() != NULL && item->Message()->FindInt32(kValueString, &v) == B_OK
+				&& v == value) {
+			item->SetMarked(true);
+			return;
+		}
+	}
+}
+
+
+int32
+TDialog::PopUpValue(int32 index) const
+{
+	BMenu* menu = PopUp(Item(index));
+	BMenuItem* marked = menu != NULL ? menu->FindMarked() : NULL;
+	int32 v;
+	if (marked == NULL || marked->Message() == NULL
+			|| marked->Message()->FindInt32(kValueString, &v) != B_OK)
+		return -1;
+	return v;
+}
+
+
+void
+TDialog::RemoveLastPopUpItems(int32 index, int32 count)
+{
+	BMenu* menu = PopUp(Item(index));
+	for (int32 i = 0; menu != NULL && i < count && menu->CountItems() > 0; i++)
+		delete menu->RemoveItem(menu->CountItems() - 1);
+}
+
 } // namespace gobe

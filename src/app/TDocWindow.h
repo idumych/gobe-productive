@@ -81,31 +81,6 @@ private:
 	BColorControl* fColor;
 };
 
-// TParagraphDialog: Paragraph dialog with alignment popup, left/first/right
-// indent fields, space before/after fields, line spacing field, and an
-// alignment pop-up for the dialog. OK applies changed properties to the
-// selected paragraphs as one undo step.
-class TParagraphDialog : public BWindow {
-public:
-	TParagraphDialog(Document* doc, TPageView* view);
-
-	virtual void MessageReceived(BMessage* message);
-	virtual bool QuitRequested();
-
-private:
-	void DoApply();
-
-	Document* fDocument;
-	TPageView* fView;
-	BMenuField* fAlignmentField;
-	BTextControl* fLeftIndent;
-	BTextControl* fFirstIndent;
-	BTextControl* fRightIndent;
-	BTextControl* fSpaceBefore;
-	BTextControl* fSpaceAfter;
-	BTextControl* fLineSpacing;
-};
-
 // TFindDialog: the Find/Replace (DIAL 7) dialog, made functional.
 // Controls: 0=Find text, 1=Replace text, 2=Ignore Case, 3=Entire Word,
 // 4=Wrap, 5=Insert Special, 6=Find, 7=Replace, 8=Replace & Find,

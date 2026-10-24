@@ -53,6 +53,11 @@ protected:
 	// radios in box `group` is on, from 0; -1 if none)
 	void SetRadioItem(int32 index, bool on);
 	int32 RadioValue(int32 group) const;
+	// pop-up menus (TPopUpMenu::FindValue, the marked item's value; -1 if
+	// none) and taking items off their end
+	void SetPopUpItem(int32 index, int32 value);
+	int32 PopUpValue(int32 index) const;
+	void RemoveLastPopUpItems(int32 index, int32 count);
 
 private:
 	void AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int32 group = -1);

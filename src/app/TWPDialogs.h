@@ -1,10 +1,12 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
 // Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
-// Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions).
+// Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions), Paragraph
+// (TDialogFormatParagraph).
 #ifndef GOBE_TWP_DIALOGS_H
 #define GOBE_TWP_DIALOGS_H
 
 #include <string>
+#include <vector>
 
 #include "TDialog.h"
 
@@ -105,6 +107,41 @@ protected:
 private:
 	BLooper* fWindow;
 	int16 fFirst;
+};
+
+// Format > Paragraph… (DIAL/Item 304, "Paragraph Format"): left, first
+// line and right indents (0 up to the frame's width less the other side's
+// indent and 8) and line spacing (1 point to 160), space before and after
+// (0 to 160), each in a unit of its own (MENU 241; the indents have no
+// lines), and the alignment (MENU 300). OK sends the window 'sM50' with the
+// values in points ("left", "first", "right", "lineSpacing", "spaceBefore",
+// "spaceAfter"), whether a spacing is in lines ("...Lines") and "align".
+class TDialogFormatParagraph : public TDialog {
+public:
+	// the paragraph's values (spacings in lines when `...Lines`), the
+	// sheet's unit and the frame's width
+	TDialogFormatParagraph(BLooper* window, const float values[6], const bool lines[3],
+		int32 align, int unit, float width);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	struct Value {
+		float points;
+		int unit;
+	};
+	bool ValidTextControl(int32 index);
+	bool ValidTextControls();
+	Value& ValueOf(int32 index);
+	void ShowValue(int32 index);
+
+	BLooper* fWindow;
+	Value fValues[6];		// items 2, 4, 6, 8, 10, 12
+	int32 fAlign;
+	float fWidth;
+	std::vector<std::string> fUnitNames;
 };
 
 } // namespace gobe

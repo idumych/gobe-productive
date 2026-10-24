@@ -32,6 +32,8 @@ namespace gobe {
 static const uint32 kMsgSlideChanged = 'Gsld';
 // sent to the window when the document was edited
 static const uint32 kMsgDocumentChanged = 'Gchg';
+// test hook: run "script" (RunScript) in the window
+static const uint32 kMsgRunScript = 'Grun';
 
 class TPageView : public BView {
 public:
@@ -74,6 +76,8 @@ public:
 	void GeometryChanged();
 	// Document > Insert/Remove Header (0) or Footer (1)
 	void ToggleHeaderFooter(int which);
+	// the width of the frame the caret is in (TWPPart::RulerBounds)
+	float CaretFrameWidth() const;
 	// printing: page `index`'s area the printer prints (`printable` is the
 	// job's PrintableRect on the paper), in view coordinates
 	BRect PageArea(int32 index, BRect printable) const;

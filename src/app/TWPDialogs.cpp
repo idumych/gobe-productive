@@ -1,6 +1,7 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
 // Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
-// Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions).
+// Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions), Paragraph
+// (TDialogFormatParagraph).
 #include "TWPDialogs.h"
 
 #include <stdio.h>
@@ -17,6 +18,7 @@
 
 #include "Editing.h"
 #include "GobeResources.h"
+#include "Measure.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 
@@ -293,6 +295,141 @@ TDialogWPFootnoteOptions::ItemHit(int32 index, BMessage* message)
 		BMessage set('sM5K');
 		set.AddInt16("start", int16(first));
 		fWindow->PostMessage(&set);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+// a measure's unit "lines" (TMeasureUnit 5): 16 points each
+static const int kLines = 5;
+
+
+TDialogFormatParagraph::TDialogFormatParagraph(BLooper* window, const float values[6],
+	const bool lines[3], int32 align, int unit, float width)
+	:
+	TDialog(304, 304, 'APPL', NULL),
+	fWindow(window),
+	fAlign(align),
+	fWidth(width)
+{
+	// TDialogFormatParagraph::setStyle: the indents in the sheet's unit;
+	// the spacings in lines (as points, 16 a line) or in the sheet's unit
+	for (int i = 0; i < 3; i++)
+		fValues[i] = {values[i], unit};
+	for (int i = 3; i < 6; i++)
+		fValues[i] = lines[i - 3] ? Value{values[i] * 16, kLines} : Value{values[i], unit};
+	for (int32 i = 0; i < 6; i++)
+		fUnitNames.push_back(GobeResources::IndexString(7, i).String());
+}
+
+
+TDialogFormatParagraph::Value&
+TDialogFormatParagraph::ValueOf(int32 index)
+{
+	return fValues[index / 2 - 1];
+}
+
+
+void
+TDialogFormatParagraph::ShowValue(int32 index)
+{
+	const Value& v = ValueOf(index);
+	SetTextItem(index, MeasureText(v.points, v.unit, kMeasureWithUnit | kMeasureTwoPlaces,
+		fUnitNames).c_str());
+	// (the pop-ups list "lines" after a separator)
+	SetPopUpItem(index + 1, v.unit);
+}
+
+
+void
+TDialogFormatParagraph::Init()
+{
+	// no lines for the indents
+	for (int32 popup = 3; popup < 8; popup += 2)
+		RemoveLastPopUpItems(popup, 2);
+	SetPopUpItem(14, fAlign);
+	for (int32 index = 2; index <= 12; index += 2)
+		ShowValue(index);
+	MakeFocusItem(2);
+}
+
+
+// TDialogFormatParagraph::validTextControl: the text as a measure in its
+// range (else STR# 6, 12 or 15)
+bool
+TDialogFormatParagraph::ValidTextControl(int32 index)
+{
+	float minimum = index == 8 ? 1 : 0, maximum = 160;
+	if (index == 2 || index == 4)
+		maximum = fWidth - ValueOf(6).points - 8;
+	else if (index == 6)
+		maximum = fWidth - ValueOf(2).points - 8;
+	Value& v = ValueOf(index);
+	float points;
+	int unit = v.unit;
+	if (!ParseMeasure(TextItem(index).String(), v.unit, fUnitNames, index >= 8, true, points, &unit)
+			|| points < minimum || points > maximum) {
+		BString alert;
+		alert.SetToFormat(GobeResources::IndexString(6, 15).String(),
+			MeasureText(minimum, v.unit, kMeasureWithUnit, fUnitNames).c_str(),
+			MeasureText(maximum, v.unit, kMeasureWithUnit | kMeasureTwoPlaces,
+				fUnitNames).c_str());
+		(new BAlert("", alert.String(), "OK"))->Go(NULL);
+		MakeFocusItem(index);
+		return false;
+	}
+	v = {points, unit};
+	ShowValue(index);
+	return true;
+}
+
+
+bool
+TDialogFormatParagraph::ValidTextControls()
+{
+	for (int32 index = 2; index <= 12; index += 2)
+		if (!ValidTextControl(index))
+			return false;
+	return true;
+}
+
+
+bool
+TDialogFormatParagraph::ItemHit(int32 index, BMessage* message)
+{
+	int32 value = 0;
+	if (message != NULL)
+		message->FindInt32(kValueString, &value);
+	if (index == 0) {
+		if (!ValidTextControls())
+			return true;
+		BMessage format('sM50');
+		// items 2 left, 4 first line, 6 right, 8 line spacing, 10 before,
+		// 12 after; a spacing in lines as lines (TWPPart::DoParagraphFormat)
+		static const char* const kNames[6] = {"left", "first", "right", "lineSpacing",
+			"spaceBefore", "spaceAfter"};
+		for (int i = 0; i < 6; i++) {
+			bool lines = i >= 3 && fValues[i].unit == kLines;
+			format.AddFloat(kNames[i], lines ? fValues[i].points * 0.0625f : fValues[i].points);
+			if (i >= 3)
+				format.AddBool((std::string(kNames[i]) + "Lines").c_str(), lines);
+		}
+		format.AddInt32("align", fAlign);
+		fWindow->PostMessage(&format);
+		return TDialog::ItemHit(index, message);
+	}
+	if (index >= 2 && index <= 12 && index % 2 == 0) {
+		ValidTextControl(index);
+		return true;
+	}
+	if (index >= 3 && index <= 13) {
+		// a unit chosen: the value shown in it
+		ValueOf(index - 1).unit = value;
+		ShowValue(index - 1);
+		return true;
+	}
+	if (index == 14) {
+		fAlign = value;
+		return true;
 	}
 	return TDialog::ItemHit(index, message);
 }

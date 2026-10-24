@@ -1110,6 +1110,54 @@ TPageView::MessageReceived(BMessage* message)
 				GeometryChanged();
 			return;
 		}
+		// Format > Paragraph… (TWPPart::DoParagraphFormat): the dialog with
+		// the caret's paragraph's values; then the indents, spacing and
+		// alignment for the selected paragraphs, as one step
+		case 'sM50': {
+			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
+			if (wp == NULL || fCaret.paragraph >= wp->paragraphs.size()) {
+				beep();
+				return;
+			}
+			float left;
+			if (message->FindFloat("left", &left) != B_OK) {
+				TextStyle st = ResolveTextStyle(fDocument.styles,
+					wp->paragraphs[fCaret.paragraph].parStyle);
+				float values[6] = {st.leftIndent, st.firstIndent, st.rightIndent, st.lineSpacing,
+					st.spaceBefore, st.spaceAfter};
+				bool lines[3] = {st.lineSpacingMultiple, st.spaceBeforeLines, st.spaceAfterLines};
+				int unit = fDocument.sheets.sheets.empty() ? 0
+					: int(fDocument.sheets.sheets[0].unit);
+				if (Window() != NULL)
+					(new TDialogFormatParagraph(Window(), values, lines, st.alignment, unit,
+						CaretFrameWidth()))->RunDialog();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, GobeResources::IndexString(3, 0).String(),
+				CurrentViewState());
+			auto range = TextSelectionRange();
+			size_t first = range.first.paragraph, last = range.second.paragraph;
+			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				IndentProperty(Sig("PLef"), left));
+			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				IndentProperty(Sig("PRig"), message->GetFloat("right", 0)));
+			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				IndentProperty(Sig("PInd"), message->GetFloat("first", 0)));
+			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				LineSpacingProperty(message->GetFloat("lineSpacing", 1),
+					message->GetBool("lineSpacingLines", true)));
+			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				SpacingProperty(Sig("SpaB"), message->GetFloat("spaceBefore", 0),
+					message->GetBool("spaceBeforeLines", true)));
+			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				SpacingProperty(Sig("SpaA"), message->GetFloat("spaceAfter", 0),
+					message->GetBool("spaceAfterLines", true)));
+			ApplyParagraphProperty(fDocument, fCaret.part, first, last,
+				AlignmentProperty(message->GetInt32("align", 0)));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
 		// Format > Insert Footnote… (TWPPart::InsertSpecial,
 		// TMiscFootnoteRef): the dialog, which sends the command back with
 		// "endnote" (and "mark"); the note's text gets the caret, after its
@@ -2406,6 +2454,26 @@ TPageView::RunScript(const std::string& script, Document& document)
 			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
 				style.tabs[nearestIdx].position);
 			TextChanged();
+		} else if (command.compare(0, 11, "paraformat ") == 0) {
+			// "paraformat L F R S Sl B Bl A Al align": what Paragraph…'s OK
+			// sends (points; spacings in lines when their flag is 1)
+			float v[6];
+			int l[3], align;
+			if (sscanf(command.c_str() + 11, "%f %f %f %f %d %f %d %f %d %d", &v[0], &v[1],
+					&v[2], &v[3], &l[0], &v[4], &l[1], &v[5], &l[2], &align) == 10) {
+				BMessage format('sM50');
+				format.AddFloat("left", v[0]);
+				format.AddFloat("first", v[1]);
+				format.AddFloat("right", v[2]);
+				format.AddFloat("lineSpacing", v[3]);
+				format.AddBool("lineSpacingLines", l[0] != 0);
+				format.AddFloat("spaceBefore", v[4]);
+				format.AddBool("spaceBeforeLines", l[1] != 0);
+				format.AddFloat("spaceAfter", v[5]);
+				format.AddBool("spaceAfterLines", l[2] != 0);
+				format.AddInt32("align", align);
+				MessageReceived(&format);
+			}
 		} else if (command.compare(0, 9, "footnote ") == 0) {
 			// "footnote <f|e> [mark]": Insert Footnote… (e: an endnote)
 			BMessage insert('sM5I');
@@ -2572,5 +2640,27 @@ TPageView::ToggleHeaderFooter(int which)
 	GeometryChanged();
 }
 
+
+// TWPPart::RulerBounds: the width of the frame the caret is in
+float
+TPageView::CaretFrameWidth() const
+{
+	size_t index;
+	float x;
+	if (CaretLine(fCaret, index, x)) {
+		BPoint center(fLines[index].frame.left + 1, fLines[index].frame.top + 1);
+		for (const auto& f : fFrames) {
+			BRect r(f.x - fBounds.left + fMargin, f.y - fBounds.top + fMargin, 0, 0);
+			r.right = r.left + f.width;
+			r.bottom = r.top + f.height;
+			if (f.part == fCaret.part && r.Contains(center))
+				return f.width;
+		}
+	}
+	for (const auto& f : fFrames)
+		if (f.part == fCaret.part)
+			return f.width;
+	return 468;
+}
 
 } // namespace gobe

@@ -48,7 +48,7 @@ MeasureText(float points, int unit, int flags, const std::vector<std::string>& u
 
 bool
 ParseMeasure(const std::string& text, int unit, const std::vector<std::string>& unitNames,
-	bool withLines, bool negative, float& points)
+	bool withLines, bool negative, float& points, int* typedUnit)
 {
 	std::string number = text;
 	size_t count = withLines ? 6 : 5;
@@ -67,6 +67,8 @@ ParseMeasure(const std::string& text, int unit, const std::vector<std::string>& 
 	if (end == number.c_str() || (value < 0 && !negative))
 		return false;
 	points = unit >= 0 && unit < 6 ? value * kPointsPer[unit] : value;
+	if (typedUnit != nullptr)
+		*typedUnit = unit;
 	return true;
 }
 

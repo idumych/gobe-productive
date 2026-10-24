@@ -184,6 +184,16 @@ public:
 		delete bitmap;
 	}
 
+	// Test hook: --do without --render runs the script in the window
+	void RunScriptIn(TDocWindow* window)
+	{
+		if (fScript.empty())
+			return;
+		BMessage run(kMsgRunScript);
+		run.AddString("script", fScript.c_str());
+		window->PostMessage(&run);
+	}
+
 	void OpenDocument(const std::string& path)
 	{
 		try {
@@ -236,6 +246,7 @@ public:
 			TDocWindow* window = new TDocWindow(frame,
 				doc->path.empty() ? doc->name.c_str() : p.Leaf(), doc);
 			window->Show();
+			RunScriptIn(window);
 		} catch (const std::exception& e) {
 			fprintf(stderr, "%s: %s\n", path.c_str(), e.what());
 		}
@@ -275,6 +286,7 @@ public:
 				fWindowCount++;
 				TDocWindow* window = new TDocWindow(frame, document->name.c_str(), document);
 				window->Show();
+				RunScriptIn(window);
 			} else
 				fprintf(stderr, "CreateBlankDocument: %s\n", error.c_str());
 			return;

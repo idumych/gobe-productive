@@ -19,8 +19,9 @@ std::string MeasureText(float points, int unit, int flags,
 // TMeasure::SetText: a number, optionally followed by a unit name (lines
 // only if `withLines`); false if it isn't a number, or is negative unless
 // `negative`
+// (`typedUnit`, if given, gets the unit the text named, else `unit`)
 bool ParseMeasure(const std::string& text, int unit, const std::vector<std::string>& unitNames,
-	bool withLines, bool negative, float& points);
+	bool withLines, bool negative, float& points, int* typedUnit = nullptr);
 
 } // namespace gobe
 
