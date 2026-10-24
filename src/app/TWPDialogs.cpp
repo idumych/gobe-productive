@@ -485,4 +485,36 @@ TDialogGRSize::ItemHit(int32 index, BMessage* message)
 	return TDialog::ItemHit(index, message);
 }
 
+TWordCountDialog::TWordCountDialog(const WordCount& count, bool selection)
+	:
+	TDialog(54, 54, 'APPL', NULL),
+	fCount(count),
+	fSelection(selection)
+{
+}
+
+
+void
+TWordCountDialog::Init()
+{
+	BString text;
+	text << fCount.characters;
+	SetTextItem(5, text.String());
+	text = "";
+	text << fCount.words;
+	SetTextItem(6, text.String());
+	if (fSelection) {
+		for (int32 index : {3, 7, 4, 8})
+			if (Item(index) != NULL)
+				Item(index)->Hide();
+		return;
+	}
+	text = "";
+	text << fCount.paragraphs;
+	SetTextItem(7, text.String());
+	text = "";
+	text << fCount.pages;
+	SetTextItem(8, text.String());
+}
+
 } // namespace gobe

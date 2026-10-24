@@ -1152,6 +1152,26 @@ TPageView::MessageReceived(BMessage* message)
 			UpdateMarks();
 			return;
 		}
+		// Writing Tools > Word Count… (TDocWindow, TWordCountDialog): the
+		// selected text's, else the whole document's
+		case 'sM29': {
+			TextPosition from, to;
+			WordCount count;
+			bool selection = fCaret.active && TextSelection(from, to)
+				&& (from.paragraph != to.paragraph || from.offset != to.offset);
+			if (selection) {
+				if (const WPPart* wp = fDocument.WordPart(fCaret.part))
+					CountBlock(RangeText(*wp, from, to), count);
+			} else
+				count = CountDocument(fDocument);
+			if (Window() != NULL)
+				(new TWordCountDialog(count, selection))->RunDialog();
+			else
+				fprintf(stderr, "wordcount %lld characters, %lld words, %lld paragraphs, "
+					"%lld pages\n", (long long)count.characters, (long long)count.words,
+					(long long)count.paragraphs, (long long)count.pages);
+			return;
+		}
 		// Format > Paragraph… (TWPPart::DoParagraphFormat): the dialog with
 		// the caret's paragraph's values; then the indents, spacing and
 		// alignment for the selected paragraphs, as one step

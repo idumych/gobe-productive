@@ -11,6 +11,7 @@
 #include <String.h>
 
 #include "TDialog.h"
+#include "WordCount.h"
 
 class BLooper;
 
@@ -163,6 +164,20 @@ private:
 	BLooper* fWindow;
 	uint32 fCommand;
 	BString fTitle, fLabel, fText;
+};
+
+// Writing Tools > Word Count… (DIAL/Item 54): the counts; for a
+// selection only characters and words.
+class TWordCountDialog : public TDialog {
+public:
+	TWordCountDialog(const WordCount& count, bool selection);
+
+protected:
+	virtual void Init();
+
+private:
+	WordCount fCount;
+	bool fSelection;
 };
 
 } // namespace gobe
