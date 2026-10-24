@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include <Alert.h>
+#include <Looper.h>
 #include <Roster.h>
 #include <exception>
 #include <Application.h>
@@ -35,6 +36,40 @@
 namespace gobe {
 
 static const char* kSignature = "application/x-vnd.gobe-port.productive";
+
+
+// receives the "Locate…" file panel's choice (or its closing) while the
+// application thread waits
+class TLocateLooper : public BLooper {
+public:
+	TLocateLooper()
+		:
+		BLooper("locate original")
+	{
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		sem_id done;
+		if (message->FindInt32("sem", &done) != B_OK)
+			done = fDone;
+		if (message->what == 'Gloc') {
+			entry_ref ref;
+			if (message->FindRef("refs", &ref) == B_OK)
+				fPath.SetTo(&ref);
+			release_sem(done);
+			return;
+		}
+		if (message->what == B_CANCEL) {
+			release_sem(fDone);
+			return;
+		}
+		BLooper::MessageReceived(message);
+	}
+
+	BPath fPath;
+	sem_id fDone = -1;
+};
 
 class TApp : public BApplication {
 public:
@@ -197,6 +232,43 @@ public:
 		delete bitmap;
 	}
 
+	// The original binary wasn't found: the user shows where it is (a
+	// file panel, waited for here), or quits.
+	bool LocateOriginal(BString error)
+	{
+		while (true) {
+			BAlert* alert = new BAlert("Gobe Productive", error.String(), "Quit", "Locate…",
+				NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
+			if (alert->Go() != 1)
+				return false;
+			TLocateLooper* looper = new TLocateLooper();
+			looper->fDone = create_sem(0, "locate");
+			looper->Run();
+			BMessage message('Gloc');
+			message.AddInt32("sem", looper->fDone);
+			BFilePanel* panel = new BFilePanel(B_OPEN_PANEL, NULL, NULL, B_FILE_NODE, false,
+				NULL, NULL, true, true);
+			panel->SetTarget(BMessenger(looper));
+			panel->SetMessage(&message);
+			panel->Window()->SetTitle("Where is \"Gobe Productive\"?");
+			panel->Show();
+			acquire_sem(looper->fDone);
+			BPath located = looper->fPath;
+			delete panel;
+			delete_sem(looper->fDone);
+			looper->Lock();
+			looper->Quit();
+			if (located.InitCheck() != B_OK)
+				continue;
+			error = "";
+			if (GobeResources::Use(located.Path(), error)) {
+				GobeResources::Remember();
+				return true;
+			}
+			error.Prepend("That isn't the original Gobe Productive program:\n");
+		}
+	}
+
 	// TApp::DoHelp, GetHelpFile: the application folder's "Help" (STR# 30,
 	// 1) "index.html" in the HTML viewer, else STR# 6, 0
 	void DoHelp()
@@ -290,9 +362,7 @@ public:
 	virtual void ReadyToRun()
 	{
 		BString error;
-		if (!GobeResources::Init(error)) {
-			BAlert* alert = new BAlert("Gobe Productive", error.String(), "Quit");
-			alert->Go();
+		if (!GobeResources::Init(error) && !LocateOriginal(error)) {
 			PostMessage(B_QUIT_REQUESTED);
 			return;
 		}

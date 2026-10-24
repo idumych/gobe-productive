@@ -15,10 +15,15 @@ extern const char* const kValueString;
 
 class GobeResources {
 public:
-	// Finds and loads the original binary: $GOBE_ORIGINAL, then
-	// "Gobe Productive" next to this executable, then in an "original"
-	// folder next to it. Returns false and fills error if none loads.
+	// Finds and loads the original binary: $GOBE_ORIGINAL, where it was
+	// found before, next to this executable (or in "original" there), the
+	// usual install folders, then a file named "Gobe Productive" on any
+	// volume. Returns false and fills error if none loads.
 	static bool Init(BString& error);
+	// loads the binary at `path` (false, with its error, if it doesn't);
+	// Remember keeps where it is for the next start
+	static bool Use(const char* path, BString& error);
+	static void Remember();
 
 	static const ResourceFile& File();
 	static const BString& Path();
