@@ -23,7 +23,7 @@ were made with.
 
 | Path | Contents |
 |------|----------|
-| `src/core/` | Portable C++17, no Haiku API: resource reader (`ResourceFile`, `RsrReader`, `Formats`), document reader (`DocArchive`, `DocSections`, `WPPart`, `GRPart`, `SSPart`, `IMPart`, `ChartPart`, `TablePart`, `DocWriter`, `Editing`, `PartTail`, `Formula`, `Styles`, `Document`), spreadsheet evaluation and cell formatting (`SSEval`, `SSStyle`). Builds and is tested on Linux. |
+| `src/core/` | Portable C++17, no Haiku API: resource reader (`ResourceFile`, `RsrReader`, `Formats`), document reader (`DocArchive`, `DocSections`, `WPPart`, `GRPart`, `SSPart`, `IMPart`, `ChartPart`, `TablePart`, `DocWriter`, `Editing`, `PartTail`, `Formula`, `Styles`, `StyleText`, `StyleEdit`, `Document`), spreadsheet evaluation and cell formatting (`SSEval`, `SSStyle`). Builds and is tested on Linux. |
 | `src/app/` | Haiku UI: `TApp`, `TDocWindow` (base menu bar), `TMenu`/`TMenuItem` (MENU resources), `TDialog` (DIAL + Item resources), `TPageView` (pages, frames, text, graphics, spreadsheets), `TDocView` (plain text fallback). |
 | `tests/` | Host tests against the original files (see below). |
 
@@ -92,17 +92,19 @@ Works:
   Dictionaries…, with the original's dictionaries); File > Preferences…
   (Application, Word Processing and Graphics panels, kept in the port's
   preferences file); Document > History… (the undo steps) with Set Undo
-  Levels….
+  Levels…; Document Size… for text; Format > Edit Styles… (the styles and
+  their properties, Modify Style…, Copy, Cut, Paste and Clear Style, and
+  formatting the chosen style).
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
 - Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
   charts (2D), images, tables, clocks and presentations (slides).
 
 Not yet: the ToolBar and the other ribbons; in the FormatBar the pattern
-and gradient inks, fill, pen and transparency, basic styles on text, Edit
-Styles and named selections; the thesaurus and dictionary (they need the
-BeOS goodies' data files), Document Size…, the add-on parts' preference
-panels, spell checking outside text parts,
-Views & Layers, Preferences, New Window, frames (creating, linking, autogrow), drawing tools,
+and gradient inks, fill, pen and transparency, basic styles on text and
+named selections; Edit Styles' Import and Export Styles; the thesaurus and
+dictionary (they need the BeOS goodies' data files), the add-on parts'
+preference panels, spell checking outside text parts,
+Views & Layers, New Window, frames (creating, linking, autogrow), drawing tools,
 spreadsheet menus beyond a few, new documents of other kinds, and the HTML,
 Word, Excel and SYLK translators. Documents saved by the port open in the
 port; they haven't been tried in BeOS Gobe Productive.
