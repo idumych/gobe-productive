@@ -1264,12 +1264,8 @@ TDocWindow::InstallBaseMenus()
 
 	bar->AddItem(new TMenu(6));
 
-	// Format menu (MENU 51): Paragraph, Insert Date, Insert Time
-	BMenu* format = new BMenu("Format");
-	format->AddItem(new BMenuItem("Paragraph…", new BMessage('sM50')));
-	format->AddItem(new BMenuItem("Insert Date…", new BMessage(kCmdInsertDate), 'D'));
-	format->AddItem(new BMenuItem("Insert Time…", new BMessage(kCmdInsertTime), 'T'));
-	bar->AddItem(format);
+	// the text part's Format menu (MENU 51)
+	bar->AddItem(new TMenu(51));
 
 	// Text menus (from the original's TTextMenuElement):
 	// Font (dynamic), Size (MENU 101), Face (MENU 102), Alignment (MENU 300)
@@ -1616,7 +1612,8 @@ TDocWindow::MessageReceived(BMessage* message)
 	if (fPages != NULL) {
 		uint32 what = message->what;
 		if (what == 'sM20' || what == 'sM21' || what == 'sM22' || what == 'sM23'
-			|| what == 'sM24') {
+			|| what == 'sM24' || what == 'sM52' || what == 'sM56' || what == 'sM57'
+			|| what == 'sM58' || what == 'sM59') {
 			fPages->MessageReceived(message);
 			return;
 		}

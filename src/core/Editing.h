@@ -31,8 +31,9 @@ size_t PreviousCharacter(const std::string& text, size_t offset);
 
 // Inserts UTF-8 text (no line breaks); returns the position after it.
 TextPosition InsertText(WPPart& part, TextPosition at, const std::string& text);
-// Deletes [from, to) within one paragraph; false if that would remove a
-// paragraph info's anchor (an embedded frame, a formula field, ...).
+// Deletes [from, to) within one paragraph (fields in it with it); false if
+// that would remove a paragraph info's anchor (an embedded frame, a
+// footnote).
 bool DeleteText(WPPart& part, TextPosition from, size_t to);
 // Enter: splits the paragraph; returns the start of the new one.
 TextPosition SplitParagraph(WPPart& part, TextPosition at);
@@ -43,7 +44,7 @@ bool JoinWithPrevious(WPPart& part, size_t paragraph, TextPosition& joined);
 // The plain text of a range ('\n' between paragraphs).
 std::string RangeText(const WPPart& part, TextPosition from, TextPosition to);
 // Deletes a range that may span paragraphs; false, with nothing changed, if
-// it would remove an anchor (frame, formula field, ...). Breaks (page,
+// it would remove an anchor (frame, footnote). Breaks (page,
 // column, section) are deleted like other characters.
 // `result` is where the range started.
 bool DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition& result);
@@ -54,6 +55,14 @@ TextPosition InsertMultiline(WPPart& part, TextPosition at, const std::string& t
 // like Enter, with that character as its terminator. Returns the position
 // after it.
 TextPosition InsertSpecialChar(WPPart& part, TextPosition at, char c);
+// a paragraph info that is a field (formula, page number, separator line):
+// it goes when its character is deleted
+bool IsField(const WPMiscInfo& info);
+// TWPPart::InsertMiscCharPrim: a field's character (0x04) at `at`, with its
+// paragraph info; a separator line (TMiscLineInfo) starts a paragraph, so
+// the paragraph is split first unless `at` is its start. Returns the
+// position after it.
+TextPosition InsertField(WPPart& part, TextPosition at, WPMiscInfo field);
 
 // Double click: [from, to) is the word, blank run or punctuation character
 // at `offset` (the one before it at the end of the text).

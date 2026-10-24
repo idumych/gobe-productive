@@ -1012,6 +1012,36 @@ TPageView::MessageReceived(BMessage* message)
 			RestoreViewState(v);
 			return;
 		}
+		// Format > Insert Page #, Insert Separator Line, Insert Line/Frame/
+		// Page Break (TWPPart::InsertSpecial, "Insert Special"); no frame or
+		// page breaks in a header or footer (+0x98 1-3)
+		case 'sM52':
+		case 'sM56':
+		case 'sM57':
+		case 'sM58':
+		case 'sM59': {
+			WPPart* wp = fCaret.active ? fDocument.EditableWordPart(fCaret.part) : NULL;
+			if (wp == NULL || ((message->what == 'sM58' || message->what == 'sM59')
+					&& wp->version98 >= 1 && wp->version98 <= 3)) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Insert Special", CurrentViewState());
+			TextPosition at{fCaret.paragraph, fCaret.offset};
+			wp = fDocument.EditableWordPart(fCaret.part);
+			if (message->what == 'sM52' || message->what == 'sM56') {
+				WPMiscInfo field{};
+				field.kind = message->what == 'sM52' ? Sig("PAGE") : Sig("LINE");
+				at = InsertField(*wp, at, field);
+			} else
+				at = InsertSpecialChar(*wp, at,
+					message->what == 'sM57' ? 0x01 : message->what == 'sM58' ? 0x02 : 0x0c);
+			fCaret.paragraph = at.paragraph;
+			fCaret.offset = at.offset;
+			fAnchor = fCaret;
+			TextChanged();
+			return;
+		}
 		// Font menu (TFormatCommand: 'sf01', "font", "style")
 		case 'sf01': {
 			if (!fCaret.active) {
@@ -1543,6 +1573,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 		} else if (command == "commit") {
 			EndCellEdit(true);
+		} else if (command.compare(0, 8, "special ") == 0 && command.size() == 12) {
+			// "special sM52": a Format > Insert command
+			const char* c = command.c_str() + 8;
+			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
+			MessageReceived(&msg);
 		} else if (command == "headerfooter 0" || command == "headerfooter 1") {
 			// Document > Insert/Remove Header (0), Footer (1)
 			ToggleHeaderFooter(command.back() - '0');

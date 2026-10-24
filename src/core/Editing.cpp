@@ -118,8 +118,14 @@ DeleteText(WPPart& part, TextPosition from, size_t to)
 	if (from.offset >= to)
 		return false;
 	for (const WPMiscInfo& m : p.misc)
-		if (m.position >= from.offset && m.position < to)
+		if (m.position >= from.offset && m.position < to && !IsField(m))
 			return false;
+	// fields go with their characters
+	for (auto it = p.misc.begin(); it != p.misc.end(); )
+		if (it->position >= from.offset && it->position < to)
+			it = p.misc.erase(it);
+		else
+			++it;
 	uint32_t n = uint32_t(to - from.offset);
 	p.text.erase(from.offset, n);
 	for (WPStyleRun& r : p.runs) {
@@ -286,7 +292,7 @@ DeleteRange(WPPart& part, TextPosition from, TextPosition to, TextPosition& resu
 		size_t a = i == from.paragraph ? from.offset : 0;
 		size_t b = i == to.paragraph ? to.offset : EditableLength(p);
 		for (const WPMiscInfo& m : p.misc)
-			if (m.position >= a && m.position < b)
+			if (m.position >= a && m.position < b && !IsField(m))
 				return false;
 	}
 
@@ -323,6 +329,31 @@ InsertMultiline(WPPart& part, TextPosition at, const std::string& text)
 			piece += c;
 	}
 	return at;
+}
+
+
+bool
+IsField(const WPMiscInfo& info)
+{
+	return info.kind == Sig("FORM") || info.kind == Sig("PAGE") || info.kind == Sig("LINE");
+}
+
+
+TextPosition
+InsertField(WPPart& part, TextPosition at, WPMiscInfo field)
+{
+	if (at.paragraph >= part.paragraphs.size())
+		return at;
+	at.offset = std::min(at.offset, EditableLength(part.paragraphs[at.paragraph]));
+	if (field.kind == Sig("LINE") && at.offset > 0)
+		at = SplitParagraph(part, at);
+	field.position = uint32_t(at.offset);
+	TextPosition after = InsertText(part, at, "\x04");
+	std::vector<WPMiscInfo>& misc = part.paragraphs[at.paragraph].misc;
+	auto it = std::find_if(misc.begin(), misc.end(),
+		[&](const WPMiscInfo& m) { return m.position > field.position; });
+	misc.insert(it, std::move(field));
+	return after;
 }
 
 

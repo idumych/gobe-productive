@@ -2,13 +2,16 @@
 // TMiscPageInfo::GetPageStr). Each formula field evaluated again shows what
 // the original showed when it saved the document (the result saved with
 // it, in its number format); Now() shows the current year; a page number is
-// its page's from 1, "#" off the pages. Arguments: the sample documents.
+// its page's from 1, "#" off the pages. Inserting fields
+// (TWPPart::InsertMiscCharPrim: a 0x04 character, a separator line in a
+// paragraph of its own) and deleting them. Arguments: the sample documents.
 #include <cstdio>
 #include <cstring>
 #include <ctime>
 #include <string>
 
 #include "Document.h"
+#include "Editing.h"
 #include "Fields.h"
 #include "SSEval.h"
 #include "SSStyle.h"
@@ -75,6 +78,56 @@ main(int argc, char** argv)
 	WPMiscInfo line{};
 	line.kind = Sig("LINE");
 	Check(FieldText(none, 0, line, 0).empty(), "a separator line shows no text");
+
+	// inserting: "Page #" and a separator line in the middle of "abcd"
+	Document doc;
+	std::string error;
+	CreateBlankDocument(doc, error);
+	WPPart* wp = doc.EditableWordPart(0);
+	TextPosition at = InsertText(*wp, {0, 0}, "Page ");
+	at = InsertField(*wp, at, page);
+	Check(wp->paragraphs[0].text == "Page \x04" && at.offset == 6
+		&& wp->paragraphs[0].misc.size() == 1 && wp->paragraphs[0].misc[0].position == 5,
+		"page number at 5");
+	at = SplitParagraph(*wp, at);
+	at = InsertText(*wp, at, "abcd");
+	at = InsertField(*wp, {1, 2}, line);
+	Check(wp->paragraphs.size() == 3 && wp->paragraphs[1].text == "ab\n"
+		&& wp->paragraphs[2].text == "\x04" "cd" && wp->paragraphs[2].misc.size() == 1
+		&& wp->paragraphs[2].misc[0].position == 0 && at.paragraph == 2 && at.offset == 1,
+		"the separator line starts a paragraph");
+	InsertText(*wp, {0, 0}, "My ");
+	Check(wp->paragraphs[0].misc[0].position == 8, "text before a field moves it");
+	std::string path = "/tmp/doc_fields.gobe";
+	Check(doc.Save(path, error), "save " + error);
+	const WPPart* back = doc.WordPart(0);
+	Check(back != nullptr && back->paragraphs[0].misc.size() == 1
+		&& back->paragraphs[0].misc[0].kind == Sig("PAGE")
+		&& back->paragraphs[0].misc[0].position == 8 && back->paragraphs[2].misc.size() == 1
+		&& back->paragraphs[2].misc[0].kind == Sig("LINE"), "saved and read back");
+	wp = doc.EditableWordPart(0);
+	Check(DeleteText(*wp, {0, 7}, 9) && wp->paragraphs[0].text == "My Page\n"
+		&& wp->paragraphs[0].misc.empty(), "deleting a field's character deletes the field");
+	remove(path.c_str());
+	// an embedded frame's anchor isn't deleted (that would take the frame)
+	int anchors = 0;
+	for (int i = 1; i < argc && anchors == 0; i++) {
+		Document d;
+		if (!LoadDocument(argv[i], d, error))
+			continue;
+		for (auto& [part, w] : d.wordParts)
+			for (size_t k = 0; k < w.paragraphs.size() && anchors == 0; k++)
+				for (const WPMiscInfo& m : w.paragraphs[k].misc)
+					if (m.kind == Sig("FRAM")) {
+						WPPart* e = d.EditableWordPart(part);
+						std::string before = e->paragraphs[k].text;
+						Check(!DeleteText(*e, {k, m.position}, m.position + 1)
+							&& e->paragraphs[k].text == before, "a frame's anchor stays");
+						anchors++;
+						break;
+					}
+	}
+	Check(anchors == 1, "a sample with an embedded frame");
 	printf("fields ok %d, failed %d\n", sOk, sFailed);
 	return sFailed > 0 ? 1 : 0;
 }

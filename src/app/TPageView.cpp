@@ -470,7 +470,10 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 		bool firstLine = true;
 		size_t paragraphIndex = &par - &wp->paragraphs[0];
 		size_t firstLineOfParagraph = fLines.size();
+		// a line moved to the next frame is laid out there (an empty one too)
+		bool moved = false;
 		do {
+			moved = false;
 			if (frameIndex >= frames.size()) {
 				result.overflow = true;
 				return result;
@@ -612,6 +615,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				y = frames[frameIndex].top;
 				if (!placed.empty())
 					t = placed.front().first;
+				moved = true;
 				continue;
 			}
 
@@ -665,7 +669,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			fLines.push_back(std::move(line));
 			y += height;
 			firstLine = false;
-		} while (t < tokens.size());
+		} while (t < tokens.size() || moved);
 		// each line runs to where the next one starts
 		for (size_t k = firstLineOfParagraph; k < fLines.size(); k++) {
 			if (k + 1 < fLines.size())
