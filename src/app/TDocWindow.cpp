@@ -1278,6 +1278,10 @@ TDocWindow::MessageReceived(BMessage* message)
 		case kCmdQuit:
 			be_app->PostMessage(B_QUIT_REQUESTED);
 			return;
+		case 'sM08':	// Help… (TApp::DoHelp)
+		case B_ABOUT_REQUESTED:
+			be_app->PostMessage(message->what);
+			return;
 	}
 
 	// Forward cell format/fill/wrap alignment commands to the page view

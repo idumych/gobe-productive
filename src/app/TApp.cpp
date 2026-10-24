@@ -7,6 +7,7 @@
 #include <string.h>
 
 #include <Alert.h>
+#include <Roster.h>
 #include <exception>
 #include <Application.h>
 #include <Entry.h>
@@ -27,6 +28,7 @@
 #include "GobeResources.h"
 #include "TDocWindow.h"
 #include "TPageView.h"
+#include "TDialogSplash.h"
 #include "TRecentDocs.h"
 #include "TTranslate.h"
 
@@ -136,8 +138,18 @@ public:
 			OpenPending();
 	}
 
+	// TApp::AboutRequested: the splash dialog
+	virtual void AboutRequested()
+	{
+		(new TDialogSplash())->Show();
+	}
+
 	virtual void MessageReceived(BMessage* message)
 	{
+		if (message->what == 'sM08') {	// Help…
+			DoHelp();
+			return;
+		}
 		if (message->what == 'sM01') {	// File > Open
 			if (fOpenPanel == NULL)
 				fOpenPanel = new BFilePanel(B_OPEN_PANEL);
@@ -183,6 +195,26 @@ public:
 		printf("render %s: %s\n", out.c_str(), strerror(status));
 		stream.DetachBitmap(&bitmap);
 		delete bitmap;
+	}
+
+	// TApp::DoHelp, GetHelpFile: the application folder's "Help" (STR# 30,
+	// 1) "index.html" in the HTML viewer, else STR# 6, 0
+	void DoHelp()
+	{
+		BPath folder(GobeResources::Path().String());
+		folder.GetParent(&folder);
+		BString file;
+		file << folder.Path() << "/" << GobeResources::IndexString(30, 1) << "/index.html";
+		if (!BEntry(file.String()).Exists()) {
+			BString message;
+			message.SetToFormat(GobeResources::IndexString(6, 0).String(), file.String());
+			(new BAlert("Help", message.String(), "OK"))->Go(NULL);
+			return;
+		}
+		BString url = "file://";
+		url << file;
+		const char* argv[] = {url.String(), NULL};
+		be_roster->Launch("text/html", 1, argv);
 	}
 
 	// Test hook: --do without --render runs the script in the window
