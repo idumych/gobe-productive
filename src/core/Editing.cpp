@@ -960,8 +960,76 @@ StyleUnionSet(const StyleMgr& styles, const Style& style)
 }
 
 
+TextFragment
+CopyFragment(const Document& doc, size_t part, TextPosition from, TextPosition to)
+{
+	TextFragment fragment;
+	const WPPart* wp = doc.WordPart(part);
+	if (to.paragraph < from.paragraph
+			|| (to.paragraph == from.paragraph && to.offset < from.offset))
+		std::swap(from, to);
+	if (wp == nullptr || from.paragraph >= wp->paragraphs.size())
+		return fragment;
+	to.paragraph = std::min(to.paragraph, wp->paragraphs.size() - 1);
+	for (size_t k = from.paragraph; k <= to.paragraph; k++) {
+		const WPParagraph& p = wp->paragraphs[k];
+		size_t length = EditableLength(p);
+		size_t a = k == from.paragraph ? std::min(from.offset, length) : 0;
+		size_t b = k == to.paragraph ? std::min(to.offset, length) : length;
+		if (k > from.paragraph)
+			fragment.text += '\n';
+		fragment.paragraphs.push_back(ParagraphFormat(doc.styles, p.parStyle));
+		// the paragraph's text without 0x04, and where each offset went
+		std::vector<size_t> at(b - a + 1);
+		std::string text;
+		for (size_t i = a; i < b; i++) {
+			at[i - a] = text.size();
+			if (p.text[i] != 0x04)
+				text += p.text[i];
+		}
+		at[b - a] = text.size();
+		fragment.text += text;
+		for (size_t r = 0; r < p.runs.size(); r++) {
+			size_t start = std::max<size_t>(a, p.runs[r].position);
+			size_t end = std::min(b, r + 1 < p.runs.size() ? size_t(p.runs[r + 1].position)
+				: length);
+			if (start >= end || at[start - a] >= at[end - a])
+				continue;
+			fragment.runs.push_back({k - from.paragraph, at[start - a], at[end - a],
+				CharacterFormat(doc.styles, p.runs[r].style)});
+		}
+	}
+	return fragment;
+}
+
+
+TextPosition
+PasteFragment(Document& doc, size_t part, TextPosition at, const TextFragment& fragment)
+{
+	WPPart* wp = doc.EditableWordPart(part);
+	if (wp == nullptr || at.paragraph >= wp->paragraphs.size())
+		return at;
+	at.offset = std::min(at.offset, EditableLength(wp->paragraphs[at.paragraph]));
+	TextPosition after = InsertMultiline(*wp, at, fragment.text);
+	for (size_t k = 1; k < fragment.paragraphs.size(); k++)
+		for (const Property& property : fragment.paragraphs[k])
+			ApplyParagraphProperty(doc, part, at.paragraph + k, at.paragraph + k, property);
+	for (const TextFragment::Run& run : fragment.runs) {
+		size_t paragraph = at.paragraph + run.paragraph;
+		size_t base = run.paragraph == 0 ? at.offset : 0;
+		for (const Property& property : run.properties)
+			ApplyCharacterProperty(doc, part, {paragraph, base + run.from},
+				{paragraph, base + run.to}, property);
+	}
+	return after;
+}
+
+
+namespace {
+
+// a style's properties, own and inherited, of paragraph types or not
 std::vector<Property>
-CharacterFormat(const StyleMgr& styles, uint32_t style)
+StyleFormat(const StyleMgr& styles, uint32_t style, bool paragraphTypes)
 {
 	// ParagraphPropTypes: what TWPPartFactory::CreateProperty makes
 	static const char* const kParagraph[17] = {"PLef", "PRig", "PInd", "PTab", "PAlg", "PWid",
@@ -969,10 +1037,17 @@ CharacterFormat(const StyleMgr& styles, uint32_t style)
 	std::vector<Property> format;
 	if (style >= styles.styles.size())
 		return format;
-	// its own properties, then what it inherits (the union set)
+	// its own properties, then what it inherits (the union set) and doesn't
+	// set itself
 	std::vector<uint32_t> all = styles.styles[style].props;
-	for (uint32_t index : StyleUnionSet(styles, styles.styles[style]))
-		all.push_back(index);
+	for (uint32_t index : StyleUnionSet(styles, styles.styles[style])) {
+		bool own = false;
+		for (uint32_t mine : styles.styles[style].props)
+			own = own || (index < styles.properties.size() && mine < styles.properties.size()
+				&& Replaces(styles.properties[mine], styles.properties[index]));
+		if (!own)
+			all.push_back(index);
+	}
 	for (uint32_t index : all) {
 		if (index >= styles.properties.size())
 			continue;
@@ -981,10 +1056,26 @@ CharacterFormat(const StyleMgr& styles, uint32_t style)
 		for (const char* t : kParagraph)
 			paragraph = paragraph || p.type == (uint32_t(uint8_t(t[0])) << 24
 				| uint32_t(uint8_t(t[1])) << 16 | uint32_t(uint8_t(t[2])) << 8 | uint8_t(t[3]));
-		if (!paragraph)
+		if (paragraph == paragraphTypes)
 			format.push_back(p);
 	}
 	return format;
+}
+
+} // namespace
+
+
+std::vector<Property>
+CharacterFormat(const StyleMgr& styles, uint32_t style)
+{
+	return StyleFormat(styles, style, false);
+}
+
+
+std::vector<Property>
+ParagraphFormat(const StyleMgr& styles, uint32_t style)
+{
+	return StyleFormat(styles, style, true);
 }
 
 

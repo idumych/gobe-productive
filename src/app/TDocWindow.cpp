@@ -1212,6 +1212,20 @@ TDocWindow::MessageReceived(BMessage* message)
 				fPages->RunScript(script, *fDocument);
 			return;
 		}
+		case 'sM1B':
+		{
+			// File > Insert…: the open panel, then the chosen file
+			if (message->HasRef("refs")) {
+				if (fPages != NULL)
+					fPages->MessageReceived(message);
+				return;
+			}
+			if (fInsertPanel == NULL)
+				fInsertPanel = new BFilePanel(B_OPEN_PANEL, new BMessenger(this), NULL,
+					B_FILE_NODE, false, new BMessage('sM1B'));
+			fInsertPanel->Show();
+			return;
+		}
 		case kCmdInsertHeader:
 		case kCmdInsertFooter:
 			if (fPages != NULL)

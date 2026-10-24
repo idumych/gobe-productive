@@ -107,9 +107,31 @@ bool UpdateDependencies(Document& doc, size_t part);
 // keeps them (by type, tabs by position). Styles store it (props2) and the
 // original uses it as stored.
 std::vector<uint32_t> StyleUnionSet(const StyleMgr& styles, const Style& style);
+// A piece of styled text (copied, or a file inserted): its text, '\n'
+// between paragraphs, and each run's character properties (CharacterFormat).
+// Field and note characters (0x04) are left out (their paragraph infos
+// aren't copied).
+struct TextFragment {
+	struct Run {
+		size_t paragraph, from, to;		// in the fragment
+		std::vector<Property> properties;
+	};
+	std::string text;
+	std::vector<Run> runs;
+	// each paragraph's paragraph properties (given to the pasted paragraphs
+	// that start in the fragment: all but the first)
+	std::vector<std::vector<Property>> paragraphs;
+};
+TextFragment CopyFragment(const Document& doc, size_t part, TextPosition from, TextPosition to);
+// Inserts a fragment at `at`, each run getting its properties; returns the
+// position after it.
+TextPosition PasteFragment(Document& doc, size_t part, TextPosition at,
+	const TextFragment& fragment);
 // Edit > Copy Format in text (TPart::CopyFormat, StripParagraphProperties):
 // a style's properties, its own and inherited, but the paragraph ones
 std::vector<Property> CharacterFormat(const StyleMgr& styles, uint32_t style);
+// the paragraph properties of a style, its own and inherited
+std::vector<Property> ParagraphFormat(const StyleMgr& styles, uint32_t style);
 // TPropsTable's order: by type, tabs by position.
 void SortProps(const StyleMgr& styles, std::vector<uint32_t>& props);
 // Whether a property list is in TPropsTable's order.

@@ -180,6 +180,7 @@ private:
 	BStringView* fStatus;
 	Document* fDocument = NULL;
 	class TPageView* fPages = NULL;
+	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
 	BFilePanel* fSavePanel = NULL;
 	BMenuField* fFormatField = NULL;	// the Save panel's "File Format"
 	bool fModified = false;

@@ -10,6 +10,7 @@
 #include <Alert.h>
 #include <Beep.h>
 #include <Clipboard.h>
+#include <Path.h>
 #include <Window.h>
 
 #include <algorithm>
@@ -22,6 +23,7 @@
 #include "Notes.h"
 #include "GobeResources.h"
 #include "TDocView.h"
+#include "TTranslate.h"
 #include "TWPDialogs.h"
 #include "SSStyle.h"
 #include "SSEval.h"
@@ -32,6 +34,8 @@ namespace gobe {
 
 // Copy Format's properties (the application's, TApp +0x184)
 static std::vector<Property> sCopiedFormat;
+// the text last copied with its styles (the clipboard has its plain text)
+static TextFragment sCopiedText;
 
 static const uint32 kMsgCellCommit = 'Gcel';
 static const uint32 kMsgCellCancel = 'Gccl';
@@ -281,7 +285,9 @@ TPageView::CopySelection()
 	TextPosition from, to;
 	if (!TextSelection(from, to))
 		return;
-	std::string s = RangeText(*fDocument.WordPart(fCaret.part), from, to);
+	// the styled text for pasting here; its text for everyone
+	sCopiedText = CopyFragment(fDocument, fCaret.part, from, to);
+	std::string s = sCopiedText.text;
 	be_clipboard->Lock();
 	be_clipboard->Clear();
 	be_clipboard->Data()->AddData("text/plain", B_MIME_TYPE, s.data(), s.size());
@@ -304,8 +310,11 @@ TPageView::PasteText()
 		TextPosition from, to;
 		if (TextSelection(from, to) && !DeleteSelection())
 			return;
-		TextPosition at = InsertMultiline(*fDocument.EditableWordPart(fCaret.part),
-			{fCaret.paragraph, fCaret.offset}, text);
+		// what was copied here keeps its styles
+		TextPosition at = text == sCopiedText.text
+			? PasteFragment(fDocument, fCaret.part, {fCaret.paragraph, fCaret.offset}, sCopiedText)
+			: InsertMultiline(*fDocument.EditableWordPart(fCaret.part),
+				{fCaret.paragraph, fCaret.offset}, text);
 		fCaret = {true, fCaret.part, at.paragraph, at.offset};
 		fAnchor = fCaret;
 		TextChanged();
@@ -1159,6 +1168,49 @@ TPageView::MessageReceived(BMessage* message)
 			fDocument.documentFlagsChanged = true;
 			Invalidate();
 			return;
+		// File > Insert… in text (TDocWindow, TWPPart: "insert" at the
+		// insertion point): a text or RTF file's text, with its styles,
+		// where the caret is
+		case 'sM1B': {
+			entry_ref ref;
+			const char* path = NULL;
+			BPath refPath;
+			if (message->FindRef("refs", &ref) == B_OK && refPath.SetTo(&ref) == B_OK)
+				path = refPath.Path();
+			else
+				message->FindString("path", &path);
+			if (path == NULL || !fCaret.active || fDocument.WordPart(fCaret.part) == NULL) {
+				beep();
+				return;
+			}
+			FileKind kind = IdentifyFile(path);
+			Document inserted;
+			BString error, warning;
+			if ((kind != kTextFile && kind != kRTFFile && kind != kTableFile)
+					|| !ImportFile(path, kind, inserted, error, warning)) {
+				// (a Gobe document goes in as a frame: not ported)
+				beep();
+				return;
+			}
+			int part = inserted.MainPart();
+			const WPPart* text = part >= 0 ? inserted.WordPart(size_t(part)) : NULL;
+			if (text == NULL || text->paragraphs.empty()) {
+				beep();
+				return;
+			}
+			TextFragment fragment = CopyFragment(inserted, size_t(part), {0, 0},
+				{text->paragraphs.size() - 1, EditableLength(text->paragraphs.back())});
+			fUndo.Begin(fDocument, fCaret.part, "Insert", CurrentViewState());
+			TextPosition from, to;
+			if (TextSelection(from, to) && !DeleteSelection())
+				return;
+			TextPosition at = PasteFragment(fDocument, fCaret.part,
+				{fCaret.paragraph, fCaret.offset}, fragment);
+			fCaret = {true, fCaret.part, at.paragraph, at.offset};
+			fAnchor = fCaret;
+			TextChanged();
+			return;
+		}
 		// Writing Tools > Word Count… (TDocWindow, TWordCountDialog): the
 		// selected text's, else the whole document's
 		case 'sM29': {
@@ -2537,6 +2589,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
 				style.tabs[nearestIdx].position);
 			TextChanged();
+		} else if (command.compare(0, 7, "insert ") == 0) {
+			// "insert path": File > Insert… with that file chosen
+			BMessage insert('sM1B');
+			insert.AddString("path", command.c_str() + 7);
+			MessageReceived(&insert);
 		} else if (command.compare(0, 11, "paraformat ") == 0) {
 			// "paraformat L F R S Sl B Bl A Al align": what Paragraph…'s OK
 			// sends (points; spacings in lines when their flag is 1)
