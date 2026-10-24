@@ -1242,7 +1242,18 @@ TDocWindow::MessageReceived(BMessage* message)
 			return;
 		case kCmdRevert:
 		{
-			if (fDocument == NULL || !fModified)
+			if (fDocument == NULL || !fModified || fDocument->path.empty())
+				return;
+			// TDoc::RevertAlert: "Revert “name” to last saved version?",
+			// Cancel (Esc) or Revert
+			BString text = GobeResources::IndexString(2, 17);
+			text << fDocument->name.c_str() << GobeResources::IndexString(2, 18);
+			BAlert* alert = new BAlert("Revert", text.String(),
+				GobeResources::IndexString(2, 1).String(),
+				GobeResources::IndexString(2, 16).String(), NULL, B_WIDTH_AS_USUAL,
+				B_WARNING_ALERT);
+			alert->SetShortcut(0, B_ESCAPE);
+			if (alert->Go() != 1)
 				return;
 			Document fresh;
 			std::string error;
