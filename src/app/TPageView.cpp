@@ -411,6 +411,7 @@ TPageView::LayoutText()
 					line.baseline += repeat.dy;
 					line.center += BPoint(repeat.dx, repeat.dy);
 					line.clip.OffsetBy(repeat.dx, repeat.dy);
+					line.textFrame.OffsetBy(repeat.dx, repeat.dy);
 					// a page number shows this page's
 					for (Line::Piece& piece : line.pieces)
 						if (piece.field == Sig("PAGE"))
@@ -912,6 +913,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			line.angle = geometry[frameIndex].angle;
 			line.center = frame.LeftTop() + BPoint(frame.Width() / 2, frame.Height() / 2);
 			line.clip = geometry[frameIndex].clip;
+			line.textFrame = frame;
 			for (size_t k = 0; k < placed.size(); k++) {
 				const Token& tk = tokens[placed[k].first];
 				Line::Piece piece{tk.text, tk.font, tk.color,

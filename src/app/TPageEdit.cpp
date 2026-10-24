@@ -273,6 +273,28 @@ TPageView::HitText(BPoint where, Caret& caret) const
 		caret = {true, line.part, line.paragraph, best};
 		return true;
 	}
+	// in a text frame but off its lines (below the text, in a margin): the
+	// end of the last line above, else the start of the first one
+	const Line* above = NULL;
+	const Line* first = NULL;
+	for (const Line& line : fLines) {
+		if (line.angle != 0 || !line.textFrame.Contains(where)
+				|| fDocument.WordPart(line.part) == NULL)
+			continue;
+		if (line.frame.top <= where.y && (above == NULL || line.frame.top >= above->frame.top))
+			above = &line;
+		if (first == NULL || line.frame.top < first->frame.top)
+			first = &line;
+	}
+	if (above != NULL) {
+		const WPParagraph& p = fDocument.WordPart(above->part)->paragraphs[above->paragraph];
+		caret = {true, above->part, above->paragraph, std::min(above->to, EditableLength(p))};
+		return true;
+	}
+	if (first != NULL) {
+		caret = {true, first->part, first->paragraph, first->from};
+		return true;
+	}
 	return false;
 }
 

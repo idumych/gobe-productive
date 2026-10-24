@@ -211,6 +211,7 @@ private:
 		float angle;				// of the frame it is in
 		BPoint center;				// rotation center
 		BRect clip;					// document coordinates
+		BRect textFrame;			// the text frame it is in (view coordinates)
 		// the text it shows: part, paragraph, byte offsets [from, to)
 		size_t part = 0, paragraph = 0, from = 0, to = 0;
 		struct Piece {

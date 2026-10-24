@@ -315,7 +315,9 @@ public:
 	bool LocateOriginal(BString error)
 	{
 		while (true) {
-			BAlert* alert = new BAlert("Gobe Productive", error.String(), "Quit", "Locate…",
+			// (titled with the app's name: on Linux it's the window title
+			// the desktop and the release smoke tests see)
+			BAlert* alert = new BAlert("GobeProductive", error.String(), "Quit", "Locate…",
 				NULL, B_WIDTH_AS_USUAL, B_WARNING_ALERT);
 			if (alert->Go() != 1)
 				return false;
