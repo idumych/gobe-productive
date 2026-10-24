@@ -89,16 +89,19 @@ Works:
   FormatBar and PartBar; zoom (the zoom tool, Fit to Window) and the page
   indicator; Document > Page View off (the browse view); spell checking
   (Document > Spell Check, the SpellBar, the PartBar's button and Spell
-  Dictionaries…, with the original's dictionaries; the chosen dictionaries
-  last until the port quits).
+  Dictionaries…, with the original's dictionaries); File > Preferences…
+  (Application, Word Processing and Graphics panels, kept in the port's
+  preferences file); Document > History… (the undo steps) with Set Undo
+  Levels….
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
 - Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
   charts (2D), images, tables, clocks and presentations (slides).
 
 Not yet: the ToolBar and the other ribbons; in the FormatBar the pattern
 and gradient inks, fill, pen and transparency, basic styles on text, Edit
-Styles and named selections; the thesaurus and dictionary, spell checking
-outside text parts,
+Styles and named selections; the thesaurus and dictionary (they need the
+BeOS goodies' data files), Document Size…, the add-on parts' preference
+panels, spell checking outside text parts,
 Views & Layers, Preferences, New Window, frames (creating, linking, autogrow), drawing tools,
 spreadsheet menus beyond a few, new documents of other kinds, and the HTML,
 Word, Excel and SYLK translators. Documents saved by the port open in the
