@@ -1628,6 +1628,20 @@ TDocWindow::MenusBeginning()
 		for (uint32 command : {'sM30', 'sM32', 'sM33', 'sM34', 'sM35', 'sM36'})
 			enable(command, false);
 	}
+	// TWPPart::FixMenus: Columns… in the main text with Page View on;
+	// Insert Footnote…, Frame Break and Page Break not in a header, footer
+	// or note (a part of kind 1 to 3)
+	if (fPages != NULL && fPages->fCaret.active && fDocument != NULL) {
+		if (const WPPart* wp = fDocument->WordPart(fPages->fCaret.part)) {
+			bool main = int(fPages->fCaret.part) == fDocument->MainPart();
+			if (BMenuItem* item = KeyMenuBar()->FindItem('sM51'))
+				item->SetEnabled(main && fPages->PageView());
+			bool body = uint16(wp->version98 - 1) > 2;
+			for (uint32 command : {'sM5I', 'sM58', 'sM59'})
+				if (BMenuItem* item = KeyMenuBar()->FindItem(command))
+					item->SetEnabled(body);
+		}
+	}
 	// TNormalDocWinHelper::FixMenus: Find Again and Replace All with a find
 	// string, Find Selection with text selected, Replace & Find with both
 	{
