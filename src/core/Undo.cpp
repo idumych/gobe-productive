@@ -185,4 +185,16 @@ UndoStack::SetLimit(size_t steps)
 		fUndo.erase(fUndo.begin(), fUndo.begin() + long(fUndo.size() - fLimit));
 }
 
+std::vector<std::string>
+UndoStack::Labels(size_t& done) const
+{
+	std::vector<std::string> labels;
+	for (const auto& step : fUndo)
+		labels.push_back(step->label);
+	done = labels.size();
+	for (auto it = fRedo.rbegin(); it != fRedo.rend(); ++it)
+		labels.push_back((*it)->label);
+	return labels;
+}
+
 } // namespace gobe

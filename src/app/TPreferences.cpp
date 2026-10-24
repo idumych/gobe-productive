@@ -18,6 +18,7 @@
 #include <cstdlib>
 
 #include "GobeResources.h"
+#include "TDocWindow.h"
 #include "TSpellBar.h"
 
 namespace gobe {
@@ -385,11 +386,32 @@ TDialogPrefs::ItemHit(int32 index, BMessage* message)
 {
 	switch (index) {
 		case 0:
+		{
 			if (fChanged)
 				SavePreferences();
+			// TAppPrefs::PrefSave: the front document's history size and
+			// ruler as the preferences changed them
+			const Preferences& p = AppPreferences();
+			if (TDocWindow* window = TDocWindow::Front()) {
+				if (p.undoCount != fBackup.undoCount || p.unlimitedUndo != fBackup.unlimitedUndo) {
+					BMessage levels('sM2D');
+					levels.AddInt32(kValueString, p.undoCount);
+					window->PostMessage(&levels);
+				}
+				if (p.measureUnits != fBackup.measureUnits
+						|| p.rulerDivisions != fBackup.rulerDivisions) {
+					BMessage ruler('s00L');
+					if (p.measureUnits != fBackup.measureUnits)
+						ruler.AddInt32(kValueString, p.measureUnits);
+					if (p.rulerDivisions != fBackup.rulerDivisions)
+						ruler.AddInt32("rulerDivisions", p.rulerDivisions);
+					window->PostMessage(&ruler);
+				}
+			}
 			fBackup = AppPreferences();
 			PanelClose();
 			break;
+		}
 		case 1:
 			PanelClose();
 			break;

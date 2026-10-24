@@ -523,6 +523,12 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	BWindow(frame, title, B_DOCUMENT_WINDOW, B_AUTO_UPDATE_SIZE_LIMITS)
 {
 	sWindows.insert(sWindows.begin(), this);
+	// the floaters' subsets take the new window (TFloaterMgr 'sE05')
+	if (TDialogHistory* history = TDialogHistory::Open()) {
+		BMessage add('sE05');
+		add.AddPointer("window", this);
+		history->PostMessage(&add);
+	}
 	TMenuBar* menuBar = InstallBaseMenus();
 	// a test aid, not the original's: every DIAL resource, with
 	// GOBE_DEBUG_MENUS set
@@ -735,32 +741,32 @@ TDocWindow::InstallBaseMenus()
 		// Cell Format submenu
 		BMenu* formatMenu = new BMenu("Cell Format");
 		{
-			BMessage* m = new BMessage('sM22');
+			BMessage* m = new BMessage('GcNF');
 			m->AddString("value", "");
 			formatMenu->AddItem(new BMenuItem("None", m));
 		}
 		{
-			BMessage* m = new BMessage('sM22');
+			BMessage* m = new BMessage('GcNF');
 			m->AddString("value", "0.00");
 			formatMenu->AddItem(new BMenuItem("0.00", m));
 		}
 		{
-			BMessage* m = new BMessage('sM22');
+			BMessage* m = new BMessage('GcNF');
 			m->AddString("value", "0.00%");
 			formatMenu->AddItem(new BMenuItem("0.00%", m));
 		}
 		{
-			BMessage* m = new BMessage('sM22');
+			BMessage* m = new BMessage('GcNF');
 			m->AddString("value", "0E+00");
 			formatMenu->AddItem(new BMenuItem("0E+00", m));
 		}
 		{
-			BMessage* m = new BMessage('sM22');
+			BMessage* m = new BMessage('GcNF');
 			m->AddString("value", "$#,##0");
 			formatMenu->AddItem(new BMenuItem("$#,##0", m));
 		}
 		{
-			BMessage* m = new BMessage('sM22');
+			BMessage* m = new BMessage('GcNF');
 			m->AddString("value", "#,##0.00");
 			formatMenu->AddItem(new BMenuItem("#,##0.00", m));
 		}
@@ -769,32 +775,32 @@ TDocWindow::InstallBaseMenus()
 		// Cell Fill submenu
 		BMenu* fillMenu = new BMenu("Cell Fill");
 		{
-			BMessage* m = new BMessage('sM23');
+			BMessage* m = new BMessage('GcFL');
 			m->AddInt32("red", 255); m->AddInt32("green", 255); m->AddInt32("blue", 255);
 			fillMenu->AddItem(new BMenuItem("None", m));
 		}
 		{
-			BMessage* m = new BMessage('sM23');
+			BMessage* m = new BMessage('GcFL');
 			m->AddInt32("red", 255); m->AddInt32("green", 0); m->AddInt32("blue", 0);
 			fillMenu->AddItem(new BMenuItem("Red", m));
 		}
 		{
-			BMessage* m = new BMessage('sM23');
+			BMessage* m = new BMessage('GcFL');
 			m->AddInt32("red", 255); m->AddInt32("green", 255); m->AddInt32("blue", 0);
 			fillMenu->AddItem(new BMenuItem("Yellow", m));
 		}
 		{
-			BMessage* m = new BMessage('sM23');
+			BMessage* m = new BMessage('GcFL');
 			m->AddInt32("red", 0); m->AddInt32("green", 255); m->AddInt32("blue", 0);
 			fillMenu->AddItem(new BMenuItem("Green", m));
 		}
 		{
-			BMessage* m = new BMessage('sM23');
+			BMessage* m = new BMessage('GcFL');
 			m->AddInt32("red", 0); m->AddInt32("green", 0); m->AddInt32("blue", 255);
 			fillMenu->AddItem(new BMenuItem("Blue", m));
 		}
 		{
-			BMessage* m = new BMessage('sM23');
+			BMessage* m = new BMessage('GcFL');
 			m->AddInt32("red", 255); m->AddInt32("green", 255); m->AddInt32("blue", 255);
 			fillMenu->AddItem(new BMenuItem("White", m));
 		}
@@ -803,17 +809,17 @@ TDocWindow::InstallBaseMenus()
 		// Cell Align Horizontal
 		BMenu* hAlignMenu = new BMenu("Align Horizontal");
 		{
-			BMessage* m = new BMessage('sM20');
+			BMessage* m = new BMessage('GcHA');
 			m->AddInt32("value", 0);
 			hAlignMenu->AddItem(new BMenuItem("Left", m));
 		}
 		{
-			BMessage* m = new BMessage('sM20');
+			BMessage* m = new BMessage('GcHA');
 			m->AddInt32("value", 1);
 			hAlignMenu->AddItem(new BMenuItem("Center", m));
 		}
 		{
-			BMessage* m = new BMessage('sM20');
+			BMessage* m = new BMessage('GcHA');
 			m->AddInt32("value", 2);
 			hAlignMenu->AddItem(new BMenuItem("Right", m));
 		}
@@ -822,17 +828,17 @@ TDocWindow::InstallBaseMenus()
 		// Cell Align Vertical
 		BMenu* vAlignMenu = new BMenu("Align Vertical");
 		{
-			BMessage* m = new BMessage('sM21');
+			BMessage* m = new BMessage('GcVA');
 			m->AddInt32("value", 0);
 			vAlignMenu->AddItem(new BMenuItem("Top", m));
 		}
 		{
-			BMessage* m = new BMessage('sM21');
+			BMessage* m = new BMessage('GcVA');
 			m->AddInt32("value", 1);
 			vAlignMenu->AddItem(new BMenuItem("Center", m));
 		}
 		{
-			BMessage* m = new BMessage('sM21');
+			BMessage* m = new BMessage('GcVA');
 			m->AddInt32("value", 2);
 			vAlignMenu->AddItem(new BMenuItem("Bottom", m));
 		}
@@ -841,7 +847,7 @@ TDocWindow::InstallBaseMenus()
 		options->AddSeparatorItem();
 		// Wrap Text toggle
 		{
-			BMessage* m = new BMessage('sM24');
+			BMessage* m = new BMessage('GcWR');
 			m->AddInt32("value", 1);
 			options->AddItem(new BMenuItem("Wrap Text", m));
 		}
@@ -884,6 +890,7 @@ TDocWindow::MessageReceived(BMessage* message)
 				fModified = true;
 				UpdateTitle();
 			}
+			TDialogHistory::Refresh();
 			return;
 		// the zoom tool (TDocWindow::ScaleTo)
 		case 's003':
@@ -1145,8 +1152,8 @@ TDocWindow::MessageReceived(BMessage* message)
 	// Forward cell format/fill/wrap alignment commands to the page view
 	if (fPages != NULL) {
 		uint32 what = message->what;
-		if (what == 'sM20' || what == 'sM21' || what == 'sM22' || what == 'sM23'
-			|| what == 'sM24' || what == 'sM52' || what == 'sM56' || what == 'sM57'
+		if (what == 'GcHA' || what == 'GcVA' || what == 'GcNF' || what == 'GcFL'
+			|| what == 'GcWR' || what == 'sM52' || what == 'sM56' || what == 'sM57'
 			|| what == 'sM58' || what == 'sM59' || what == 'sM55' || what == 'sM51'
 			|| what == 'sM5I' || what == 'sM5K' || what == 'sM16' || what == 'sM17'
 			|| what == 'sM29' || what == 'sM5J') {
@@ -1270,6 +1277,39 @@ TDocWindow::MessageReceived(BMessage* message)
 			(new BAlert("", text.String(), "OK"))->Go(NULL);
 		} else if (fStatus != NULL)
 			fStatus->SetText("The thesaurus and dictionary dialogs are not ported yet");
+		return;
+	}
+	// Document > History… (a floater) and its Options (THistory::
+	// HandleMessage): Set Undo Levels (with "value" the history's size, the
+	// document changed; else the dialog), Clear History (the document
+	// changed), Show Undo Steps
+	if (message->what == 'sM24') {
+		if (TDialogHistory* history = TDialogHistory::Open())
+			history->Activate(true);
+		else
+			(new TDialogHistory())->RunDialog();
+		return;
+	}
+	if (message->what == 'sM2D' || message->what == 'sM2E' || message->what == 'sM2F') {
+		if (fPages == NULL)
+			return;
+		int32 levels;
+		if (message->what == 'sM2D') {
+			if (message->FindInt32(kValueString, &levels) != B_OK) {
+				size_t limit = fPages->fUndo.Limit();
+				(new TDialogHistorySize(this, limit == 0 ? 20 : int32(limit)))->RunDialog();
+				return;
+			}
+			fPages->fUndo.SetLimit(size_t(std::max<int32>(1, levels)));
+			fModified = true;
+			UpdateTitle();
+		} else if (message->what == 'sM2E') {
+			fPages->fUndo.Clear();
+			fModified = true;
+			UpdateTitle();
+		} else
+			fPages->fShowUndoSteps = !fPages->fShowUndoSteps;
+		TDialogHistory::Refresh();
 		return;
 	}
 	// File > Preferences… (TDocWindow: TDialogPrefs)
@@ -1790,6 +1830,7 @@ TDocWindow::WindowActivated(bool active)
 		sWindows.insert(sWindows.begin(), this);
 		if (TDialogFindChange* find = TDialogFindChange::Open())
 			find->PostMessage('sD=L');
+		TDialogHistory::Refresh();
 	}
 }
 
@@ -1799,6 +1840,19 @@ TDocWindow*
 TDocWindow::Front()
 {
 	return sWindows.empty() ? NULL : sWindows.front();
+}
+
+
+void
+TDocWindow::HistoryState(std::vector<std::string>& labels, size_t& done, bool& show) const
+{
+	labels.clear();
+	done = 0;
+	show = false;
+	if (fPages == NULL)
+		return;
+	labels = fPages->fUndo.Labels(done);
+	show = fPages->fShowUndoSteps;
 }
 
 

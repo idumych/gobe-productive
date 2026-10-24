@@ -129,6 +129,8 @@ public:
 	static TDocWindow* Front();
 	// the active part has text selected (TFindReplace::hasTextSelection)
 	bool HasTextSelection() const;
+	// THistory: the steps' labels, how many are done, Show Undo Steps
+	void HistoryState(std::vector<std::string>& labels, size_t& done, bool& show) const;
 
 	// Called from TPageView after text style changes to update marks.
 	// `family` is the current font family (empty = default).

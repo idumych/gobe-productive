@@ -12,6 +12,7 @@
 #include "Url.h"
 #include "Find.h"
 #include "TPreferences.h"
+#include "TDocumentDialogs.h"
 #include "TWPRuler.h"
 
 #include <Alert.h>
@@ -54,13 +55,14 @@ static const uint32 kMsgCellCancel = 'Gccl';
 static const uint32 kCmdInsertColumns = 'Gicl';
 static const uint32 kCmdDeleteColumns = 'Gdcl';
 
-// Cell format menu commands: value_message = 'sM20' (HAln), 'sM21' (VAln),
-// 'sM22' (number format), 'sM23' (fill color), 'sM24' (wrap).
-static const uint32 kCmdCellHAlign = 'sM20';
-static const uint32 kCmdCellVAlign = 'sM21';
-static const uint32 kCmdCellFormat = 'sM22';
-static const uint32 kCmdCellFill = 'sM23';
-static const uint32 kCmdCellWrap = 'sM24';
+// the port's stand-in cell format commands (the Spreadsheet add-on's
+// menus aren't ported; private codes: the original's 'sM20'..'sM24' are
+// the Document menu's)
+static const uint32 kCmdCellHAlign = 'GcHA';
+static const uint32 kCmdCellVAlign = 'GcVA';
+static const uint32 kCmdCellFormat = 'GcNF';
+static const uint32 kCmdCellFill = 'GcFL';
+static const uint32 kCmdCellWrap = 'GcWR';
 
 
 // the in-place cell editor
@@ -1389,24 +1391,32 @@ TPageView::MessageReceived(BMessage* message)
 			return;
 		case 'sM10':	// Undo
 		case 'sM11': {	// Redo
+			// THistory::HandleMessage: "value" steps (1), each shown when
+			// "show" (else the history's Show Undo Steps) is on
 			if (fCellEditor != NULL)
 				EndCellEdit(true);
-			UndoStack::ViewState v = CurrentViewState();
-			int part = message->what == 'sM10' ? fUndo.Undo(fDocument, v)
-				: fUndo.Redo(fDocument, v);
-			if (part == UndoStack::kDocumentChanged) {
-				GeometryChanged();
-				RestoreViewState(v);
-				return;
+			int32 steps = message->GetInt32(kValueString, 1);
+			bool show = message->GetBool("show", fShowUndoSteps);
+			for (int32 i = 0; i < std::max<int32>(1, steps); i++) {
+				UndoStack::ViewState v = CurrentViewState();
+				int part = message->what == 'sM10' ? fUndo.Undo(fDocument, v)
+					: fUndo.Redo(fDocument, v);
+				if (part == UndoStack::kDocumentChanged) {
+					GeometryChanged();
+					RestoreViewState(v);
+				} else if (part < 0) {
+					if (i == 0)
+						beep();
+					break;
+				} else {
+					if (fDocument.SpreadsheetPart(part) != NULL)
+						fBook->Reset();
+					TextChanged();
+					RestoreViewState(v);
+				}
+				if (show && Window() != NULL)
+					Window()->UpdateIfNeeded();
 			}
-			if (part < 0) {
-				beep();
-				return;
-			}
-			if (fDocument.SpreadsheetPart(part) != NULL)
-				fBook->Reset();
-			TextChanged();
-			RestoreViewState(v);
 			return;
 		}
 		// Format > Insert Page #, Insert Separator Line, Insert Line/Frame/
@@ -2535,6 +2545,9 @@ TPageView::RunScript(const std::string& script, Document& document)
 				TDialogPrefs::Press(-1, atoi(what.c_str() + 7));
 			else
 				TDialogPrefs::SelectPanel(atoi(what.c_str()));
+		} else if (command.compare(0, 8, "history ") == 0) {
+			// "history N": row N chosen in the History floater
+			TDialogHistory::Choose(atoi(command.c_str() + 8));
 		} else if (command == "caret") {
 			// "caret": the caret and the anchor (part, paragraph, offset)
 			printf("caret %zu %zu.%zu anchor %zu.%zu\n", fCaret.part, fCaret.paragraph,

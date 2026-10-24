@@ -59,6 +59,10 @@ public:
 	static const int kDocumentChanged = -2;
 	// THistory::SetMaxSize: the steps kept (0: all)
 	void SetLimit(size_t steps);
+	size_t Limit() const { return fLimit; }
+	// the steps' labels, the oldest first (those undone after the
+	// others), and how many are done
+	std::vector<std::string> Labels(size_t& done) const;
 
 private:
 	struct Step;

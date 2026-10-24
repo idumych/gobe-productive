@@ -139,6 +139,7 @@ public:
 	Caret fCaret;
 	Caret fAnchor;
 	UndoStack fUndo;
+	bool fShowUndoSteps = false;	// THistory +0x1d (History's Options)
 	UndoStack::ViewState CurrentViewState() const;
 	// test hooks used by RunScript
 	TextStyle StyleAt(TextPosition at) const;
