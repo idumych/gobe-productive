@@ -5,6 +5,20 @@ the decompiled original (`../decomp/`). It reads its resources (menus,
 dialogs, strings, icons) from the user's own original `Gobe Productive`
 binary at runtime; nothing from the original is in this tree.
 
+## Installing the preview package
+
+    pkgman install gobe_productive_port-0.1~preview-1-x86_64.hpkg
+    # or copy it to ~/config/packages
+
+"Gobe Productive" then appears in the Deskbar's Applications. It needs your
+original Gobe Productive 2.0 folder somewhere on your disks: on first start
+it looks for its "Gobe Productive" program file (next to the app, in the
+usual install folders, then by name on every volume) and otherwise asks
+where it is; the place is remembered in
+`~/config/settings/Gobe Productive port settings`. Installing
+`liberation_fonts` makes documents lay out with the widths of the fonts they
+were made with.
+
 ## Layout
 
 | Path | Contents |
@@ -24,11 +38,17 @@ fallback is wider):
     make
     GOBE_ORIGINAL="/path/to/Gobe Productive 2.0/Gobe Productive" build/GobeProductive [document...]
 
-Or put `build/GobeProductive` next to the original `Gobe Productive` binary.
+Without `GOBE_ORIGINAL` it finds the original as the package does.
+`package/make_package.sh [version]` (on Haiku, in `port/`) builds
+`build/gobe_productive_port-<version>-x86_64.hpkg`; its license file is a
+placeholder until the port's terms are decided.
+
 Test options: `--menu <index>` opens a menu-bar menu, `--dialog <id>` opens a
 DIAL resource, `--render out.png` draws the document into a PNG and quits,
-`--slide <n>` shows a presentation slide, `--do '<script>'` (with
-`--render`) clicks, types and saves first.
+`--slide <n>` shows a presentation slide, `--do '<script>'` clicks, types,
+sends commands and saves first (with `--render` on the offscreen page;
+without it, in the document's window; see `TPageView::RunScript`).
+`GOBE_DEBUG_MENUS=1` adds a menu listing every DIAL resource.
 
 ## Host tests (Linux, from the project root)
 
@@ -42,58 +62,31 @@ DIAL resource, `--render out.png` draws the document into a PNG and quits,
     # write the same bytes, cell input round trips)
     # and tests/ss_dump.cpp (prints cells, formulas and computed values)
 
-## Status
+## Status (preview)
 
-Milestone 1 (done): menus and dialogs from the original resources.
-- Base menu bar exactly as `TNormalDocWinHelper::InstallBaseMenus` (MENU 2-6,
-  part menu in Frame), shortcuts, submenus, value menus.
-- All 52 dialogs open from DIAL/Item, with Haiku layouts standing in for
-  Gobe's Engineer layout classes; Gobe-specific views are placeholders.
+Works:
+- Opening and saving Gobe Productive documents (only what was edited is
+  rewritten, everything else is kept byte for byte); File > New (the New
+  Document dialog; word processing documents so far), Open Recent, Revert,
+  Insert… (text and RTF files), Page Setup, Print, Help (the original's
+  User's Guide), About.
+- Word processing: typing, selection, cut/copy/paste with styles, undo and
+  redo, Find/Replace, fonts, sizes (and Other…), faces (superscript and
+  subscript too), colors, alignment, Paragraph Format, tabs, line and
+  paragraph spacing, Copy/Paste Format, Show/Hide Invisibles; pages that
+  come and go with the text; Document > Margins, Insert/Remove Header and
+  Footer; Format > Columns, Insert Page #, Date, Time, Formula (live
+  fields), Footnote and endnote (with Footnote Options), Separator Line,
+  Line/Frame/Page Break; Writing Tools > Word Count.
+- Plain text and RTF: opened as documents, saved with Save As's File Format.
+- Viewing: drawings, spreadsheets (formulas evaluated, cells editable),
+  charts (2D), images, tables, clocks and presentations (slides).
 
-Milestone 2 (in progress): documents.
-- Reader: header, table of contents; VersionMgr, PartFactory Table, Document
-  Misc, StyleMgr (properties, styles), PartMgr (all part records) read
-  exactly in all 14 samples; word processing parts (paragraphs, style runs,
-  formula/footnote/frame infos, text, sections) in all 65 WORD parts.
-- Text properties decoded (font, size, face, color, alignment, indents,
-  spacing) with style inheritance.
-- Frames and portals: where every part sits (all 254 part tails read).
-- Graphics parts: rectangles, rounded rectangles, ellipses, arcs, lines,
-  Bezier paths with fills (solid, gradients), pens, rotation.
-- Spreadsheet parts: cells, header sizes, styles (fonts, fills, borders,
-  alignment, number formats), formulas evaluated (the functions the samples
-  use, named ranges across parts), text overflow, grid, headers.
-- Viewer (`TPageView`): pages and frames laid out as in the document, text
-  flowed through its frames, graphics and spreadsheets drawn; `--render
-  out.png doc` writes a PNG.
-- Images (BITS), clocks (current time), charts (2D rendition of the cached
-  data with legend/title; the original is 3D OpenGL), presentations (the
-  current slide; layers hidden in a view aren't drawn).
-- All 14 samples render: `vm/render.sh vm/renders <sample>...`.
-- Fonts: Dutch801 -> Liberation Serif, Swiss721 -> Liberation Sans,
-  Courier10 -> Liberation Mono (Noto when not installed); VAG Rounded and
-  Haru -> sans.
-- Tab stops (left/center/right/decimal, leaders) and line spacing.
-- Presentations: arrows, Page Up/Down, space or a click change slides.
-- Tables (the Avery label templates): cell fills, outlines, borders.
+Not yet: the format bar and other ribbons, the text ruler (its tab commands
+are in a stand-in Tabs menu), spell checking, the thesaurus and dictionary,
+Page View off (browse layout), zoom, Views & Layers, Preferences, Window
+menu commands, frames (creating, linking, autogrow), drawing tools,
+spreadsheet menus beyond a few, new documents of other kinds, and the HTML,
+Word, Excel and SYLK translators. Documents saved by the port open in the
+port; they haven't been tried in BeOS Gobe Productive.
 
-Milestone 3 (started): editing.
-- Text: caret, typing, Backspace/Delete, Enter, arrows, Home/End.
-- Spreadsheets: select, edit in place (values, text, dates, formulas parsed
-  into Gobe's tokens), recalculation.
-- File > Save / Save As / Revert to Saved; only edited parts are written,
-  everything else is copied byte for byte; the spreadsheet dependency and
-  link tables, text frame ranges and selections are updated to match the
-  edits. Saved files load in the port; they haven't been tried in BeOS
-  Gobe.
-- Not yet: selections, undo, styling, frames/graphics editing.
-
-Milestone 5 (started): translators.
-- Plain text and RTF as the Gobe Text and RTF translators do them
-  (`core/TextImport`, `core/RTF`, `app/TTranslate`): File > Open reads text
-  and RTF files into untitled "<name> (converted)" documents (encoding
-  detection, StyledEdit attributes, the RTF reader's keyword table); Save
-  As has the original's "File Format" popup (Gobe Productive, Plain Text,
-  RTF). Not yet: the translators' Settings, delimited text as a
-  spreadsheet, RTF headers/footers, pictures and page number fields, and
-  the HTML, Word, Excel and SYLK translators.
