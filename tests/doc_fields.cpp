@@ -79,6 +79,42 @@ main(int argc, char** argv)
 	line.kind = Sig("LINE");
 	Check(FieldText(none, 0, line, 0).empty(), "a separator line shows no text");
 
+	// a new date field is written as the original wrote TheWidget's,
+	// but for the time it was evaluated and the formula's pointer word
+	int compared = 0;
+	for (int i = 1; i < argc; i++) {
+		Document d;
+		std::string error;
+		if (strstr(argv[i], "TheWidget") == nullptr || !LoadDocument(argv[i], d, error))
+			continue;
+		SSBook book(d);
+		for (const auto& [part, w] : d.wordParts)
+			for (const WPParagraph& p : w.paragraphs)
+				for (const WPMiscInfo& m : p.misc) {
+					if (m.kind != Sig("FORM"))
+						continue;
+					WPMiscInfo made;
+					Check(FormulaField(book, part, "=Now()", "mmmm d, yyyy", Sig("sM53"), false,
+						true, false, made, error), "FormulaField " + error);
+					std::vector<uint8_t> expected = m.raw;
+					std::string bytes(expected.begin(), expected.end());
+					size_t time = bytes.find("Time"), format = bytes.find("yyyy");
+					bool found = time != std::string::npos && format != std::string::npos
+						&& made.raw.size() == expected.size();
+					if (found) {
+						for (size_t k = time + 4; k < time + 8; k++)
+							expected[k] = made.raw[k];
+						for (size_t k = format + 5; k < format + 9; k++)
+							expected[k] = made.raw[k];
+					}
+					Check(found && made.raw == expected, "the date field's bytes");
+					Check(FieldText(book, part, made, 0) == FieldText(book, part, m, 0),
+						"it shows what TheWidget's shows");
+					compared++;
+				}
+	}
+	Check(compared == 1, "TheWidget's date field");
+
 	// inserting: "Page #" and a separator line in the middle of "abcd"
 	Document doc;
 	std::string error;

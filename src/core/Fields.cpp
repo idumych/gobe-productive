@@ -1,6 +1,8 @@
 // Fields in word processing text.
 #include "Fields.h"
 
+#include "DocWriter.h"
+#include "Editing.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 
@@ -48,6 +50,73 @@ FieldText(SSBook& book, size_t part, const WPMiscInfo& field, int page)
 		text += FormatCellValue(value, e.format);
 	}
 	return text;
+}
+
+EvalResult
+ResultOf(const SSValue& value)
+{
+	EvalResult r;
+	switch (value.type) {
+		case SSValue::kNumber:
+			r.type = Sig("Dbl#");
+			r.number = value.number;
+			break;
+		case SSValue::kBool:
+			r.type = Sig("Bool");
+			r.number = value.number;
+			break;
+		case SSValue::kString:
+			r.type = Sig("Strn");
+			r.text = value.text;
+			break;
+		case SSValue::kTime:
+			r.type = Sig("Time");
+			r.value = uint32_t(value.time);
+			break;
+		case SSValue::kError:
+			r.type = Sig("Err#");
+			r.value = uint32_t(value.error);
+			break;
+		default:
+			break;
+	}
+	return r;
+}
+
+
+bool
+FormulaField(SSBook& book, size_t part, const std::string& formula, const std::string& format,
+	uint32_t command, bool isStatic, bool displayResult, bool displayFormula, WPMiscInfo& field,
+	std::string& error)
+{
+	field = WPMiscInfo{};
+	field.kind = Sig("FORM");
+	Expression& e = field.expression;
+	e.text = formula;
+	e.format = format;
+	std::string body = !formula.empty() && formula[0] == '=' ? formula.substr(1) : formula;
+	auto isName = [&](const std::string& name) {
+		int p;
+		SSRange range;
+		return book.ResolveName(name, int(part), p, range);
+	};
+	if (!ParseFormula(body, CellID(), isName, e.formula, error))
+		return false;
+	e.result = ResultOf(book.EvaluateField(e.formula, int(part)));
+	field.text = formula;
+	field.command = command;
+	field.isStatic = isStatic;
+	field.displayResult = displayResult;
+	field.displayFormula = displayFormula;
+	// TMiscFormulaInfo::Write: the expression, the command, the flags
+	DocWriter w;
+	WriteExpression(w, e);
+	w.UInt32(command);
+	w.Bool(isStatic);
+	w.Bool(displayResult);
+	w.Bool(displayFormula);
+	field.raw = w.Data();
+	return true;
 }
 
 } // namespace gobe

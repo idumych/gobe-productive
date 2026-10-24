@@ -79,18 +79,18 @@ TDialog::TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target
 
 
 void
-TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items)
+TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int32 group)
 {
 	for (const ItemData& item : items) {
 		if (item.type == FourCC("GRUP") || item.type == FourCC("FGRP")) {
-			BGroupLayout* group = new BGroupLayout(
+			BGroupLayout* inner = new BGroupLayout(
 				item.vertical ? B_VERTICAL : B_HORIZONTAL,
 				item.spacing > 0 ? item.spacing : B_USE_SMALL_SPACING);
 			if (item.type == FourCC("FGRP"))
-				group->SetInsets(item.insets[0], item.insets[1], item.insets[0],
+				inner->SetInsets(item.insets[0], item.insets[1], item.insets[0],
 					item.insets[1]);
-			layout->AddItem(group);
-			AddItems(group, item.children);
+			layout->AddItem(inner);
+			AddItems(inner, item.children, group);
 		} else if (item.type == FourCC("GBOX")) {
 			BBox* box = new BBox("box");
 			if (!item.label.empty())
@@ -100,12 +100,15 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items)
 			inner->SetInsets(B_USE_SMALL_INSETS, B_USE_BIG_INSETS, B_USE_SMALL_INSETS,
 				B_USE_SMALL_INSETS);
 			layout->AddView(box);
-			AddItems(inner, item.children);
+			fItems[item.index] = box;
+			AddItems(inner, item.children, item.index);
 		} else {
 			BView* view = MakeControl(item);
 			if (view != NULL) {
 				layout->AddView(view);
 				fItems[item.index] = view;
+				if (item.type == FourCC("RADI"))
+					fRadios[group].push_back(item.index);
 			}
 		}
 	}
@@ -361,6 +364,36 @@ TDialog::MakeFocusItem(int32 index)
 {
 	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index)))
 		control->MakeFocus(true);
+}
+
+void
+TDialog::SetLabelItem(int32 index, const char* label)
+{
+	if (BControl* control = dynamic_cast<BControl*>(Item(index)))
+		control->SetLabel(label);
+}
+
+
+void
+TDialog::SetRadioItem(int32 index, bool on)
+{
+	if (BRadioButton* radio = dynamic_cast<BRadioButton*>(Item(index)))
+		radio->SetValue(on ? B_CONTROL_ON : B_CONTROL_OFF);
+}
+
+
+int32
+TDialog::RadioValue(int32 group) const
+{
+	auto radios = fRadios.find(group);
+	if (radios == fRadios.end())
+		return -1;
+	for (size_t i = 0; i < radios->second.size(); i++) {
+		BRadioButton* radio = dynamic_cast<BRadioButton*>(Item(radios->second[i]));
+		if (radio != NULL && radio->Value() == B_CONTROL_ON)
+			return int32(i);
+	}
+	return -1;
 }
 
 } // namespace gobe

@@ -62,6 +62,10 @@ struct Expression {
 	std::vector<uint32_t> links;
 };
 void ReadExpression(DocArchive& a, Expression& out);
+// TEvalResult::Write, TExpression::Write: the inverses (the formula's
+// "present" word is the original's pointer; any nonzero value reads back)
+void WriteEvalResult(DocWriter& w, const EvalResult& result);
+void WriteExpression(DocWriter& w, const Expression& e);
 
 } // namespace gobe
 

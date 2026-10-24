@@ -1719,46 +1719,13 @@ TDocWindow::MessageReceived(BMessage* message)
 		}
 		return;
 	}
-	// Insert Date… (sM53) — insert current date
-	if (message->what == kCmdInsertDate) {
-		if (fPages != NULL) {
-			fPages->fCaret = fPages->fCaret;  // ensure caret is valid
-			// Use the same pattern as the RunScript: get the date and insert it
-			time_t now = time(NULL);
-			struct tm* tm_now = localtime(&now);
-			char dateStr[32];
-			strftime(dateStr, sizeof(dateStr), "%m/%d/%Y", tm_now);
-
-			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
-			if (wp != NULL && fPages->fCaret.active) {
-				fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Date",
-					fPages->CurrentViewState());
-				InsertText(*wp, {fPages->fCaret.paragraph, fPages->fCaret.offset}, dateStr);
-				fPages->fCaret.offset += strlen(dateStr);
-				fPages->TextChanged();
-			}
-		}
+	// Insert Date…, Insert Time… (sM53, sM54): the text part's
+	if (message->what == kCmdInsertDate || message->what == kCmdInsertTime) {
+		if (fPages != NULL)
+			fPages->MessageReceived(message);
 		return;
 	}
-	// Insert Time… (sM54) — insert current time
-	if (message->what == kCmdInsertTime) {
-		if (fPages != NULL) {
-			time_t now = time(NULL);
-			struct tm* tm_now = localtime(&now);
-			char timeStr[32];
-			strftime(timeStr, sizeof(timeStr), "%l:%M %p", tm_now);
 
-			WPPart* wp = fDocument->EditableWordPart(fPages->fCaret.part);
-			if (wp != NULL && fPages->fCaret.active) {
-				fPages->fUndo.Begin(*fDocument, fPages->fCaret.part, "Time",
-					fPages->CurrentViewState());
-				InsertText(*wp, {fPages->fCaret.paragraph, fPages->fCaret.offset}, timeStr);
-				fPages->fCaret.offset += strlen(timeStr);
-				fPages->TextChanged();
-			}
-		}
-		return;
-	}
 	// Tab menu: add tab of given type at caret position
 	if (message->what == kCmdTabLeft || message->what == kCmdTabCenter
 		|| message->what == kCmdTabRight || message->what == kCmdTabAlign) {

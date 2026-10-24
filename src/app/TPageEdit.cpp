@@ -18,7 +18,9 @@
 #include <ctime>
 
 #include "Editing.h"
+#include "Fields.h"
 #include "GobeResources.h"
+#include "TWPDialogs.h"
 #include "SSStyle.h"
 #include "SSEval.h"
 #include "TDocWindow.h"
@@ -1036,6 +1038,38 @@ TPageView::MessageReceived(BMessage* message)
 			} else
 				at = InsertSpecialChar(*wp, at,
 					message->what == 'sM57' ? 0x01 : message->what == 'sM58' ? 0x02 : 0x0c);
+			fCaret.paragraph = at.paragraph;
+			fCaret.offset = at.offset;
+			fAnchor = fCaret;
+			TextChanged();
+			return;
+		}
+		// Format > Insert Date… / Insert Time… (TWPPart::InsertSpecial): the
+		// format dialog, which sends the command back with "format" and
+		// "static"; then a formula field "=Now()" in that format
+		case 'sM53':
+		case 'sM54': {
+			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL) {
+				beep();
+				return;
+			}
+			const char* format;
+			if (message->FindString("format", &format) != B_OK) {
+				if (Window() != NULL)
+					(new TDialogWPDateTimeFormat(Window(), message->what, "", false))->RunDialog();
+				return;
+			}
+			WPMiscInfo field;
+			std::string error;
+			if (!FormulaField(*fBook, fCaret.part, GobeResources::IndexString(0x516, 8).String(),
+					format, message->what, message->GetBool("static", false), true, false, field,
+					error)) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Insert Special", CurrentViewState());
+			TextPosition at = InsertField(*fDocument.EditableWordPart(fCaret.part),
+				{fCaret.paragraph, fCaret.offset}, field);
 			fCaret.paragraph = at.paragraph;
 			fCaret.offset = at.offset;
 			fAnchor = fCaret;
@@ -2257,46 +2291,14 @@ TPageView::RunScript(const std::string& script, Document& document)
 			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
 				style.tabs[nearestIdx].position);
 			TextChanged();
-		} else if (command == "insertdate") {
-			// Insert current date as plain text in m/d/yyyy format
-			if (!fCaret.active) {
-				fprintf(stderr, "insertdate: no caret\n");
-				continue;
-			}
-			time_t now = time(NULL);
-			struct tm* tm_now = localtime(&now);
-			char dateStr[32];
-			strftime(dateStr, sizeof(dateStr), "%m/%d/%Y", tm_now);
-
-			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
-			if (wp == NULL) {
-				fprintf(stderr, "insertdate: no word part\n");
-				continue;
-			}
-			fUndo.Begin(fDocument, fCaret.part, "Date", CurrentViewState());
-			InsertText(*wp, {fCaret.paragraph, fCaret.offset}, dateStr);
-			fCaret.offset += strlen(dateStr);
-			TextChanged();
-		} else if (command == "inserttime") {
-			// Insert current time as plain text in h:mm AM/PM format
-			if (!fCaret.active) {
-				fprintf(stderr, "inserttime: no caret\n");
-				continue;
-			}
-			time_t now = time(NULL);
-			struct tm* tm_now = localtime(&now);
-			char timeStr[32];
-			strftime(timeStr, sizeof(timeStr), "%l:%M %p", tm_now);
-
-			WPPart* wp = fDocument.EditableWordPart(fCaret.part);
-			if (wp == NULL) {
-				fprintf(stderr, "inserttime: no word part\n");
-				continue;
-			}
-			fUndo.Begin(fDocument, fCaret.part, "Time", CurrentViewState());
-			InsertText(*wp, {fCaret.paragraph, fCaret.offset}, timeStr);
-			fCaret.offset += strlen(timeStr);
-			TextChanged();
+		} else if (command.compare(0, 10, "datefield ") == 0
+				|| command.compare(0, 10, "timefield ") == 0) {
+			// "datefield <format>": Insert Date… with that format chosen
+			// (timefield: Insert Time…), as the dialog sends it
+			BMessage insert(command[0] == 'd' ? 'sM53' : 'sM54');
+			insert.AddString("format", command.c_str() + 10);
+			insert.AddBool("static", false);
+			MessageReceived(&insert);
 		} else if (command.compare(0, 8, "margins ") == 0) {
 			// "margins L T R B" (points): Document > Margins…
 			float m[4];

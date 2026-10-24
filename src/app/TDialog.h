@@ -47,9 +47,15 @@ protected:
 	void SetCheckBoxItem(int32 index, bool on);
 	bool CheckBoxItem(int32 index) const;
 	void MakeFocusItem(int32 index);
+	// a control's label (BControl::SetLabel)
+	void SetLabelItem(int32 index, const char* label);
+	// radio buttons (TDialog::SetRadioItem, GetRadioValue: which of the
+	// radios in box `group` is on, from 0; -1 if none)
+	void SetRadioItem(int32 index, bool on);
+	int32 RadioValue(int32 group) const;
 
 private:
-	void AddItems(BGroupLayout* layout, const std::vector<ItemData>& items);
+	void AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int32 group = -1);
 	BView* MakeControl(const ItemData& item);
 	BMessage* ControlMessage(const ItemData& item) const;
 
@@ -57,6 +63,7 @@ private:
 	uint32 fCommand;
 	BHandler* fTarget;
 	std::map<int32, BView*> fItems;
+	std::map<int32, std::vector<int32>> fRadios;	// box index: its radios, in order
 };
 
 } // namespace gobe

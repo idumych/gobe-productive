@@ -203,4 +203,45 @@ WriteFormula(DocWriter& w, const std::vector<FormulaToken>& tokens)
 	}
 }
 
+void
+WriteEvalResult(DocWriter& w, const EvalResult& r)
+{
+	w.UInt32(r.type);
+	switch (r.type) {
+		case Sig("Err#"):
+		case Sig("Time"):
+			w.UInt32(r.value);
+			break;
+		case Sig("Bool"):
+		case Sig("Dbl#"):
+			w.Double(r.number);
+			break;
+		case Sig("Strn"):
+			w.String(r.text);
+			break;
+	}
+}
+
+
+void
+WriteExpression(DocWriter& w, const Expression& e)
+{
+	w.Sig(Sig("EXPR"));
+	w.UInt16(e.cell.a);
+	w.UInt16(e.cell.b);
+	w.String(e.text);
+	w.UInt32(e.valueC);
+	w.UInt32(e.value10);
+	w.String(e.source);
+	WriteEvalResult(w, e.result);
+	w.String(e.format);
+	w.UInt32(e.formula.empty() ? 0 : 1);
+	if (!e.formula.empty())
+		WriteFormula(w, e.formula);
+	w.UInt32(uint32_t(e.links.size()));
+	for (uint32_t link : e.links)
+		w.UInt32(link);
+	w.Sig(Sig("ExpR"));
+}
+
 } // namespace gobe
