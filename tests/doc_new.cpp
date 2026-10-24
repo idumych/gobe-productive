@@ -230,6 +230,22 @@ main(int argc, char** argv)
 	WPPart* wp = doc.EditableWordPart(0);
 	InsertText(*wp, {0, 0}, "Hello");
 	ApplyCharacterProperty(doc, 0, {0, 0}, {0, 5}, TextFaceProperty(2));
+	// Copy Format: the run's own face and the paragraph style's character
+	// properties, no paragraph ones
+	auto has = [&](const std::vector<Property>& format, uint32_t type) {
+		for (const Property& p : format)
+			if (p.type == type)
+				return true;
+		return false;
+	};
+	std::vector<Property> runFormat = CharacterFormat(doc.styles,
+		doc.wordParts[0].second.paragraphs[0].runs[0].style);
+	Check(has(runFormat, Sig("TFac")) && !has(runFormat, Sig("PAlg")), "Copy Format of the run");
+	std::vector<Property> parFormat = CharacterFormat(doc.styles,
+		doc.wordParts[0].second.paragraphs[0].parStyle);
+	Check(has(parFormat, Sig("TFon")) && has(parFormat, Sig("TSiz")) && !has(parFormat, Sig("PAlg"))
+		&& !has(parFormat, Sig("LSpa")) && !has(parFormat, Sig("SpaB")) && !has(parFormat, Sig("PLef")),
+		"Copy Format of the paragraph style: its character properties");
 	Check(doc.Save(path, error), "save edited " + error);
 	Document back;
 	Check(LoadDocument(path, back, error), "reload " + error);

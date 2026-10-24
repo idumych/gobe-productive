@@ -960,6 +960,34 @@ StyleUnionSet(const StyleMgr& styles, const Style& style)
 }
 
 
+std::vector<Property>
+CharacterFormat(const StyleMgr& styles, uint32_t style)
+{
+	// ParagraphPropTypes: what TWPPartFactory::CreateProperty makes
+	static const char* const kParagraph[17] = {"PLef", "PRig", "PInd", "PTab", "PAlg", "PWid",
+		"LTog", "PNxt", "PgBB", "PHyp", "PChk", "PHid", "PExp", "LSpa", "SpaB", "SpaA", "PLab"};
+	std::vector<Property> format;
+	if (style >= styles.styles.size())
+		return format;
+	// its own properties, then what it inherits (the union set)
+	std::vector<uint32_t> all = styles.styles[style].props;
+	for (uint32_t index : StyleUnionSet(styles, styles.styles[style]))
+		all.push_back(index);
+	for (uint32_t index : all) {
+		if (index >= styles.properties.size())
+			continue;
+		const Property& p = styles.properties[index];
+		bool paragraph = false;
+		for (const char* t : kParagraph)
+			paragraph = paragraph || p.type == (uint32_t(uint8_t(t[0])) << 24
+				| uint32_t(uint8_t(t[1])) << 16 | uint32_t(uint8_t(t[2])) << 8 | uint8_t(t[3]));
+		if (!paragraph)
+			format.push_back(p);
+	}
+	return format;
+}
+
+
 bool
 PropsSorted(const StyleMgr& styles, const std::vector<uint32_t>& props)
 {

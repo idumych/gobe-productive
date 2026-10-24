@@ -29,6 +29,9 @@
 
 namespace gobe {
 
+// Copy Format's properties (the application's, TApp +0x184)
+static std::vector<Property> sCopiedFormat;
+
 static const uint32 kMsgCellCommit = 'Gcel';
 static const uint32 kMsgCellCancel = 'Gccl';
 // columns: not in the original's menus (its Insert/Delete Cells dialog
@@ -1108,6 +1111,45 @@ TPageView::MessageReceived(BMessage* message)
 				CurrentViewState());
 			if (fDocument.SetColumnCount(fCaret.part, section, value))
 				GeometryChanged();
+			return;
+		}
+		// Edit > Copy Format, Paste Format in text (TWPPart, TPart::
+		// CopyFormat, PasteFormat): the character properties of the style at
+		// the insertion point, kept for the application; applied to the
+		// selection as one step
+		case 'sM16': {
+			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
+			if (wp == NULL || fCaret.paragraph >= wp->paragraphs.size()) {
+				beep();
+				return;
+			}
+			// the first selected character's, else the one before the caret
+			auto sel = TextSelectionRange();
+			size_t at = sel.first.offset;
+			if (sel.first.paragraph == sel.second.paragraph && sel.first.offset == sel.second.offset
+					&& at > 0)
+				at--;
+			const WPParagraph& p = wp->paragraphs[sel.first.paragraph];
+			uint32_t style = p.parStyle;
+			for (const WPStyleRun& r : p.runs)
+				if (r.position <= at)
+					style = r.style;
+			sCopiedFormat = CharacterFormat(fDocument.styles, style);
+			return;
+		}
+		case 'sM17': {
+			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL
+					|| sCopiedFormat.empty()) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, GobeResources::IndexString(0x516, 4).String(),
+				CurrentViewState());
+			auto sel = TextSelectionRange();
+			for (const Property& property : sCopiedFormat)
+				ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second, property);
+			TextChanged();
+			UpdateMarks();
 			return;
 		}
 		// Format > Paragraph… (TWPPart::DoParagraphFormat): the dialog with
