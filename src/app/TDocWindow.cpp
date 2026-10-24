@@ -815,6 +815,33 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	}
 	desk->SetExplicitMinSize(BSize(400, 300));
 
+	// TDocWindow::TDocWindow: the faces' keys (MENU 102's) send 'sf0C',
+	// Shift-O the size's Other… ('sf0K' 'sM0U'); TWPPart::Activate: the
+	// alignments on [, \, ] and Shift-\ ('sM5B')
+	{
+		TMenu faces(102, true);
+		static const int32 kFaces[7] = {1, 2, 4, 8, 32, 64, 128};
+		for (int32 face : kFaces) {
+			BMenuItem* item = faces.FindValue(face);
+			if (item == NULL || item->Shortcut() == 0)
+				continue;
+			BMessage* message = new BMessage('sf0C');
+			message->AddInt32(kValueString, face);
+			AddShortcut(item->Shortcut(), 0, message);
+		}
+		BMessage* other = new BMessage('sf0K');
+		other->AddInt32(kValueString, 'sM0U');
+		AddShortcut('O', B_SHIFT_KEY, other);
+		if (fPartBar != NULL) {
+			static const char kAlignKeys[4] = {'[', '\\', ']', '\\'};
+			for (int32 i = 0; i < 4; i++) {
+				BMessage* message = new BMessage('sM5B');
+				message->AddInt32(kValueString, i);
+				AddShortcut(kAlignKeys[i], i == 3 ? B_SHIFT_KEY : 0, message);
+			}
+		}
+	}
+
 	BLayoutBuilder::Group<> layout(this, B_VERTICAL, 0);
 	layout.Add(menuBar);
 	if (fFormatBar != NULL)
