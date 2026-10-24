@@ -158,7 +158,7 @@ struct LeafSheet {
 	uint32_t footerPart = 0xffffffff;	// +0x20
 	uint32_t value24 = 0, value28 = 0;
 	bool frameSheet = false;			// +0x2c
-	bool value2d = false;
+	bool pageView = false;				// +0x2d: shown in page view (TDocWindow::SetPageView)
 	float paper[4] = {0, 0, 612, 792};		// +0x34
 	float printable[4] = {72, 72, 540, 720};	// +0x44
 	bool flags[4] = {};					// +0x54..+0x57

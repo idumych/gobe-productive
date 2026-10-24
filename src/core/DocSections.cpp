@@ -417,7 +417,7 @@ ReadSheetMgr(DocArchive& a, SheetMgr& out)
 		s.value24 = a.UInt32();
 		s.value28 = a.UInt32();
 		s.frameSheet = a.Bool();
-		s.value2d = a.Bool();
+		s.pageView = a.Bool();
 		a.Rect(s.paper);
 		a.Rect(s.printable);
 		for (bool& f : s.flags)
@@ -451,7 +451,7 @@ WriteSheetMgr(const SheetMgr& mgr)
 		w.UInt32(s.value24);
 		w.UInt32(s.value28);
 		w.Bool(s.frameSheet);
-		w.Bool(s.value2d);
+		w.Bool(s.pageView);
 		w.Rect(s.paper);
 		w.Rect(s.printable);
 		for (bool f : s.flags)

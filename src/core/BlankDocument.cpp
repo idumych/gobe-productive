@@ -376,7 +376,7 @@ SheetSection()
 	sheet.name = "Sheet 1";
 	sheet.mainPart = kWordPart;
 	sheet.graphicsPart = kGraphicsPart;
-	sheet.value2d = true;
+	sheet.pageView = true;
 	std::copy(kPaper, kPaper + 4, sheet.paper);
 	std::copy(kPrintable, kPrintable + 4, sheet.printable);
 	sheet.flags[0] = sheet.flags[1] = sheet.flags[2] = true;

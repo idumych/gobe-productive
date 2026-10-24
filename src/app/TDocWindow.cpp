@@ -1139,7 +1139,7 @@ TDocWindow::MessageReceived(BMessage* message)
 		case 'sM2A':
 			if (fPages != NULL && fDocument != NULL && !fDocument->sheets.sheets.empty()) {
 				fPages->SetPageView(!fPages->PageView());
-				fDocument->sheets.sheets[0].value2d = fPages->PageView();
+				fDocument->sheets.sheets[0].pageView = fPages->PageView();
 				fDocument->sheetsChanged = true;
 			}
 			return;

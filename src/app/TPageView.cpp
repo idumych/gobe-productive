@@ -48,7 +48,7 @@ TPageView::TPageView(Document& document)
 	// with it off opens in browse view)
 	fBrowse = fDocument.PagePart() >= 0 && fDocument.WordPart(size_t(std::max(0,
 		fDocument.MainPart()))) != NULL && !fDocument.sheets.sheets.empty()
-		&& !fDocument.sheets.sheets[0].value2d;
+		&& !fDocument.sheets.sheets[0].pageView;
 	Rebuild();
 	// a word processing document opens with the insertion point in its
 	// main text, where its selection was (at the start of a new one)
