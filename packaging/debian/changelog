@@ -1,3 +1,11 @@
+gobeproductive (0.1.1-1) unstable; urgency=medium
+
+  * The Linux AppImage is built with a newer Hokku: disabled buttons, icons
+    and the ruler draw like on Haiku; tooltips close when the pointer
+    leaves the window. Same program on Haiku and VitruvianOS.
+
+ -- Ian <idumych@gmail.com>  Sat, 24 Oct 2026 13:55:52 -0700
+
 gobeproductive (0.1.0-1) unstable; urgency=medium
 
   * First release: a preview of the word processor.
