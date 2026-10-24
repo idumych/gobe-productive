@@ -29,6 +29,7 @@
 #include "GobeResources.h"
 #include "TDocWindow.h"
 #include "TPageView.h"
+#include "TDialogNewDoc.h"
 #include "TDialogSplash.h"
 #include "TRecentDocs.h"
 #include "TTranslate.h"
@@ -179,8 +180,37 @@ public:
 		(new TDialogSplash())->Show();
 	}
 
+	// the document windows open
+	int32 CountDocuments()
+	{
+		int32 count = 0;
+		for (int32 i = 0; BWindow* w = WindowAt(i); i++)
+			count += dynamic_cast<TDocWindow*>(w) != NULL;
+		return count;
+	}
+
 	virtual void MessageReceived(BMessage* message)
 	{
+		if (message->what == 's001') {	// File > New…: the dialog, then the kind
+			int32 kind;
+			if (message->FindInt32("kind", &kind) != B_OK) {
+				(new TDialogNewDoc(CountDocuments()))->RunDialog();
+				return;
+			}
+			if (kind != 'WORD')
+				return;
+			Document* document = new Document;
+			std::string error;
+			if (!CreateBlankDocument(*document, error)) {
+				delete document;
+				return;
+			}
+			BRect frame(80, 60, 720, 620);
+			frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
+			fWindowCount++;
+			(new TDocWindow(frame, document->name.c_str(), document))->Show();
+			return;
+		}
 		if (message->what == 'sM08') {	// Help…
 			DoHelp();
 			return;
@@ -396,6 +426,16 @@ public:
 				fprintf(stderr, "CreateBlankDocument: %s\n", error.c_str());
 			return;
 		}
+		// TApp::ReadyToRun: no documents: File > New…, or the open panel
+		// with Shift held
+		if (fOpenDialog < 0 && fOpenMenu < 0) {
+			if (modifiers() & B_SHIFT_KEY)
+				PostMessage('sM01');
+			else
+				PostMessage('s001');
+			return;
+		}
+		// test hooks (--dialog, --menu): an empty window to show them in
 		TDocWindow* window = new TDocWindow(BRect(80, 60, 720, 520), "Untitled 1");
 		window->Show();
 

@@ -1,0 +1,8 @@
+Gobe Productive for Haiku (port) - preview build
+
+PLACEHOLDER: the terms for this port haven't been decided yet. Until they
+are, this preview is for testing only and comes with no warranty.
+
+The port contains no part of the original Gobe Productive: it reads the
+menus, dialogs, strings and pictures from your own copy of the original
+program at runtime. Gobe Productive is a trademark of its owners.

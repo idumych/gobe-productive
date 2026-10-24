@@ -13,8 +13,14 @@ OBJ := $(patsubst src/%.cpp,build/%.o,$(CORE) $(APP))
 
 all: build/$(NAME)
 
-build/$(NAME): $(OBJ)
-	$(CXX) -o $@ $^ $(LIBS)
+build/$(NAME): $(OBJ) build/$(NAME).rsrc
+	$(CXX) -o $@ $(OBJ) $(LIBS)
+	xres -o $@ build/$(NAME).rsrc
+	mimeset -f $@
+
+build/$(NAME).rsrc: $(NAME).rdef
+	@mkdir -p build
+	rc -o $@ $<
 
 build/%.o: src/%.cpp $(wildcard src/*/*.h)
 	@mkdir -p $(dir $@)

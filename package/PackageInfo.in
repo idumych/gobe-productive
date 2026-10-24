@@ -1,0 +1,23 @@
+name			gobe_productive_port
+version			@VERSION@
+architecture	x86_64
+summary			"Gobe Productive 2.0.1 ported to 64-bit Haiku (preview)"
+description		"A port of Gobe Productive 2.0.1, the BeOS office suite, to 64-bit Haiku, rebuilt from the original. This preview opens and saves Gobe Productive documents, edits word processing documents (text, styles, headers and footers, footnotes, columns, fields, page setup and printing), shows drawings, spreadsheets, charts and presentations, and imports and exports plain text and RTF.
+
+It needs your original Gobe Productive 2.0 (its \"Gobe Productive\" program file), whose menus, dialogs and pictures it uses; it looks for it where it is usually installed and asks for it otherwise."
+packager		"@PACKAGER@"
+vendor			"@VENDOR@"
+copyrights		{
+	"@COPYRIGHT@"
+}
+licenses		{
+	"Gobe Productive port"
+}
+provides		{
+	gobe_productive_port = @VERSION@
+	app:GobeProductive = @VERSION@
+}
+requires		{
+	haiku >= r1~beta5
+	lib:libz
+}

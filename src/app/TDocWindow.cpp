@@ -1259,19 +1259,8 @@ TDocWindow::MessageReceived(BMessage* message)
 			return;
 		}
 		case kCmdNew:
-		{
-			Document* document = new Document;
-			std::string error;
-			if (CreateBlankDocument(*document, error)) {
-				TDocWindow* window = new TDocWindow(Frame().OffsetByCopy(20, 20),
-					document->name.c_str(), document);
-				window->Show();
-			} else {
-				fprintf(stderr, "kCmdNew: %s\n", error.c_str());
-				delete document;
-			}
+			be_app->PostMessage(kCmdNew);
 			return;
-		}
 		case kCmdOpen:
 			be_app->PostMessage(kCmdOpen);
 			return;

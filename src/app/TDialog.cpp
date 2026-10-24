@@ -1,6 +1,7 @@
 #include "TDialog.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <Box.h>
 #include <Button.h>
@@ -233,6 +234,14 @@ TDialog::MakeControl(const ItemData& item)
 			bool h = item.values.size() > 2 && item.values[2] != 0;
 			bool v = item.values.size() > 3 && item.values[3] != 0;
 			view = new BScrollView("list scroll", list, 0, h, v || !h);
+			// LIST params: rows (17 each) and a width (0: wide enough for a
+			// name)
+			if (item.values.size() >= 2 && item.values[0] > 0) {
+				BSize size(item.values[1] > 0 ? item.values[1] : 170,
+					item.values[0] * 17 + 4);
+				view->SetExplicitMinSize(size);
+				view->SetExplicitPreferredSize(size);
+			}
 			break;
 		}
 		case FourCC("BSLI"):
@@ -264,10 +273,23 @@ TDialog::MakeControl(const ItemData& item)
 			view = new BColorControl(B_ORIGIN, layout, cell, "color", ControlMessage(item));
 			break;
 		}
+		case FourCC("USER"):
+		{
+			// TUserItemEngineer: a view of the given size the dialog draws in
+			BView* user = new BView("user", B_WILL_DRAW);
+			if (item.values.size() >= 2) {
+				BSize size(item.values[0], item.values[1]);
+				user->SetExplicitMinSize(size);
+				user->SetExplicitPreferredSize(size);
+			}
+			user->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+			view = user;
+			break;
+		}
 		default:
 		{
-			// IBUT, ICON, 256P, PIKR, CUST, USER, ISET: Gobe-specific views,
-			// not ported yet
+			// IBUT, ICON, 256P, PIKR, CUST, ISET: Gobe-specific views, not
+			// ported yet
 			BString text;
 			text << "[" << FourCCString(item.type).c_str() << "]";
 			if (!item.label.empty())
@@ -300,6 +322,10 @@ TDialog::RunDialog()
 {
 	if (Lock()) {
 		Init();
+		// as large as the items want (the window isn't resizable); Init may
+		// have changed sizes inside nested group layouts
+		ResizeToPreferred();
+		CenterOnScreen();
 		Unlock();
 	}
 	Show();
