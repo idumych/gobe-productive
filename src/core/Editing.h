@@ -72,6 +72,15 @@ TextPosition InsertField(WPPart& part, TextPosition at, WPMiscInfo field);
 // Double click: [from, to) is the word, blank run or punctuation character
 // at `offset` (the one before it at the end of the text).
 void WordRange(const std::string& text, size_t offset, size_t& from, size_t& to);
+// TParagraph::CharKind: 1 a blank or break (also past the end), 2
+// punctuation (ASCII's, U+2000-203F, U+3000-303F), 3-7 kinds of CJK
+// characters, 0 the rest
+int CharKind(const std::string& text, size_t at);
+// TParagraph::WordBounds: the run of one kind around `offset` (with
+// `before`, a blank's is the run before it)
+void WordBounds(const std::string& text, size_t offset, bool before, size_t& from, size_t& to);
+// TParagraph::SpaceBounds: the blanks and breaks around `offset`
+void SpaceBounds(const std::string& text, size_t offset, size_t& from, size_t& to);
 // a position in the part's text (its paragraphs' bytes one after another,
 // as the original counts), and back (the last paragraph's end at most)
 uint32_t PartPosition(const WPPart& part, TextPosition at);

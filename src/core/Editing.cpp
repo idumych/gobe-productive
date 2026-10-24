@@ -2416,4 +2416,104 @@ FromPartPosition(const WPPart& part, uint32_t position)
 	return {0, 0};
 }
 
+namespace {
+
+bool
+IsBlank(char c)
+{
+	return c == 0x01 || c == '\n' || c == 0x02 || c == '\f' || c == 0x05 || c == '\t' || c == ' ';
+}
+
+
+// TParagraph::PrevCharPos
+size_t
+PrevCharPos(const std::string& text, size_t at)
+{
+	while (at > 0) {
+		at--;
+		if ((uint8_t(text[at]) & 0xc0) != 0x80)
+			break;
+	}
+	return at;
+}
+
+} // namespace
+
+
+int
+CharKind(const std::string& text, size_t at)
+{
+	if (at >= text.size())
+		return 1;
+	uint8_t c = uint8_t(text[at]);
+	if (IsBlank(char(c)))
+		return 1;
+	// FlattenUTF8: the bytes big-endian
+	size_t n = ((0xe5000000u >> ((c >> 3) & 0x1e)) & 3) + 1;
+	uint32_t flat = 0;
+	for (size_t i = 0; i < n && at + i < text.size(); i++)
+		flat |= uint32_t(uint8_t(text[at + i])) << (24 - 8 * i);
+	if ((c < 0x80 && ispunct(c)) || flat - 0xe2808000u <= 0x12f00
+			|| flat - 0xe3808000u <= 0x3f00)
+		return 2;
+	if (c >= 0x80) {
+		if (flat - 0xe3888000u <= 0x33f00)
+			return 3;
+		if (flat - 0xefbc8000u <= 0x32f00)
+			return 4;
+		if (flat - 0xe3818000u <= 0x11f00)
+			return 5;
+		if (flat - 0xe382a000u <= 0x11f00)
+			return 6;
+		if (flat - 0xe4b88000u <= 0x5073f00 || flat - 0xefa48000u <= 0x73f00)
+			return 7;
+	}
+	return 0;
+}
+
+
+void
+WordBounds(const std::string& text, size_t offset, bool before, size_t& from, size_t& to)
+{
+	if (offset != 0 && offset < text.size() && text[offset] == 0x05)
+		offset = PrevCharPos(text, offset);
+	int kind = CharKind(text, offset);
+	size_t at = offset;
+	bool scan = true;
+	if (before && kind == 1) {
+		if (offset == 0) {
+			from = 0;
+			scan = false;
+		} else {
+			at = PrevCharPos(text, offset);
+			kind = CharKind(text, at);
+		}
+	}
+	if (scan) {
+		from = at;
+		while (from > 0) {
+			size_t previous = PrevCharPos(text, from);
+			if (CharKind(text, previous) != kind)
+				break;
+			from = previous;
+		}
+	}
+	to = offset;
+	while (to < text.size() && CharKind(text, to) == kind)
+		to += ((0xe5000000u >> ((uint8_t(text[to]) >> 3) & 0x1e)) & 3) + 1;
+	to = std::min(to, text.size());
+}
+
+
+void
+SpaceBounds(const std::string& text, size_t offset, size_t& from, size_t& to)
+{
+	from = std::min(offset, text.size());
+	while (from > 0 && IsBlank(text[from - 1]))
+		from--;
+	to = std::min(offset, text.size());
+	while (to < text.size() && IsBlank(text[to]))
+		to++;
+}
+
 } // namespace gobe

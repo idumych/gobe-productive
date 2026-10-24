@@ -19,6 +19,7 @@
 #include <MenuItem.h>
 #include <Path.h>
 #include <PopUpMenu.h>
+#include <ScrollBar.h>
 #include <Window.h>
 
 #include <algorithm>
@@ -461,7 +462,7 @@ TPageView::ContextMenu(BPoint where)
 	// the clicked word (WordBounds) unless it starts with a break, a tab
 	// or a space
 	size_t wordFrom, wordTo;
-	WordRange(text, click.offset, wordFrom, wordTo);
+	WordBounds(text, click.offset, true, wordFrom, wordTo);
 	static const char kBreaks[] = {1, '\n', 2, '\f', 5, '\t', ' '};
 	bool skip = wordFrom >= text.size()
 		|| std::find(kBreaks, kBreaks + sizeof(kBreaks), text[wordFrom]) != kBreaks + sizeof(kBreaks);
@@ -649,6 +650,51 @@ TPageView::MoveCaretVertically(int direction)
 }
 
 
+// TWPPart::DoSpecialKeys' Page Up and Down: the view scrolled a page
+// (the scroll bar's large step there; the port's scroll bars keep Haiku's
+// steps, so the view's height), the caret where it was in the window; at
+// the top or the bottom, the text's start or end
+void
+TPageView::MoveCaretByPage(int direction)
+{
+	size_t index;
+	float x;
+	if (!CaretLine(fCaret, index, x))
+		return;
+	BScrollBar* bar = ScrollBar(B_VERTICAL);
+	float before = Bounds().top;
+	float page = Bounds().Height();
+	if (bar != NULL) {
+		float minimum, maximum;
+		bar->GetRange(&minimum, &maximum);
+		page = std::max(std::min(page, maximum - before), minimum - before);
+		if (direction < 0)
+			page = std::min(Bounds().Height(), before - minimum);
+	}
+	ScrollBy(0, direction * page);
+	float moved = Bounds().top - before;
+	const WPPart* wp = fDocument.WordPart(fCaret.part);
+	float minimum = 0, maximum = 0;
+	if (bar != NULL)
+		bar->GetRange(&minimum, &maximum);
+	if (wp != NULL && bar != NULL && bar->Value() <= minimum && direction < 0) {
+		fCaret.paragraph = 0;
+		fCaret.offset = 0;
+		return;
+	}
+	if (wp != NULL && bar != NULL && bar->Value() >= maximum && direction > 0) {
+		fCaret.paragraph = wp->paragraphs.size() - 1;
+		fCaret.offset = EditableLength(wp->paragraphs.back());
+		return;
+	}
+	const Line& line = fLines[index];
+	Caret c;
+	if (HitText(BPoint(x, (line.frame.top + line.frame.bottom) / 2 + moved / fZoom), c)
+			&& c.part == fCaret.part)
+		fCaret = c;
+}
+
+
 void
 TPageView::EditText(const char* bytes, int32 count)
 {
@@ -727,17 +773,37 @@ TPageView::EditText(const char* bytes, int32 count)
 		case B_UP_ARROW:
 		case B_DOWN_ARROW:
 		case B_HOME:
-		case B_END: {
+		case B_END:
+		case B_PAGE_UP:
+		case B_PAGE_DOWN: {
+			// TWPPart::DoSpecialKeys: Command with Left and Right to the
+			// line's start and end, with Up and Down to the text's; Option
+			// or Control with Left and Right a word; Control with Home and
+			// End to the text's start and end; Home and End the line's,
+			// Page Up and Down a page (the PC Home & End and Page Keys
+			// preferences, on by default). Without Shift a selection's start
+			// (Left, Up) or end is where the move starts from.
+			uint32 mods = fScriptModifiers;
+			if (mods == 0 && Window() != NULL && Window()->CurrentMessage() != NULL)
+				mods = uint32(Window()->CurrentMessage()->GetInt32("modifiers", 0));
+			if (mods == 0)
+				mods = modifiers();
+			bool command = (mods & B_COMMAND_KEY) != 0;
+			bool control = (mods & B_CONTROL_KEY) != 0;
+			bool option = (mods & B_OPTION_KEY) != 0;
+			char key = bytes[0];
+			TextPosition from, to;
+			bool selection = TextSelection(from, to);
 			if (shift) {
 				if (!fAnchor.active || fAnchor.part != fCaret.part)
 					fAnchor = fCaret;
-			} else {
-				TextPosition from, to;
-				if (TextSelection(from, to)) {
-					if (bytes[0] == B_LEFT_ARROW || bytes[0] == B_UP_ARROW || bytes[0] == B_HOME)
-						fCaret = {true, fCaret.part, from.paragraph, from.offset};
-					else
-						fCaret = {true, fCaret.part, to.paragraph, to.offset};
+			} else if (selection) {
+				TextPosition origin = key == B_LEFT_ARROW || key == B_UP_ARROW || key == B_PAGE_UP
+					? from : to;
+				fCaret = {true, fCaret.part, origin.paragraph, origin.offset};
+				// a plain Left or Right only collapses the selection
+				if ((key == B_LEFT_ARROW || key == B_RIGHT_ARROW) && !command && !option
+						&& !control) {
 					fAnchor = fCaret;
 					changed = true;
 					break;
@@ -746,47 +812,116 @@ TPageView::EditText(const char* bytes, int32 count)
 			wp = fDocument.EditableWordPart(fCaret.part);
 			if (wp == NULL || fCaret.paragraph >= wp->paragraphs.size())
 				break;
-			const WPParagraph& par = wp->paragraphs[fCaret.paragraph];
-			switch (bytes[0]) {
+			auto lineEdge = [&](bool end) {
+				size_t index;
+				float x;
+				const WPParagraph& par = wp->paragraphs[fCaret.paragraph];
+				if (!CaretLine(fCaret, index, x))
+					return;
+				fCaret.offset = !end ? fLines[index].from
+					: std::min(fLines[index].to, EditableLength(par));
+				if (end && fCaret.offset > fLines[index].from
+					&& fCaret.offset < EditableLength(par)
+					&& par.text[PreviousCharacter(par.text, fCaret.offset)] == ' ')
+					fCaret.offset = PreviousCharacter(par.text, fCaret.offset);
+			};
+			auto textStart = [&]() {
+				fCaret.paragraph = 0;
+				fCaret.offset = 0;
+			};
+			// LastTextInsertionPos
+			auto textEnd = [&]() {
+				fCaret.paragraph = wp->paragraphs.size() - 1;
+				fCaret.offset = EditableLength(wp->paragraphs.back());
+			};
+			auto previous = [&]() {
+				if (fCaret.offset > 0)
+					fCaret.offset = PreviousCharacter(wp->paragraphs[fCaret.paragraph].text,
+						fCaret.offset);
+				else if (fCaret.paragraph > 0) {
+					fCaret.paragraph--;
+					fCaret.offset = EditableLength(wp->paragraphs[fCaret.paragraph]);
+				}
+			};
+			auto next = [&]() {
+				const WPParagraph& par = wp->paragraphs[fCaret.paragraph];
+				if (fCaret.offset < EditableLength(par))
+					fCaret.offset = NextCharacter(par.text, fCaret.offset);
+				else if (fCaret.paragraph + 1 < wp->paragraphs.size()) {
+					fCaret.paragraph++;
+					fCaret.offset = 0;
+				}
+			};
+			switch (key) {
 				case B_LEFT_ARROW:
-					if (fCaret.offset > 0)
-						fCaret.offset = PreviousCharacter(par.text, fCaret.offset);
-					else if (fCaret.paragraph > 0) {
-						fCaret.paragraph--;
-						fCaret.offset = EditableLength(wp->paragraphs[fCaret.paragraph]);
-					}
+					if (command)
+						lineEdge(false);
+					else if (option || control) {
+						// the word before the blanks before (SpaceBounds,
+						// PrevChar, WordBounds)
+						size_t blankFrom, blankTo, wordFrom, wordTo;
+						SpaceBounds(wp->paragraphs[fCaret.paragraph].text, fCaret.offset,
+							blankFrom, blankTo);
+						fCaret.offset = blankFrom;
+						previous();
+						WordBounds(wp->paragraphs[fCaret.paragraph].text, fCaret.offset, false,
+							wordFrom, wordTo);
+						fCaret.offset = wordFrom;
+					} else
+						previous();
 					break;
 				case B_RIGHT_ARROW:
-					if (fCaret.offset < EditableLength(par))
-						fCaret.offset = NextCharacter(par.text, fCaret.offset);
-					else if (fCaret.paragraph + 1 < wp->paragraphs.size()) {
-						fCaret.paragraph++;
-						fCaret.offset = 0;
-					}
+					if (command)
+						lineEdge(true);
+					else if (option || control) {
+						// the end of the word after the blanks after
+						const std::string& text = wp->paragraphs[fCaret.paragraph].text;
+						size_t blankFrom, blankTo, wordFrom, wordTo;
+						SpaceBounds(text, fCaret.offset, blankFrom, blankTo);
+						WordBounds(text, blankTo, false, wordFrom, wordTo);
+						if (wordTo != blankTo)
+							fCaret.offset = std::min(wordTo, EditableLength(wp->paragraphs[
+								fCaret.paragraph]));
+						else {
+							fCaret.offset = blankTo;
+							next();
+						}
+					} else
+						next();
 					break;
 				case B_UP_ARROW:
-					MoveCaretVertically(-1);
+					if (command)
+						textStart();
+					else
+						MoveCaretVertically(-1);
 					break;
 				case B_DOWN_ARROW:
-					MoveCaretVertically(1);
+					if (command)
+						textEnd();
+					else
+						MoveCaretVertically(1);
 					break;
 				case B_HOME:
-				case B_END: {
-					size_t index;
-					float x;
-					if (CaretLine(fCaret, index, x))
-						fCaret.offset = bytes[0] == B_HOME ? fLines[index].from
-							: std::min(fLines[index].to, EditableLength(par));
-					if (bytes[0] == B_END && fCaret.offset > fLines[index].from
-						&& fCaret.offset < EditableLength(par)
-						&& par.text[PreviousCharacter(par.text, fCaret.offset)] == ' ')
-						fCaret.offset = PreviousCharacter(par.text, fCaret.offset);
+					if (control)
+						textStart();
+					else
+						lineEdge(false);
 					break;
-				}
+				case B_END:
+					if (control)
+						textEnd();
+					else
+						lineEdge(true);
+					break;
+				case B_PAGE_UP:
+				case B_PAGE_DOWN:
+					MoveCaretByPage(key == B_PAGE_UP ? -1 : 1);
+					break;
 			}
 			if (!shift)
 				fAnchor = fCaret;
 			fUndo.Break();
+			ScrollCaretIntoView();
 			break;
 		}
 		case B_ESCAPE:
@@ -1020,15 +1155,24 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		if (shift && fCaret.active && caret.part == fCaret.part) {
 			fCaret = caret;
 		} else if (clicks == 2) {
+			// TWPClickHandler: a word (TWPPart::WordBounds), the line
+			// (LogicalLineBounds), the paragraph (ParBounds)
 			const WPPart* wp = fDocument.WordPart(caret.part);
 			if (wp != NULL) {
 				const std::string& text = wp->paragraphs[caret.paragraph].text;
 				size_t from, to;
-				WordRange(text, caret.offset, from, to);
+				WordBounds(text, caret.offset, false, from, to);
 				fAnchor = {true, caret.part, caret.paragraph, from};
 				fCaret = {true, caret.part, caret.paragraph, to};
 			}
-		} else if (clicks >= 3) {
+		} else if (clicks == 3) {
+			size_t index;
+			float x;
+			if (CaretLine(caret, index, x)) {
+				fAnchor = {true, caret.part, caret.paragraph, fLines[index].from};
+				fCaret = {true, caret.part, caret.paragraph, fLines[index].to};
+			}
+		} else if (clicks >= 4) {
 			const WPPart* wp = fDocument.WordPart(caret.part);
 			if (wp != NULL) {
 				fAnchor = {true, caret.part, caret.paragraph, 0};
@@ -2357,6 +2501,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 				else
 					fprintf(stderr, "cellrect %d %d (not visible)\n", row, column);
 			}
+		} else if (command == "caret") {
+			// "caret": the caret and the anchor (part, paragraph, offset)
+			printf("caret %zu %zu.%zu anchor %zu.%zu\n", fCaret.part, fCaret.paragraph,
+				fCaret.offset, fAnchor.paragraph, fAnchor.offset);
+			fflush(stdout);
 		} else if (command == "selection") {
 			if (!fSelectedCell.active) {
 				fprintf(stderr, "cells none\n");
@@ -2371,25 +2520,30 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 		} else if (command.compare(0, 4, "key ") == 0) {
 			std::string keys = command.substr(4);
-			static const struct { const char* name; char key; } kNames[] = {
-				{"{enter}", B_ENTER}, {"{bs}", B_BACKSPACE}, {"{del}", B_DELETE},
-				{"{left}", B_LEFT_ARROW}, {"{right}", B_RIGHT_ARROW}, {"{up}", B_UP_ARROW},
-				{"{down}", B_DOWN_ARROW}, {"{tab}", B_TAB}, {"{esc}", B_ESCAPE},
-				{"{home}", B_HOME}, {"{end}", B_END}, {"{sleft}", B_LEFT_ARROW},
-				{"{sright}", B_RIGHT_ARROW}, {"{sup}", B_UP_ARROW},
-				{"{sdown}", B_DOWN_ARROW}};
+			// {c...}: with Command, {o...}: Option, {k...}: Control
+			static const struct { const char* name; char key; uint32 mods; } kNames[] = {
+				{"{enter}", B_ENTER, 0}, {"{bs}", B_BACKSPACE, 0}, {"{del}", B_DELETE, 0},
+				{"{left}", B_LEFT_ARROW, 0}, {"{right}", B_RIGHT_ARROW, 0},
+				{"{up}", B_UP_ARROW, 0}, {"{down}", B_DOWN_ARROW, 0}, {"{tab}", B_TAB, 0},
+				{"{esc}", B_ESCAPE, 0}, {"{home}", B_HOME, 0}, {"{end}", B_END, 0},
+				{"{sleft}", B_LEFT_ARROW, B_SHIFT_KEY}, {"{sright}", B_RIGHT_ARROW, B_SHIFT_KEY},
+				{"{sup}", B_UP_ARROW, B_SHIFT_KEY}, {"{sdown}", B_DOWN_ARROW, B_SHIFT_KEY},
+				{"{cleft}", B_LEFT_ARROW, B_COMMAND_KEY}, {"{cright}", B_RIGHT_ARROW, B_COMMAND_KEY},
+				{"{cup}", B_UP_ARROW, B_COMMAND_KEY}, {"{cdown}", B_DOWN_ARROW, B_COMMAND_KEY},
+				{"{oleft}", B_LEFT_ARROW, B_OPTION_KEY}, {"{oright}", B_RIGHT_ARROW, B_OPTION_KEY},
+				{"{khome}", B_HOME, B_CONTROL_KEY}, {"{kend}", B_END, B_CONTROL_KEY},
+				{"{pgup}", B_PAGE_UP, 0}, {"{pgdn}", B_PAGE_DOWN, 0}};
 			for (size_t i = 0; i < keys.size();) {
 				char key = keys[i];
 				size_t length = 1;
-				bool shifted = keys.compare(i, 7, "{sleft}") == 0
-					|| keys.compare(i, 8, "{sright}") == 0
-					|| keys.compare(i, 4, "{sup}") == 0
-					|| keys.compare(i, 7, "{sdown}") == 0;
+				uint32 mods = 0;
 				for (const auto& n : kNames)
 					if (keys.compare(i, strlen(n.name), n.name) == 0) {
 						key = n.key;
 						length = strlen(n.name);
+						mods = n.mods;
 					}
+				bool shifted = (mods & B_SHIFT_KEY) != 0;
 				if (length == 1 && (key & 0x80)) {	// a UTF-8 sequence
 					while (i + length < keys.size() && (keys[i + length] & 0xc0) == 0x80)
 						length++;
@@ -2412,8 +2566,10 @@ TPageView::RunScript(const std::string& script, Document& document)
 					}
 				} else {
 					fScriptShift = shifted;
+					fScriptModifiers = mods & ~uint32(B_SHIFT_KEY);
 					KeyDown(bytes.c_str(), int32(bytes.size()));
 					fScriptShift = false;
+					fScriptModifiers = 0;
 				}
 				i += length;
 			}

@@ -230,6 +230,7 @@ private:
 	bool CaretLine(const Caret& caret, size_t& line, float& x) const;
 	void EditText(const char* bytes, int32 count);
 	void MoveCaretVertically(int direction);
+	void MoveCaretByPage(int direction);
 	void UpdateMarks();
 	void DrawCaret();
 	// the x of a byte offset in that line
@@ -276,6 +277,7 @@ private:
 	bool fDragging = false;
 	bool fDraggingCells = false;	// cell range: drag from first click
 	bool fScriptShift = false;		// RunScript: shift held
+	uint32 fScriptModifiers = 0;	// RunScript: Command, Option, Control held
 };
 
 } // namespace gobe
