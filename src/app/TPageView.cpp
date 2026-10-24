@@ -40,9 +40,9 @@ TPageView::CanShow(const Document& document)
 TPageView::TPageView(Document& document)
 	:
 	BView("TPageView", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE | B_NAVIGABLE),
-	fDocument(document),
+	fMargin(kDesk),
 	fBook(new SSBook(document)),
-	fMargin(kDesk)
+	fDocument(document)
 {
 	SetViewColor(B_TRANSPARENT_COLOR);
 	// TDoc: the history keeps the Undo Levels preference's steps
@@ -1132,8 +1132,6 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 {
 	const SSPart& ss = *fDocument.SpreadsheetPart(f.part);
 	SSEvaluator& eval = *fBook->For(f.part);
-	const gobe::Frame& frame = *f.frame;
-
 	PushState();
 	BRegion clip(r);
 	ConstrainClippingRegion(&clip);

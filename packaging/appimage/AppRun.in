@@ -1,0 +1,13 @@
+#!/bin/sh
+# AppImage entry point. Cosmoe finds its add-ons and data next to
+# usr/lib/libbe.so, and the app finds libbe through its RUNPATH; this sets
+# up the rest:
+#  - fontconfig, for the bundled Noto fonts;
+#  - TRANSLATORS, the image translators to load. Cosmoe's default lookup
+#    misses the bundled ones on the very first run from a mounted AppImage
+#    (cosmoe#4), so name them directly. One path only: AddPaths() drops a
+#    character from all but the last entry.
+HERE=$(dirname "$(readlink -f "$0")")
+export FONTCONFIG_FILE="$HERE/etc/fonts/fonts.conf"
+export TRANSLATORS="$HERE/usr/lib/addons/Translators"
+exec "$HERE/usr/bin/@APP_NAME@" "$@"

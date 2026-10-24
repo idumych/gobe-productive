@@ -54,6 +54,13 @@ ResourceFile::Load(const std::string& path)
 		fError = "cannot open " + path;
 		return false;
 	}
+	// (not an ELF file, e.g. a CD image: not read through)
+	char magic[4] = {};
+	if (!in.read(magic, 4) || memcmp(magic, "\x7f" "ELF", 4) != 0) {
+		fError = path + " is not a 32-bit ELF file";
+		return false;
+	}
+	in.seekg(0);
 	std::vector<uint8_t> d((std::istreambuf_iterator<char>(in)),
 		std::istreambuf_iterator<char>());
 	if (d.size() < 0x34 || memcmp(d.data(), "\x7f" "ELF", 4) != 0 || d[4] != 1) {

@@ -1,0 +1,5 @@
+A port of Gobe Productive 2.0.1, the BeOS office suite, rebuilt from the original so that it opens and saves Gobe Productive documents and works the way the original did. This preview edits word processing documents: text and styles (including Edit Styles), headers and footers, footnotes, columns, fields, find and replace, spell checking, the history, page setup and printing. It also shows drawings, spreadsheets, charts and presentations, and imports and exports plain text and RTF.
+
+It needs your own copy of the original Gobe Productive 2.0 (its "Gobe Productive" program file), whose menus, dialogs, strings and pictures it reads at runtime; none of them are included. It looks for it in the usual places and asks for it otherwise.
+
+This is an unofficial reimplementation, not affiliated with the owners of Gobe Productive.

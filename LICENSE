@@ -1,0 +1,41 @@
+MIT License
+
+Copyright (c) 2026 the Gobe Productive port contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+-------------------------------------------------------------------------------
+NOTICE
+
+This is an unofficial, independent reimplementation of Gobe Productive 2.0.1
+for BeOS. It is not affiliated with, endorsed by or supported by Gobe Software
+or whoever now holds the rights to Gobe Productive. "Gobe Productive" is a
+trademark of its owners.
+
+The port was written by studying how the original program behaves, including
+analysis of its machine code, so that it reads and writes the same documents
+and works the same way. It contains no code, resources, pictures, sample
+documents or dictionaries from the original: it needs the user's own copy of
+the original "Gobe Productive" program file and reads its menus, dialogs,
+strings and pictures from it at runtime.
+
+The legal status of the original's rights is unclear, and so is how far this
+reimplementation may be affected by them. The MIT licence above applies only to
+the extent that the contributors hold rights in this code. If you hold rights
+to Gobe Productive and have a concern, please open an issue.

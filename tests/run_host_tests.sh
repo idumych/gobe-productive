@@ -11,9 +11,16 @@ mkdir -p "$OUT/core"
 APP=$(ls -d ../original/installed/*/"Gobe Productive 2.0" 2>/dev/null | head -1)
 DOCS="$OUT/documents"
 find "$APP/Samples" "$APP/Labels" -type f ! -name '*.json' 2>/dev/null | sort > "$DOCS"
+# Without the original (CI, a fresh checkout): only the tests that need
+# neither its documents nor its dictionaries
+PORTABLE="text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment"
 if [ ! -s "$DOCS" ]; then
-	echo "FAIL: no documents found in $APP/Samples and $APP/Labels"
-	exit 1
+	if [ $# -gt 0 ]; then
+		echo "FAIL: no documents found in $APP/Samples and $APP/Labels"
+		exit 1
+	fi
+	echo "note: no original Gobe Productive install next to port/: running the portable tests only"
+	set -- $PORTABLE
 fi
 
 # the core once, as objects
@@ -26,7 +33,7 @@ for c in src/core/*.cpp; do
 done
 
 # tests that take no arguments; all others get every sample document
-NO_ARGS="text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment spell"
+NO_ARGS="text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment spell import_original"
 TOOLS="core_dump ss_dump"	# not tests
 
 TESTS=${*:-$(ls tests/*.cpp | xargs -n1 basename | sed 's/\.cpp$//')}

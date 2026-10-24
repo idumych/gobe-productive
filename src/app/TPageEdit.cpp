@@ -9,7 +9,7 @@
 #include "TFormatBar.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
-#include "Url.h"
+#include "UrlParse.h"
 #include "Find.h"
 #include "TPreferences.h"
 #include "TDocumentDialogs.h"
@@ -159,7 +159,6 @@ TPageView::CaretLine(const Caret& caret, size_t& lineIndex, float& x) const
 	const WPPart* wp = fDocument.WordPart(caret.part);
 	if (wp == NULL || caret.paragraph >= wp->paragraphs.size())
 		return false;
-	const std::string& text = wp->paragraphs[caret.paragraph].text;
 	bool found = false;
 	for (size_t i = 0; i < fLines.size(); i++) {
 		const Line& line = fLines[i];
@@ -3019,10 +3018,6 @@ TPageView::RunScript(const std::string& script, Document& document)
 				fprintf(stderr, "cellstyle: no selection\n");
 				continue;
 			}
-			int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
-			int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
-			int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
-			int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
 			std::string name = command.substr(9);
 			// TODO: look up style by name and apply
 			fprintf(stderr, "cellstyle '%s': not yet implemented\n", name.c_str());

@@ -24,12 +24,20 @@ public:
 	// Remember keeps where it is for the next start
 	static bool Use(const char* path, BString& error);
 	static void Remember();
+	// the original unpacked from `source` (its CD image, its installer, a
+	// folder from the CD or an installation: OriginalImport) into the
+	// port's own folder, then used
+	static bool Import(const char* source, BString& error);
 
 	static const ResourceFile& File();
 	static const BString& Path();
 	// GetIndexString: string `index` (from 0) of STR# `id`
 	static BString IndexString(int32 id, int32 index);
 };
+
+// a URL in the program for its kind (`mime`: "text/html", "text/x-email");
+// on Linux (Cosmoe) the desktop's, through xdg-open
+void LaunchURL(const char* mime, const char* url);
 
 } // namespace gobe
 

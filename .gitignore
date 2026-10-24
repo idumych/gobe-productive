@@ -1,0 +1,10 @@
+/GobeProductive
+obj/
+build/
+dist/
+*.deb
+*.hpkg
+*.AppImage
+.cosmoe/
+.haiku-headers/
+.vos-sdk/

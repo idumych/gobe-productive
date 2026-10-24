@@ -97,10 +97,10 @@ public:
 		fOpenDialog(-1),
 		fReady(false),
 		fHasDocument(false),
+		fNewDocument(false),
 		fOpenPanel(NULL),
 		fWindowCount(0),
-		fSlide(-1),
-		fNewDocument(false)
+		fSlide(-1)
 	{
 	}
 
@@ -324,11 +324,13 @@ public:
 			looper->Run();
 			BMessage message('Gloc');
 			message.AddInt32("sem", looper->fDone);
-			BFilePanel* panel = new BFilePanel(B_OPEN_PANEL, NULL, NULL, B_FILE_NODE, false,
-				NULL, NULL, true, true);
+			// (a file or a folder: the program, the installer, the CD image
+			// or a folder from the CD)
+			BFilePanel* panel = new BFilePanel(B_OPEN_PANEL, NULL, NULL,
+				B_FILE_NODE | B_DIRECTORY_NODE, false, NULL, NULL, true, true);
 			panel->SetTarget(BMessenger(looper));
 			panel->SetMessage(&message);
-			panel->Window()->SetTitle("Where is \"Gobe Productive\"?");
+			panel->Window()->SetTitle("Where is Gobe Productive (CD image, installer or folder)?");
 			panel->Show();
 			acquire_sem(looper->fDone);
 			BPath located = looper->fPath;
@@ -339,11 +341,15 @@ public:
 			if (located.InitCheck() != B_OK)
 				continue;
 			error = "";
-			if (GobeResources::Use(located.Path(), error)) {
+			BString useError;
+			if (GobeResources::Use(located.Path(), useError)) {
 				GobeResources::Remember();
 				return true;
 			}
-			error.Prepend("That isn't the original Gobe Productive program:\n");
+			// the CD image, the installer or a folder: unpacked
+			if (GobeResources::Import(located.Path(), error))
+				return true;
+			error.Prepend("The original Gobe Productive couldn't be found there:\n");
 		}
 	}
 
@@ -363,8 +369,7 @@ public:
 		}
 		BString url = "file://";
 		url << file;
-		const char* argv[] = {url.String(), NULL};
-		be_roster->Launch("text/html", 1, argv);
+		LaunchURL("text/html", url.String());
 	}
 
 	// Test hook: --do without --render runs the script in the window

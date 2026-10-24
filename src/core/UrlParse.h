@@ -1,7 +1,7 @@
 // ParseURL: the URL a text's selection (or the place clicked) is in, for a
 // text part's context menu's Open URL.
-#ifndef GOBE_URL_H
-#define GOBE_URL_H
+#ifndef GOBE_URLPARSE_H
+#define GOBE_URLPARSE_H
 
 #include <string>
 

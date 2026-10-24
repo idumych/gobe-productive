@@ -1,0 +1,20 @@
+name: test
+
+# Host-side unit tests (TEST_CMD in haiku-app.env) on every push.
+on:
+  push:
+  pull_request:
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          . ./haiku-app.env
+          if [ -n "$APPIMAGE_APT_EXTRA" ]; then sudo apt-get update && sudo apt-get install -y $APPIMAGE_APT_EXTRA; fi
+      - name: Unit tests
+        run: |
+          . ./haiku-app.env
+          if [ -n "$TEST_CMD" ]; then sh -c "$TEST_CMD"; else echo "no TEST_CMD"; fi

@@ -1237,9 +1237,7 @@ TDocWindow::MessageReceived(BMessage* message)
 	if (message->what == 'sE03') {
 		const char* url;
 		if (message->FindString("URL", &url) == B_OK) {
-			char* argv[1] = {const_cast<char*>(url)};
-			be_roster->Launch(strncmp(url, "mailto:", 7) == 0 ? "text/x-email" : "text/html", 1,
-				argv);
+			LaunchURL(strncmp(url, "mailto:", 7) == 0 ? "text/x-email" : "text/html", url);
 		}
 		return;
 	}
@@ -1617,7 +1615,6 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 
 	// Size: mark the item whose value matches textSize
 	if (fSizeMenu != NULL) {
-		BMenuItem* found = NULL;
 		for (int32 i = 0; i < fSizeMenu->CountItems(); i++) {
 			BMenuItem* item = fSizeMenu->ItemAt(i);
 			BMessage* msg = item->Message();
@@ -1626,7 +1623,6 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 				if (msg->FindInt32(kValueString, &val) == B_OK
 					&& val == int32(textSize)) {
 					item->SetMarked(true);
-					found = item;
 					break;
 				}
 			}
