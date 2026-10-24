@@ -2,6 +2,9 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+
+#include <algorithm>
+#include <vector>
 #include <string.h>
 
 #include <Alert.h>
@@ -43,6 +46,8 @@
 #include "TPartBar.h"
 #include "TSpellBar.h"
 #include "TSpellDialogs.h"
+#include "TFindDialog.h"
+#include "Find.h"
 #include "TWPRuler.h"
 #include "Styles.h"
 
@@ -83,12 +88,6 @@ static const uint32 kCmdGoToCell = 'sM77';
 static const uint32 kCmdInsertDate = 'sM53';
 static const uint32 kCmdInsertTime = 'sM54';
 
-// Find/Replace dialog controls (DIAL 7, Item 7)
-static const uint32 kFindBtn = 6;
-static const uint32 kReplaceBtn = 7;
-static const uint32 kReplaceFindBtn = 8;
-static const uint32 kReplaceAllBtn = 9;
-
 // Find/Replace menu commands (MENU 7)
 static const uint32 kCmdFindReplace = 'sME0';
 static const uint32 kCmdFindAgain = 'sME1';
@@ -109,269 +108,13 @@ static const uint32 kCmdMargins = 'sM22';
 static const uint32 kCmdInsertHeader = 'sM2B';
 static const uint32 kCmdInsertFooter = 'sM2C';
 
+namespace {
 
-// #pragma mark - TFindDialog
+// TApp +0x198: the document windows, the front one first
+std::vector<TDocWindow*> sWindows;
 
-TFindDialog::TFindDialog(int32 dialogId, int32 itemsId, uint32 command,
-	BHandler* target, Document* doc, TPageView* view)
-	:
-	TDialog(dialogId, itemsId, command, target),
-	fDocument(doc),
-	fView(view)
-{
-}
+} // namespace
 
-
-TFindDialog::~TFindDialog()
-{
-}
-
-
-void
-TFindDialog::SetFindText(const char* text)
-{
-	fFindText = text;
-}
-
-
-void
-TFindDialog::SetReplaceText(const char* text)
-{
-	fReplaceText = text;
-}
-
-
-void
-TFindDialog::SetCaseSensitive(bool on)
-{
-	fCaseSensitive = on;
-}
-
-
-void
-TFindDialog::SetEntireWord(bool on)
-{
-	fEntireWord = on;
-}
-
-
-void
-TFindDialog::SetWrap(bool on)
-{
-	fWrap = on;
-}
-
-
-void
-TFindDialog::ReadControls()
-{
-	// Recursively walk all descendant views to find BTextControl and BCheckBox
-	struct ControlFinder {
-		int32 editCount = 0;
-
-		void Visit(BView* view, TFindDialog* dialog) {
-			if (view == NULL) return;
-			BTextControl* edit = dynamic_cast<BTextControl*>(view);
-			if (edit != NULL) {
-				if (editCount == 0)
-					dialog->fFindText = edit->Text();
-				else if (editCount == 1)
-					dialog->fReplaceText = edit->Text();
-				editCount++;
-				return;
-			}
-			BCheckBox* box = dynamic_cast<BCheckBox*>(view);
-			if (box != NULL) {
-				switch (editCount) {
-					case 2:
-						dialog->fCaseSensitive = !box->Value();
-						break;
-					case 3:
-						dialog->fEntireWord = box->Value() != 0;
-						break;
-					case 4:
-						dialog->fWrap = box->Value() != 0;
-						break;
-				}
-				editCount++;
-				return;
-			}
-			// Recurse into children
-			int32 count = view->CountChildren();
-			for (int32 i = 0; i < count; i++)
-				Visit(view->ChildAt(i), dialog);
-		}
-	};
-
-	ControlFinder finder;
-	// Start from this (the TFindDialog window), cast through BWindow
-	finder.Visit(ChildAt(0), this);
-}
-
-
-void
-TFindDialog::DoFind()
-{
-	ReadControls();
-	if (fView == NULL || fDocument == NULL || fFindText.empty())
-		return;
-
-	FindDialogOptions opts;
-	opts.caseSensitive = fCaseSensitive;
-	opts.wholeWord = fEntireWord;
-	opts.backwards = false;
-	opts.wrap = fWrap;
-
-	const WPPart* wp = fDocument->WordPart(fView->fCaret.part);
-	if (wp == NULL) {
-		fprintf(stderr, "find: no word part\n");
-		return;
-	}
-	TextPosition from = {fView->fCaret.paragraph, fView->fCaret.offset};
-	TextPosition start, endPos;
-	if (FindText(*wp, from, fFindText, opts, start, endPos)) {
-		fView->fAnchor.active = true;
-		fView->fAnchor.part = fView->fCaret.part;
-		fView->fAnchor.paragraph = start.paragraph;
-		fView->fAnchor.offset = start.offset;
-		fView->fCaret.active = true;
-		fView->fCaret.part = fView->fCaret.part;
-		fView->fCaret.paragraph = start.paragraph;
-		fView->fCaret.offset = endPos.offset;
-		fView->Invalidate();
-	} else {
-		fprintf(stderr, "find: not found\n");
-	}
-}
-
-
-void
-TFindDialog::DoReplace()
-{
-	ReadControls();
-	if (fView == NULL || fDocument == NULL || fFindText.empty())
-		return;
-
-	// Check if the current selection matches
-	TextPosition selFrom, selTo;
-	if (!fView->TextSelection(selFrom, selTo)) {
-		fprintf(stderr, "replace: no selection\n");
-		return;
-	}
-
-	const WPPart* wp = fDocument->WordPart(fView->fCaret.part);
-	if (wp == NULL) {
-		fprintf(stderr, "replace: no word part\n");
-		return;
-	}
-
-	std::string selected = RangeText(*wp, selFrom, selTo);
-
-	// Check if it matches (considering case sensitivity)
-	bool match = false;
-	if (selected.size() == fFindText.size()) {
-		if (fCaseSensitive) {
-			match = (selected == fFindText);
-		} else {
-			match = true;
-			for (size_t i = 0; i < selected.size(); i++) {
-				if (FoldCase(selected[i]) != FoldCase(fFindText[i])) {
-					match = false;
-					break;
-				}
-			}
-		}
-	}
-
-	if (!match) {
-		fprintf(stderr, "replace: selection doesn't match\n");
-		return;
-	}
-
-	// Replace the selection
-	size_t part = fView->fCaret.part;
-	fView->fUndo.Begin(*fDocument, part, "Replace Text", fView->CurrentViewState());
-	WPPart* editWP = fDocument->EditableWordPart(part);
-	if (editWP) {
-		TextPosition result;
-		DeleteRange(*editWP, selFrom, selTo, result);
-		InsertText(*editWP, result, fReplaceText);
-		// Select the replacement
-		fView->fAnchor.active = true;
-		fView->fAnchor.part = part;
-		fView->fAnchor.paragraph = result.paragraph;
-		fView->fAnchor.offset = result.offset;
-		fView->fCaret.active = true;
-		fView->fCaret.part = part;
-		fView->fCaret.paragraph = result.paragraph;
-		fView->fCaret.offset = result.offset + fReplaceText.size();
-		fView->TextChanged();
-	}
-}
-
-
-void
-TFindDialog::DoReplaceAndFind()
-{
-	DoReplace();
-	DoFind();
-}
-
-
-void
-TFindDialog::DoReplaceAll()
-{
-	ReadControls();
-	if (fView == NULL || fDocument == NULL || fFindText.empty())
-		return;
-
-	WPPart* wp = fDocument->EditableWordPart(fView->fCaret.part);
-	if (wp == NULL) {
-		fprintf(stderr, "replaceall: no word part\n");
-		return;
-	}
-
-	FindDialogOptions opts;
-	opts.caseSensitive = fCaseSensitive;
-	opts.wholeWord = fEntireWord;
-	opts.wrap = fWrap;
-
-	fView->fUndo.Begin(*fDocument, fView->fCaret.part, GobeResources::IndexString(3, 29).String(),
-		fView->CurrentViewState());
-	int count = ReplaceAll(*wp, fFindText, fReplaceText, opts);
-	fView->TextChanged();
-	fprintf(stderr, "replaceall: %d replacements\n", count);
-}
-
-
-void
-TFindDialog::MessageReceived(BMessage* message)
-{
-	// Dialog-specific command handling
-	if (message->HasInt32("dialog")) {
-		int32 index = message->GetInt32("index", -1);
-
-		switch (index) {
-			case kFindBtn:
-				DoFind();
-				break;
-			case kReplaceBtn:
-				DoReplace();
-				break;
-			case kReplaceFindBtn:
-				DoReplaceAndFind();
-				break;
-			case kReplaceAllBtn:
-				DoReplaceAll();
-				break;
-			default:
-				PostMessage(B_QUIT_REQUESTED);
-				break;
-		}
-		return;
-	}
-	TDialog::MessageReceived(message);
-}
 
 // #pragma mark - TDocWindow
 
@@ -777,6 +520,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	:
 	BWindow(frame, title, B_DOCUMENT_WINDOW, B_AUTO_UPDATE_SIZE_LIMITS)
 {
+	sWindows.insert(sWindows.begin(), this);
 	TMenuBar* menuBar = InstallBaseMenus();
 	// a test aid, not the original's: every DIAL resource, with
 	// GOBE_DEBUG_MENUS set
@@ -1412,12 +1156,7 @@ TDocWindow::MessageReceived(BMessage* message)
 	if (message->what == kMsgOpenDialog) {
 		int32 id = message->GetInt32("id", 0);
 		if (id == 7) {
-			// Find/Replace dialog: use TFindDialog
-			if (fPages != NULL) {
-				TFindDialog* dialog = new TFindDialog(id, id, kDialogCommand, this,
-					fDocument, fPages);
-				dialog->Show();
-			}
+			FindReplaceCommand(message);
 			return;
 		}
 		// most other dialogs use the same id for DIAL and Item
@@ -1426,57 +1165,15 @@ TDocWindow::MessageReceived(BMessage* message)
 		return;
 	}
 
-	// Handle Find/Replace menu commands (MENU 7)
-	if (message->what == kCmdFindReplace) {
-		if (fPages != NULL) {
-			TFindDialog* dialog = new TFindDialog(7, 7, kDialogCommand, this,
-				fDocument, fPages);
-			dialog->Show();
-		}
+	// Document > Find/Change (MENU 7), the Find dialog's 'sME5' (Replace)
+	// and 'sE02' (the document view to the fore: focused)
+	if (message->what >= kCmdFindReplace && message->what <= 'sME5') {
+		FindReplaceCommand(message);
 		return;
 	}
-	if (message->what == kCmdFindSelection) {
-		if (fPages != NULL) {
-			// Pre-fill the find field with current text selection
-			TextPosition from, to;
-			if (fPages->TextSelection(from, to)) {
-				const WPPart* wp = fDocument->WordPart(fPages->fCaret.part);
-				if (wp != NULL) {
-					std::string sel = RangeText(*wp, from, to);
-					TFindDialog* dialog = new TFindDialog(7, 7, kDialogCommand, this,
-						fDocument, fPages);
-					dialog->SetFindText(sel.c_str());
-					dialog->Show();
-				}
-			}
-		}
-		return;
-	}
-	if (message->what == kCmdReplaceAll) {
-		if (fPages != NULL && fDocument != NULL) {
-			// Pre-fill find text from current selection if any
-			TextPosition from, to;
-			std::string prefill;
-			if (fPages->TextSelection(from, to)) {
-				const WPPart* wp = fDocument->WordPart(fPages->fCaret.part);
-				if (wp != NULL)
-					prefill = RangeText(*wp, from, to);
-			}
-			TFindDialog* dialog = new TFindDialog(7, 7, kDialogCommand, this,
-				fDocument, fPages);
-			if (!prefill.empty())
-				dialog->SetFindText(prefill.c_str());
-			dialog->Show();
-		}
-		return;
-	}
-	// sME1 (Find Again) and sME3 (Replace & Find Again) — open dialog
-	if (message->what == kCmdFindAgain || message->what == kCmdReplaceFindAgain) {
-		if (fPages != NULL) {
-			TFindDialog* dialog = new TFindDialog(7, 7, kDialogCommand, this,
-				fDocument, fPages);
-			dialog->Show();
-		}
+	if (message->what == 'sE02') {
+		if (fPages != NULL)
+			fPages->MakeFocus(true);
 		return;
 	}
 	// Column Width, Row Height, Go To Cell
@@ -1900,6 +1597,19 @@ TDocWindow::MenusBeginning()
 		item->SetEnabled(paged);
 		item->SetMarked(paged && fPages->PageView());
 	}
+	// TNormalDocWinHelper::FixMenus: Find Again and Replace All with a find
+	// string, Find Selection with text selected, Replace & Find with both
+	{
+		bool findText = !AppFindReplace().find.empty();
+		bool selection = HasTextSelection();
+		static const struct {
+			uint32 command;
+			int needs;			// 1 find text, 2 a selection
+		} kFind[] = {{'sME1', 1}, {'sME2', 2}, {'sME3', 3}, {'sME4', 1}};
+		for (const auto& f : kFind)
+			if (BMenuItem* item = KeyMenuBar()->FindItem(f.command))
+				item->SetEnabled((!(f.needs & 1) || findText) && (!(f.needs & 2) || selection));
+	}
 	// TNormalDocWinHelper::FixMenus: Hide or Show SpellBar (STR# 1); Skip,
 	// Learn and Replace as the bar's buttons
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMC5')) {
@@ -1966,6 +1676,155 @@ TDocWindow::QuitRequested()
 	if (documents <= 1)
 		be_app->PostMessage(B_QUIT_REQUESTED);
 	return true;
+}
+
+// #pragma mark - Find/Change
+
+
+TDocWindow::~TDocWindow()
+{
+	sWindows.erase(std::remove(sWindows.begin(), sWindows.end(), this), sWindows.end());
+}
+
+
+void
+TDocWindow::WindowActivated(bool active)
+{
+	BWindow::WindowActivated(active);
+	if (active) {
+		sWindows.erase(std::remove(sWindows.begin(), sWindows.end(), this), sWindows.end());
+		sWindows.insert(sWindows.begin(), this);
+		if (TDialogFindChange* find = TDialogFindChange::Open())
+			find->PostMessage('sD=L');
+	}
+}
+
+
+// TApp::FrontDocWindow
+TDocWindow*
+TDocWindow::Front()
+{
+	return sWindows.empty() ? NULL : sWindows.front();
+}
+
+
+bool
+TDocWindow::HasTextSelection() const
+{
+	TextPosition from, to;
+	return fPages != NULL && fPages->fCaret.active
+		&& fDocument != NULL && fDocument->WordPart(fPages->fCaret.part) != NULL
+		&& fPages->TextSelection(from, to);
+}
+
+
+// TFindReplace::DoMessage: a message's "find", "replace", "caseSens",
+// "wholeWord" and "wrap" first; then the dialog (sME0), DoFind (sME1, from
+// the selection's end; a beep if there's nothing), DoFindSelection (sME2),
+// DoReplaceAndFind (sME3), DoReplaceAll (sME4: from the top, one step) or
+// DoReplace (sME5: the selected text, whatever it is); the dialog's
+// buttons brought up to date
+void
+TDocWindow::FindReplaceCommand(BMessage* message)
+{
+	FindReplace& find = AppFindReplace();
+	bool on;
+	const char* text;
+	if (message->FindBool("caseSens", &on) == B_OK)
+		find.SetCaseSensitive(on);
+	if (message->FindBool("wholeWord", &on) == B_OK)
+		find.wholeWord = on;
+	if (message->FindBool("wrap", &on) == B_OK)
+		find.wrap = on;
+	if (message->FindString("find", &text) == B_OK)
+		find.SetFind(text);
+	if (message->FindString("replace", &text) == B_OK)
+		find.replace = text;
+
+	auto doFind = [&]() {
+		if (find.Pattern().empty() || fPages == NULL || fDocument == NULL)
+			return;
+		bool fromPosition = false;
+		size_t part = 0;
+		uint32_t position = 0;
+		const WPPart* wp = fPages->fCaret.active ? fDocument->WordPart(fPages->fCaret.part)
+			: NULL;
+		if (wp != NULL) {
+			TextPosition from, to;
+			if (!fPages->TextSelection(from, to))
+				to = {fPages->fCaret.paragraph, fPages->fCaret.offset};
+			fromPosition = true;
+			part = fPages->fCaret.part;
+			position = PartPosition(*wp, to);
+		}
+		FoundText found;
+		if (FindNext(*fDocument, find, fromPosition, part, position, found))
+			fPages->SelectRange(found.part, found.start, found.end);
+		else
+			beep();
+	};
+	auto doReplace = [&]() {
+		TextPosition from, to;
+		if (!HasTextSelection() || !fPages->TextSelection(from, to))
+			return;
+		const WPPart* wp = fDocument->WordPart(fPages->fCaret.part);
+		fPages->ReplaceRange(fPages->fCaret.part, PartPosition(*wp, from), PartPosition(*wp, to),
+			find.replace);
+	};
+
+	switch (message->what) {
+		case kCmdFindReplace:
+		case kMsgOpenDialog:
+			if (TDialogFindChange* dialog = TDialogFindChange::Open())
+				dialog->Activate(true);
+			else
+				(new TDialogFindChange())->RunDialog();
+			break;
+		case kCmdFindAgain:
+			doFind();
+			break;
+		case kCmdFindSelection:
+		{
+			TextPosition from, to;
+			if (!HasTextSelection() || !fPages->TextSelection(from, to))
+				break;
+			std::string selected = RangeText(*fDocument->WordPart(fPages->fCaret.part), from, to);
+			if (selected.size() < 0x800) {
+				find.SetFind(selected);
+				doFind();
+			} else {
+				BString alert;
+				alert.SetToFormat(GobeResources::IndexString(6, 22).String(), 0x800);
+				(new BAlert("", alert.String(), "OK"))->Go(NULL);
+			}
+			break;
+		}
+		case kCmdReplaceFindAgain:
+			if (!find.Pattern().empty() && HasTextSelection()) {
+				doReplace();
+				doFind();
+			}
+			break;
+		case kCmdReplaceAll:
+		{
+			FoundText found, last;
+			if (find.Pattern().empty() || fPages == NULL || fDocument == NULL
+					|| !FindNext(*fDocument, find, false, 0, 0, found))
+				break;
+			fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 29).String(),
+				fPages->CurrentViewState());
+			if (ReplaceEvery(*fDocument, find, last) > 0) {
+				fPages->TextChanged();
+				fPages->SelectRange(last.part, last.start, last.end);
+			}
+			break;
+		}
+		case 'sME5':
+			doReplace();
+			break;
+	}
+	if (TDialogFindChange* dialog = TDialogFindChange::Open())
+		dialog->PostMessage('sD=L');
 }
 
 } // namespace gobe

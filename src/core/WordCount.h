@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace gobe {
 
@@ -22,6 +23,9 @@ void CountBlock(const std::string& text, WordCount& count);
 // GetNextWordInBlock: the next word of `text` from `at` (false if none):
 // `at` its start, `length` its bytes, `digits` if it has only digits
 bool NextWordInBlock(const std::string& text, size_t& at, size_t& length, bool& digits);
+// TTextAccessor's parts: the word processing parts shown (not a removed
+// header), in the document's order
+std::vector<size_t> ShownTextParts(const Document& doc);
 // TWordCountDialog::countDoc: every paragraph of every text part shown
 // (TTextAccessor; each a block and a paragraph) and the pages
 WordCount CountDocument(const Document& doc);

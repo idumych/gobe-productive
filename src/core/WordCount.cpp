@@ -148,6 +148,18 @@ CountBlock(const std::string& text, WordCount& count)
 }
 
 
+std::vector<size_t>
+ShownTextParts(const Document& doc)
+{
+	std::vector<size_t> parts;
+	for (const auto& [part, wp] : doc.wordParts)
+		if (part < doc.tails.size() && doc.tailRead[part] && !doc.tails[part].portals.empty())
+			parts.push_back(part);
+	std::sort(parts.begin(), parts.end());
+	return parts;
+}
+
+
 WordCount
 CountDocument(const Document& doc)
 {

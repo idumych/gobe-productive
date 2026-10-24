@@ -33,17 +33,10 @@ SetOption(Session& session, uint32_t option, bool on)
 }
 
 
-// the shown word processing parts (as Word Count's: a removed header
-// isn't), in the document's order
 std::vector<size_t>
 TextParts(const Document& doc)
 {
-	std::vector<size_t> parts;
-	for (const auto& [part, wp] : doc.wordParts)
-		if (part < doc.tails.size() && doc.tailRead[part] && !doc.tails[part].portals.empty())
-			parts.push_back(part);
-	std::sort(parts.begin(), parts.end());
-	return parts;
+	return ShownTextParts(doc);
 }
 
 } // namespace

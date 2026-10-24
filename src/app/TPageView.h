@@ -124,6 +124,10 @@ public:
 	// TWPTextIterator::ReplaceText (TWPReplaceTextCmd "Replace Text"):
 	// [from, to) replaced by `text`, which is selected
 	void ReplaceText(size_t part, TextPosition from, size_t to, const std::string& text);
+	// the same by positions in the part's text (PartPosition), across
+	// paragraphs too
+	void SelectRange(size_t part, uint32_t start, uint32_t end);
+	void ReplaceRange(size_t part, uint32_t start, uint32_t end, const std::string& text);
 	// the caret's line scrolled into view
 	void ScrollCaretIntoView();
 	// TWPPart::SetUpContextMenu: the menu for a context click at `where`

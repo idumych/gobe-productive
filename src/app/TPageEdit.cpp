@@ -10,6 +10,7 @@
 #include "TPartBar.h"
 #include "TSpellBar.h"
 #include "Url.h"
+#include "Find.h"
 #include "TWPRuler.h"
 
 #include <Alert.h>
@@ -521,6 +522,38 @@ TPageView::ReplaceText(size_t part, TextPosition from, size_t to, const std::str
 	fCaret = {true, part, at.paragraph, at.offset + text.size()};
 	TextChanged();
 	ScrollCaretIntoView();
+}
+
+
+void
+TPageView::SelectRange(size_t part, uint32_t start, uint32_t end)
+{
+	const WPPart* wp = fDocument.WordPart(part);
+	if (wp == NULL)
+		return;
+	TextPosition from = FromPartPosition(*wp, start);
+	TextPosition to = FromPartPosition(*wp, end);
+	fAnchor = {true, part, from.paragraph, from.offset};
+	fCaret = {true, part, to.paragraph, to.offset};
+	fUndo.Break();
+	Invalidate();
+	UpdateMarks();
+	ScrollCaretIntoView();
+}
+
+
+void
+TPageView::ReplaceRange(size_t part, uint32_t start, uint32_t end, const std::string& text)
+{
+	if (fDocument.WordPart(part) == NULL)
+		return;
+	fUndo.Begin(fDocument, part, "Replace Text", CurrentViewState());
+	FoundText replaced;
+	if (!ReplacePartText(fDocument, part, start, end, text, replaced))
+		return;
+	fUndo.Break();
+	TextChanged();
+	SelectRange(part, replaced.start, replaced.end);
 }
 
 
@@ -2395,6 +2428,53 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 		} else if (command == "commit") {
 			EndCellEdit(true);
+		} else if (command.compare(0, 8, "findcmd ") == 0 && command.size() >= 12) {
+			// "findcmd ABCD [find=..|replace=..|case=0/1|word=0/1|wrap=0/1]":
+			// Find/Change's command 'ABCD' with TFindReplace::DoMessage's
+			// fields, to the window; then the selection printed
+			const char* c = command.c_str() + 8;
+			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
+			std::string args = command.size() > 13 ? command.substr(13) : "";
+			for (size_t at = 0; at < args.size();) {
+				size_t bar = args.find('|', at);
+				std::string field = args.substr(at, bar == std::string::npos ? std::string::npos
+					: bar - at);
+				at = bar == std::string::npos ? args.size() : bar + 1;
+				size_t equals = field.find('=');
+				if (equals == std::string::npos)
+					continue;
+				std::string key = field.substr(0, equals), value = field.substr(equals + 1);
+				// \n, \t in the script: the characters
+				std::string raw;
+				for (size_t i = 0; i < value.size(); i++) {
+					if (value[i] == '\\' && i + 1 < value.size() && (value[i + 1] == 'n'
+							|| value[i + 1] == 't')) {
+						raw += value[++i] == 'n' ? '\n' : '\t';
+					} else
+						raw += value[i];
+				}
+				if (key == "find" || key == "replace")
+					msg.AddString(key.c_str(), raw.c_str());
+				else if (key == "case")
+					msg.AddBool("caseSens", raw == "1");
+				else if (key == "word")
+					msg.AddBool("wholeWord", raw == "1");
+				else if (key == "wrap")
+					msg.AddBool("wrap", raw == "1");
+			}
+			if (Window() != NULL && dynamic_cast<TDocWindow*>(Window()) != NULL)
+				Window()->MessageReceived(&msg);
+			TextPosition from, to;
+			std::string selected;
+			const WPPart* wp = document.WordPart(fCaret.part);
+			bool any = wp != NULL && TextSelection(from, to);
+			if (any)
+				selected = RangeText(*wp, from, to);
+			printf("findcmd %s: part %zu %zu.%zu-%zu.%zu \"%s\"\n", std::string(c, 4).c_str(),
+				fCaret.part, any ? from.paragraph : fCaret.paragraph, any ? from.offset
+				: fCaret.offset, any ? to.paragraph : fCaret.paragraph, any ? to.offset
+				: fCaret.offset, selected.c_str());
+			fflush(stdout);
 		} else if (command.compare(0, 7, "window ") == 0 && command.size() == 11) {
 			// "window ABCD": the command 'ABCD' as a menu sends it, to the
 			// window (only in a document window)
