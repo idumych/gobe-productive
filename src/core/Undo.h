@@ -2,7 +2,8 @@
 // CommandMgr section is copied unchanged on save). Each step is a snapshot
 // of what an edit can change: the edited part's parsed data, the document's
 // links (UpdateDependencies adds some), the styles (text styling adds
-// some) and which parts were dirty. Undo
+// some) and which parts were dirty, or for structural changes the whole
+// document. Undo
 // swaps the snapshot with the current state, so redo is the same operation
 // the other way.
 #ifndef GOBE_UNDO_H
@@ -30,6 +31,9 @@ public:
 	// in a row (typing) become one, until Break().
 	void Begin(const Document& doc, size_t part, const std::string& label,
 		const ViewState& view, uint64_t merge = 0);
+	// Call before changing the document's structure (a part added, the
+	// pages, the sheet): the step keeps the whole document.
+	void BeginDocument(const Document& doc, const std::string& label, const ViewState& view);
 	// the next Begin starts a new step (the caret moved, ...)
 	void Break() { fMerge = 0; }
 
@@ -40,7 +44,8 @@ public:
 	std::string RedoLabel() const;
 
 	// `view` is the view's state now; on success it's replaced with the
-	// state to restore. Returns the part changed, or -1.
+	// state to restore. Returns the part changed, kDocumentChanged for a
+	// BeginDocument step, or -1.
 	int Undo(Document& doc, ViewState& view);
 	int Redo(Document& doc, ViewState& view);
 
@@ -51,6 +56,7 @@ public:
 	void Clear();
 
 	static const size_t kMaxSteps = 100;
+	static const int kDocumentChanged = -2;
 
 private:
 	struct Step;

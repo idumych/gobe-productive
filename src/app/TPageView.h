@@ -71,6 +71,8 @@ public:
 	void TextChanged();
 	// the page geometry changed (Page Setup, Margins): frames, layout
 	void GeometryChanged();
+	// Document > Insert/Remove Header (0) or Footer (1)
+	void ToggleHeaderFooter(int which);
 	// printing: page `index`'s area the printer prints (`printable` is the
 	// job's PrintableRect on the paper), in view coordinates
 	BRect PageArea(int32 index, BRect printable) const;

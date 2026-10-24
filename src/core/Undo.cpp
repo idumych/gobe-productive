@@ -15,10 +15,18 @@ struct UndoStack::Step {
 	bool wasDirty = false;
 	bool trustDirty = true;			// false once the document was saved
 	ViewState view;
+	// a change to the document's structure (parts, pages, the sheet): all
+	// of it, as it was (with the bytes it was read from and what was
+	// dirty, so it saves the same)
+	std::optional<Document> whole;
 
 	// the document's state of the step's part
 	void Take(const Document& doc)
 	{
+		if (whole) {
+			whole = doc;
+			return;
+		}
 		word.reset();
 		sheet.reset();
 		if (const WPPart* wp = doc.WordPart(part))
@@ -34,6 +42,13 @@ struct UndoStack::Step {
 	// exchanges the snapshot with the document's state
 	void Exchange(Document& doc)
 	{
+		if (whole) {
+			// it stays where it was saved last
+			std::swap(whole->path, doc.path);
+			std::swap(whole->name, doc.name);
+			std::swap(doc, *whole);
+			return;
+		}
 		bool dirty = doc.dirtyParts.count(part) != 0;
 		if (word) {
 			WPPart* wp = doc.EditableWordPart(part);
@@ -82,6 +97,23 @@ UndoStack::Begin(const Document& doc, size_t part, const std::string& label,
 }
 
 
+void
+UndoStack::BeginDocument(const Document& doc, const std::string& label, const ViewState& view)
+{
+	fRedo.clear();
+	fMerge = 0;
+	auto step = std::make_unique<Step>();
+	step->part = kNoPart;
+	step->label = label;
+	step->view = view;
+	step->whole.emplace();
+	step->Take(doc);
+	fUndo.push_back(std::move(step));
+	if (fUndo.size() > kMaxSteps)
+		fUndo.erase(fUndo.begin());
+}
+
+
 std::string
 UndoStack::UndoLabel() const
 {
@@ -107,7 +139,7 @@ UndoStack::Swap(Document& doc, std::vector<std::unique_ptr<Step>>& from,
 	from.pop_back();
 	step->Exchange(doc);
 	std::swap(step->view, view);
-	int part = int(step->part);
+	int part = step->whole ? kDocumentChanged : int(step->part);
 	to.push_back(std::move(step));
 	return part;
 }

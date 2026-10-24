@@ -990,6 +990,11 @@ TPageView::MessageReceived(BMessage* message)
 			UndoStack::ViewState v = CurrentViewState();
 			int part = message->what == 'sM10' ? fUndo.Undo(fDocument, v)
 				: fUndo.Redo(fDocument, v);
+			if (part == UndoStack::kDocumentChanged) {
+				GeometryChanged();
+				RestoreViewState(v);
+				return;
+			}
 			if (part < 0) {
 				beep();
 				return;
@@ -1531,6 +1536,9 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 		} else if (command == "commit") {
 			EndCellEdit(true);
+		} else if (command == "headerfooter 0" || command == "headerfooter 1") {
+			// Document > Insert/Remove Header (0), Footer (1)
+			ToggleHeaderFooter(command.back() - '0');
 		} else if (command == "undo") {
 			BMessage msg('sM10');
 			MessageReceived(&msg);
@@ -2355,5 +2363,31 @@ TPageView::DocumentReloaded()
 	Rebuild();
 	Invalidate();
 }
+
+// Document > Insert Header / Insert Footer (TDocHeaderFooterCommand):
+// inserts it, or removes it if there is one; a new one gets the caret
+void
+TPageView::ToggleHeaderFooter(int which)
+{
+	if (fDocument.PagePart() < 0) {
+		beep();
+		return;
+	}
+	int removed = fDocument.HeaderPart(which);
+	bool insert = removed < 0;
+	fUndo.BeginDocument(fDocument,
+		GobeResources::IndexString(3, 0x16 + 2 * which + (insert ? 0 : 1)).String(),
+		CurrentViewState());
+	if (!(insert ? fDocument.InsertHeaderFooter(which) : fDocument.RemoveHeaderFooter(which))) {
+		beep();
+		return;
+	}
+	if (insert)
+		fCaret = {true, size_t(fDocument.HeaderPart(which)), 0, 0};
+	else if (fCaret.part == size_t(removed))
+		fCaret = {fDocument.MainPart() >= 0, size_t(std::max(0, fDocument.MainPart())), 0, 0};
+	GeometryChanged();
+}
+
 
 } // namespace gobe

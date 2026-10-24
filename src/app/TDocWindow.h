@@ -206,6 +206,7 @@ public:
 
 	virtual void MessageReceived(BMessage* message);
 	virtual bool QuitRequested();
+	virtual void MenusBeginning();
 
 	// Called from TPageView after text style changes to update marks.
 	// `family` is the current font family (empty = default).

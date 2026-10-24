@@ -83,7 +83,8 @@ main(int argc, char** argv)
 	Check(doc.Save(path, error) && doc.bytes == onePage, "back to the one page document's bytes");
 
 	// the samples: a page added and removed again gives the bytes back;
-	// every frame of the page is new
+	// the page's frames are new but for the header and footer, which every
+	// page shows (TPageFrame::TPageFrame: the page portal's +0x3c, +0x40)
 	int paged = 0;
 	for (int i = 1; i < argc; i++) {
 		Document d;
@@ -99,11 +100,17 @@ main(int argc, char** argv)
 				counts[p].push_back(portal.frames.size());
 		Check(d.AddPage() && d.PageCount() == 2, std::string(argv[i]) + ": AddPage");
 		const Frame& added = d.tails[pagePart].portals[0].frames[1];
+		const Frame& first = d.tails[pagePart].portals[0].frames[0];
 		bool fresh = added.children.size() == children;
-		for (const Frame::Pointer& c : added.children)
-			if (c.part != kNoPart)
-				fresh = fresh && c.frame >= counts[c.part][c.portal];
-		Check(fresh, std::string(argv[i]) + ": the page's frames are new");
+		for (size_t k = 0; fresh && k < added.children.size(); k++) {
+			const Frame::Pointer& c = added.children[k];
+			if (k < 2)
+				fresh = c == first.children[k];
+			else if (c.part != kNoPart)
+				fresh = c.frame >= counts[c.part][c.portal];
+		}
+		Check(fresh, std::string(argv[i]) + ": the page's frames are new, its header and footer "
+			"the first page's");
 		Check(d.Save(path, error) && d.PageCount() == 2, std::string(argv[i]) + ": saved " + error);
 		Check(d.RemoveLastPage() && d.Save(path, error) && d.bytes == original,
 			std::string(argv[i]) + ": removed, the document's bytes");

@@ -95,7 +95,8 @@ struct Document {
 		const Frame* frame;
 		float x, y, width, height;
 		int depth;			// nesting level (root = 0)
-		int index;			// the frame's number among its part's frames
+		int index;			// the frame's number among its part's frames (a header or
+							// footer frame comes once per page, the same number)
 	};
 	std::vector<PlacedFrame> PlacedFrames() const;
 
@@ -140,6 +141,25 @@ struct Document {
 	// on them move to match (TPageFrame::RepositionChildFrames) and the
 	// text is laid out again. False if nothing changed.
 	bool SetPageGeometry(const float paper[4], const float printable[4]);
+	// TPageFrame::RepositionChildFrames on every page: the header at the
+	// top of the printable area, the footer at its bottom, the drawing over
+	// it and the text columns between header and footer
+	void RepositionPages();
+	// Document > Insert Header / Insert Footer (TDocHeaderFooterCommand;
+	// `which` 0 header, 1 footer): the sheet's header or footer part, -1 if
+	// none; inserting makes a new text part in a paragraph style based on
+	// "Header"/"Footer" with one frame every page shows; removing takes it
+	// off the pages (the part stays, as the original keeps it for undo).
+	// False if the document isn't paged or there's nothing to do.
+	int HeaderPart(int which) const;
+	bool InsertHeaderFooter(int which);
+	bool RemoveHeaderFooter(int which);
+	// the header or footer frame's height (it grows with its text); the
+	// pages' frames move to match. False if it didn't change.
+	bool SetHeaderHeight(int which, float height);
+	// selections added since loading (records written at the end of the
+	// SelectionMgr by Save)
+	std::vector<std::vector<uint8_t>> addedSelections;
 	// the first sheet's main part (what Save As exports), or -1
 	int MainPart() const;
 };

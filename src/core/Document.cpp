@@ -346,19 +346,21 @@ Document::PlacedFrames() const
 	}
 
 	// frames placed on a page are relative to their page's frame
-	// (TPageFrame), not the page part's first one
+	// (TPageFrame), not the page part's first one; the header and footer
+	// frames are on every page
 	int pagePart = PagePart();
-	auto pageOf = [&](size_t part, size_t portal, size_t frame, float& x, float& y) {
+	auto pagesOf = [&](size_t part, size_t portal, size_t frame) {
+		std::vector<std::pair<float, float>> at;
 		if (pagePart < 0 || root < 0 || !origin[root].known)
-			return false;
+			return at;
 		for (const Frame& page : tails[pagePart].portals[0].frames)
 			for (const Frame::Pointer& c : page.children)
 				if (c.part == part && c.portal == portal && c.frame == frame) {
-					x = origin[root].x + page.origin[0];
-					y = origin[root].y + page.origin[1];
-					return true;
+					at.emplace_back(origin[root].x + page.origin[0],
+						origin[root].y + page.origin[1]);
+					break;
 				}
-		return false;
+		return at;
 	};
 
 	std::vector<PlacedFrame> placed;
@@ -373,8 +375,15 @@ Document::PlacedFrames() const
 				uint32_t c = f.container;
 				float bx = 0, by = 0;
 				int depth = 0;
-				if (int(c) == pagePart && pageOf(i, pi, fi, bx, by)) {
-					depth = origin[c].depth + 1;
+				std::vector<std::pair<float, float>> pages;
+				if (int(c) == pagePart)
+					pages = pagesOf(i, pi, fi);
+				if (!pages.empty()) {
+					for (const auto& [x, y] : pages)
+						placed.push_back({i, &f, x + f.origin[0], y + f.origin[1],
+							f.extent[0], f.extent[1], origin[c].depth + 1, index});
+					index++;
+					continue;
 				} else if (c < origin.size() && origin[c].known) {
 					bx = origin[c].x;
 					by = origin[c].y;
@@ -576,7 +585,7 @@ Document::Save(const std::string& to, std::string& error)
 		}
 	}
 	// text selections of edited parts follow the edits
-	if (!textLength.empty() || selectionsChanged) {
+	if (!textLength.empty() || selectionsChanged || !addedSelections.empty()) {
 		for (size_t s = 0; s < file.toc.size(); s++) {
 			if (file.toc[s].name != "SelectionMgr")
 				continue;
@@ -615,6 +624,17 @@ Document::Save(const std::string& to, std::string& error)
 							section[at + half * 4 + i] = (v >> (24 - 8 * i)) & 0xff;
 					}
 				}
+			}
+			// new parts' selections at the end (TSelectionMgr::Write: the
+			// count, the records, 'SelM')
+			if (!addedSelections.empty() && section.size() >= 12) {
+				uint32_t count = uint32_t(section[4]) << 24 | uint32_t(section[5]) << 16
+					| uint32_t(section[6]) << 8 | section[7];
+				count += uint32_t(addedSelections.size());
+				for (int i = 0; i < 4; i++)
+					section[4 + i] = uint8_t(count >> (24 - 8 * i));
+				for (const std::vector<uint8_t>& record : addedSelections)
+					section.insert(section.end() - 4, record.begin(), record.end());
 			}
 			changes.sections["SelectionMgr"] = std::move(section);
 		}

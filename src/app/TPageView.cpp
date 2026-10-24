@@ -5,6 +5,7 @@
 #include <time.h>
 
 #include <algorithm>
+#include <map>
 #include <cstdint>
 
 #include <AffineTransform.h>
@@ -210,25 +211,75 @@ TPageView::LayoutText()
 		fLines.clear();
 		// group each word processing part's frames, in flow order
 		std::vector<std::pair<size_t, std::vector<FrameGeometry>>> flows;
+		// a frame on several pages (the header, the footer) is laid out once
+		// and shown on each: its other places, as offsets
+		struct Repeat {
+			size_t part;
+			float dx, dy;
+		};
+		std::vector<Repeat> repeats;
 		for (const auto& f : fFrames) {
 			if (fDocument.parts.parts[f.part].kind != Sig("WORD"))
 				continue;
 			BRect r(f.x - fBounds.left + fMargin, f.y - fBounds.top + fMargin, 0, 0);
 			r.right = r.left + f.width;
-			r.bottom = r.top + f.height;
+			// TWPPart::MaxChildFrameRect: flag 8, the frame grows with its text
+			r.bottom = r.top + ((f.frame->values[3] & 8) != 0 ? 1e6f : f.height);
 			auto it = std::find_if(flows.begin(), flows.end(),
 				[&](const auto& fl) { return fl.first == f.part; });
 			FrameGeometry g{r, f.frame->angle, ContainerClip(f), f.index};
 			if (it == flows.end())
 				flows.push_back({f.part, {g}});
-			else
-				it->second.push_back(g);
+			else {
+				auto same = std::find_if(it->second.begin(), it->second.end(),
+					[&](const FrameGeometry& o) { return o.index == f.index; });
+				if (same != it->second.end())
+					repeats.push_back({f.part, r.left - same->rect.left, r.top - same->rect.top});
+				else
+					it->second.push_back(g);
+			}
 		}
 		main = LayoutResult();
+		std::map<size_t, std::pair<size_t, size_t>> laidOut;	// part: its lines
 		for (const auto& [part, frames] : flows) {
+			size_t first = fLines.size();
 			LayoutResult result = LayoutPart(part, frames);
 			if (int(part) == fDocument.MainPart())
 				main = result;
+			size_t last = fLines.size();
+			laidOut[part] = {first, last};
+			for (const Repeat& repeat : repeats) {
+				if (repeat.part != part)
+					continue;
+				for (size_t k = first; k < last; k++) {
+					Line line = fLines[k];
+					line.frame.OffsetBy(repeat.dx, repeat.dy);
+					line.baseline += repeat.dy;
+					line.center += BPoint(repeat.dx, repeat.dy);
+					line.clip.OffsetBy(repeat.dx, repeat.dy);
+					fLines.push_back(line);
+				}
+			}
+		}
+		// the header and footer, once edited, are as high as their text
+		bool resized = false;
+		for (int which = 0; which < 2; which++) {
+			int part = fDocument.HeaderPart(which);
+			if (part < 0 || !fDocument.dirtyParts.count(size_t(part)))
+				continue;
+			auto flow = std::find_if(flows.begin(), flows.end(),
+				[&](const auto& fl) { return fl.first == size_t(part); });
+			if (flow == flows.end() || flow->second.empty())
+				continue;
+			float top = flow->second[0].rect.top, bottom = top;
+			auto [first, last] = laidOut[size_t(part)];
+			for (size_t k = first; k < last; k++)
+				bottom = std::max(bottom, fLines[k].frame.bottom);
+			resized |= fDocument.SetHeaderHeight(which, bottom - top);
+		}
+		if (resized && pass < 2000) {
+			RebuildFrames();
+			continue;
 		}
 		// a runaway document stops at 2000 pages
 		if (pass >= 2000 || !Paginate(main))

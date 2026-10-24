@@ -104,6 +104,8 @@ static const uint32 kCmdQuit = 'sM09';
 static const uint32 kCmdPageSetup = 'sM05';
 static const uint32 kCmdPrint = 'sM06';
 static const uint32 kCmdMargins = 'sM22';
+static const uint32 kCmdInsertHeader = 'sM2B';
+static const uint32 kCmdInsertFooter = 'sM2C';
 
 
 // #pragma mark - TFindDialog
@@ -1552,6 +1554,11 @@ TDocWindow::MessageReceived(BMessage* message)
 			GeometryChanged();
 			return;
 		}
+		case kCmdInsertHeader:
+		case kCmdInsertFooter:
+			if (fPages != NULL)
+				fPages->ToggleHeaderFooter(message->what == kCmdInsertFooter ? 1 : 0);
+			return;
 		case kCmdRevert:
 		{
 			if (fDocument == NULL || !fModified)
@@ -2101,6 +2108,26 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 				}
 			}
 		}
+	}
+}
+
+
+// TNormalDocWinHelper::SetupMenus: Insert Header/Footer read Remove
+// Header/Footer when the document has one (STR# 3, 22-25)
+void
+TDocWindow::MenusBeginning()
+{
+	BWindow::MenusBeginning();
+	if (KeyMenuBar() == NULL)
+		return;
+	for (int which = 0; which < 2; which++) {
+		BMenuItem* item = KeyMenuBar()->FindItem(which == 0 ? kCmdInsertHeader : kCmdInsertFooter);
+		if (item == NULL)
+			continue;
+		bool paged = fDocument != NULL && fDocument->PagePart() >= 0;
+		bool has = paged && fDocument->HeaderPart(which) >= 0;
+		item->SetEnabled(paged);
+		item->SetLabel(GobeResources::IndexString(3, 0x16 + 2 * which + (has ? 1 : 0)).String());
 	}
 }
 

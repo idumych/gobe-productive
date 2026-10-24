@@ -3,8 +3,13 @@
 // sheet's drawing, the text columns).
 #include "Document.h"
 
+#include "DocWriter.h"
+#include "Editing.h"
+#include "WPPart.h"
+
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace gobe {
 
@@ -32,6 +37,37 @@ PagesAcross(const Document& doc)
 	} catch (const ArchiveError&) {
 		return 1;
 	}
+}
+
+// TPagePortal::Write: the main part and its portal, the drawing part and
+// its portal, then the header and footer frames (part, portal, frame)
+const size_t kHeaderFrameAt = 16;
+
+
+void
+PutUInt32(std::vector<uint8_t>& raw, size_t at, uint32_t v)
+{
+	for (int i = 0; i < 4; i++)
+		raw[at + i] = uint8_t(v >> (24 - 8 * i));
+}
+
+
+void
+PutPointer(std::vector<uint8_t>& raw, size_t at, const Frame::Pointer& p)
+{
+	PutUInt32(raw, at, p.part);
+	PutUInt32(raw, at + 4, p.portal);
+	PutUInt32(raw, at + 8, p.frame);
+}
+
+
+uint32_t
+NamedStyle(const StyleMgr& styles, uint32_t type, const std::string& name)
+{
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (styles.styles[i].value10 == type && styles.styles[i].name == name)
+			return uint32_t(i);
+	return kNoPart;
 }
 
 } // namespace
@@ -80,8 +116,11 @@ Document::AddPage()
 	page.extent[0] = width;
 	page.extent[1] = height;
 	uint32_t textLength = 0;
-	for (Frame::Pointer& child : page.children) {
-		if (child.part == kNoPart || child.part >= tails.size() || !tailRead[child.part]
+	for (size_t i = 0; i < page.children.size(); i++) {
+		Frame::Pointer& child = page.children[i];
+		// the header and footer: the page portal's frames, on every page
+		// (TPageFrame::TPageFrame)
+		if (i < 2 || child.part == kNoPart || child.part >= tails.size() || !tailRead[child.part]
 				|| child.portal >= tails[child.part].portals.size())
 			continue;
 		Portal& portal = tails[child.part].portals[child.portal];
@@ -130,9 +169,10 @@ Document::RemoveLastPage()
 	if (pages.frames.size() < 2)
 		return false;
 	const Frame& page = pages.frames.back();
-	// last first: a page's text columns follow each other in their portal
-	for (auto it = page.children.rbegin(); it != page.children.rend(); ++it) {
-		const Frame::Pointer& child = *it;
+	// last first: a page's text columns follow each other in their
+	// portal; the header and footer stay (every page shows them)
+	for (size_t i = page.children.size(); i-- > 2; ) {
+		const Frame::Pointer& child = page.children[i];
 		if (child.part == kNoPart || child.part >= tails.size() || !tailRead[child.part]
 				|| child.portal >= tails[child.part].portals.size())
 			continue;
@@ -195,10 +235,19 @@ Document::SetPageGeometry(const float paper[4], const float printable[4])
 	std::copy(paper, paper + 4, sheet.paper);
 	std::copy(printable, printable + 4, sheet.printable);
 	sheetsChanged = true;
+	RepositionPages();
+	return true;
+}
 
+
+void
+Document::RepositionPages()
+{
 	int pagePart = PagePart();
-	if (pagePart < 0)
-		return true;
+	if (pagePart < 0 || sheets.sheets.empty())
+		return;
+	const float* paper = sheets.sheets[0].paper;
+	const float* printable = sheets.sheets[0].printable;
 	uint32_t across = PagesAcross(*this);
 	float width = paper[2] - paper[0];
 	float height = paper[3] - paper[1];
@@ -298,7 +347,280 @@ Document::SetPageGeometry(const float paper[4], const float printable[4])
 	if (mainPart >= 0 && WordPart(size_t(mainPart)) != nullptr)
 		dirtyParts.insert(size_t(mainPart));
 	ComputeHiddenFrames();
+}
+
+
+
+int
+Document::HeaderPart(int which) const
+{
+	if (sheets.sheets.empty() || which < 0 || which > 1)
+		return -1;
+	uint32_t part = which == 0 ? sheets.sheets[0].headerPart : sheets.sheets[0].footerPart;
+	return part < parts.parts.size() ? int(part) : -1;
+}
+
+
+bool
+Document::InsertHeaderFooter(int which)
+{
+	int pagePart = PagePart();
+	if (pagePart < 0 || which < 0 || which > 1 || HeaderPart(which) >= 0)
+		return false;
+	Portal& pages = tails[pagePart].portals[0];
+	if (pages.frames.empty() || pages.raw.size() < kHeaderFrameAt + 24)
+		return false;
+	bool wordFactory = false;
+	for (const PartFactoryEntry& f : factories)
+		wordFactory = wordFactory || f.kind == Sig("WORD");
+	if (!wordFactory)
+		return false;	// (a document without text parts: not ported)
+
+	// the styles: "Header"/"Footer" (TWPPartFactory::InitStyles: based on
+	// "WP Default", nothing of its own; documents keep it only once used),
+	// the paragraph's style based on it, the run's with no parent
+	auto newStyle = [&](uint32_t type, const char* name, uint32_t flags, uint32_t parent) {
+		Style s;
+		s.id = Sig("STYL");
+		s.value4 = 1;		// the manager
+		s.value8 = flags;
+		s.valueC = 0xffff;
+		s.value10 = type;
+		s.name = name;
+		s.links[0] = parent;
+		s.links[1] = s.links[2] = kNoPart;
+		if (parent < styles.styles.size())
+			styles.styles[parent].value4++;
+		s.props2 = StyleUnionSet(styles, s);
+		styles.styles.push_back(s);
+		return uint32_t(styles.styles.size() - 1);
+	};
+	const char* name = which == 0 ? "Header" : "Footer";
+	uint32_t named = NamedStyle(styles, Sig("Para"), name);
+	if (named == kNoPart) {
+		uint32_t wpDefault = NamedStyle(styles, Sig("Para"), "WP Default");
+		if (wpDefault == kNoPart)
+			return false;
+		named = newStyle(Sig("Para"), name, 0x822, wpDefault);
+	}
+	uint32_t paragraphStyle = newStyle(Sig("Para"), "", 0x20, named);
+	uint32_t runStyle = newStyle(Sig("Basi"), "", 0x20, kNoPart);
+	styles.styles[paragraphStyle].value4++;
+	styles.styles[runStyle].value4++;
+	// the frame in the main text frames' style
+	uint32_t frameStyle = kNoPart;
+	for (const Frame::Pointer& c : pages.frames[0].children)
+		if (int(c.part) == MainPart() && c.portal < tails[c.part].portals.size()
+				&& c.frame < tails[c.part].portals[c.portal].frames.size()) {
+			frameStyle = tails[c.part].portals[c.portal].frames[c.frame].style;
+			break;
+		}
+	if (frameStyle >= styles.styles.size())
+		return false;
+	styles.styles[frameStyle].value4++;
+	stylesChanged = true;
+
+	// its selection (TWPPart: no text selected)
+	uint32_t selection = uint32_t(selections.selections.size());
+	size_t part = parts.parts.size();
+	DocWriter sel;
+	sel.UInt32(18);
+	sel.Sig(Sig("WORD"));
+	sel.UInt32(uint32_t(part));
+	sel.UInt32(selection);
+	sel.UInt32(0);
+	sel.Bool(false);
+	sel.Bool(false);
+	addedSelections.push_back(sel.Data());
+	Selection s;
+	s.id = selection;
+	s.kind = Sig("WORD");
+	s.part = uint32_t(part);
+	s.value = selection;
+	selections.selections.push_back(s);
+
+	// the part (TWPPart::TWPPart: one empty paragraph, one section; +0x98
+	// is 3 for a header or footer, as the command sets it), its portal in
+	// the page part and the one frame every page shows (TPagePortal: at
+	// the top of the printable area, as wide, no height until its text is
+	// laid out; flag 8: it grows with its text)
+	const LeafSheet& sheet = sheets.sheets[0];
+	DocWriter w;
+	w.Sig(Sig("PART"));
+	w.Sig(Sig("WORD"));
+	w.UInt32(0);
+	w.UInt32(2);
+	w.UInt32(parts.value14++);	// TPartMgr::NewPartID
+	w.UInt32(0xffffffff);
+	w.UInt32(1);
+	w.UInt32(selection);
+	w.Sig(Sig("wp++"));
+	w.UInt16(3);
+	w.UInt16(1);
+	w.UInt32(0);
+	w.UInt32(0xffffffff);
+	w.UInt32(0);
+	w.UInt32(1);
+	w.Sig(Sig("par+"));
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.UInt16(0);
+	w.UInt32(paragraphStyle);
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt32(runStyle);
+	w.UInt32(0);
+	w.Sig(Sig("par-"));
+	w.Sig(Sig("txt+"));
+	w.Sig(Sig("txt-"));
+	w.Sig(Sig("sct+"));
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt16(0);
+	w.UInt16(1);
+	w.Bool(false);
+	w.UInt32(1);
+	const float whole[4] = {0, 0, 1, 1};
+	w.Rect(whole);
+	w.Sig(Sig("sct-"));
+	w.Sig(Sig("wp--"));
+	w.Sig(Sig("REFT"));
+	w.UInt32(1);
+	w.UInt32(0);
+	w.Sig(Sig("RefT"));
+	w.UInt32(1);
+	w.Sig(Sig("PORT"));
+	w.UInt32(uint32_t(pagePart));
+	w.UInt32(0);
+	w.UInt32(0);
+	w.UInt32(1);
+	w.UInt32(1);
+	w.Sig(Sig("FRAM"));
+	w.Float(0);
+	const float origin[2] = {sheet.printable[0] - sheet.paper[0],
+		sheet.printable[1] - sheet.paper[1]};
+	w.Point(origin);
+	w.Float(sheet.printable[2] - sheet.printable[0]);
+	w.Float(0);
+	w.UInt32(frameStyle);
+	w.UInt32(0);
+	w.UInt32(0xffffffff);
+	w.UInt32(0xffffffff);
+	w.UInt32(uint32_t(part));
+	w.UInt32(uint32_t(pagePart));
+	w.UInt32(0);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.UInt32(8);
+	w.UInt32(0);			// TWPFrame: no text yet
+	w.UInt32(0);
+	for (int i = 0; i < 4; i++)
+		w.Float(0);
+	w.Sig(Sig("FraM"));
+	w.Float(0);				// TWPPortal
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+
+	DocArchive versions(bytes);
+	DocFile file;
+	std::string error;
+	if (!ReadDocFile(versions, file, error))
+		return false;
+	PartRecord record{Sig("WORD"), 0, w.Data()};
+	DocArchive a(record.data);
+	a.CopyVersions(versions);
+	WPPart wp;
+	try {
+		ReadWPPart(a, wp);
+	} catch (const ArchiveError&) {
+		return false;
+	}
+	PartTail tail;
+	if (!ReadPartTail(record.data, record.kind, versions, tail))
+		return false;
+	parts.parts.push_back(std::move(record));
+	wordParts.emplace_back(part, std::move(wp));
+	tails.push_back(std::move(tail));
+	tailRead.push_back(true);
+
+	Frame::Pointer frame{uint32_t(part), 0, 0};
+	for (Frame& page : pages.frames)
+		if (page.children.size() > size_t(which))
+			page.children[which] = frame;
+	PutPointer(pages.raw, kHeaderFrameAt + 12 * which, frame);
+	(which == 0 ? sheets.sheets[0].headerPart : sheets.sheets[0].footerPart) = uint32_t(part);
+	sheetsChanged = true;
+	dirtyParts.insert(part);
+	dirtyTails.insert(part);
+	dirtyTails.insert(size_t(pagePart));
+	RepositionPages();
 	return true;
+}
+
+
+bool
+Document::RemoveHeaderFooter(int which)
+{
+	int pagePart = PagePart();
+	int part = HeaderPart(which);
+	if (pagePart < 0 || part < 0)
+		return false;
+	Portal& pages = tails[pagePart].portals[0];
+	for (Frame& page : pages.frames)
+		if (page.children.size() > size_t(which))
+			page.children[which] = Frame::Pointer();
+	if (pages.raw.size() >= kHeaderFrameAt + 24)
+		PutPointer(pages.raw, kHeaderFrameAt + 12 * which, Frame::Pointer());
+	(which == 0 ? sheets.sheets[0].headerPart : sheets.sheets[0].footerPart) = kNoPart;
+	sheetsChanged = true;
+	// its portal goes with the pages it was in (TDocWindow::NewRootFrame),
+	// and its frame's hold on its style
+	std::vector<Portal>& portals = tails[part].portals;
+	for (auto it = portals.begin(); it != portals.end(); ) {
+		if (it->part != uint32_t(pagePart)) {
+			++it;
+			continue;
+		}
+		for (const Frame& f : it->frames)
+			if (f.style < styles.styles.size() && styles.styles[f.style].value4 > 1) {
+				styles.styles[f.style].value4--;
+				stylesChanged = true;
+			}
+		it = portals.erase(it);
+	}
+	dirtyTails.insert(size_t(part));
+	dirtyTails.insert(size_t(pagePart));
+	RepositionPages();
+	return true;
+}
+
+
+bool
+Document::SetHeaderHeight(int which, float height)
+{
+	int pagePart = PagePart();
+	int part = HeaderPart(which);
+	if (pagePart < 0 || part < 0 || !tailRead[part])
+		return false;
+	for (Portal& portal : tails[part].portals) {
+		if (portal.part != uint32_t(pagePart) || portal.frames.empty())
+			continue;
+		Frame& frame = portal.frames[0];
+		if (std::fabs(frame.extent[1] - height) < 0.01f)
+			return false;
+		frame.extent[1] = height;
+		// TWPFrame: the height its text fills
+		if (frame.raw.size() >= 20) {
+			uint32_t bits;
+			memcpy(&bits, &height, 4);
+			PutUInt32(frame.raw, 16, bits);
+		}
+		dirtyTails.insert(size_t(part));
+		RepositionPages();
+		return true;
+	}
+	return false;
 }
 
 } // namespace gobe
