@@ -69,6 +69,11 @@ public:
 
 	// text editing state (public for TDocWindow)
 	void TextChanged();
+	// the page geometry changed (Page Setup, Margins): frames, layout
+	void GeometryChanged();
+	// printing: page `index`'s area the printer prints (`printable` is the
+	// job's PrintableRect on the paper), in view coordinates
+	BRect PageArea(int32 index, BRect printable) const;
 	bool TextSelection(TextPosition& from, TextPosition& to) const;
 	Caret fCaret;
 	Caret fAnchor;
@@ -160,6 +165,7 @@ private:
 	void DrawLines(BRect updateRect, float dx, float dy);
 	void DrawGraphics(const Document::PlacedFrame& frame, float dx, float dy);
 	void DrawFrameBackground(const Document::PlacedFrame& frame, BRect rect);
+	void DrawPageGuides(const Document::PlacedFrame& frame, BRect rect);
 	void DrawSpreadsheet(const Document::PlacedFrame& frame, BRect rect);
 	void DrawImage(const Document::PlacedFrame& frame, BRect rect);
 	void DrawClock(const Document::PlacedFrame& frame, BRect rect);

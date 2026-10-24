@@ -7,6 +7,9 @@
 #ifndef GOBE_TDIALOG_H
 #define GOBE_TDIALOG_H
 
+#include <map>
+
+#include <String.h>
 #include <Window.h>
 
 #include "Formats.h"
@@ -26,6 +29,25 @@ public:
 
 	static bool Exists(int32 dialogId);
 
+	// TDialog::Run: Init, then show
+	void RunDialog();
+
+protected:
+	// TDialog::Init: fill in the controls (the window is locked)
+	virtual void Init() {}
+	// TDialog::ItemHit: a control was used; true keeps the dialog open
+	// after OK (a value didn't validate). The default closes on OK (0)
+	// and Cancel (1).
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+	// the controls by their item index (TDialog::SetTextItem, ...)
+	BView* Item(int32 index) const;
+	void SetTextItem(int32 index, const char* text);
+	BString TextItem(int32 index) const;
+	void SetCheckBoxItem(int32 index, bool on);
+	bool CheckBoxItem(int32 index) const;
+	void MakeFocusItem(int32 index);
+
 private:
 	void AddItems(BGroupLayout* layout, const std::vector<ItemData>& items);
 	BView* MakeControl(const ItemData& item);
@@ -34,6 +56,7 @@ private:
 	int32 fDialogId;
 	uint32 fCommand;
 	BHandler* fTarget;
+	std::map<int32, BView*> fItems;
 };
 
 } // namespace gobe

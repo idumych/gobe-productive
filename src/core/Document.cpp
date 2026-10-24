@@ -532,6 +532,8 @@ Document::Save(const std::string& to, std::string& error)
 		changes.sections["LinksMgr"] = WriteLinksMgr(links);
 	if (stylesChanged)
 		changes.sections["StyleMgr"] = WriteStyleMgr(styles);
+	if (sheetsChanged)
+		changes.sections["SheetMgr"] = WriteSheetMgr(sheets);
 	std::set<size_t> written;
 	for (size_t part : dirtyParts) written.insert(part);
 	for (size_t part : dirtyTails) written.insert(part);

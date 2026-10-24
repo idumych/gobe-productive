@@ -103,8 +103,10 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items)
 			AddItems(inner, item.children);
 		} else {
 			BView* view = MakeControl(item);
-			if (view != NULL)
+			if (view != NULL) {
 				layout->AddView(view);
+				fItems[item.index] = view;
+			}
 		}
 	}
 }
@@ -283,13 +285,82 @@ TDialog::MessageReceived(BMessage* message)
 		BString code = FourCCString(message->what).c_str();
 		printf("dialog %d: control %d sent '%s'\n", (int)fDialogId, (int)index,
 			code.String());
-		// OK / Cancel buttons are the first two controls in Gobe's dialogs;
-		// close on any button for now
-		if (index <= 1)
-			PostMessage(B_QUIT_REQUESTED);
+		ItemHit(index, message);
 		return;
 	}
 	BWindow::MessageReceived(message);
+}
+
+
+void
+TDialog::RunDialog()
+{
+	if (Lock()) {
+		Init();
+		Unlock();
+	}
+	Show();
+}
+
+
+bool
+TDialog::ItemHit(int32 index, BMessage* message)
+{
+	// OK / Cancel are the first two controls in Gobe's dialogs
+	if (index <= 1)
+		PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
+
+BView*
+TDialog::Item(int32 index) const
+{
+	auto it = fItems.find(index);
+	return it == fItems.end() ? NULL : it->second;
+}
+
+
+void
+TDialog::SetTextItem(int32 index, const char* text)
+{
+	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index)))
+		control->SetText(text);
+	else if (BStringView* label = dynamic_cast<BStringView*>(Item(index)))
+		label->SetText(text);
+}
+
+
+BString
+TDialog::TextItem(int32 index) const
+{
+	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index)))
+		return control->Text();
+	return BString();
+}
+
+
+void
+TDialog::SetCheckBoxItem(int32 index, bool on)
+{
+	if (BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index)))
+		box->SetValue(on ? B_CONTROL_ON : B_CONTROL_OFF);
+}
+
+
+bool
+TDialog::CheckBoxItem(int32 index) const
+{
+	BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index));
+	return box != NULL && box->Value() == B_CONTROL_ON;
+}
+
+
+void
+TDialog::MakeFocusItem(int32 index)
+{
+	if (BTextControl* control = dynamic_cast<BTextControl*>(Item(index)))
+		control->MakeFocus(true);
 }
 
 } // namespace gobe

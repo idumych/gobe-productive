@@ -43,6 +43,9 @@ public:
 };
 
 // TFontMenu: a font menu built dynamically from system font families.
+// the Font menu's message (TFontMenu)
+static const uint32 kMsgFontFamily = 'sf01';
+
 class TFontMenu : public BMenu {
 public:
 	TFontMenu();
@@ -215,6 +218,11 @@ private:
 	BMenu* MakeFontMenu();
 	bool Save(const std::string& path);
 	void UpdateTitle();
+	// File > Page Setup… (TLeafSheet::PageSetup), Print… (TDocWindow::
+	// Print, TPart::Print); the document's geometry changed (margins)
+	bool PageSetup();
+	void Print();
+	void GeometryChanged();
 
 	BStringView* fStatus;
 	Document* fDocument = NULL;

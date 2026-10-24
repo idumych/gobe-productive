@@ -71,6 +71,7 @@ struct Document {
 	std::set<size_t> dirtyTails;
 	std::set<size_t> layoutRanges;
 	bool stylesChanged = false;		// the StyleMgr (written by Save)
+	bool sheetsChanged = false;		// the SheetMgr (page setup, margins)
 	bool selectionsChanged = false;	// spreadsheet selections/names moved
 	WPPart* EditableWordPart(size_t part);
 	SSPart* EditableSpreadsheetPart(size_t part);
@@ -131,6 +132,14 @@ struct Document {
 	// the text range a word processing frame shows (TWPFrame +0x4c, +0x50),
 	// as laid out
 	void SetFrameText(size_t part, size_t frame, uint32_t start, uint32_t length);
+	// The first sheet's margins (TLeafSheet::Margins: left, top, right,
+	// bottom, from the paper to the printable rectangle).
+	void Margins(float margins[4]) const;
+	// Page Setup and Margins (TLeafSheet::PageSetup, TDocMarginsCommand):
+	// the sheet's paper and printable rectangles; the pages and the frames
+	// on them move to match (TPageFrame::RepositionChildFrames) and the
+	// text is laid out again. False if nothing changed.
+	bool SetPageGeometry(const float paper[4], const float printable[4]);
 	// the first sheet's main part (what Save As exports), or -1
 	int MainPart() const;
 };

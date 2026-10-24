@@ -1000,21 +1000,24 @@ TPageView::MessageReceived(BMessage* message)
 			RestoreViewState(v);
 			return;
 		}
-		// Font menu: what = 'sM05', "name" = font family
-		case 'sM05': {
+		// Font menu (TFormatCommand: 'sf01', "font", "style")
+		case 'sf01': {
 			if (!fCaret.active) {
 				beep();
 				return;
 			}
 			const char* family = NULL;
-			if (message->FindString("name", &family) != B_OK || family == NULL) {
+			const char* style = "";
+			if (message->FindString("font", &family) != B_OK || family == NULL) {
 				beep();
 				return;
 			}
+			if (message->FindString("style", &style) != B_OK || style == NULL)
+				style = "";
 			fUndo.Begin(fDocument, fCaret.part, "Font", CurrentViewState());
 			auto sel = TextSelectionRange();
 			ApplyCharacterProperty(fDocument, fCaret.part, sel.first, sel.second,
-				TextFontProperty(family, ""));
+				TextFontProperty(family, style));
 			TextChanged();
 			UpdateMarks();
 			return;
@@ -1727,8 +1730,8 @@ TPageView::RunScript(const std::string& script, Document& document)
 				std::string valStr = space + 1;
 				BMessage msg;
 				if (whatStr == "font") {
-					msg.what = 'sM05';
-					msg.AddString("name", valStr.c_str());
+					msg.what = 'sf01';
+					msg.AddString("font", valStr.c_str());
 				} else if (whatStr == "size") {
 					msg.what = 'sf0K';
 					int32 size = 0;
@@ -2244,6 +2247,18 @@ TPageView::RunScript(const std::string& script, Document& document)
 			InsertText(*wp, {fCaret.paragraph, fCaret.offset}, timeStr);
 			fCaret.offset += strlen(timeStr);
 			TextChanged();
+		} else if (command.compare(0, 8, "margins ") == 0) {
+			// "margins L T R B" (points): Document > Margins…
+			float m[4];
+			if (sscanf(command.c_str() + 8, "%f %f %f %f", &m[0], &m[1], &m[2], &m[3]) == 4
+					&& !fDocument.sheets.sheets.empty()) {
+				const LeafSheet& sheet = fDocument.sheets.sheets[0];
+				float paper[4], printable[4] = {sheet.paper[0] + m[0], sheet.paper[1] + m[1],
+					sheet.paper[2] - m[2], sheet.paper[3] - m[3]};
+				std::copy(sheet.paper, sheet.paper + 4, paper);
+				fDocument.SetPageGeometry(paper, printable);
+				GeometryChanged();
+			}
 		} else if (command.compare(0, 11, "exporttext ") == 0
 				|| command.compare(0, 10, "exportrtf ") == 0) {
 			// "exporttext <path>", "exportrtf <path>": Save As in the

@@ -1451,8 +1451,11 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 void
 TPageView::Draw(BRect updateRect)
 {
-	SetHighColor(152, 152, 152);
-	FillRect(updateRect);
+	// printing (TPageFrame::Draw): the pages' contents only
+	if (!IsPrinting()) {
+		SetHighColor(152, 152, 152);
+		FillRect(updateRect);
+	}
 
 	float dx = fMargin - fBounds.left;
 	float dy = fMargin - fBounds.top;
@@ -1487,10 +1490,13 @@ TPageView::DrawFrame(const Document::PlacedFrame& f, BRect r, uint32_t kind, flo
 	if (kind == Sig("PROT"))
 		return;
 	if (kind == Sig("PAGE")) {
+		if (IsPrinting())
+			return;
 		SetHighColor(96, 96, 96);
 		FillRect(r.OffsetByCopy(3, 3));
 		SetHighColor(255, 255, 255);
 		FillRect(r);
+		DrawPageGuides(f, r);
 		return;
 	}
 	DrawFrameBackground(f, r);
@@ -1541,7 +1547,8 @@ void
 TPageView::DrawLines(BRect updateRect, float dx, float dy)
 {
 	// the selection highlight goes under the text
-	DrawSelection();
+	if (!IsPrinting())
+		DrawSelection();
 	SetDrawingMode(B_OP_OVER);
 	for (const Line& line : fLines) {
 		if (line.angle == 0 && !line.frame.Intersects(updateRect))
@@ -1559,7 +1566,84 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 		PopState();
 	}
 	SetDrawingMode(B_OP_COPY);
-	DrawCaret();
+	if (!IsPrinting())
+		DrawCaret();
+}
+
+
+// TPageFrame::Draw with "Show Page Guides": gray lines round the printable
+// area, under the header and over the footer, and round each text column
+// (unless a single column fills the page)
+void
+TPageView::DrawPageGuides(const Document::PlacedFrame& f, BRect r)
+{
+	if (fDocument.sheets.sheets.empty() || !fDocument.sheets.sheets[0].flags[1])
+		return;
+	const LeafSheet& sheet = fDocument.sheets.sheets[0];
+	float left = sheet.printable[0] - sheet.paper[0], top = sheet.printable[1] - sheet.paper[1];
+	BRect page(r.left + left, r.top + top,
+		r.left + sheet.printable[2] - sheet.paper[0], r.top + sheet.printable[3] - sheet.paper[1]);
+	SetHighColor(192, 192, 192);
+	SetPenSize(1);
+	StrokeRect(page.InsetByCopy(-1, -1));
+	const gobe::Frame& frame = *f.frame;
+	auto childFrame = [&](size_t i) -> const gobe::Frame* {
+		if (i >= frame.children.size())
+			return NULL;
+		const gobe::Frame::Pointer& c = frame.children[i];
+		if (c.part == kNoPart || c.part >= fDocument.tails.size()
+				|| c.portal >= fDocument.tails[c.part].portals.size()
+				|| c.frame >= fDocument.tails[c.part].portals[c.portal].frames.size())
+			return NULL;
+		return &fDocument.tails[c.part].portals[c.portal].frames[c.frame];
+	};
+	if (const gobe::Frame* header = childFrame(0)) {
+		float y = page.top + 1 + header->extent[1];
+		StrokeLine(BPoint(page.left, y), BPoint(page.right, y));
+	}
+	if (const gobe::Frame* footer = childFrame(1)) {
+		float y = page.bottom - 1 - footer->extent[1];
+		StrokeLine(BPoint(page.left, y), BPoint(page.right, y));
+	}
+	size_t columns = frame.children.size() > 3 ? frame.children.size() - 3 : 0;
+	for (size_t i = 0; i < columns; i++) {
+		const gobe::Frame* column = childFrame(3 + i);
+		if (column == NULL)
+			continue;
+		BRect c(r.left + column->origin[0], r.top + column->origin[1],
+			r.left + column->origin[0] + column->extent[0],
+			r.top + column->origin[1] + column->extent[1]);
+		if (columns == 1 && c == page)
+			break;
+		StrokeRect(c.InsetByCopy(-1, -1));
+	}
+}
+
+
+void
+TPageView::GeometryChanged()
+{
+	RebuildFrames();
+	LayoutText();
+	InvalidateLayout();
+	Invalidate();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+}
+
+
+BRect
+TPageView::PageArea(int32 index, BRect printable) const
+{
+	int page = fDocument.PagePart();
+	for (const auto& f : fFrames) {
+		if (int(f.part) != page || f.index != index)
+			continue;
+		float x = f.x - fBounds.left + fMargin + printable.left;
+		float y = f.y - fBounds.top + fMargin + printable.top;
+		return BRect(x, y, x + printable.Width(), y + printable.Height());
+	}
+	return BRect();
 }
 
 } // namespace gobe

@@ -2,6 +2,8 @@
 // a new document and on the samples: the new page's frames, where they are
 // placed, saving and reloading them, and removing the page again giving the
 // document's bytes back. Arguments: the sample documents.
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <string>
 
@@ -107,6 +109,58 @@ main(int argc, char** argv)
 			std::string(argv[i]) + ": removed, the document's bytes");
 	}
 	Check(paged >= 5, "paged samples: " + std::to_string(paged));
+
+	// page geometry: wider margins move and resize the frames; back to the
+	// document's margins, every frame on its pages is where the original
+	// laid it out (TPageFrame::RepositionChildFrames)
+	int repositioned = 0;
+	for (int i = 1; i < argc; i++) {
+		Document d;
+		if (!LoadDocument(argv[i], d, error) || d.PagePart() < 0 || d.sheets.sheets.empty())
+			continue;
+		Document original = d;
+		float paper[4], printable[4], wider[4];
+		std::copy(d.sheets.sheets[0].paper, d.sheets.sheets[0].paper + 4, paper);
+		std::copy(d.sheets.sheets[0].printable, d.sheets.sheets[0].printable + 4, printable);
+		float margins[4];
+		d.Margins(margins);
+		Check(margins[0] == printable[0] - paper[0] && margins[3] == paper[3] - printable[3],
+			std::string(argv[i]) + ": margins");
+		std::copy(printable, printable + 4, wider);
+		wider[0] += 36;
+		wider[2] -= 36;
+		Check(d.SetPageGeometry(paper, wider) && d.sheetsChanged, std::string(argv[i])
+			+ ": wider margins");
+		int pagePart = d.PagePart();
+		bool moved = false;
+		for (const Frame::Pointer& c : d.tails[pagePart].portals[0].frames[0].children)
+			if (c.part != kNoPart)
+				moved = moved || d.tails[c.part].portals[c.portal].frames[c.frame].extent[0]
+					!= original.tails[c.part].portals[c.portal].frames[c.frame].extent[0];
+		uint32_t mainKind = d.parts.parts[d.MainPart()].kind;
+		if (mainKind == Sig("WORD") || mainKind == Sig("GRFX"))
+			Check(moved, std::string(argv[i]) + ": frames resized");
+		d.SetPageGeometry(paper, printable);
+		bool same = true;
+		for (const Frame::Pointer& c : d.tails[pagePart].portals[0].frames[0].children) {
+			if (c.part == kNoPart)
+				continue;
+			const Frame& a = d.tails[c.part].portals[c.portal].frames[c.frame];
+			const Frame& b = original.tails[c.part].portals[c.portal].frames[c.frame];
+			for (int k = 0; k < 2; k++)
+				same = same && std::fabs(a.origin[k] - b.origin[k]) < 0.5f
+					&& std::fabs(a.extent[k] - b.extent[k]) < 0.5f;
+			if (!same) {
+				printf("  %s part %u frame %u: %g,%g %gx%g, the original %g,%g %gx%g\n", argv[i],
+					c.part, c.frame, a.origin[0], a.origin[1], a.extent[0], a.extent[1],
+					b.origin[0], b.origin[1], b.extent[0], b.extent[1]);
+				break;
+			}
+		}
+		Check(same, std::string(argv[i]) + ": frames back where the original put them");
+		repositioned++;
+	}
+	Check(repositioned >= 5, "repositioned samples: " + std::to_string(repositioned));
 	remove(path.c_str());
 	printf("pages ok %d, failed %d\n", sOk, sFailed);
 	return sFailed > 0 ? 1 : 0;

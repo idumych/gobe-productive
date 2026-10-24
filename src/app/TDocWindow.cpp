@@ -4,6 +4,8 @@
 
 #include <Alert.h>
 #include <Application.h>
+#include <Messenger.h>
+#include <PrintJob.h>
 #include <Button.h>
 #include <CheckBox.h>
 #include <ColorControl.h>
@@ -28,6 +30,7 @@
 #include "Formats.h"
 #include "GobeResources.h"
 #include "TDialog.h"
+#include "TDocumentDialogs.h"
 #include "TDocView.h"
 #include "TPageView.h"
 #include "TTranslate.h"
@@ -98,6 +101,9 @@ static const uint32 kCmdSaveAs = 'sM03';
 static const uint32 kCmdRevert = 'sM04';
 static const uint32 kCmdOpen = 'sM01';
 static const uint32 kCmdQuit = 'sM09';
+static const uint32 kCmdPageSetup = 'sM05';
+static const uint32 kCmdPrint = 'sM06';
+static const uint32 kCmdMargins = 'sM22';
 
 
 // #pragma mark - TFindDialog
@@ -1165,10 +1171,13 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 }
 
 
-// TFontMenu: builds the dynamic font list from system font families.
+// TFontMenu (TFontNameMenuElement: TFontMenu(true)): the installed font
+// families by name; a family with several styles has a submenu of them.
+// Items send 'sf01' with "font", "style" (the family's only style, or the
+// style chosen) and "cacheIndex" (TFontMenu::loadFonts).
 TFontMenu::TFontMenu()
 	:
-	BMenu("Font", B_ITEMS_IN_COLUMN)
+	BMenu(GobeResources::IndexString(5, 14).String(), B_ITEMS_IN_COLUMN)
 {
 	Rebuild();
 }
@@ -1177,46 +1186,55 @@ TFontMenu::TFontMenu()
 void
 TFontMenu::Rebuild()
 {
-	// Keep the current selection
-	const char* current = NULL;
-	if (fCurrentFamily != NULL) {
-		BMessage* msg = fCurrentFamily->Message();
-		if (msg != NULL)
-			msg->FindString("name", &current);
-	}
-
-	// Remove all existing items
 	while (CountItems() > 0)
-		RemoveItem(0);
-
-	int32 count = count_font_families();
+		delete RemoveItem((int32)0);
 	fCurrentFamily = NULL;
+	int32 count = count_font_families();
 	for (int32 i = 0; i < count; i++) {
-		font_family name;
-		uint32 flags;
-		if (get_font_family(i, &name, &flags) != B_OK)
+		font_family family;
+		uint32 familyFlags;
+		if (get_font_family(i, &family, &familyFlags) != B_OK)
 			continue;
-		BMessage* msg = new BMessage('sM05');  // font value message
-		msg->AddString("name", name);
-		TMenuItem* item = new TMenuItem((const char*)name, msg, 0, 0);
-		AddItem(item);
-		if (current != NULL && strcmp(name, current) == 0)
-			fCurrentFamily = item;
+		BString label(family);
+		// sorted by name
+		int32 at = 0;
+		while (at < CountItems() && strcmp(label.String(), ItemAt(at)->Label()) >= 0)
+			at++;
+		BMessage* message = new BMessage(kMsgFontFamily);
+		message->AddString("font", family);
+		int32 styles = count_font_styles(family);
+		BMenuItem* item;
+		if (styles == 1) {
+			font_style style;
+			uint32 flags;
+			get_font_style(family, 0, &style, &flags);
+			label << " " << style;
+			message->AddString("style", style);
+			message->AddInt32("cacheIndex", i);
+			item = new BMenuItem(label.String(), message);
+		} else {
+			BMenu* submenu = new BMenu(family);
+			for (int32 k = 0; k < styles; k++) {
+				font_style style;
+				uint32 flags;
+				if (get_font_style(family, k, &style, &flags) != B_OK)
+					continue;
+				BMessage* choice = new BMessage(*message);
+				choice->AddString("style", style);
+				submenu->AddItem(new BMenuItem(style, choice));
+			}
+			message->AddInt32("cacheIndex", i);
+			item = new BMenuItem(submenu, message);
+		}
+		AddItem(item, at);
 	}
-	if (fCurrentFamily == NULL && CountItems() > 0)
-		fCurrentFamily = ItemAt(0);
 }
 
 
 BMenu*
 TDocWindow::MakeFontMenu()
 {
-	// The original's font menu has a "More Fonts..." item at the end.
-	// Build a TFontMenu and add the "More Fonts..." item.
 	fFontMenu = new TFontMenu();
-	BMenuItem* more = new BMenuItem("More Fonts...", new BMessage('sM05'));
-	more->SetEnabled(false);
-	fFontMenu->AddItem(more);
 	return fFontMenu;
 }
 
@@ -1495,6 +1513,43 @@ TDocWindow::MessageReceived(BMessage* message)
 					SetTitle(path.Leaf());
 				}
 			}
+			return;
+		}
+		case kCmdPageSetup:
+			PageSetup();
+			return;
+		case kCmdPrint:
+			Print();
+			return;
+		case kCmdMargins:
+		{
+			if (fDocument == NULL || fDocument->sheets.sheets.empty())
+				return;
+			BRect rect;
+			if (message->FindRect("Margins", &rect) != B_OK) {
+				(new TDialogFormatDocument(this, *fDocument))->RunDialog();
+				return;
+			}
+			// TDocMarginsCommand: a negative margin stays as it is; the page
+			// guides flag is set (the others are read but not applied)
+			LeafSheet& sheet = fDocument->sheets.sheets[0];
+			float current[4];
+			fDocument->Margins(current);
+			float margins[4] = {rect.left, rect.top, rect.right, rect.bottom};
+			for (int i = 0; i < 4; i++)
+				if (margins[i] < 0)
+					margins[i] = current[i];
+			float printable[4] = {sheet.paper[0] + margins[0], sheet.paper[1] + margins[1],
+				sheet.paper[2] - margins[2], sheet.paper[3] - margins[3]};
+			bool guides;
+			if (message->FindBool("ShowPageGuides", &guides) == B_OK && guides != sheet.flags[1]) {
+				sheet.flags[1] = guides;
+				fDocument->sheetsChanged = true;
+			}
+			float paper[4];
+			std::copy(sheet.paper, sheet.paper + 4, paper);
+			fDocument->SetPageGeometry(paper, printable);
+			GeometryChanged();
 			return;
 		}
 		case kCmdRevert:
@@ -1783,6 +1838,131 @@ TDocWindow::MessageReceived(BMessage* message)
 }
 
 
+// TApp::PrinterName: the default printer (the original read
+// ~/config/settings/printer_data; Haiku's print server tells it)
+static BString
+PrinterName()
+{
+	BMessenger server("application/x-vnd.Be-PSRV");
+	BMessage request(B_GET_PROPERTY), reply;
+	request.AddSpecifier("ActivePrinter");
+	BString name;
+	if (server.IsValid() && server.SendMessage(&request, &reply) == B_OK)
+		reply.FindString("result", &name);
+	return name;
+}
+
+
+static BMessage*
+PrintSettings(const LeafSheet& sheet)
+{
+	if (sheet.printSettings.empty())
+		return NULL;
+	BMessage* settings = new BMessage;
+	if (settings->Unflatten((const char*)sheet.printSettings.data()) != B_OK) {
+		delete settings;
+		return NULL;
+	}
+	return settings;
+}
+
+
+bool
+TDocWindow::PageSetup()
+{
+	if (fDocument == NULL || fDocument->sheets.sheets.empty())
+		return false;
+	LeafSheet& sheet = fDocument->sheets.sheets[0];
+	float margins[4];
+	fDocument->Margins(margins);
+	BPrintJob job(sheet.name.c_str());
+	if (BMessage* settings = PrintSettings(sheet))
+		job.SetSettings(settings);
+	if (job.ConfigPage() != B_OK)
+		return false;
+	// the new settings, the printer's name; the paper from the job, the
+	// margins as they were
+	BMessage* settings = job.Settings();
+	if (settings != NULL) {
+		BString printer = PrinterName();
+		if (settings->HasString("_printerName"))
+			settings->ReplaceString("_printerName", printer);
+		else
+			settings->AddString("_printerName", printer);
+		ssize_t size = settings->FlattenedSize();
+		sheet.printSettings.resize(size_t(size));
+		settings->Flatten((char*)sheet.printSettings.data(), size);
+		fDocument->sheetsChanged = true;
+		delete settings;
+	}
+	BRect rect = job.PaperRect();
+	float paper[4] = {rect.left, rect.top, rect.right, rect.bottom};
+	float printable[4] = {rect.left + margins[0], rect.top + margins[1],
+		rect.right - margins[2], rect.bottom - margins[3]};
+	fDocument->SetPageGeometry(paper, printable);
+	GeometryChanged();
+	return true;
+}
+
+
+void
+TDocWindow::Print()
+{
+	if (fDocument == NULL || fDocument->sheets.sheets.empty() || fPages == NULL)
+		return;
+	// Page Setup first when the settings are for another printer
+	LeafSheet* sheet = &fDocument->sheets.sheets[0];
+	bool setup = true;
+	if (BMessage* settings = PrintSettings(*sheet)) {
+		const char* printer = NULL;
+		if (settings->FindString("_printerName", &printer) == B_OK && printer != NULL
+				&& PrinterName() == printer)
+			setup = false;
+		delete settings;
+	}
+	if (setup && !PageSetup())
+		return;
+	sheet = &fDocument->sheets.sheets[0];
+	BMessage* settings = PrintSettings(*sheet);
+	if (settings != NULL)
+		settings->RemoveName("save");
+	BPrintJob job(fDocument->path.empty() ? fDocument->name.c_str()
+		: BPath(fDocument->path.c_str()).Leaf());
+	if (settings != NULL)
+		job.SetSettings(settings);
+	if (job.ConfigJob() != B_OK || !job.CanContinue())
+		return;
+	// TPart::Print: the pages from FirstPage to LastPage (1 to the page
+	// count), each drawn where the printer can print
+	int32 pages = int32(fDocument->PageCount());
+	int32 first = std::max<int32>(1, job.FirstPage());
+	int32 last = std::min<int32>(pages, job.LastPage());
+	if (last < first)
+		return;
+	BRect printable = job.PrintableRect();
+	job.BeginJob();
+	for (int32 page = first; page <= last; page++) {
+		BRect area = fPages->PageArea(page - 1, printable);
+		job.DrawView(fPages, area, BPoint(0, 0));
+		job.SpoolPage();
+		if (!job.CanContinue())
+			break;
+	}
+	if (job.CanContinue())
+		job.CommitJob();
+}
+
+
+void
+TDocWindow::GeometryChanged()
+{
+	if (fPages != NULL)
+		fPages->GeometryChanged();
+	fModified = true;
+	UpdateTitle();
+}
+
+
 // Writes the document (only edited parts are written anew). The first save
 // over an existing file in a session keeps the previous version as
 // "<name>~".
@@ -1846,7 +2026,7 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 				BMessage* msg = item->Message();
 				if (msg != NULL) {
 					const char* name = NULL;
-					msg->FindString("name", &name);
+					msg->FindString("font", &name);
 					if (name != NULL && strcmp(name, family) == 0) {
 						item->SetMarked(true);
 						fFontMenu->SetCurrentFamily(item);
