@@ -1,6 +1,7 @@
 #include "TDocWindow.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <Alert.h>
 #include <Application.h>
@@ -776,7 +777,10 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	BWindow(frame, title, B_DOCUMENT_WINDOW, B_AUTO_UPDATE_SIZE_LIMITS)
 {
 	TMenuBar* menuBar = InstallBaseMenus();
-	menuBar->AddItem(MakeDialogsMenu());
+	// a test aid, not the original's: every DIAL resource, with
+	// GOBE_DEBUG_MENUS set
+	if (getenv("GOBE_DEBUG_MENUS") != NULL)
+		menuBar->AddItem(MakeDialogsMenu());
 
 	fStatus = new BStringView("status", "Gobe Productive port: menus and dialogs "
 		"from the original resources");
