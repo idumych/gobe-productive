@@ -1906,6 +1906,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 		} else if (command == "commit") {
 			EndCellEdit(true);
+		} else if (command.compare(0, 7, "window ") == 0 && command.size() == 11) {
+			// "window ABCD": the command 'ABCD' as a menu sends it, to the
+			// window (only in a document window)
+			const char* c = command.c_str() + 7;
+			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
+			if (Window() != NULL && dynamic_cast<TDocWindow*>(Window()) != NULL)
+				Window()->MessageReceived(&msg);
+			else
+				fprintf(stderr, "window: not in a document window\n");
 		} else if (command.compare(0, 8, "special ") == 0 && command.size() == 12) {
 			// "special sM52": a Format > Insert command
 			const char* c = command.c_str() + 8;

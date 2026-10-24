@@ -926,14 +926,15 @@ TDocWindow::InstallBaseMenus()
 	fAlignmentMenu = new TMenu(300);
 	bar->AddItem(fAlignmentMenu);
 
-	// Tab menu (MENU 120)
+	// Tab menu (MENU 120 is the ruler's pop-up; the ruler isn't ported, so
+	// its items are here, without shortcuts: they took Copy's and others')
 	BMenu* tabMenu = new BMenu("Tabs");
-	tabMenu->AddItem(new BMenuItem("Left Tab", new BMessage(kCmdTabLeft), 'l'));
-	tabMenu->AddItem(new BMenuItem("Center Tab", new BMessage(kCmdTabCenter), 'c'));
-	tabMenu->AddItem(new BMenuItem("Right Tab", new BMessage(kCmdTabRight), 'r'));
+	tabMenu->AddItem(new BMenuItem("Left Tab", new BMessage(kCmdTabLeft)));
+	tabMenu->AddItem(new BMenuItem("Center Tab", new BMessage(kCmdTabCenter)));
+	tabMenu->AddItem(new BMenuItem("Right Tab", new BMessage(kCmdTabRight)));
 	tabMenu->AddItem(new BMenuItem("Align Tab", new BMessage(kCmdTabAlign)));
 	tabMenu->AddItem(new BSeparatorItem());
-	tabMenu->AddItem(new BMenuItem("Delete Tab", new BMessage(kCmdDeleteTab), 'D'));
+	tabMenu->AddItem(new BMenuItem("Delete Tab", new BMessage(kCmdDeleteTab)));
 	tabMenu->AddItem(new BMenuItem("Edit Tab…", new BMessage(kCmdEditTab)));
 	bar->AddItem(tabMenu);
 
@@ -942,8 +943,8 @@ TDocWindow::InstallBaseMenus()
 	if (fDocument != NULL && !fDocument->spreadsheetParts.empty()) {
 		// Format menu: Column Width, Row Height, Display Options
 		BMenu* format = new BMenu("Format");
-		format->AddItem(new BMenuItem("Column Width…", new BMessage(kCmdColWidth), 'W'));
-		format->AddItem(new BMenuItem("Row Height…", new BMessage(kCmdRowHeight), 'H'));
+		format->AddItem(new BMenuItem("Column Width…", new BMessage(kCmdColWidth)));
+		format->AddItem(new BMenuItem("Row Height…", new BMessage(kCmdRowHeight)));
 		BMenuItem* displayOpts = new BMenuItem("Display Options", NULL);
 		displayOpts->SetEnabled(false);
 		format->AddItem(displayOpts);
@@ -1072,7 +1073,7 @@ TDocWindow::InstallBaseMenus()
 		options->AddItem(new BMenuItem("Insert Cells…", new BMessage('sM73')));
 		options->AddItem(new BMenuItem("Delete Cells…", new BMessage('sM74')));
 		options->AddSeparatorItem();
-		options->AddItem(new BMenuItem("Go To Cell…", new BMessage(kCmdGoToCell), 'G'));
+		options->AddItem(new BMenuItem("Go To Cell…", new BMessage(kCmdGoToCell)));
 		bar->AddItem(options);
 	}
 
