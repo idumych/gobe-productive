@@ -16,6 +16,7 @@
 #include <CheckBox.h>
 #include <ColorControl.h>
 #include <FilePanel.h>
+#include <FindDirectory.h>
 #include <Entry.h>
 #include <Font.h>
 #include <NodeInfo.h>
@@ -1227,6 +1228,48 @@ TDocWindow::MessageReceived(BMessage* message)
 			be_roster->Launch(strncmp(url, "mailto:", 7) == 0 ? "text/x-email" : "text/html", 1,
 				argv);
 		}
+		return;
+	}
+	// Writing Tools > Thesaurus… and Dictionary… (TDocWindow: the active
+	// part's SelectWord, then TThesaurus::GUI, TDictionary::GUI): the word
+	// at the caret selected; the data file is the first of STR# 38 (37)
+	// there ("~etc": the system's etc folder); none: STR# 6's alert with
+	// the last. (The dialogs need the BeOS goodies' files; not ported.)
+	if (message->what == 'sM27' || message->what == 'sM28') {
+		if (fPages != NULL && fPages->fCaret.active && fDocument != NULL) {
+			if (const WPPart* wp = fDocument->WordPart(fPages->fCaret.part)) {
+				TextPosition from, to;
+				if (!fPages->TextSelection(from, to))
+					from = {fPages->fCaret.paragraph, fPages->fCaret.offset};
+				size_t start, end;
+				WordBounds(wp->paragraphs[from.paragraph].text, from.offset, true, start, end);
+				if (start != end)
+					fPages->SelectText(fPages->fCaret.part, {from.paragraph, start}, end);
+			}
+		}
+		int32 list = message->what == 'sM27' ? 38 : 37;
+		BString path;
+		bool found = false;
+		for (int32 i = 0; !found; i++) {
+			BString candidate = GobeResources::IndexString(list, i);
+			if (candidate.IsEmpty())
+				break;
+			if (candidate.Compare("~etc", 4) == 0) {
+				BPath etc;
+				if (find_directory(B_SYSTEM_ETC_DIRECTORY, &etc) == B_OK) {
+					etc.Append(candidate.String() + 5);
+					candidate = etc.Path();
+				}
+			}
+			path = candidate;
+			found = BEntry(path.String()).Exists();
+		}
+		if (!found) {
+			BString text;
+			text.SetToFormat(GobeResources::IndexString(6, 0).String(), path.String());
+			(new BAlert("", text.String(), "OK"))->Go(NULL);
+		} else if (fStatus != NULL)
+			fStatus->SetText("The thesaurus and dictionary dialogs are not ported yet");
 		return;
 	}
 	// File > Preferences… (TDocWindow: TDialogPrefs)
