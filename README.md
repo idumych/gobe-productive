@@ -93,7 +93,7 @@ On VitruvianOS, finding a word:
 
 ![Gobe Productive on VitruvianOS: Find/Replace](docs/screenshots/vitruvianos-find.png)
 
-On Linux (X11), with Edit Styles:
+On Linux (X11), with Edit Styles (a build made after 0.1.0, with Hokku's drawing fixes; the 0.1.0 AppImage greys out disabled buttons less faithfully):
 
 ![Gobe Productive on Linux: the Edit Styles floater](docs/screenshots/linux-edit-styles.png)
 
