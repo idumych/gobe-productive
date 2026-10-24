@@ -1,5 +1,5 @@
 // The spreadsheet part's data (TPartSS::TPartSS(TInputArchive&)): the used
-// range, the default style, the selection, the cells with column and row
+// range, the default style, the locked cells, the cells with column and row
 // header cells (sizes), the dependency table and the display settings.
 #ifndef GOBE_SS_PART_H
 #define GOBE_SS_PART_H
@@ -54,8 +54,8 @@ struct SSPart {
 	PartHeader header;
 	SSRange used;				// +0x60
 	uint32_t style = 0xffffffff;	// +0x68
-	std::vector<SSRange> selection;	// +0x6c TCellsList
-	bool flag80 = false;
+	std::vector<SSRange> locked;	// +0x6c TCellsList: LockedCells
+	bool autoCalculate = false;	// +0x80 (Options > Auto Calculate)
 	std::vector<SSHeader> columns;
 	std::vector<SSHeader> rows;
 	std::vector<SSCell> cells;
@@ -82,8 +82,9 @@ struct SSPart {
 	std::vector<SSFill> fills;	// TSSFillManager
 	uint32_t frame[3] = {};		// format > 0x15: ReadFramePtr
 
-	// the 'data' block and the 'depm' block in the part record (both are
-	// written from the parsed form)
+	// 'ss +' to the end of 'rowi', the 'data' block and the 'depm' block
+	// in the part record (all written from the parsed form)
+	size_t headerStart = 0;
 	size_t dataStart = 0, dataEnd = 0;
 	size_t depmStart = 0, depmEnd = 0;
 	CellID dataEndID;			// the terminating cell id (column 0xffff)

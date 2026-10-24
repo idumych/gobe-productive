@@ -1498,14 +1498,14 @@ InsertRowsColumns(Document& doc, size_t part, bool columns, uint16_t at, int cou
 	MapRange(used, map, columns, valid);
 	if (valid)
 		ss->used = used;
-	std::vector<SSRange> selection;
-	for (SSRange r : ss->selection) {
+	// (the locked cells deleted aren't locked any more)
+	std::vector<SSRange> locked;
+	for (SSRange r : ss->locked) {
 		MapRange(r, map, columns, valid);
 		if (valid)
-			selection.push_back(r);
+			locked.push_back(r);
 	}
-	if (!selection.empty())
-		ss->selection = std::move(selection);
+	ss->locked = std::move(locked);
 	std::vector<SSFill> fills;
 	for (SSFill& fill : ss->fills) {
 		MapRange(fill.range, map, columns, valid);
@@ -2329,6 +2329,99 @@ FillCells(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
 		}
 	}
 	return changed;
+}
+
+
+// TRange::Intersects
+static bool
+RangesIntersect(const SSRange& x, const SSRange& y)
+{
+	return x.from.a <= y.to.a && y.from.a <= x.to.a && x.from.b <= y.to.b
+		&& y.from.b <= x.to.b;
+}
+
+
+bool
+LockCells(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1, uint16_t column1,
+	bool lock)
+{
+	// TRange::Normalize
+	SSRange block{{std::min(row0, row1), std::min(column0, column1)},
+		{std::max(row0, row1), std::max(column0, column1)}};
+	if (lock) {
+		part.locked.push_back(block);
+		return true;
+	}
+	// TCellsList::RemoveRange: the ranges it touches out, those it doesn't
+	// contain stacked to come back in pieces (last first)
+	std::vector<SSRange> stack;
+	bool changed = false;
+	for (size_t i = 0; i < part.locked.size(); i++) {
+		const SSRange& r = part.locked[i];
+		if (!RangesIntersect(block, r))
+			continue;
+		bool contained = block.from.a <= r.from.a && block.from.b <= r.from.b
+			&& r.to.a <= block.to.a && r.to.b <= block.to.b;
+		if (!contained)
+			stack.push_back(r);
+		part.locked.erase(part.locked.begin() + i);
+		i--;
+		changed = true;
+	}
+	while (!stack.empty()) {
+		SSRange r = stack.back();
+		stack.pop_back();
+		if (r.from.a < block.from.a) {		// above
+			part.locked.push_back({r.from, {uint16_t(block.from.a - 1), r.to.b}});
+			r.from.a = block.from.a;
+		}
+		if (r.from.b < block.from.b) {		// left
+			part.locked.push_back({r.from, {r.to.a, uint16_t(block.from.b - 1)}});
+			r.from.b = block.from.b;
+		}
+		if (block.to.a < r.to.a) {			// below
+			part.locked.push_back({{uint16_t(block.to.a + 1), r.from.b}, r.to});
+			r.to.a = block.to.a;
+		}
+		if (block.to.b < r.to.b)			// right
+			part.locked.push_back({{r.from.a, uint16_t(block.to.b + 1)}, r.to});
+	}
+	return changed;
+}
+
+
+bool
+CellsLocked(const SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
+	uint16_t column1)
+{
+	SSRange block{{std::min(row0, row1), std::min(column0, column1)},
+		{std::max(row0, row1), std::max(column0, column1)}};
+	for (const SSRange& r : part.locked)
+		if (RangesIntersect(r, block))
+			return true;
+	return false;
+}
+
+
+bool
+FillTargets(uint16_t& row0, uint16_t& column0, uint16_t& row1, uint16_t& column1,
+	FillKind kind)
+{
+	switch (kind) {
+		case FillKind::down: row0++; break;
+		case FillKind::right: column0++; break;
+		case FillKind::up:
+			if (row1 == 0)
+				return false;
+			row1--;
+			break;
+		case FillKind::left:
+			if (column1 == 0)
+				return false;
+			column1--;
+			break;
+	}
+	return row0 <= row1 && column0 <= column1;
 }
 
 

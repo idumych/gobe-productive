@@ -292,6 +292,24 @@ enum class FillKind { down, right, up, left };
 bool FillCells(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
 	uint16_t column1, FillKind kind);
 
+// Format > Lock Cells / Unlock Cells (TSSLockCommand::Perform): the block
+// (normalized) appended to the part's locked cells (TCellsList::AddList, not
+// merged), or taken out of them (TCellsList::RemoveList: each locked range
+// it touches is removed, and those it doesn't cover are added back as their
+// parts above, left of, below and right of it, in that order). True if the
+// list changed.
+bool LockCells(SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
+	uint16_t column1, bool lock);
+
+// TPartSS::IsLocked (TCellsList::ListInList): any cell of the block locked
+bool CellsLocked(const SSPart& part, uint16_t row0, uint16_t column0, uint16_t row1,
+	uint16_t column1);
+
+// the cells a fill changes: the block without its source row (column),
+// as TSSFillCommand::IsLocked checks them; false if there are none
+bool FillTargets(uint16_t& row0, uint16_t& column0, uint16_t& row1, uint16_t& column1,
+	FillKind kind);
+
 } // namespace gobe
 
 #endif

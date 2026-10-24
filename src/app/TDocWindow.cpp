@@ -1602,7 +1602,7 @@ TDocWindow::MenusBeginning()
 		enable('sM7B', height > 1);
 		enable('sM71', width > 1);
 		enable('sM7C', width > 1);
-		for (uint32 command : {'sM60', 'sM62', 'sM63', 'sM66', 'sM75', 'sM76', 'sM78',
+		for (uint32 command : {'sM60', 'sM66', 'sM75', 'sM76', 'sM78',
 				'sM79', 'sM7A'})
 			enable(command, false);
 	}

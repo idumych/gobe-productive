@@ -79,6 +79,9 @@ public:
 	void GeometryChanged();
 	// the menu commands MessageReceived handles (the window passes them on)
 	static bool HandlesCommand(uint32 what);
+	// TSSFillCommand::IsLocked (and its alert)
+	bool FillLocked(FillKind kind, int r0, int c0, int r1, int c1);
+	bool RangeLocked(int r0, int c0, int r1, int c1);
 	// Document > Insert/Remove Header (0) or Footer (1)
 	void ToggleHeaderFooter(int which);
 	// the width of the frame the caret is in (TWPPart::RulerBounds)

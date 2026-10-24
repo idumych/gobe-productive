@@ -56,6 +56,16 @@ SSCommandName(int32 index)
 }
 
 
+// TPartSS::IsLocked's SimpleAlert: STR# 1503 of Parts/Spreadsheet (0: locked
+// cells in the selection)
+static void
+SSAlert(int32 index)
+{
+	(new BAlert("", IndexString(GobeResources::Part("Spreadsheet"), 1503, index).c_str(),
+		"OK"))->Go(NULL);
+}
+
+
 // Copy Format's properties (the application's, TApp +0x184)
 static std::vector<Property> sCopiedFormat;
 // the text last copied with its styles (the clipboard has its plain text)
@@ -1107,6 +1117,14 @@ TPageView::EndCellEdit(bool commit, int moveRows, int moveColumns)
 	delete fCellEditor;
 	fCellEditor = NULL;
 	MakeFocus(true);
+	// TSSSetCellsCommand::IsLocked: a locked cell keeps what it had
+	const SSPart* sheet = fDocument.SpreadsheetPart(fSelectedCell.part);
+	if (commit && sheet != NULL && CellsLocked(*sheet, uint16_t(fSelectedCell.row),
+			uint16_t(fSelectedCell.column), uint16_t(fSelectedCell.row),
+			uint16_t(fSelectedCell.column))) {
+		SSAlert(0);
+		commit = false;
+	}
 	if (commit) {
 		fUndo.Begin(fDocument, fSelectedCell.part, "Cell Entry",
 			CurrentViewState());
@@ -1348,12 +1366,20 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				return;
 			case B_BACKSPACE:
 			case B_DELETE: {
-				fUndo.Begin(fDocument, fSelectedCell.part, "Delete",
-					CurrentViewState());
 				int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
 				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
 				int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
 				int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+				// TSSClearCommand::IsLocked
+				if (const SSPart* sheet = fDocument.SpreadsheetPart(fSelectedCell.part)) {
+					if (CellsLocked(*sheet, uint16_t(r0), uint16_t(c0), uint16_t(r1),
+							uint16_t(c1))) {
+						SSAlert(0);
+						break;
+					}
+				}
+				fUndo.Begin(fDocument, fSelectedCell.part, "Delete",
+					CurrentViewState());
 				SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
 				std::string error;
 				if (ss != NULL && ClearRange(*ss, uint16_t(r0), uint16_t(c0),
@@ -2234,6 +2260,8 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case B_CUT: {
+						if (RangeLocked(r0, c0, r1, c1))
+							return;
 						fUndo.Begin(fDocument, fSelectedCell.part, "Cut",
 							CurrentViewState());
 						SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
@@ -2302,6 +2330,8 @@ TPageView::MessageReceived(BMessage* message)
 					}
 					case kCmdClear:
 						{
+							if (RangeLocked(r0, c0, r1, c1))
+								return;
 							fUndo.Begin(fDocument, fSelectedCell.part, "Clear",
 								CurrentViewState());
 							SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
@@ -2369,6 +2399,8 @@ TPageView::MessageReceived(BMessage* message)
 					}
 					// Fill Down / Fill Right
 					case 'sM70': {	// Fill Down
+						if (FillLocked(FillKind::down, r0, c0, r1, c1))
+							return;
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
 						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
@@ -2379,6 +2411,8 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case 'sM71': {	// Fill Right
+						if (FillLocked(FillKind::right, r0, c0, r1, c1))
+							return;
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
 						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
@@ -2391,12 +2425,25 @@ TPageView::MessageReceived(BMessage* message)
 					case 'sM7B':	// Fill Up
 					case 'sM7C': {	// Fill Left
 						bool up = message->what == 'sM7B';
+						if (FillLocked(up ? FillKind::up : FillKind::left, r0, c0, r1, c1))
+							return;
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
 						FillCells(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
 							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
 							up ? FillKind::up : FillKind::left);
 						fBook->Reset();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 'sM62':	// Lock Cells
+					case 'sM63': {	// Unlock Cells (TSSLockCommand)
+						bool lock = message->what == 'sM62';
+						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(lock ? 8 : 9),
+							CurrentViewState());
+						LockCells(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1), lock);
+						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
@@ -2968,6 +3015,16 @@ TPageView::RunScript(const std::string& script, Document& document)
 		} else if (command == "fillright") {
 			BMessage msg('sM71');
 			MessageReceived(&msg);
+		} else if (command == "lock" || command == "unlock") {
+			BMessage msg(command == "lock" ? 'sM62' : 'sM63');
+			MessageReceived(&msg);
+		} else if (command == "locked") {
+			const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+			fprintf(stderr, "locked");
+			if (ss != NULL)
+				for (const SSRange& r : ss->locked)
+					fprintf(stderr, " %d,%d-%d,%d", r.from.a, r.from.b, r.to.a, r.to.b);
+			fprintf(stderr, "\n");
 		} else if (command == "fillup") {
 			BMessage msg('sM7B');
 			MessageReceived(&msg);
@@ -3930,6 +3987,33 @@ TPageView::FormatParagraphs(const std::vector<float>& removeTabs,
 }
 
 
+// TSSFillCommand::IsLocked: a fill whose target cells are locked is refused
+// with TPartSS::IsLocked's alert
+bool
+TPageView::FillLocked(FillKind kind, int r0, int c0, int r1, int c1)
+{
+	const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+	uint16_t a0 = uint16_t(r0), b0 = uint16_t(c0), a1 = uint16_t(r1), b1 = uint16_t(c1);
+	if (ss == NULL || !FillTargets(a0, b0, a1, b1, kind) || !CellsLocked(*ss, a0, b0, a1, b1))
+		return false;
+	SSAlert(0);
+	return true;
+}
+
+
+// TPartSS::IsLocked for a block of the selected part (and its alert)
+bool
+TPageView::RangeLocked(int r0, int c0, int r1, int c1)
+{
+	const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+	if (ss == NULL || !CellsLocked(*ss, uint16_t(r0), uint16_t(c0), uint16_t(r1),
+			uint16_t(c1)))
+		return false;
+	SSAlert(0);
+	return true;
+}
+
+
 bool
 TPageView::HandlesCommand(uint32 what)
 {
@@ -3946,6 +4030,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
+		case 'sM62': case 'sM63':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

@@ -1,5 +1,7 @@
 #include "SSPart.h"
 
+#include <algorithm>
+
 #include "DocWriter.h"
 
 namespace gobe {
@@ -168,11 +170,12 @@ ReadSSPart(DocArchive& a, SSPart& out)
 	a.UInt32();
 	ReadPartHeader(a, out.header);
 
+	out.headerStart = a.Position();
 	a.CheckSig(Sig("ss +"));
 	out.used = ReadRange(a);
 	out.style = a.UInt32();
-	out.selection = ReadCellsList(a);
-	out.flag80 = a.Bool();
+	out.locked = ReadCellsList(a);
+	out.autoCalculate = a.Bool();
 
 	// TSSDataManager::Read
 	a.CheckSig(Sig("coli"));
@@ -251,7 +254,37 @@ std::vector<uint8_t>
 WriteSSPart(const SSPart& part, const std::vector<uint8_t>& record)
 {
 	DocWriter w;
-	w.Bytes(record.data(), part.dataStart);
+	w.Bytes(record.data(), part.headerStart);
+	// TPartSS::Write
+	auto range = [&](const SSRange& r) {
+		w.UInt16(r.from.a);
+		w.UInt16(r.from.b);
+		w.UInt16(r.to.a);
+		w.UInt16(r.to.b);
+	};
+	w.Sig(Sig("ss +"));
+	range(part.used);
+	w.UInt32(part.style);
+	w.UInt32(uint32_t(part.locked.size()));		// TCellsList::Write
+	for (const SSRange& r : part.locked)
+		range(r);
+	w.Bool(part.autoCalculate);
+	// TSSDataManager::Write: the column and row headers in order, each
+	// after its kind ('Head'), then a 0
+	for (int which = 0; which < 2; which++) {
+		w.Sig(Sig(which == 0 ? "coli" : "rowi"));
+		std::vector<SSHeader> headers = which == 0 ? part.columns : part.rows;
+		std::stable_sort(headers.begin(), headers.end(),
+			[](const SSHeader& x, const SSHeader& y) { return x.index < y.index; });
+		for (const SSHeader& h : headers) {
+			w.UInt32(h.cell.kind);
+			w.UInt32(h.index);
+			w.UInt16(h.cell.flags);
+			w.UInt32(h.cell.style);
+			w.Float(float(h.cell.number));
+		}
+		w.UInt32(0);
+	}
 	w.Sig(Sig("data"));
 	for (const SSCell& c : part.cells) {	// TSSDataManager::Write
 		w.UInt16(c.id.a);
