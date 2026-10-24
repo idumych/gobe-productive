@@ -1613,7 +1613,8 @@ TDocWindow::MessageReceived(BMessage* message)
 		uint32 what = message->what;
 		if (what == 'sM20' || what == 'sM21' || what == 'sM22' || what == 'sM23'
 			|| what == 'sM24' || what == 'sM52' || what == 'sM56' || what == 'sM57'
-			|| what == 'sM58' || what == 'sM59' || what == 'sM55' || what == 'sM51') {
+			|| what == 'sM58' || what == 'sM59' || what == 'sM55' || what == 'sM51'
+			|| what == 'sM5I' || what == 'sM5K') {
 			fPages->MessageReceived(message);
 			return;
 		}

@@ -62,9 +62,9 @@ ReadParagraph(DocArchive& a, WPParagraph& p)
 			}
 			case Sig("FREF"):
 				ReadFramePtr(a, m.frame);
-				a.Bool();
-				a.Bool();
-				a.UInt32();
+				m.endnote = a.Bool();
+				m.autoNumber = a.Bool();
+				m.number = a.UInt32();
 				m.text = a.String();
 				break;
 			case Sig("FMRK"):

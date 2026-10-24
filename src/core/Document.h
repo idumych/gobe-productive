@@ -165,6 +165,21 @@ struct Document {
 	// the header or footer frame's height (it grows with its text); the
 	// pages' frames move to match. False if it didn't change.
 	bool SetHeaderHeight(int which, float height);
+	// A new style (TStyleManager::NewStyle) with its own properties; the
+	// parent gets a user. The paragraph style named `name`, made (based on
+	// "WP Default", with `properties`) if the document doesn't have it
+	// (TWPPartFactory::InitStyles makes "Header", "Footer", "Footnote";
+	// documents keep only those used).
+	uint32_t NewStyle(uint32_t type, const std::string& name, uint32_t flags, uint32_t parent,
+		const std::vector<Property>& properties = {});
+	uint32_t NamedParagraphStyle(const std::string& name,
+		const std::vector<Property>& properties = {});
+	// A new text part (TWPPart::TWPPart: one empty paragraph in a style based
+	// on `basedOn`, +0x98 `kind`: 1 footnote, 3 header or footer) with its
+	// selection, its portal in part `container` and one frame there (flag 8:
+	// it grows with its text). The part's index, -1 if it can't be made.
+	int NewTextPart(uint16_t kind, uint32_t basedOn, uint32_t container, const float origin[2],
+		const float extent[2], uint32_t frameStyle);
 	// selections added since loading (records written at the end of the
 	// SelectionMgr by Save)
 	std::vector<std::vector<uint8_t>> addedSelections;

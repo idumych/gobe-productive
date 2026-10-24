@@ -107,6 +107,8 @@ bool UpdateDependencies(Document& doc, size_t part);
 // keeps them (by type, tabs by position). Styles store it (props2) and the
 // original uses it as stored.
 std::vector<uint32_t> StyleUnionSet(const StyleMgr& styles, const Style& style);
+// TPropsTable's order: by type, tabs by position.
+void SortProps(const StyleMgr& styles, std::vector<uint32_t>& props);
 // Whether a property list is in TPropsTable's order.
 bool PropsSorted(const StyleMgr& styles, const std::vector<uint32_t>& props);
 

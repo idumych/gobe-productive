@@ -1,5 +1,6 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
-// Insert Formula (TDialogWPFormula), Columns (TDialogSection).
+// Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
+// Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions).
 #ifndef GOBE_TWP_DIALOGS_H
 #define GOBE_TWP_DIALOGS_H
 
@@ -68,6 +69,42 @@ protected:
 private:
 	BLooper* fWindow;
 	int32 fColumns;
+};
+
+// Format > Insert Footnote… (DIAL/Item 306): a footnote or an endnote
+// (labels STR# 1302, 10-13: "at End of Page"/"of Document" in the main
+// text, "of Frame"/"of Text" elsewhere; the last choice is kept), numbered
+// automatically or with a custom mark; OK sends the window 'sM5I' with
+// "endnote" and "mark". Options… opens the Footnote Options.
+class TDialogWPInsertFootnote : public TDialog {
+public:
+	TDialogWPInsertFootnote(BLooper* window, int16 first, bool mainText);
+
+	virtual void MessageReceived(BMessage* message);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	int16 fFirst;
+	bool fMainText;
+};
+
+// Footnote Options (DIAL/Item 307): the starting number; OK sends the
+// window 'sM5K' with "start".
+class TDialogWPFootnoteOptions : public TDialog {
+public:
+	TDialogWPFootnoteOptions(BLooper* window, int16 first);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	int16 fFirst;
 };
 
 } // namespace gobe

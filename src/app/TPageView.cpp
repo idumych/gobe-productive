@@ -16,6 +16,7 @@
 #include <Shape.h>
 
 #include "Fields.h"
+#include "Notes.h"
 #include "ResourceFile.h"
 #include "TDocView.h"
 
@@ -58,8 +59,18 @@ TPageView::RebuildFrames()
 {
 	fFrames.clear();
 	fLines.clear();
+	fRules.clear();
+	// notes are laid out with their references' text
+	fNoteParts.clear();
+	for (const auto& [part, wp] : fDocument.wordParts)
+		for (const WPParagraph& p : wp.paragraphs)
+			for (const WPMiscInfo& m : p.misc) {
+				int note = NotePart(fDocument, m);
+				if (note >= 0)
+					fNoteParts.insert(size_t(note));
+			}
 	for (const auto& f : fDocument.PlacedFrames())
-		if (!fDocument.FrameHidden(f.part, f.index))
+		if (!fDocument.FrameHidden(f.part, f.index) && !fNoteParts.count(f.part))
 			fFrames.push_back(f);
 	// a presentation's frame shows the whole slide (the saved window may
 	// have shown part of it, scrolled)
@@ -210,6 +221,7 @@ TPageView::LayoutText()
 	LayoutResult main;
 	for (int pass = 0;; pass++) {
 		fLines.clear();
+		fRules.clear();
 		// group each word processing part's frames, in flow order
 		std::vector<std::pair<size_t, std::vector<FrameGeometry>>> flows;
 		// a frame on several pages (the header, the footer) is laid out once
@@ -391,6 +403,55 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 		bool space;			// a space follows
 		size_t start, end;	// bytes of the paragraph's text it shows
 		uint32_t field = 0;	// a field: its kind
+		const WPMiscInfo* misc = NULL;	// a field's or note's paragraph info
+		float size = 0;		// the size its line is measured with
+		float dy = 0;		// superscript, subscript: off the baseline
+	};
+
+	// footnotes (TWPFrame::CalcFootnoteHeight, PlaceFootnotes): the notes of
+	// the lines in a frame go under them, 14 points down, each as high as
+	// its text; the frame's lines leave room for them
+	struct Note {
+		size_t part;
+		float height;
+	};
+	std::vector<Note> frameNotes;
+	float notesHeight = 0;		// 14 + their heights, 0 for none
+	std::map<size_t, float> noteHeights;
+	auto noteHeight = [&](size_t note, float width) {
+		auto known = noteHeights.find(note);
+		if (known != noteHeights.end())
+			return known->second;
+		size_t mark = fLines.size();
+		LayoutPart(note, {FrameGeometry{BRect(0, 0, width, 1e6), 0,
+			BRect(-1e6, -1e6, 1e6, 1e6), 0, -1}});
+		float height = 0;
+		for (size_t k = mark; k < fLines.size(); k++)
+			height = std::max(height, fLines[k].frame.bottom);
+		fLines.resize(mark);
+		noteHeights[note] = height;
+		return height;
+	};
+	// the separator 6 above the first note, 144 long (pen 0.45), then the
+	// notes from `top`
+	auto placeNotes = [&](const std::vector<Note>& notes, float top, size_t index) {
+		const BRect& frame = frames[index];
+		const FrameGeometry& g = geometry[index];
+		fRules.push_back({BPoint(frame.left, top - 6), BPoint(frame.left + 144, top - 6), 0.45f,
+			g.clip});
+		for (const Note& n : notes) {
+			LayoutPart(n.part, {FrameGeometry{BRect(frame.left, top, frame.right, top + 1e6),
+				g.angle, g.clip, 0, g.page}});
+			top += n.height;
+		}
+	};
+	// leaving frame `index` with its text ending at `bottom`
+	auto finishFrame = [&](size_t index, float bottom) {
+		if (!frameNotes.empty())
+			placeNotes(frameNotes, std::max(bottom, frames[index].bottom - notesHeight) + 14,
+				index);
+		frameNotes.clear();
+		notesHeight = 0;
 	};
 
 	for (const WPParagraph& par : wp->paragraphs) {
@@ -418,6 +479,14 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			BFont font = TDocView::MapFont(st);
 			if (r == 0)
 				lineFont = font;	// empty lines take the first run's font
+			// superscript (0x40), subscript (0x80): 0.66 of the size
+			// (TStyle::FontInfo), half the small ascent up or half its
+			// descent down (TLineRun::Draw); the line measured with the size
+			float size = font.Size(), dy = 0;
+			if (st.faceFlags & 0xc0) {
+				font.SetSize(size * 0.66f);
+				dy = (st.faceFlags & 0x40) ? -(font.Size() * 0.95f) / 2 : font.Size() * 0.25f / 2;
+			}
 			if (start >= text.size())
 				break;
 			end = std::min(end, text.size());
@@ -427,7 +496,8 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			size_t i = start;
 			auto flush = [&](bool space) {
 				if (!word.empty() || space) {
-					tokens.push_back({Token::kWord, word, font, color, space, wordStart, i});
+					tokens.push_back({Token::kWord, word, font, color, space, wordStart, i, 0, NULL,
+						size, dy});
 					word.clear();
 				}
 				wordStart = i + 1;
@@ -438,10 +508,12 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 					flush(true);
 				} else if (c == '\t') {
 					flush(false);
-					tokens.push_back({Token::kTab, "", font, color, false, i, i + 1});
+					tokens.push_back({Token::kTab, "", font, color, false, i, i + 1, 0, NULL, size,
+						dy});
 				} else if (c == 0x01) {
 					flush(false);
-					tokens.push_back({Token::kLineBreak, "", font, color, false, i, i + 1});
+					tokens.push_back({Token::kLineBreak, "", font, color, false, i, i + 1, 0, NULL,
+						size, dy});
 				} else if (c == 0x04) {
 					// a field (TParagraph's misc info at this offset): what it
 					// shows, or a line across the frame
@@ -452,12 +524,20 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 							misc = &m;
 					if (misc != NULL && misc->kind == Sig("LINE"))
 						tokens.push_back({Token::kRule, "", font, color, false, i, i + 1,
-							misc->kind});
+							misc->kind, misc, size, dy});
 					else if (misc != NULL && (misc->kind == Sig("FORM")
 							|| misc->kind == Sig("PAGE")))
 						tokens.push_back({Token::kWord,
 							FieldText(*fBook, part, *misc, geometry[0].page), font, color, false,
-							i, i + 1, misc->kind});
+							i, i + 1, misc->kind, misc, size, dy});
+					// a note's reference shows its mark, the note its
+					// reference's (TMiscFootnoteRef, TMiscFootnoteMark)
+					else if (misc != NULL && misc->kind == Sig("FREF"))
+						tokens.push_back({Token::kWord, NoteMark(*misc), font, color, false, i,
+							i + 1, misc->kind, misc, size, dy});
+					else if (misc != NULL && misc->kind == Sig("FMRK"))
+						tokens.push_back({Token::kWord, NoteMarkOf(fDocument, part), font, color,
+							false, i, i + 1, misc->kind, misc, size, dy});
 					wordStart = i + 1;
 				} else if ((unsigned char)c >= 0x20) {
 					if (word.empty())
@@ -471,7 +551,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 		size_t t = 0;
 		bool firstLine = true;
 		size_t paragraphIndex = &par - &wp->paragraphs[0];
-		size_t firstLineOfParagraph = fLines.size();
+		std::vector<size_t> paragraphLines;
 		// a line moved to the next frame is laid out there (an empty one too)
 		bool moved = false;
 		do {
@@ -512,8 +592,9 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			// Line metrics as with the BeOS Bitstream fonts Gobe documents
 			// were laid out with (about 1.2 x size). Haiku's Noto fonts are
 			// taller (~1.36), which would push text out of its frames.
-			auto measure = [&](const BFont& f) {
-				float size = f.Size();
+			auto measure = [&](const BFont& f, float size = 0) {
+				if (size <= 0)
+					size = f.Size();
 				ascent = std::max(ascent, size * 0.95f);
 				descent = std::max(descent, size * 0.25f);
 			};
@@ -526,12 +607,12 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 						break;
 					placed.push_back({t, x});
 					x = avail;
-					measure(tk.font);
+					measure(tk.font, tk.size);
 					t++;
 					break;
 				}
 				if (tk.kind == Token::kLineBreak) {
-					measure(tk.font);
+					measure(tk.font, tk.size);
 					t++;
 					forced = true;
 					break;
@@ -577,7 +658,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 					break;
 				placed.push_back({t, x});
 				x += ww + (tk.space ? tk.font.StringWidth(" ") : 0);
-				measure(tk.font);
+				measure(tk.font, tk.size);
 				t++;
 			}
 			if (placed.empty())
@@ -607,8 +688,24 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				descent += parStyle.spaceAfterLines
 					? parStyle.spaceAfter * lineHeight : parStyle.spaceAfter;
 			float height = ascent + descent + leading;
-			if (y + height > frame.bottom && y > frame.top) {
+			// the footnotes of the line's references need room too
+			std::vector<Note> lineNotes;
+			float lineNotesHeight = 0;
+			for (const auto& placement : placed) {
+				const Token& tk = tokens[placement.first];
+				if (tk.field != Sig("FREF") || tk.misc == NULL || tk.misc->endnote)
+					continue;
+				int note = NotePart(fDocument, *tk.misc);
+				if (note < 0 || fDocument.WordPart(size_t(note)) == NULL)
+					continue;
+				lineNotes.push_back({size_t(note), noteHeight(size_t(note), frame.Width())});
+				lineNotesHeight += lineNotes.back().height;
+			}
+			if (!lineNotes.empty() && frameNotes.empty())
+				lineNotesHeight += 14;
+			if (y + height + notesHeight + lineNotesHeight > frame.bottom && y > frame.top) {
 				// frame full: continue in the next frame
+				finishFrame(frameIndex, y);
 				frameIndex++;
 				if (frameIndex >= frames.size()) {
 					result.overflow = true;
@@ -645,7 +742,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			for (size_t k = 0; k < placed.size(); k++) {
 				const Token& tk = tokens[placed[k].first];
 				Line::Piece piece{tk.text, tk.font, tk.color,
-					shift + placed[k].second + extra * k, tk.start, tk.end, tk.field};
+					shift + placed[k].second + extra * k, tk.start, tk.end, tk.field, 0, tk.dy};
 				// a page number: the page this frame is on
 				if (tk.field == Sig("PAGE")) {
 					int page = geometry[frameIndex].page;
@@ -668,26 +765,74 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			uint32_t at = paragraphStart + uint32_t(firstLine ? 0 : line.from);
 			result.starts[index] = std::min(result.starts[index], at);
 			result.lastFrame = std::max(result.lastFrame, index);
+			paragraphLines.push_back(fLines.size());
 			fLines.push_back(std::move(line));
+			frameNotes.insert(frameNotes.end(), lineNotes.begin(), lineNotes.end());
+			notesHeight += lineNotesHeight;
 			y += height;
 			firstLine = false;
 		} while (t < tokens.size() || moved);
-		// each line runs to where the next one starts
-		for (size_t k = firstLineOfParagraph; k < fLines.size(); k++) {
-			if (k + 1 < fLines.size())
-				fLines[k].to = std::max(fLines[k].from, fLines[k + 1].from);
+		// each line runs to where the next one starts (notes laid out in
+		// between are other parts')
+		for (size_t n = 0; n < paragraphLines.size(); n++) {
+			Line& line = fLines[paragraphLines[n]];
+			if (n + 1 < paragraphLines.size())
+				line.to = std::max(line.from, fLines[paragraphLines[n + 1]].from);
 			else
-				fLines[k].to = text.size();
-			if (k == firstLineOfParagraph)
-				fLines[k].from = 0;
+				line.to = text.size();
+			if (n == 0)
+				line.from = 0;
 		}
 
 		if (IsFrameBreak(terminator)) {
+			finishFrame(frameIndex, y);
 			frameIndex++;
 			if (frameIndex < frames.size())
 				y = frames[frameIndex].top;
 		}
 		paragraphStart += uint32_t(par.text.size());
+	}
+	// the last frame's footnotes; then the endnotes (TWPPortal::
+	// PlaceEndnotes): after the text, 14 down, above those footnotes, in
+	// the next frames when they don't fit
+	float footnotes = notesHeight;
+	if (frameIndex < frames.size())
+		finishFrame(frameIndex, y);
+	std::vector<Note> endnotes;
+	for (const WPParagraph& par : wp->paragraphs)
+		for (const WPMiscInfo& m : par.misc) {
+			int note = m.endnote ? NotePart(fDocument, m) : -1;
+			if (note >= 0 && fDocument.WordPart(size_t(note)) != NULL)
+				endnotes.push_back({size_t(note), 0});
+		}
+	if (!endnotes.empty()) {
+		if (frameIndex >= frames.size()) {
+			result.overflow = true;
+			return result;
+		}
+		size_t index = frameIndex;
+		float top = y > frames[index].top ? y + 14 : frames[index].top;
+		float limit = frames[index].bottom - footnotes;
+		float start = top;
+		std::vector<Note> here;
+		for (Note& n : endnotes) {
+			n.height = noteHeight(n.part, frames[index].Width());
+			if (top + n.height > limit && (!here.empty() || top > frames[index].top)) {
+				if (!here.empty())
+					placeNotes(here, start, index);
+				here.clear();
+				if (++index >= frames.size()) {
+					result.overflow = true;
+					return result;
+				}
+				top = start = frames[index].top;
+				limit = frames[index].bottom;
+			}
+			here.push_back(n);
+			top += n.height;
+			result.lastFrame = std::max(result.lastFrame, geometry[index].index);
+		}
+		placeNotes(here, start, index);
 	}
 	return result;
 }
@@ -1672,8 +1817,17 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 					BPoint(line.frame.left + p.ruleEnd, y));
 				continue;
 			}
-			DrawString(p.text.c_str(), BPoint(line.frame.left + p.x, line.baseline));
+			DrawString(p.text.c_str(), BPoint(line.frame.left + p.x, line.baseline + p.dy));
 		}
+		PopState();
+	}
+	for (const Rule& rule : fRules) {
+		PushState();
+		BRegion clip(rule.clip.OffsetByCopy(dx, dy) & Bounds());
+		ConstrainClippingRegion(&clip);
+		SetHighColor(0, 0, 0);
+		SetPenSize(rule.width);
+		StrokeLine(rule.from, rule.to);
 		PopState();
 	}
 	SetDrawingMode(B_OP_COPY);

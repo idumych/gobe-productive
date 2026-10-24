@@ -16,6 +16,7 @@
 
 #include <map>
 #include <memory>
+#include <set>
 #include <vector>
 
 #include "Document.h"
@@ -116,6 +117,17 @@ private:
 	};
 	void RebuildFrames();
 	bool Paginate(const LayoutResult& main);
+	// footnote and endnote parts (laid out under their references' lines,
+	// not as frames of their own)
+	std::set<size_t> fNoteParts;
+	// lines drawn with the text: the footnotes' separators (TWPFrame::
+	// DrawContent)
+	struct Rule {
+		BPoint from, to;
+		float width;
+		BRect clip;					// document coordinates
+	};
+	std::vector<Rule> fRules;
 
 	struct Line {
 		BRect frame;				// in view coordinates
@@ -136,6 +148,7 @@ private:
 			// (TMiscLineInfo) is drawn from x to `ruleEnd`
 			uint32_t field = 0;
 			float ruleEnd = 0;
+			float dy = 0;			// superscript, subscript: off the baseline
 		};
 		std::vector<Piece> pieces;
 	};

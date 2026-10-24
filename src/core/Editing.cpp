@@ -858,20 +858,6 @@ Replaces(const Property& a, const Property& b)
 }
 
 
-// TPropsTable keeps its properties sorted by type (tabs by position), and
-// TPropsTable::Read takes them in the file's order: write them sorted
-void
-SortProps(const StyleMgr& styles, std::vector<uint32_t>& props)
-{
-	auto key = [&](uint32_t i) {
-		if (i >= styles.properties.size())
-			return std::make_pair(uint64_t(1) << 32, 0.0f);
-		const Property& p = styles.properties[i];
-		return std::make_pair(uint64_t(p.type), p.type == Sig("PTab") ? TabPosition(p) : 0.0f);
-	};
-	std::stable_sort(props.begin(), props.end(),
-		[&](uint32_t a, uint32_t b) { return key(a) < key(b); });
-}
 
 
 // appends `props` to `set`, each replacing one it replaces
@@ -949,6 +935,22 @@ RunAt(const WPParagraph& p, size_t offset)
 }
 
 } // namespace
+
+
+// TPropsTable keeps its properties sorted by type (tabs by position), and
+// TPropsTable::Read takes them in the file's order: write them sorted
+void
+SortProps(const StyleMgr& styles, std::vector<uint32_t>& props)
+{
+	auto key = [&](uint32_t i) {
+		if (i >= styles.properties.size())
+			return std::make_pair(uint64_t(1) << 32, 0.0f);
+		const Property& p = styles.properties[i];
+		return std::make_pair(uint64_t(p.type), p.type == Sig("PTab") ? TabPosition(p) : 0.0f);
+	};
+	std::stable_sort(props.begin(), props.end(),
+		[&](uint32_t a, uint32_t b) { return key(a) < key(b); });
+}
 
 
 std::vector<uint32_t>

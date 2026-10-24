@@ -19,6 +19,7 @@
 
 #include "Editing.h"
 #include "Fields.h"
+#include "Notes.h"
 #include "GobeResources.h"
 #include "TWPDialogs.h"
 #include "SSStyle.h"
@@ -1109,6 +1110,53 @@ TPageView::MessageReceived(BMessage* message)
 				GeometryChanged();
 			return;
 		}
+		// Format > Insert Footnote… (TWPPart::InsertSpecial,
+		// TMiscFootnoteRef): the dialog, which sends the command back with
+		// "endnote" (and "mark"); the note's text gets the caret, after its
+		// mark. No footnotes in headers and footers.
+		case 'sM5I': {
+			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
+			if (wp == NULL || (wp->version98 >= 1 && wp->version98 <= 3)) {
+				beep();
+				return;
+			}
+			bool endnote;
+			if (message->FindBool("endnote", &endnote) != B_OK) {
+				if (Window() != NULL)
+					(new TDialogWPInsertFootnote(Window(), int16(wp->version9a),
+						int(fCaret.part) == fDocument.MainPart()))->RunDialog();
+				return;
+			}
+			const char* mark;
+			if (message->FindString("mark", &mark) != B_OK || mark == NULL)
+				mark = "";
+			fUndo.BeginDocument(fDocument, "Insert Special", CurrentViewState());
+			TextPosition after;
+			int note = InsertNote(fDocument, fCaret.part, {fCaret.paragraph, fCaret.offset},
+				endnote, mark, after);
+			if (note < 0) {
+				beep();
+				return;
+			}
+			fCaret = {true, size_t(note), 0, 2};
+			fAnchor = fCaret;
+			GeometryChanged();
+			return;
+		}
+		// Footnote Options (TWPSetFootnoteOptionsCmd): the first number
+		case 'sM5K': {
+			int16 first;
+			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL
+					|| message->FindInt16("start", &first) != B_OK) {
+				beep();
+				return;
+			}
+			fUndo.BeginDocument(fDocument, GobeResources::IndexString(0x515, 6).String(),
+				CurrentViewState());
+			if (SetFirstNoteNumber(fDocument, fCaret.part, uint16_t(first)))
+				TextChanged();
+			return;
+		}
 		// Format > Insert Formula… (TWPPart::InsertSpecial): the dialog,
 		// which sends the command back with the formula and how to show it
 		case 'sM55': {
@@ -1123,8 +1171,9 @@ TPageView::MessageReceived(BMessage* message)
 					(new TDialogWPFormula(Window(), "", true, false))->RunDialog();
 				return;
 			}
-			const char* format = "";
-			message->FindString("format", &format);
+			const char* format;
+			if (message->FindString("format", &format) != B_OK || format == NULL)
+				format = "";
 			WPMiscInfo field;
 			std::string error;
 			if (!FormulaField(fDocument, *fBook, fCaret.part, formula, format, 'sM55',
@@ -2357,6 +2406,13 @@ TPageView::RunScript(const std::string& script, Document& document)
 			RemoveParagraphTab(fDocument, fCaret.part, fCaret.paragraph, fCaret.paragraph,
 				style.tabs[nearestIdx].position);
 			TextChanged();
+		} else if (command.compare(0, 9, "footnote ") == 0) {
+			// "footnote <f|e> [mark]": Insert Footnote… (e: an endnote)
+			BMessage insert('sM5I');
+			insert.AddBool("endnote", command[9] == 'e');
+			if (command.size() > 11)
+				insert.AddString("mark", command.c_str() + 11);
+			MessageReceived(&insert);
 		} else if (command.compare(0, 8, "columns ") == 0) {
 			// "columns N": Format > Columns… with N
 			BMessage set('sM51');

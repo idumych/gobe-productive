@@ -351,74 +351,63 @@ Document::RepositionPages()
 
 
 
-int
-Document::HeaderPart(int which) const
+uint32_t
+Document::NewStyle(uint32_t type, const std::string& name, uint32_t flags, uint32_t parent,
+	const std::vector<Property>& properties)
 {
-	if (sheets.sheets.empty() || which < 0 || which > 1)
-		return -1;
-	uint32_t part = which == 0 ? sheets.sheets[0].headerPart : sheets.sheets[0].footerPart;
-	return part < parts.parts.size() ? int(part) : -1;
+	Style s;
+	s.id = Sig("STYL");
+	s.value4 = 1;		// the manager
+	s.value8 = flags;
+	s.valueC = 0xffff;
+	s.value10 = type;
+	s.name = name;
+	s.links[0] = parent;
+	s.links[1] = s.links[2] = kNoPart;
+	if (parent < styles.styles.size())
+		styles.styles[parent].value4++;
+	for (const Property& p : properties) {
+		styles.properties.push_back(p);
+		s.props.push_back(uint32_t(styles.properties.size() - 1));
+	}
+	SortProps(styles, s.props);
+	s.props2 = StyleUnionSet(styles, s);
+	styles.styles.push_back(s);
+	stylesChanged = true;
+	return uint32_t(styles.styles.size() - 1);
 }
 
 
-bool
-Document::InsertHeaderFooter(int which)
+uint32_t
+Document::NamedParagraphStyle(const std::string& name, const std::vector<Property>& properties)
 {
-	int pagePart = PagePart();
-	if (pagePart < 0 || which < 0 || which > 1 || HeaderPart(which) >= 0)
-		return false;
-	Portal& pages = tails[pagePart].portals[0];
-	if (pages.frames.empty() || pages.raw.size() < kHeaderFrameAt + 24)
-		return false;
+	uint32_t named = NamedStyle(styles, Sig("Para"), name);
+	if (named != kNoPart)
+		return named;
+	uint32_t wpDefault = NamedStyle(styles, Sig("Para"), "WP Default");
+	if (wpDefault == kNoPart)
+		return kNoPart;
+	return NewStyle(Sig("Para"), name, 0x822, wpDefault, properties);
+}
+
+
+int
+Document::NewTextPart(uint16_t kind, uint32_t basedOn, uint32_t container, const float origin[2],
+	const float extent[2], uint32_t frameStyle)
+{
 	bool wordFactory = false;
 	for (const PartFactoryEntry& f : factories)
 		wordFactory = wordFactory || f.kind == Sig("WORD");
 	if (!wordFactory)
-		return false;	// (a document without text parts: not ported)
-
-	// the styles: "Header"/"Footer" (TWPPartFactory::InitStyles: based on
-	// "WP Default", nothing of its own; documents keep it only once used),
-	// the paragraph's style based on it, the run's with no parent
-	auto newStyle = [&](uint32_t type, const char* name, uint32_t flags, uint32_t parent) {
-		Style s;
-		s.id = Sig("STYL");
-		s.value4 = 1;		// the manager
-		s.value8 = flags;
-		s.valueC = 0xffff;
-		s.value10 = type;
-		s.name = name;
-		s.links[0] = parent;
-		s.links[1] = s.links[2] = kNoPart;
-		if (parent < styles.styles.size())
-			styles.styles[parent].value4++;
-		s.props2 = StyleUnionSet(styles, s);
-		styles.styles.push_back(s);
-		return uint32_t(styles.styles.size() - 1);
-	};
-	const char* name = which == 0 ? "Header" : "Footer";
-	uint32_t named = NamedStyle(styles, Sig("Para"), name);
-	if (named == kNoPart) {
-		uint32_t wpDefault = NamedStyle(styles, Sig("Para"), "WP Default");
-		if (wpDefault == kNoPart)
-			return false;
-		named = newStyle(Sig("Para"), name, 0x822, wpDefault);
-	}
-	uint32_t paragraphStyle = newStyle(Sig("Para"), "", 0x20, named);
-	uint32_t runStyle = newStyle(Sig("Basi"), "", 0x20, kNoPart);
+		return -1;	// (a document without text parts: not ported)
+	// TWPPart::TWPPart: the paragraph's style based on `basedOn`, the run's
+	// with no parent
+	uint32_t paragraphStyle = NewStyle(Sig("Para"), "", 0x20, basedOn);
+	uint32_t runStyle = NewStyle(Sig("Basi"), "", 0x20, kNoPart);
 	styles.styles[paragraphStyle].value4++;
 	styles.styles[runStyle].value4++;
-	// the frame in the main text frames' style
-	uint32_t frameStyle = kNoPart;
-	for (const Frame::Pointer& c : pages.frames[0].children)
-		if (int(c.part) == MainPart() && c.portal < tails[c.part].portals.size()
-				&& c.frame < tails[c.part].portals[c.portal].frames.size()) {
-			frameStyle = tails[c.part].portals[c.portal].frames[c.frame].style;
-			break;
-		}
-	if (frameStyle >= styles.styles.size())
-		return false;
-	styles.styles[frameStyle].value4++;
-	stylesChanged = true;
+	if (frameStyle < styles.styles.size())
+		styles.styles[frameStyle].value4++;
 
 	// its selection (TWPPart: no text selected)
 	uint32_t selection = uint32_t(selections.selections.size());
@@ -439,12 +428,8 @@ Document::InsertHeaderFooter(int which)
 	s.value = selection;
 	selections.selections.push_back(s);
 
-	// the part (TWPPart::TWPPart: one empty paragraph, one section; +0x98
-	// is 3 for a header or footer, as the command sets it), its portal in
-	// the page part and the one frame every page shows (TPagePortal: at
-	// the top of the printable area, as wide, no height until its text is
-	// laid out; flag 8: it grows with its text)
-	const LeafSheet& sheet = sheets.sheets[0];
+	// the part: one empty paragraph, one section, +0x98 `kind`; its portal
+	// in `container` with one frame (flag 8: it grows with its text)
 	DocWriter w;
 	w.Sig(Sig("PART"));
 	w.Sig(Sig("WORD"));
@@ -455,7 +440,7 @@ Document::InsertHeaderFooter(int which)
 	w.UInt32(1);
 	w.UInt32(selection);
 	w.Sig(Sig("wp++"));
-	w.UInt16(3);
+	w.UInt16(kind);
 	w.UInt16(1);
 	w.UInt32(0);
 	w.UInt32(0xffffffff);
@@ -491,24 +476,21 @@ Document::InsertHeaderFooter(int which)
 	w.Sig(Sig("RefT"));
 	w.UInt32(1);
 	w.Sig(Sig("PORT"));
-	w.UInt32(uint32_t(pagePart));
+	w.UInt32(container);
 	w.UInt32(0);
 	w.UInt32(0);
 	w.UInt32(1);
 	w.UInt32(1);
 	w.Sig(Sig("FRAM"));
 	w.Float(0);
-	const float origin[2] = {sheet.printable[0] - sheet.paper[0],
-		sheet.printable[1] - sheet.paper[1]};
 	w.Point(origin);
-	w.Float(sheet.printable[2] - sheet.printable[0]);
-	w.Float(0);
+	w.Point(extent);
 	w.UInt32(frameStyle);
 	w.UInt32(0);
 	w.UInt32(0xffffffff);
 	w.UInt32(0xffffffff);
 	w.UInt32(uint32_t(part));
-	w.UInt32(uint32_t(pagePart));
+	w.UInt32(container);
 	w.UInt32(0);
 	w.UInt32(0);
 	w.UInt32(0);
@@ -526,7 +508,7 @@ Document::InsertHeaderFooter(int which)
 	DocFile file;
 	std::string error;
 	if (!ReadDocFile(versions, file, error))
-		return false;
+		return -1;
 	PartRecord record{Sig("WORD"), 0, w.Data()};
 	DocArchive a(record.data);
 	a.CopyVersions(versions);
@@ -534,15 +516,70 @@ Document::InsertHeaderFooter(int which)
 	try {
 		ReadWPPart(a, wp);
 	} catch (const ArchiveError&) {
-		return false;
+		return -1;
 	}
 	PartTail tail;
 	if (!ReadPartTail(record.data, record.kind, versions, tail))
-		return false;
+		return -1;
 	parts.parts.push_back(std::move(record));
 	wordParts.emplace_back(part, std::move(wp));
 	tails.push_back(std::move(tail));
 	tailRead.push_back(true);
+	dirtyParts.insert(part);
+	dirtyTails.insert(part);
+	return int(part);
+}
+
+
+int
+Document::HeaderPart(int which) const
+{
+	if (sheets.sheets.empty() || which < 0 || which > 1)
+		return -1;
+	uint32_t part = which == 0 ? sheets.sheets[0].headerPart : sheets.sheets[0].footerPart;
+	return part < parts.parts.size() ? int(part) : -1;
+}
+
+
+bool
+Document::InsertHeaderFooter(int which)
+{
+	int pagePart = PagePart();
+	if (pagePart < 0 || which < 0 || which > 1 || HeaderPart(which) >= 0)
+		return false;
+	Portal& pages = tails[pagePart].portals[0];
+	if (pages.frames.empty() || pages.raw.size() < kHeaderFrameAt + 24)
+		return false;
+	bool wordFactory = false;
+	for (const PartFactoryEntry& f : factories)
+		wordFactory = wordFactory || f.kind == Sig("WORD");
+	if (!wordFactory)
+		return false;	// (a document without text parts: not ported)
+
+	// the paragraph's style based on "Header"/"Footer" (TWPPartFactory::
+	// InitStyles: based on "WP Default", nothing of its own; documents keep
+	// it only once used), the frame in the main text frames' style
+	uint32_t named = NamedParagraphStyle(which == 0 ? "Header" : "Footer");
+	uint32_t frameStyle = kNoPart;
+	for (const Frame::Pointer& c : pages.frames[0].children)
+		if (int(c.part) == MainPart() && c.portal < tails[c.part].portals.size()
+				&& c.frame < tails[c.part].portals[c.portal].frames.size()) {
+			frameStyle = tails[c.part].portals[c.portal].frames[c.frame].style;
+			break;
+		}
+	if (named == kNoPart || frameStyle >= styles.styles.size())
+		return false;
+	// +0x98 is 3 for a header or footer, as the command sets it; its frame
+	// (TPagePortal) at the top of the printable area, as wide, no height
+	// until its text is laid out
+	const LeafSheet& sheet = sheets.sheets[0];
+	const float origin[2] = {sheet.printable[0] - sheet.paper[0],
+		sheet.printable[1] - sheet.paper[1]};
+	const float extent[2] = {sheet.printable[2] - sheet.printable[0], 0};
+	int made = NewTextPart(3, named, uint32_t(pagePart), origin, extent, frameStyle);
+	if (made < 0)
+		return false;
+	size_t part = size_t(made);
 
 	Frame::Pointer frame{uint32_t(part), 0, 0};
 	for (Frame& page : pages.frames)
@@ -551,8 +588,6 @@ Document::InsertHeaderFooter(int which)
 	PutPointer(pages.raw, kHeaderFrameAt + 12 * which, frame);
 	(which == 0 ? sheets.sheets[0].headerPart : sheets.sheets[0].footerPart) = uint32_t(part);
 	sheetsChanged = true;
-	dirtyParts.insert(part);
-	dirtyTails.insert(part);
 	dirtyTails.insert(size_t(pagePart));
 	RepositionPages();
 	return true;

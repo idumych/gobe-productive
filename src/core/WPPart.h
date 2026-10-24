@@ -35,6 +35,10 @@ struct WPMiscInfo {
 	Expression expression;
 	uint32_t command = 0;
 	bool isStatic = false, displayResult = true, displayFormula = false;
+	// FREF (TMiscFootnoteRef): the note's frame is `frame`; an endnote, an
+	// automatic number (else `text` is its mark) and that number
+	bool endnote = false, autoNumber = true;
+	uint32_t number = 0;
 };
 
 struct WPStyleRun {

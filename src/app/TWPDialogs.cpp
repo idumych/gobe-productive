@@ -1,5 +1,6 @@
 // Word processing dialogs: Insert Date/Time (TDialogWPDateTimeFormat),
-// Insert Formula (TDialogWPFormula), Columns (TDialogSection).
+// Insert Formula (TDialogWPFormula), Columns (TDialogSection), Insert
+// Footnote (TDialogWPInsertFootnote, TDialogWPFootnoteOptions).
 #include "TWPDialogs.h"
 
 #include <stdio.h>
@@ -10,6 +11,7 @@
 #include <Button.h>
 #include <Looper.h>
 #include <Message.h>
+#include <TextControl.h>
 
 #include <functional>
 
@@ -169,6 +171,127 @@ TDialogSection::ItemHit(int32 index, BMessage* message)
 		}
 		BMessage set('sM51');
 		set.AddInt32("value", int32(columns));
+		fWindow->PostMessage(&set);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+// the dialog's last choice (gIsEndnote)
+static bool sIsEndnote = false;
+static const uint32 kMsgMarkModified = 'MoDF';
+
+
+TDialogWPInsertFootnote::TDialogWPInsertFootnote(BLooper* window, int16 first, bool mainText)
+	:
+	TDialog(306, 306, 'APPL', NULL),
+	fWindow(window),
+	fFirst(first),
+	fMainText(mainText)
+{
+}
+
+
+void
+TDialogWPInsertFootnote::Init()
+{
+	SetRadioItem(4, !sIsEndnote);
+	SetRadioItem(5, sIsEndnote);
+	SetRadioItem(7, true);
+	SetLabelItem(4, GobeResources::IndexString(0x516, fMainText ? 10 : 11).String());
+	SetLabelItem(5, GobeResources::IndexString(0x516, fMainText ? 12 : 13).String());
+	// typing a mark chooses Custom Mark
+	if (BTextControl* mark = dynamic_cast<BTextControl*>(Item(9))) {
+		BMessage* modified = new BMessage(kMsgMarkModified);
+		modified->AddBool("isMod", true);
+		mark->SetModificationMessage(modified);
+	}
+}
+
+
+void
+TDialogWPInsertFootnote::MessageReceived(BMessage* message)
+{
+	if (message->what == kMsgMarkModified) {
+		SetRadioItem(7, false);
+		SetRadioItem(8, true);
+		if (BButton* ok = dynamic_cast<BButton*>(Item(0)))
+			ok->SetEnabled(TextItem(9).Length() > 0);
+		return;
+	}
+	TDialog::MessageReceived(message);
+}
+
+
+bool
+TDialogWPInsertFootnote::ItemHit(int32 index, BMessage* message)
+{
+	switch (index) {
+		case 0:
+		{
+			BMessage insert('sM5I');
+			sIsEndnote = RadioValue(3) == 1;
+			insert.AddBool("endnote", sIsEndnote);
+			if (RadioValue(6) != 0) {
+				BString mark = TextItem(9);
+				if (mark.Length() == 0)
+					return true;
+				insert.AddString("mark", mark.String());
+			}
+			fWindow->PostMessage(&insert);
+			break;
+		}
+		case 2:
+			(new TDialogWPFootnoteOptions(fWindow, fFirst))->RunDialog();
+			return true;
+		case 7:
+			MakeFocusItem(9);
+			SetRadioItem(8, false);
+			SetRadioItem(7, true);
+			if (BButton* ok = dynamic_cast<BButton*>(Item(0)))
+				ok->SetEnabled(true);
+			return true;
+		case 8:
+		{
+			MakeFocusItem(9);
+			BMessage modified(kMsgMarkModified);
+			MessageReceived(&modified);
+			return true;
+		}
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+
+TDialogWPFootnoteOptions::TDialogWPFootnoteOptions(BLooper* window, int16 first)
+	:
+	TDialog(307, 307, 'APPL', NULL),
+	fWindow(window),
+	fFirst(first)
+{
+}
+
+
+void
+TDialogWPFootnoteOptions::Init()
+{
+	BString text;
+	text << fFirst;
+	SetTextItem(2, text.String());
+	MakeFocusItem(2);
+}
+
+
+bool
+TDialogWPFootnoteOptions::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		BString text = TextItem(2);
+		char* end;
+		long first = strtol(text.String(), &end, 10);
+		if (end == text.String())
+			return true;
+		BMessage set('sM5K');
+		set.AddInt16("start", int16(first));
 		fWindow->PostMessage(&set);
 	}
 	return TDialog::ItemHit(index, message);
