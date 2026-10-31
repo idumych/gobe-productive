@@ -194,17 +194,15 @@ public:
 		while (source.CountItems() > 0) {
 			BMenuItem* item = source.RemoveItem((int32)0);
 			if (BMessage* message = item->Message()) {
-				if (message->what == 'sM0U') {
-					// (Other…: its dialog isn't ported)
-					item->SetEnabled(false);
-				} else {
-					int32 value = message->GetInt32(kValueString, 0);
-					message->MakeEmpty();
-					message->what = fSide < 0 ? 'sM6B' : 'sM69';
-					message->AddInt32(kValueString, value);
-					if (fSide >= 0)
-						message->AddInt32("border", fSide);
-				}
+				// Other… ('sM0U'): the value 'sM0U' asks for the dialog
+				// (TPartSS::HandleMessage, TDialogGetTransparent)
+				int32 value = message->what == 'sM0U' ? int32('sM0U')
+					: message->GetInt32(kValueString, 0);
+				message->MakeEmpty();
+				message->what = fSide < 0 ? 'sM6B' : 'sM69';
+				message->AddInt32(kValueString, value);
+				if (fSide >= 0)
+					message->AddInt32("border", fSide);
 			}
 			transparency->AddItem(item);
 		}

@@ -29,6 +29,7 @@ struct CellStyle {
 		Ink ink;
 		bool shown = false;
 		float size = 0;
+		float opacity = 1;		// BTra
 	} borders[4];
 };
 

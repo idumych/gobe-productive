@@ -64,6 +64,8 @@ ApplyCellProperty(const Property& p, CellStyle& style)
 			case Sig("BTra"): {	// TPropBorderTransparency: opacity, side
 				float opacity = a.Float();
 				uint32_t side = a.UInt32();
+				if (side < 4)
+					style.borders[side].opacity = opacity;
 				if (side < 4 && opacity <= 0)
 					style.borders[side].shown = false;
 				break;

@@ -6,6 +6,7 @@
 #include <Alert.h>
 #include <Beep.h>
 #include <TextControl.h>
+#include <cmath>
 #include <cstring>
 #include <OutlineListView.h>
 #include <RadioButton.h>
@@ -1111,6 +1112,55 @@ TDialogSort::ItemHit(int32 index, BMessage* message)
 		fTarget->Looper()->PostMessage(&sort, fTarget);
 	PostMessage(B_QUIT_REQUESTED);
 	return false;
+}
+
+// #pragma mark - TDialogGetTransparent
+
+
+TDialogGetTransparent::TDialogGetTransparent(BLooper* window, const BMessage& message,
+	int32 percent)
+	:
+	TDialog(31, 31, 'APPL', NULL),
+	fWindow(window),
+	fMessage(message),
+	fPercent(percent)
+{
+}
+
+
+void
+TDialogGetTransparent::Init()
+{
+	const ResourceFile& strings = GobeResources::Part("Spreadsheet");
+	SetTitle(IndexString(strings, 1506, 5).c_str());
+	SetLabelItem(2, IndexString(strings, 1506, 6).c_str());
+	BString text;
+	text << fPercent;
+	SetTextItem(2, text.String());
+	MakeFocusItem(2);
+}
+
+
+bool
+TDialogGetTransparent::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		// TDialogGetTransparent::ValidateAndSendMsg
+		BString text = TextItem(2);
+		char* end;
+		float value = strtof(text.String(), &end);
+		if (end == text.String() || value < 0 || value > 100) {
+			BString alert;
+			alert.SetToFormat(GobeResources::IndexString(6, 13).String(), 0, 100);
+			(new BAlert("", alert.String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		fMessage.RemoveName(kValueString);
+		fMessage.AddInt32(kValueString, int32(std::lround(value)));
+		fWindow->PostMessage(&fMessage);
+	}
+	return TDialog::ItemHit(index, message);
 }
 
 } // namespace gobe

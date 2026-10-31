@@ -3489,6 +3489,17 @@ TPageView::MessageReceived(BMessage* message)
 						} else
 							opacity = message->GetInt32(kValueString, 0) / 100.0f;
 						int32 side = message->GetInt32("border", -1);
+						if (!color && message->GetInt32(kValueString, 0) == int32('sM0U')) {
+							// Transparency > Other…: the dialog, with the active
+							// cell's opacity on that side (the outline: the left)
+							CellStyle active;
+							float current = 1;
+							if (ActiveCellStyle(active))
+								current = active.borders[side >= 0 && side < 4 ? side : 0].opacity;
+							(new TDialogGetTransparent(Window(), *message,
+								int32(std::lround(current * 100))))->RunDialog();
+							return;
+						}
 						if ((!outline && (side < 0 || side > 3)) || SelectionLocked())
 							return;
 						// (TPartSS::HandleMessage: the outline of cells only)
