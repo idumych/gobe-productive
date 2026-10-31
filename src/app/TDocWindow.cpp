@@ -465,6 +465,7 @@ TDocWindow::MessageReceived(BMessage* message)
 		// (the page view's: the active part's ribbon to show)
 		case kMsgActiveRibbon:
 			ShowActiveRibbon();
+			InstallPartMenus();
 			return;
 		case 's00L':
 		{

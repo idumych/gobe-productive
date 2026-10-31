@@ -1985,13 +1985,16 @@ TPageView::Draw(BRect updateRect)
 		fPartBar->Update();
 	if (fFormatBar != NULL && !IsPrinting())
 		fFormatBar->Update();
-	if (fEntryBar != NULL && !IsPrinting()) {
-		// the window shows it (or the ruler) when cells are (or stop being)
-		// selected; not here, while drawing
-		if (fSelectedCell.active == fEntryBar->IsHidden() && Window() != NULL)
-			Window()->PostMessage(kMsgActiveRibbon);
-		fEntryBar->Update();
+	// cells selected or not any more: the window shows the active part's
+	// ribbon and menus (TPartSS::InstallMenus at activation); not here,
+	// while drawing
+	if (!IsPrinting() && Window() != NULL && (fSelectedCell.active != fCellsActive
+			|| (fEntryBar != NULL && fSelectedCell.active == fEntryBar->IsHidden()))) {
+		fCellsActive = fSelectedCell.active;
+		Window()->PostMessage(kMsgActiveRibbon);
 	}
+	if (fEntryBar != NULL && !IsPrinting())
+		fEntryBar->Update();
 	if (fSpellBar != NULL && !IsPrinting())
 		fSpellBar->Update();
 	if (fPageBar != NULL && !IsPrinting()) {
