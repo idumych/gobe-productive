@@ -4,7 +4,8 @@
 Every table row under "## Status" whose last cell is 0.1.1, next,
 in progress or not yet counts as one feature. The bar has a block per
 feature: released, in the sources, in progress, left. The README's
-<img> alt text gets the same counts.
+<img> alt text gets the same counts, and its address a ?v= query with
+them, so a cached bar isn't shown after it changes.
 usage: tools/readme_progress.py (from port/ or anywhere)
 """
 import os
@@ -83,7 +84,11 @@ def main():
     with open(SVG, "w") as f:
         f.write(image)
     alt = f"Port progress: {done} of {n} features done, {n - done} left (see Status)"
-    readme = re.sub(r'(<img src="docs/progress.svg" alt=")[^"]*(")', lambda m: m.group(1) + alt + m.group(2), readme)
+    # the counts in the image's address, so GitHub and browsers don't keep
+    # showing a cached bar after it changes
+    counts = "-".join(str(states.count(state)) for state in STATES)
+    readme = re.sub(r'<img src="docs/progress\.svg[^"]*" alt="[^"]*"',
+        f'<img src="docs/progress.svg?v={counts}" alt="{alt}"', readme)
     with open(README, "w") as f:
         f.write(readme)
     print(f"{done} of {n} done: " + ", ".join(f"{states.count(s)} {s}" for s in STATES))
