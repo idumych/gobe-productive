@@ -160,7 +160,8 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
 - **Copy and paste:** cells copied and pasted as cells, formulas
   referring to the cells around where they land (absolute references stay)
   and formats coming along; Paste Special… (values and formulas or values
-  only, with or without the formatting).
+  only, with or without the formatting); Copy Format and Paste Format put
+  one cell's formatting on others.
 - **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
 - **The EntryBar:** the active cell's contents under the PartBar; typing
   on a cell edits there, Enter (or Accept) puts it in and moves down, Tab

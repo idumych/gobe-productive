@@ -1989,6 +1989,24 @@ TPageView::MessageReceived(BMessage* message)
 		// the insertion point, kept for the application; applied to the
 		// selection as one step
 		case 'sM16': {
+			if (fSelectedCell.active && fCellEditor == NULL) {
+				// TPart::CopyFormat for cells (CreateActivePartStyleIterator's
+				// first style): the active cell's own properties, else the
+				// part's style's
+				const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+				if (ss == NULL)
+					return;
+				const SSCell* cell = ss->Cell(uint16_t(fSelectedCell.row),
+					uint16_t(fSelectedCell.column));
+				uint32_t style = cell != NULL && cell->style < fDocument.styles.styles.size()
+					? cell->style : ss->style;
+				sCopiedFormat.clear();
+				if (style < fDocument.styles.styles.size())
+					for (uint32_t p : fDocument.styles.styles[style].props)
+						if (p < fDocument.styles.properties.size())
+							sCopiedFormat.push_back(fDocument.styles.properties[p]);
+				return;
+			}
 			const WPPart* wp = fCaret.active ? fDocument.WordPart(fCaret.part) : NULL;
 			if (wp == NULL || fCaret.paragraph >= wp->paragraphs.size()) {
 				beep();
@@ -2015,6 +2033,20 @@ TPageView::MessageReceived(BMessage* message)
 			return;
 		}
 		case 'sM17': {
+			if (fSelectedCell.active && fCellEditor == NULL && !sCopiedFormat.empty()) {
+				// TPart::PasteFormat for cells: each property on the selected
+				// cells (TSSFormatCommand)
+				fUndo.Begin(fDocument, fSelectedCell.part,
+					GobeResources::IndexString(0x516, 4).String(), CurrentViewState());
+				for (const SSRange& r : SelectedRanges())
+					for (const Property& property : sCopiedFormat)
+						ApplyCellProperty(fDocument, fSelectedCell.part, r.from.a, r.from.b, r.to.a,
+							r.to.b, property);
+				fBook->Reset();
+				Window()->PostMessage(kMsgDocumentChanged);
+				Invalidate();
+				return;
+			}
 			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL
 					|| sCopiedFormat.empty()) {
 				beep();
