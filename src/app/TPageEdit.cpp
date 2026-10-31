@@ -4954,6 +4954,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 				ShowSheet(atoi(command.c_str() + 6));
 			fprintf(stderr, "sheet %d main part %d\n", fDocument.CurrentSheet(),
 				fDocument.MainPart());
+		} else if (command.compare(0, 11, "exporthtml ") == 0) {
+			// "exporthtml <path>": Save As in the HTML format
+			BString error;
+			if (!ExportFile(fDocument, command.c_str() + 11, kSaveHTML, error))
+				fprintf(stderr, "exporthtml: %s\n", error.String());
 		} else if (command.compare(0, 11, "exportsylk ") == 0) {
 			// "exportsylk <path>": Save As in the SYLK format
 			BString error;

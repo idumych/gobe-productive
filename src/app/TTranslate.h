@@ -47,6 +47,7 @@ enum SaveFormat {
 	kSaveGobe,
 	kSavePlainText,		// TextTranslator 'TEXT', text/plain
 	kSaveRTF,			// RTFTranslator 'RTF ', text/rtf
+	kSaveHTML,			// HTMLTranslator 'HTML', text/html
 	kSaveSYLK,			// SYLKTranslator, text/sylk (spreadsheets)
 	kSaveTabText,		// TextTranslator 'TABT', text/tab-separated-values
 	kSaveCommaText,		// 'COMA', text/x-comma-separated-values
@@ -55,7 +56,7 @@ enum SaveFormat {
 
 // Adds the "File Format" popup to a save panel (SavePanel::SavePanel);
 // returns the menu field. `textFormats`: whether the document's main part
-// is word processing (the Plain Text and RTF formats are offered);
+// is word processing (the HTML, Plain Text and RTF formats are offered);
 // `sheetFormats`: a spreadsheet (SYLK and the delimited texts).
 BMenuField* AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats = false);
 // The format chosen in the field (kSaveGobe if none).

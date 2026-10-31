@@ -28,6 +28,7 @@
 #include "GobeResources.h"
 #include "RTF.h"
 #include "SSSylk.h"
+#include "HTMLExport.h"
 
 namespace gobe {
 
@@ -254,6 +255,8 @@ FormatType(SaveFormat format)
 			return "text/plain";
 		case kSaveRTF:
 			return "text/rtf";
+		case kSaveHTML:
+			return "text/html";
 		case kSaveSYLK:
 			return "text/sylk";
 		case kSaveTabText:
@@ -427,7 +430,11 @@ AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats)
 		item->SetMarked(true);
 		menu->AddItem(item);
 		if (textFormats) {
+			// the translators' formats by name: HTML, Plain Text, RTF
 			menu->AddSeparatorItem();
+			BMessage* html = new BMessage(kMsgFormat);
+			html->AddInt32("format", kSaveHTML);
+			menu->AddItem(new BMenuItem("HTML", html));
 			BMessage* text = new BMessage(kMsgFormat);
 			text->AddInt32("format", kSavePlainText);
 			menu->AddItem(new BMenuItem("Plain Text", text));
@@ -486,6 +493,9 @@ ExportFile(const Document& doc, const char* path, SaveFormat format, BString& er
 			WriteTextAttributes(path, attributes);
 	} else if (format == kSaveRTF) {
 		ok = ExportRTF(doc, part, path, message, InstalledFonts());
+	} else if (format == kSaveHTML) {
+		// TExportHTML: the title is the file's name
+		ok = ExportHTML(doc, path, BPath(path).Leaf(), message);
 	} else if (format == kSaveSYLK) {
 		ok = ExportSylk(doc, part, path, message);
 	} else if (format == kSaveTabText || format == kSaveCommaText
