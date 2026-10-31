@@ -2,7 +2,7 @@
  * The SheetBar: TSheetBar::LoadAllElements' TTabControl (colors 0xeeeeee
  * for the shown sheet's tab, 0xd8d8d8 for the others, 0xc8c8c8 lines), one
  * tab per sheet in the SheetMgr's order, after the options menu (MENU 110:
- * New Sheet… (spreadsheets), Delete Sheet, Rename Sheet…). A
+ * New Sheet… (spreadsheets and text), Delete Sheet, Rename Sheet…). A
  * double click on a tab renames it ('s00D').
  */
 #include "TSheetBar.h"
@@ -103,6 +103,8 @@ TSheetBar::ArrowFrame(bool right) const
 void
 TSheetBar::Draw(BRect updateRect)
 {
+	if (fReveal)
+		Reveal();
 	BRect bounds = Bounds();
 	SetHighColor(216, 216, 216);
 	FillRect(bounds);
@@ -123,7 +125,7 @@ TSheetBar::Draw(BRect updateRect)
 		BRegion clip(BRect(0, 0, ArrowFrame(false).left - 2, bounds.bottom));
 		ConstrainClippingRegion(&clip);
 	}
-	for (int32 i = 0; i < int32(fDocument.SheetCount()); i++) {
+	for (int32 i = fFirst; i < int32(fDocument.SheetCount()); i++) {
 		BRect tab = TabFrame(i);
 		if (i == shown)
 			SetHighColor(238, 238, 238);
@@ -261,7 +263,18 @@ TSheetBar::MouseUp(BPoint where)
 void
 TSheetBar::Update()
 {
-	// the shown sheet's tab in view
+	fReveal = true;
+	Invalidate();
+}
+
+
+// the shown sheet's tab in view (once the bar has its width)
+void
+TSheetBar::Reveal()
+{
+	if (Bounds().Width() < 60)
+		return;
+	fReveal = false;
 	int32 shown = fDocument.CurrentSheet();
 	if (fFirst >= int32(fDocument.SheetCount()))
 		fFirst = 0;
@@ -270,7 +283,6 @@ TSheetBar::Update()
 	while (fFirst < shown && TabFrame(shown).right > (Overflows() || fFirst > 0
 			? ArrowFrame(false).left - 2 : Bounds().right))
 		fFirst++;
-	Invalidate();
 }
 
 } // namespace gobe

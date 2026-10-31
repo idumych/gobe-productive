@@ -964,7 +964,7 @@ TDialogSheetNew::Init()
 {
 	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(2));
 	if (BListView* list = scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL)
-		FillPartKinds(list, 'SPRD', [](uint32 kind) { return kind == 'SPRD'; });
+		FillPartKinds(list, 'SPRD', [](uint32 kind) { return kind == 'SPRD' || kind == 'WORD'; });
 	BString name;
 	name.SetToFormat(GobeResources::IndexString(5, 24).String(), int(fSheets.size() + 1));
 	SetTextItem(3, name.String());

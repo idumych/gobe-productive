@@ -127,61 +127,11 @@ enum {
 };
 
 
+// (WordPartRecord is defined below, outside this namespace)
 std::vector<uint8_t>
 WordPart()
 {
-	// TWPPart::TWPPart(TDoc*): one empty paragraph in a new style based on
-	// "Body", its run in a new style with no parent, one section
-	DocWriter w;
-	WritePartHeader(w, Sig("WORD"), 2, 1, 1);
-	w.Sig(Sig("wp++"));
-	w.UInt16(0);			// +0x98
-	w.UInt16(1);			// +0x9a
-	w.UInt32(0);			// +0x88: the text's length
-	w.UInt32(0xffffffff);	// +0x90: no style
-	w.UInt32(0);			// +0x8c
-	w.UInt32(1);			// +0x94
-	w.Sig(Sig("par+"));
-	w.UInt32(1);
-	w.UInt32(0);			// start
-	w.UInt32(0);			// length
-	w.UInt16(0);
-	w.UInt32(kParagraphStyle);
-	w.UInt32(1);			// one run
-	w.UInt32(0);
-	w.UInt32(kRunStyle);
-	w.UInt32(0);			// no paragraph infos
-	w.Sig(Sig("par-"));
-	w.Sig(Sig("txt+"));
-	w.Sig(Sig("txt-"));
-	w.Sig(Sig("sct+"));		// TSection(0): one column, the whole frame
-	w.UInt32(1);
-	w.UInt32(0);
-	w.UInt16(0);
-	w.UInt16(1);
-	w.Bool(false);
-	w.UInt32(1);
-	w.Float(0);
-	w.Float(0);
-	w.Float(1);
-	w.Float(1);
-	w.Sig(Sig("sct-"));
-	w.Sig(Sig("wp--"));
-	PortalStart(w, kPagePart, 12);
-	WriteFrame(w, kPrintable, kTextWidth, kTextHeight, kTextFrameStyle, kWordPart, kPagePart);
-	// TWPFrame: the text it shows (none yet), three floats (the third is
-	// the height the text fills: 0 for none), a float
-	w.UInt32(0);
-	w.UInt32(0);
-	w.Float(0);
-	w.Float(0);
-	w.Float(0);
-	w.Float(0);
-	w.Sig(Sig("FraM"));
-	w.Float(0);				// TWPPortal
-	w.Sig(Sig("PorT"));
-	w.Sig(Sig("ParT"));
-	return w.Data();
+	return WordPartRecord(1, 1, kParagraphStyle, kRunStyle, true, kTextFrameStyle);
 }
 
 
@@ -583,6 +533,127 @@ SheetGraphicsRecord(uint32_t id, uint32_t selection, bool framed, uint32_t frame
 	w.Sig(Sig("PorT"));
 	w.Sig(Sig("ParT"));
 	return w.Data();
+}
+
+
+std::vector<uint8_t>
+WordPartRecord(uint32_t id, uint32_t selection, uint32_t paragraphStyle, uint32_t runStyle,
+	bool framed, uint32_t frameStyle)
+{
+	// TWPPart::TWPPart(TDoc*): one empty paragraph in a new style based on
+	// "Body", its run in a new style with no parent, one section
+	DocWriter w;
+	WritePartHeader(w, Sig("WORD"), 2, id, selection);
+	w.Sig(Sig("wp++"));
+	w.UInt16(0);			// +0x98
+	w.UInt16(1);			// +0x9a
+	w.UInt32(0);			// +0x88: the text's length
+	w.UInt32(0xffffffff);	// +0x90: no style
+	w.UInt32(0);			// +0x8c
+	w.UInt32(1);			// +0x94
+	w.Sig(Sig("par+"));
+	w.UInt32(1);
+	w.UInt32(0);			// start
+	w.UInt32(0);			// length
+	w.UInt16(0);
+	w.UInt32(paragraphStyle);
+	w.UInt32(1);			// one run
+	w.UInt32(0);
+	w.UInt32(runStyle);
+	w.UInt32(0);			// no paragraph infos
+	w.Sig(Sig("par-"));
+	w.Sig(Sig("txt+"));
+	w.Sig(Sig("txt-"));
+	w.Sig(Sig("sct+"));		// TSection(0): one column, the whole frame
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt16(0);
+	w.UInt16(1);
+	w.Bool(false);
+	w.UInt32(1);
+	w.Float(0);
+	w.Float(0);
+	w.Float(1);
+	w.Float(1);
+	w.Sig(Sig("sct-"));
+	w.Sig(Sig("wp--"));
+	if (!framed) {
+		NoPortals(w);
+		return w.Data();
+	}
+	PortalStart(w, kPagePart, 12);
+	WriteFrame(w, kPrintable, kTextWidth, kTextHeight, frameStyle, kWordPart, kPagePart);
+	// TWPFrame: the text it shows (none yet), three floats (the third is
+	// the height the text fills: 0 for none), a float
+	w.UInt32(0);
+	w.UInt32(0);
+	w.Float(0);
+	w.Float(0);
+	w.Float(0);
+	w.Float(0);
+	w.Sig(Sig("FraM"));
+	w.Float(0);				// TWPPortal
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+WordStyles
+AddWordStyles(StyleMgr& styles, uint32_t base)
+{
+	auto add = [&](const char* type, const char* hex) {
+		Property p{Code(type), Hex(hex)};
+		for (size_t i = 0; i < styles.properties.size(); i++)
+			if (styles.properties[i].type == p.type && styles.properties[i].data == p.data)
+				return uint32_t(i);
+		styles.properties.push_back(p);
+		return uint32_t(styles.properties.size() - 1);
+	};
+	std::vector<uint32_t> added;
+	auto style = [&](const char* type, const char* name, uint32_t flags, uint32_t parent,
+			std::vector<uint32_t> props, bool reuse) {
+		if (reuse)
+			for (size_t i = 0; i < styles.styles.size(); i++)
+				if (styles.styles[i].name == name && styles.styles[i].value10 == Code(type))
+					return uint32_t(i);
+		Style s;
+		s.id = Sig("STYL");
+		s.value4 = 1;
+		s.value8 = flags;
+		s.valueC = 0xffff;
+		s.value10 = Code(type);
+		s.name = name;
+		s.links[0] = parent;
+		s.links[1] = s.links[2] = kNoPart;
+		std::stable_sort(props.begin(), props.end(), [&](uint32_t a, uint32_t b) {
+			return styles.properties[a].type < styles.properties[b].type;
+		});
+		s.props = std::move(props);
+		styles.styles.push_back(std::move(s));
+		if (parent < styles.styles.size())
+			styles.styles[parent].value4++;
+		added.push_back(uint32_t(styles.styles.size() - 1));
+		return uint32_t(styles.styles.size() - 1);
+	};
+	// TWPPartFactory::InitStyles: "WP Default" (single spaced, left, no
+	// indents or spacing) and "Body" based on it, as the documents have
+	// them; TWPPart::TWPPart: a paragraph style based on "Body" and a run
+	// style with no parent, one use each
+	uint32_t wpDefault = style("Para", "WP Default", 0x912, base, {add("LSpa", "013f800000"),
+		add("PAlg", "0000"), add("PInd", "00000000"), add("PLab", "0000000000000000"),
+		add("PLef", "00000000"), add("PRig", "00000000"), add("SpaA", "0100000000"),
+		add("SpaB", "0100000000")}, true);
+	uint32_t body = style("Para", "Body", 0x822, wpDefault, {}, true);
+	WordStyles ids;
+	ids.paragraph = style("Para", "", 0x20, body, {}, false);
+	ids.run = style("Basi", "", 0x20, kNoPart, {}, false);
+	styles.styles[ids.paragraph].value4++;
+	styles.styles[ids.run].value4++;
+	for (int pass = 0; pass < 3; pass++)
+		for (uint32_t s : added)
+			styles.styles[s].props2 = StyleUnionSet(styles, styles.styles[s]);
+	return ids;
 }
 
 

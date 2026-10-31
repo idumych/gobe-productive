@@ -172,6 +172,33 @@ main(int argc, char** argv)
 				&& third.MainPart() == shownMain, name + ": the first sheet moved last");
 			Check(!third.MoveSheet(0, third.sheets.sheets.size() + 3), name + ": not past the sheets");
 		}
+		// a word processing sheet: shown, typed into, saved and reloaded
+		{
+			int words = third.AddSheet(Sig("WORD"), "Notes", error);
+			Check(words >= 0, name + ": a text sheet added " + error);
+			if (words >= 0) {
+				uint32_t main = third.sheets.sheets[size_t(words)].mainPart;
+				Check(third.WordPart(main) != nullptr && third.ShowSheet(size_t(words), error)
+					&& Placed(third).count(main) == 1, name + ": the text sheet shown " + error);
+				WPPart* wp = third.EditableWordPart(main);
+				if (wp != nullptr)
+					InsertText(*wp, {0, 0}, "Remember the milk");
+				Check(third.Save(path, error), name + ": save with text " + error);
+				Document fourth;
+				Check(LoadDocument(path, fourth, error), name + ": reload " + error);
+				const WPPart* back4 = fourth.WordPart(main);
+				Check(back4 != nullptr && !back4->paragraphs.empty()
+					&& back4->paragraphs[0].text.compare(0, 17, "Remember the milk") == 0
+					&& fourth.CurrentSheet() == words, name + ": the text back");
+				// its paragraph's style is based on "Body"
+				if (back4 != nullptr && !back4->paragraphs.empty()) {
+					uint32_t ps = back4->paragraphs[0].parStyle;
+					Check(ps < fourth.styles.styles.size()
+						&& fourth.styles.styles[fourth.styles.styles[ps].links[0]].name == "Body",
+						name + ": its paragraph style based on Body");
+				}
+			}
+		}
 		// the last one left can't go
 		Document one;
 		if (CreateBlankSpreadsheet(one, error))

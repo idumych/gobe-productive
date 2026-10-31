@@ -134,7 +134,7 @@ not released yet: build it to try it.
   deleted.
 - Sheets: the SheetBar (View > Show SheetBar) has a tab per sheet; a tab
   shows its sheet (CheckBook's Setup, Summary and months), and the
-  document saves showing it. New Sheet… (spreadsheets), Delete Sheet and
+  document saves showing it. New Sheet… (spreadsheets and text), Delete Sheet and
   Rename Sheet… (its options menu, or a double click on the tab); a tab
   dragged along moves its sheet; all of them undo.
 - Viewing: drawings, charts (2D), images, tables, clocks and presentations.

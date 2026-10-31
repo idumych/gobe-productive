@@ -485,14 +485,15 @@ TDocWindow::MessageReceived(BMessage* message)
 				(new TDialogSheetNew(this, names))->RunDialog();
 				return;
 			}
-			if (message->GetInt32("kind", 'SPRD') != 'SPRD') {
+			uint32 kind = uint32(message->GetInt32("kind", 'SPRD'));
+			if (kind != 'SPRD' && kind != 'WORD') {
 				beep();
 				return;
 			}
 			fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 16).String(),
 				fPages->CurrentViewState());
 			std::string error;
-			int sheet = fDocument->AddSpreadsheetSheet(name, error);
+			int sheet = fDocument->AddSheet(kind, name, error);
 			if (sheet < 0) {
 				fprintf(stderr, "New Sheet: %s\n", error.c_str());
 				beep();

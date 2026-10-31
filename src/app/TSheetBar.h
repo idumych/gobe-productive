@@ -44,9 +44,11 @@ private:
 	// the arrows that scroll the tabs, when they don't all fit
 	bool Overflows() const;
 	BRect ArrowFrame(bool right) const;
+	void Reveal();
 
 	const Document& fDocument;
 	int32 fFirst = 0;			// the first tab shown (the tabs scrolled)
+	bool fReveal = false;		// bring the shown sheet's tab into view
 	int32 fPressed = -1;		// the tab the mouse went down on
 	int32 fDropAt = -1;			// where it would go, dragged
 };

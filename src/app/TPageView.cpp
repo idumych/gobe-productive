@@ -221,6 +221,12 @@ TPageView::SheetShown()
 	fSelectedCell.extra.clear();
 	fCaret.active = false;
 	fAnchor.active = false;
+	// a text sheet's main text active, the insertion point at its start
+	int main = fDocument.MainPart();
+	if (main >= 0 && fDocument.WordPart(size_t(main)) != NULL) {
+		fCaret = {true, size_t(main), 0, 0};
+		fAnchor = fCaret;
+	}
 	fBook->Reset();
 	Rebuild();
 	InvalidateLayout();

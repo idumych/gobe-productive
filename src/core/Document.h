@@ -225,7 +225,11 @@ struct Document {
 	// the styles they use (AddSheetStyles), a factory for kinds the document
 	// hasn't had, and the sheet after the others, named `name` ("Sheet N"
 	// for "", STR# 5, 24 with the count). Returns the sheet's index, or -1.
-	int AddSpreadsheetSheet(const std::string& name, std::string& error);
+	int AddSpreadsheetSheet(const std::string& name, std::string& error)
+		{ return AddSheet(Sig("SPRD"), name, error); }
+	// The same for `kind` 'SPRD' or 'WORD' (TWPPart::TWPPart: one empty
+	// paragraph, AddWordStyles; shown in browse view).
+	int AddSheet(uint32_t kind, const std::string& name, std::string& error);
 };
 
 bool LoadDocument(const std::string& path, Document& doc, std::string& error);

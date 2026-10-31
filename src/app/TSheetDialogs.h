@@ -226,8 +226,8 @@ private:
 	int32 fSheet;
 };
 
-// New Sheet… (TDialogSheetNew, DIAL 38): the kinds of part (list 2: only
-// spreadsheets can be made so far) and the name (3, "Sheet N" from STR# 5,
+// New Sheet… (TDialogSheetNew, DIAL 38): the kinds of part (list 2:
+// spreadsheets and word processing can be made so far) and the name (3, "Sheet N" from STR# 5,
 // 24); OK with a valid name no sheet has (STR# 6, 19 and 6, 16) sends
 // `target` 's00B' with "name" and "kind"
 class TDialogSheetNew : public TDialog {

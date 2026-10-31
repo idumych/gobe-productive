@@ -307,8 +307,12 @@ Document::MainPart() const
 
 
 int
-Document::AddSpreadsheetSheet(const std::string& name, std::string& error)
+Document::AddSheet(uint32_t kind, const std::string& name, std::string& error)
 {
+	if (kind != Sig("SPRD") && kind != Sig("WORD")) {
+		error = "sheets of that kind can't be made";
+		return -1;
+	}
 	if (sheets.sheets.empty()) {
 		error = "no sheets";
 		return -1;
@@ -327,7 +331,12 @@ Document::AddSpreadsheetSheet(const std::string& name, std::string& error)
 		if (p.data.size() >= 20)
 			id = std::max(id, uint32_t(p.data[16]) << 24 | uint32_t(p.data[17]) << 16
 				| uint32_t(p.data[18]) << 8 | p.data[19]);
-	SheetStyles sheetStyles = AddSheetStyles(styles, base);
+	SheetStyles sheetStyles{};
+	WordStyles wordStyles{};
+	if (kind == Sig("SPRD"))
+		sheetStyles = AddSheetStyles(styles, base);
+	else
+		wordStyles = AddWordStyles(styles, base);
 	stylesChanged = true;
 	// the parts' selections: the drawing's (no shapes), the sheet's (A1)
 	uint32_t main = uint32_t(parts.parts.size()), graphics = main + 1;
@@ -351,44 +360,61 @@ Document::AddSpreadsheetSheet(const std::string& name, std::string& error)
 		selections.selections.push_back(s);
 	}
 	{
+		// the spreadsheet's: A1 (TSSSelection 'CELL'); the text's: no range,
+		// as the blank document's (TWPSelection)
 		DocWriter body;
-		body.Sig(Sig("SPRD"));
+		body.Sig(kind);
 		body.UInt32(main);
 		body.UInt32(cellSelection);
-		body.Sig(Sig("CELL"));
-		body.UInt16(0);
-		body.UInt16(0);
-		body.UInt32(1);
-		for (int i = 0; i < 4; i++)
+		if (kind == Sig("SPRD")) {
+			body.Sig(Sig("CELL"));
 			body.UInt16(0);
-		body.Bool(true);
+			body.UInt16(0);
+			body.UInt32(1);
+			for (int i = 0; i < 4; i++)
+				body.UInt16(0);
+			body.Bool(true);
+		} else {
+			body.UInt32(0);
+			body.Bool(false);
+			body.Bool(false);
+		}
 		DocWriter record;
 		record.UInt32(uint32_t(body.Data().size()));
 		record.Bytes(body.Data());
 		addedSelections.push_back(record.Data());
 		Selection s;
 		s.id = cellSelection;
-		s.kind = Sig("SPRD");
+		s.kind = kind;
 		s.part = main;
 		s.value = cellSelection;
-		s.ranges.push_back({0, 0, 0, 0});
-		s.hasCell = true;
+		if (kind == Sig("SPRD")) {
+			s.ranges.push_back({0, 0, 0, 0});
+			s.hasCell = true;
+		}
 		selections.selections.push_back(s);
 	}
 	// the records, parsed as LoadDocument does
 	DocArchive versions(std::vector<uint8_t>{});
 	versions.SetVersions(file.header.version.values[0], file.header.version.values[3],
 		file.header.version.values[2]);
-	parts.parts.push_back({Sig("SPRD"), 0,
-		SheetPartRecord(id + 1, cellSelection, sheetStyles, false, 0)});
+	parts.parts.push_back({kind, 0, kind == Sig("SPRD")
+		? SheetPartRecord(id + 1, cellSelection, sheetStyles, false, 0)
+		: WordPartRecord(id + 1, cellSelection, wordStyles.paragraph, wordStyles.run, false, 0)});
 	parts.parts.push_back({Sig("GRFX"), 0,
 		SheetGraphicsRecord(id + 2, drawingSelection, false, 0)});
 	try {
 		DocArchive pa(parts.parts[main].data);
 		pa.CopyVersions(versions);
-		SSPart ss;
-		ReadSSPart(pa, ss);
-		spreadsheetParts.emplace_back(main, std::move(ss));
+		if (kind == Sig("SPRD")) {
+			SSPart ss;
+			ReadSSPart(pa, ss);
+			spreadsheetParts.emplace_back(main, std::move(ss));
+		} else {
+			WPPart wp;
+			ReadWPPart(pa, wp);
+			wordParts.emplace_back(main, std::move(wp));
+		}
 		DocArchive ga(parts.parts[graphics].data);
 		ga.CopyVersions(versions);
 		GRPart gr;
@@ -406,13 +432,13 @@ Document::AddSpreadsheetSheet(const std::string& name, std::string& error)
 		dirtyTails.insert(part);
 	}
 	// factories for kinds the document hasn't had
-	for (const auto& [kind, label] : {std::make_pair(Sig("SPRD"), "Spreadsheet"),
-			std::make_pair(Sig("GRFX"), "Graphics")}) {
+	for (const auto& [factory, label] : {std::make_pair(kind, kind == Sig("SPRD")
+			? "Spreadsheet" : "Word Processing"), std::make_pair(Sig("GRFX"), "Graphics")}) {
 		bool known = false;
 		for (const PartFactoryEntry& f : factories)
-			known |= f.kind == kind;
+			known |= f.kind == factory;
 		if (!known) {
-			factories.push_back({kind, 1, label});
+			factories.push_back({factory, 1, label});
 			factoriesChanged = true;
 		}
 	}
