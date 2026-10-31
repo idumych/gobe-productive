@@ -151,6 +151,8 @@ public:
 	// (Drawing.h); a shape tool's shape is dragged out in a drawing
 	uint32 Tool() const { return fTool; }
 	void SetTool(uint32 tool);
+	// the toolbar shape the TOOS tool makes (TDocWindow +0x1c0)
+	void SetToolShape(int32 index) { fToolShape = index; }
 	class TRibbon* fToolBar = NULL;
 	// a selected shape
 	struct ShapeRef {
@@ -249,7 +251,9 @@ private:
 	// resized, the shape selected
 	struct ShapeDrag {
 		int mode = 0;			// 1 creating, 2 moving, 3 resizing, 4 rotating,
-								// 5 reshaping (a point), 6 a rubber band
+								// 5 reshaping (a point), 6 a rubber band, 7 a
+								// Bezier point's control pulled, 8 a control
+								// point reshaped
 		size_t part = 0;
 		float x = 0, y = 0;		// the drawing's origin in the view
 		std::vector<std::array<float, 2>> points;	// creating: drawing coordinates
@@ -265,6 +269,7 @@ private:
 	bool DrawingUp(BPoint where);
 	bool DrawingKey(const char* bytes, int32 count);
 	bool ShapeCommand(BMessage* message);
+	void UndoAlignPreview();
 	bool ShapeSelected(size_t part, size_t layer, size_t index) const;
 	// the shape dragged out made; a polygon ended by Enter drops the point
 	// that was following the pointer
@@ -274,6 +279,9 @@ private:
 	std::vector<ShapeRef> fShapes;	// selected, all in one part
 	ShapeDrag fShapeDrag;
 	int fShapeMode = 0;			// what a handle does: 0 resize, 1 rotate, 2 reshape
+	int32 fToolShape = 0;		// the TOOS tool's shape (a POLY resource)
+	std::vector<Vertex> fBezier;	// the Bezier tool's points so far
+	bool fAlignPreview = false;	// Align Objects' last step is a preview
 	bool fShapesWereSelected = false;
 	struct FrameGeometry {
 		BRect rect;					// in view coordinates, unrotated

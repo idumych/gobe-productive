@@ -1998,6 +1998,16 @@ void
 TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 {
 	const GRPart* gr = fDocument.GraphicsPart(f.part);
+	// Draw Grid (TGrid +0x5): light lines at its spacing, under the shapes
+	if (gr->gridFlags[1] && gr->gridSpacing >= 2 && !IsPrinting()) {
+		SetHighColor(220, 220, 235);
+		SetPenSize(1);
+		float left = f.x + dx, top = f.y + dy;
+		for (float x = left; x <= left + f.width; x += gr->gridSpacing)
+			StrokeLine(BPoint(x, top), BPoint(x, top + f.height));
+		for (float y = top; y <= top + f.height; y += gr->gridSpacing)
+			StrokeLine(BPoint(left, y), BPoint(left + f.width, y));
+	}
 	SetDrawingMode(B_OP_ALPHA);
 	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
 	for (size_t l = 0; l < gr->layers.size(); l++) {

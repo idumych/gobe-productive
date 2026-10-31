@@ -4,6 +4,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <string>
 
 #include "Document.h"
 #include "Editing.h"
@@ -175,6 +177,14 @@ Contains(const Shape& s, float x, float y, float tolerance)
 {
 	float b[4];
 	ShapeBounds(s, b);
+	if (s.angle != 0) {
+		// a turned shape: the point turned back about the center (the
+		// shape is drawn turned by -angle in screen coordinates)
+		float cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+		float a = float(s.angle * M_PI / 180), dx = x - cx, dy = y - cy;
+		x = cx + dx * std::cos(a) - dy * std::sin(a);
+		y = cy + dx * std::sin(a) + dy * std::cos(a);
+	}
 	if (x < b[0] - tolerance || x > b[2] + tolerance || y < b[1] - tolerance
 			|| y > b[3] + tolerance)
 		return false;
@@ -435,6 +445,336 @@ MoveVertex(Shape& shape, int vertex, float x, float y)
 	shape.origin[1] += top;
 	shape.size[0] = right - left;
 	shape.size[1] = bottom - top;
+}
+
+
+
+std::vector<std::pair<int, DrawPoint>>
+ControlPoints(const Shape& shape)
+{
+	std::vector<std::pair<int, DrawPoint>> points;
+	if (shape.kind != Sig("BEZI") || shape.paths.empty())
+		return points;
+	const std::vector<Vertex>& v = shape.paths[0].vertices;
+	for (size_t i = 0; i < v.size(); i++) {
+		float px = shape.origin[0] + v[i].point[0], py = shape.origin[1] + v[i].point[1];
+		if (v[i].control1[0] != 0 || v[i].control1[1] != 0)
+			points.push_back({int(i * 2), {px + v[i].control1[0], py + v[i].control1[1]}});
+		if (v[i].control2[0] != 0 || v[i].control2[1] != 0)
+			points.push_back({int(i * 2 + 1), {px + v[i].control2[0], py + v[i].control2[1]}});
+	}
+	return points;
+}
+
+
+int
+HitControlPoint(const Shape& shape, float x, float y, float tolerance)
+{
+	for (const auto& [handle, p] : ControlPoints(shape))
+		if (std::fabs(p[0] - x) <= tolerance && std::fabs(p[1] - y) <= tolerance)
+			return handle;
+	return -1;
+}
+
+
+void
+MoveControlPoint(Shape& shape, int handle, float x, float y)
+{
+	if (shape.kind != Sig("BEZI") || shape.paths.empty() || handle < 0)
+		return;
+	std::vector<Vertex>& v = shape.paths[0].vertices;
+	size_t i = size_t(handle / 2);
+	if (i >= v.size())
+		return;
+	float dx = x - shape.origin[0] - v[i].point[0], dy = y - shape.origin[1] - v[i].point[1];
+	float* moved = handle % 2 == 0 ? v[i].control1 : v[i].control2;
+	float* other = handle % 2 == 0 ? v[i].control2 : v[i].control1;
+	moved[0] = dx;
+	moved[1] = dy;
+	// a smooth vertex keeps its two control points in a line
+	if ((v[i].flags & 2) != 0) {
+		float length = std::sqrt(other[0] * other[0] + other[1] * other[1]);
+		float now = std::sqrt(dx * dx + dy * dy);
+		if (now > 0) {
+			other[0] = -dx / now * length;
+			other[1] = -dy / now * length;
+		}
+	}
+}
+
+
+void
+AlignShapes(std::vector<Shape*>& shapes, int alignX, int alignY)
+{
+	if (shapes.size() < 2)
+		return;
+	float all[4];
+	ShapeBounds(*shapes[0], all);
+	for (Shape* s : shapes) {
+		float b[4];
+		ShapeBounds(*s, b);
+		all[0] = std::min(all[0], b[0]);
+		all[1] = std::min(all[1], b[1]);
+		all[2] = std::max(all[2], b[2]);
+		all[3] = std::max(all[3], b[3]);
+	}
+	for (int axis = 0; axis < 2; axis++) {
+		int align = axis == 0 ? alignX : alignY;
+		float low = all[axis], high = all[axis + 2];
+		if (align >= 1 && align <= 3) {
+			for (Shape* s : shapes) {
+				float b[4];
+				ShapeBounds(*s, b);
+				float to = align == 1 ? low : align == 3 ? high - (b[axis + 2] - b[axis])
+					: (low + high) / 2 - (b[axis + 2] - b[axis]) / 2;
+				s->origin[axis] += to - b[axis];
+			}
+		} else if (align == 4 && shapes.size() > 2) {
+			// the space between them equal: in their order along the axis
+			std::vector<Shape*> order = shapes;
+			std::stable_sort(order.begin(), order.end(), [axis](Shape* a, Shape* b) {
+				float ba[4], bb[4];
+				ShapeBounds(*a, ba);
+				ShapeBounds(*b, bb);
+				return ba[axis] < bb[axis];
+			});
+			float sizes = 0;
+			for (Shape* s : order) {
+				float b[4];
+				ShapeBounds(*s, b);
+				sizes += b[axis + 2] - b[axis];
+			}
+			float first[4], last[4];
+			ShapeBounds(*order.front(), first);
+			ShapeBounds(*order.back(), last);
+			float gap = (last[axis + 2] - first[axis] - sizes) / float(order.size() - 1);
+			float at = first[axis];
+			for (Shape* s : order) {
+				float b[4];
+				ShapeBounds(*s, b);
+				s->origin[axis] += at - b[axis];
+				at += b[axis + 2] - b[axis] + gap;
+			}
+		}
+	}
+}
+
+
+float
+SnapToGrid(float value, float spacing)
+{
+	if (spacing <= 0)
+		return value;
+	return std::round(value / spacing) * spacing;
+}
+
+
+void
+AlignToGrid(Shape& shape, float spacing)
+{
+	float b[4];
+	ShapeBounds(shape, b);
+	MoveShape(shape, SnapToGrid(b[0], spacing) - b[0], SnapToGrid(b[1], spacing) - b[1]);
+}
+
+
+bool
+OutlineShape(Shape& s)
+{
+	if (s.kind == Sig("BEZI"))
+		return true;
+	float b[4];
+	ShapeBounds(s, b);
+	float w = b[2] - b[0], h = b[3] - b[1];
+	auto vertex = [](float x, float y, float c1x, float c1y, float c2x, float c2y, uint8_t flags) {
+		Vertex v;
+		v.point[0] = x;
+		v.point[1] = y;
+		v.control1[0] = c1x;
+		v.control1[1] = c1y;
+		v.control2[0] = c2x;
+		v.control2[1] = c2y;
+		v.flags = flags;
+		return v;
+	};
+	BezierPath path;
+	// a quarter ellipse's control points: kappa of its radii
+	const float k = 0.5522847f;
+	if (s.kind == Sig("LINE")) {
+		path.closed = false;
+		float x0 = s.size[0] < 0 ? -s.size[0] : 0, y0 = s.size[1] < 0 ? -s.size[1] : 0;
+		path.vertices.push_back(vertex(x0, y0, 0, 0, 0, 0, 4));
+		path.vertices.push_back(vertex(x0 + s.size[0], y0 + s.size[1], 0, 0, 0, 0, 4));
+	} else if (s.kind == Sig("RECT") || (s.kind == Sig("RRCT") && s.radius[0] <= 0
+			&& s.radius[1] <= 0)) {
+		path.closed = true;
+		path.vertices = {vertex(0, 0, 0, 0, 0, 0, 4), vertex(w, 0, 0, 0, 0, 0, 4),
+			vertex(w, h, 0, 0, 0, 0, 4), vertex(0, h, 0, 0, 0, 0, 4)};
+	} else if (s.kind == Sig("RRCT")) {
+		path.closed = true;
+		float rx = std::min(s.radius[0], w / 2), ry = std::min(s.radius[1], h / 2);
+		float cx = rx * k, cy = ry * k;
+		path.vertices = {
+			vertex(rx, 0, -cx, 0, 0, 0, 4), vertex(w - rx, 0, 0, 0, cx, 0, 4),
+			vertex(w, ry, 0, -cy, 0, 0, 4), vertex(w, h - ry, 0, 0, 0, cy, 4),
+			vertex(w - rx, h, cx, 0, 0, 0, 4), vertex(rx, h, 0, 0, -cx, 0, 4),
+			vertex(0, h - ry, 0, cy, 0, 0, 4), vertex(0, ry, 0, 0, 0, -cy, 4)};
+	} else if (s.kind == Sig("ELPS")) {
+		path.closed = true;
+		float rx = w / 2, ry = h / 2;
+		path.vertices = {
+			vertex(rx, 0, -rx * k, 0, rx * k, 0, 2), vertex(w, ry, 0, -ry * k, 0, ry * k, 2),
+			vertex(rx, h, rx * k, 0, -rx * k, 0, 2), vertex(0, ry, 0, ry * k, 0, -ry * k, 2)};
+	} else if (s.kind == Sig("ARC ")) {
+		// the arc's sweep from its start (degrees counterclockwise, 0 at
+		// the right), in quarters or less, closed through the center as
+		// the arc is filled
+		float rx = w / 2, ry = h / 2;
+		float start = s.arcAngles[0], sweep = s.arcAngles[1];
+		int pieces = std::max(1, int(std::ceil(std::fabs(sweep) / 90)));
+		float step = sweep / float(pieces);
+		auto at = [&](float degrees, float& x, float& y, float& tx, float& ty) {
+			float a = float(degrees * M_PI / 180);
+			x = rx + rx * std::cos(a);
+			y = ry - ry * std::sin(a);
+			tx = -rx * std::sin(a);
+			ty = -ry * std::cos(a);
+		};
+		float t = float(4.0 / 3.0 * std::tan(step * M_PI / 180 / 4));
+		path.closed = true;
+		path.vertices.push_back(vertex(rx, ry, 0, 0, 0, 0, 4));
+		for (int i = 0; i <= pieces; i++) {
+			float x, y, tx, ty;
+			at(start + step * float(i), x, y, tx, ty);
+			path.vertices.push_back(vertex(x, y, i > 0 ? -tx * t : 0, i > 0 ? -ty * t : 0,
+				i < pieces ? tx * t : 0, i < pieces ? ty * t : 0, 4));
+		}
+	} else
+		return false;
+	s.kind = Sig("BEZI");
+	s.origin[0] = b[0];
+	s.origin[1] = b[1];
+	s.size[0] = w;
+	s.size[1] = h;
+	s.radius[0] = s.radius[1] = 0;
+	s.arcAngles[0] = s.arcAngles[1] = 0;
+	s.values[0] &= ~uint32_t(0x100);
+	s.paths = {path};
+	return true;
+}
+
+
+bool
+ParseToolbarShape(const std::vector<uint8_t>& data, BezierPath& path)
+{
+	auto u32 = [&](size_t at) {
+		return uint32_t(data[at]) | uint32_t(data[at + 1]) << 8 | uint32_t(data[at + 2]) << 16
+			| uint32_t(data[at + 3]) << 24;
+	};
+	if (data.size() < 8)
+		return false;
+	uint32_t count = u32(0);
+	path = BezierPath();
+	path.closed = u32(4) != 0;
+	size_t at = 8;
+	for (uint32_t i = 0; i < count; i++) {
+		if (at + 4 > data.size())
+			return false;
+		Vertex v;
+		v.flags = uint8_t(u32(at));
+		at += 4;
+		float values[6];
+		for (float& value : values) {
+			size_t end = at;
+			while (end < data.size() && data[end] != 0)
+				end++;
+			if (end >= data.size())
+				return false;
+			value = std::strtof(std::string(data.begin() + long(at), data.begin() + long(end)).c_str(),
+				nullptr);
+			at = end + 1;
+		}
+		v.point[0] = values[0];
+		v.point[1] = values[1];
+		v.control1[0] = values[2];
+		v.control1[1] = values[3];
+		v.control2[0] = values[4];
+		v.control2[1] = values[5];
+		path.vertices.push_back(v);
+	}
+	return count > 1;
+}
+
+
+namespace {
+
+// a path shape from vertices (drawing coordinates), its box the points'
+int
+AddPathShape(Document& doc, size_t part, size_t layer, BezierPath path)
+{
+	GRPart* gr = doc.EditableGraphicsPart(part);
+	if (gr == nullptr || layer >= gr->layers.size() || path.vertices.size() < 2)
+		return -1;
+	float left = path.vertices[0].point[0], right = left;
+	float top = path.vertices[0].point[1], bottom = top;
+	for (const Vertex& v : path.vertices) {
+		left = std::min(left, v.point[0]);
+		right = std::max(right, v.point[0]);
+		top = std::min(top, v.point[1]);
+		bottom = std::max(bottom, v.point[1]);
+	}
+	if (right - left <= 0 && bottom - top <= 0)
+		return -1;
+	for (Vertex& v : path.vertices) {
+		v.point[0] -= left;
+		v.point[1] -= top;
+	}
+	Shape s;
+	s.kind = Sig("BEZI");
+	s.origin[0] = left;
+	s.origin[1] = top;
+	s.size[0] = right - left;
+	s.size[1] = bottom - top;
+	s.paths = {path};
+	uint32_t id = 0;
+	for (const GRLayer& l : gr->layers)
+		for (const Shape& other : l.shapes)
+			if (other.kind != Sig("FRAM"))
+				id = std::max(id, other.values[2] + 1);
+	s.values[2] = id;
+	s.style = NewShapeStyle(doc.styles);
+	doc.stylesChanged = true;
+	gr->layers[layer].shapes.push_back(s);
+	return int(gr->layers[layer].shapes.size() - 1);
+}
+
+} // namespace
+
+
+int
+AddToolbarShape(Document& doc, size_t part, size_t layer, const BezierPath& path,
+	const DrawPoint& from, const DrawPoint& to)
+{
+	float box[4] = {std::min(from[0], to[0]), std::min(from[1], to[1]),
+		std::max(from[0], to[0]), std::max(from[1], to[1])};
+	if (box[2] - box[0] <= 0 || box[3] - box[1] <= 0)
+		return -1;
+	int index = AddPathShape(doc, part, layer, path);
+	if (index < 0)
+		return -1;
+	Shape& s = doc.EditableGraphicsPart(part)->layers[layer].shapes[size_t(index)];
+	ResizeShape(s, box);
+	return index;
+}
+
+
+int
+AddBezierShape(Document& doc, size_t part, size_t layer, const std::vector<Vertex>& vertices)
+{
+	BezierPath path;
+	path.closed = false;
+	path.vertices = vertices;
+	return AddPathShape(doc, part, layer, path);
 }
 
 } // namespace gobe

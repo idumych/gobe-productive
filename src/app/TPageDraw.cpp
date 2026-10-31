@@ -11,6 +11,7 @@
 #include "TPageView.h"
 
 #include <Menu.h>
+#include <Shape.h>
 #include <MenuItem.h>
 #include <Window.h>
 
@@ -22,6 +23,7 @@
 #include "GobeResources.h"
 #include "SSStyle.h"
 #include "TRibbon.h"
+#include "TDialog.h"
 #include "TSheetDialogs.h"
 
 namespace gobe {
@@ -97,6 +99,57 @@ InkFromMessage(BMessage* message, uint32_t type, Property& property)
 }
 
 
+// a toolbar shape (TToolbarShapes: the application's 'POLY' resources)
+bool
+ToolbarShapePath(int32 index, BezierPath& path)
+{
+	const ResourceFile::Resource* r = GobeResources::File().Find('POLY', index);
+	return r != NULL && ParseToolbarShape(r->data, path);
+}
+
+
+// TDialogAlignObjects (DIAL 202): None, Top Edges, Centers, Bottom Edges
+// and Distribute Space top to bottom (3-7), the same left to right
+// (9-13); each choice is tried at once ('sM44' with "AlignY", "AlignX",
+// the last try taken back first: SendKillLastMessage); OK keeps it,
+// Cancel takes it back
+class TDialogAlignObjects : public TDialog {
+public:
+	TDialogAlignObjects(BLooper* window)
+		: TDialog(202, 202, 'APPL', NULL), fWindow(window) {}
+
+protected:
+	virtual void Init()
+	{
+		SetRadioItem(fY, true);
+		SetRadioItem(fX, true);
+	}
+
+	virtual bool ItemHit(int32 index, BMessage* message)
+	{
+		if ((index >= 3 && index <= 7) || (index >= 9 && index <= 13)) {
+			(index <= 7 ? fY : fX) = index;
+			BMessage align('sM44');
+			align.AddInt32("AlignY", fY - 3);
+			align.AddInt32("AlignX", fX - 9);
+			align.AddBool("preview", true);
+			fWindow->PostMessage(&align);
+			return true;
+		}
+		if (index == 0 || index == 1) {
+			BMessage end('sM44');
+			end.AddBool(index == 0 ? "done" : "cancel", true);
+			fWindow->PostMessage(&end);
+		}
+		return TDialog::ItemHit(index, message);
+	}
+
+private:
+	BLooper* fWindow;
+	int32 fY = 3, fX = 9;
+};
+
+
 TPageView::ShapeRef
 Ref(size_t part, size_t layer, size_t index)
 {
@@ -106,6 +159,39 @@ Ref(size_t part, size_t layer, size_t index)
 	ref.layer = layer;
 	ref.index = index;
 	return ref;
+}
+
+} // namespace
+
+
+namespace {
+
+// AutoGrid (TGrid +0x4): a point snapped to the drawing's grid
+void
+Snap(const Document& doc, size_t part, float& x, float& y)
+{
+	const GRPart* gr = doc.GraphicsPart(part);
+	if (gr == nullptr || !gr->gridFlags[0])
+		return;
+	x = SnapToGrid(x, gr->gridSpacing);
+	y = SnapToGrid(y, gr->gridSpacing);
+}
+
+
+// the drawing Arrange's grid commands act on: the selected shapes', or a
+// drawing document's
+bool
+CurrentDrawing(const Document& doc, const std::vector<TPageView::ShapeRef>& shapes, size_t& part)
+{
+	if (!shapes.empty()) {
+		part = shapes[0].part;
+		return true;
+	}
+	int main = doc.MainPart();
+	if (main < 0 || doc.GraphicsPart(size_t(main)) == nullptr)
+		return false;
+	part = size_t(main);
+	return true;
 }
 
 } // namespace
@@ -126,7 +212,10 @@ TPageView::SetTool(uint32 tool)
 {
 	if (fShapeDrag.mode == 1 && fTool == kToolPolygon)
 		FinishShape();
+	else if (fShapeDrag.mode == 1 && fTool == kToolBezier)
+		FinishShape(false);
 	fShapeDrag = ShapeDrag();
+	fBezier.clear();
 	fTool = tool;
 	if (fToolBar != NULL)
 		fToolBar->Update();
@@ -152,13 +241,27 @@ TPageView::FixShapeMenu(BMenu* menu) const
 	// (TPartGR::FixMenus: the ported items, Arrange's with shapes
 	// selected; the handles' mode marked; the others off)
 	static const uint32 kModes[3] = {'sM4A', 'sM4B', 'sM4C'};
+	bool locked = false, unlocked = false;
+	for (const ShapeRef& ref : fShapes)
+		if (const Shape* s = ShapeAt(fDocument, ref.part, ref.layer, ref.index))
+			(ShapeLocked(*s) ? locked : unlocked) = true;
+	size_t drawing;
+	const GRPart* gr = CurrentDrawing(fDocument, fShapes, drawing)
+		? fDocument.GraphicsPart(drawing) : nullptr;
 	for (int32 i = 0; BMenuItem* item = menu->ItemAt(i); i++) {
 		uint32 what = item->Message() != NULL ? item->Message()->what : 0;
-		bool arrange = what == 'sM40' || what == 'sM41' || what == 'sM42' || what == 'sM43';
+		bool arrange = what == 'sM40' || what == 'sM41' || what == 'sM42' || what == 'sM43'
+			|| what == 'sM45' || what == 'sM4T';
 		bool mode = what == 'sM4A' || what == 'sM4B' || what == 'sM4C';
-		item->SetEnabled((arrange && !fShapes.empty()) || mode);
+		bool grid = what == 'sM4D' || what == 'sM4E';
+		// (Group, Ungroup and Text Wrap aren't ported: off)
+		item->SetEnabled((arrange && !fShapes.empty()) || mode || (grid && gr != nullptr)
+			|| (what == 'sM44' && fShapes.size() >= 2) || (what == 'sM48' && unlocked)
+			|| (what == 'sM49' && locked));
 		if (mode)
 			item->SetMarked(kModes[fShapeMode] == what);
+		if (grid)
+			item->SetMarked(gr != nullptr && gr->gridFlags[what == 'sM4D' ? 1 : 0]);
 	}
 }
 
@@ -201,7 +304,43 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 		Invalidate();
 		return true;
 	}
-	if (ToolMakesShapes(fTool)) {
+	// the Bezier tool: each press a point, a drag from it its control
+	// points (a smooth point); a double click or Enter ends the path
+	if (fTool == kToolBezier) {
+		size_t part;
+		float x, y;
+		bool building = (fShapeDrag.mode == 1 || fShapeDrag.mode == 7) && !fBezier.empty();
+		if (building) {
+			part = fShapeDrag.part;
+			x = fShapeDrag.x;
+			y = fShapeDrag.y;
+		} else if (!DrawingAt(where, part, x, y))
+			return true;
+		else {
+			fBezier.clear();
+			fShapes.clear();
+		}
+		float px = where.x - x, py = where.y - y;
+		Snap(fDocument, part, px, py);
+		Vertex v = {{px, py}, {0, 0}, {0, 0}, 4};
+		if (clicks >= 2 && !fBezier.empty()) {
+			if (fBezier.back().point[0] != px || fBezier.back().point[1] != py)
+				fBezier.push_back(v);
+			FinishShape(false);
+			return true;
+		}
+		fBezier.push_back(v);
+		fShapeDrag = ShapeDrag();
+		fShapeDrag.mode = 7;
+		fShapeDrag.part = part;
+		fShapeDrag.x = x;
+		fShapeDrag.y = y;
+		fShapeDrag.start[0] = fShapeDrag.now[0] = px;
+		fShapeDrag.start[1] = fShapeDrag.now[1] = py;
+		Invalidate();
+		return true;
+	}
+	if (ToolMakesShapes(fTool) || fTool == kToolShapes) {
 		size_t part;
 		float x, y;
 		if (!DrawingAt(where, part, x, y))
@@ -212,6 +351,7 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 		fShapeDrag.x = x;
 		fShapeDrag.y = y;
 		std::array<float, 2> p = {where.x - x, where.y - y};
+		Snap(fDocument, part, p[0], p[1]);
 		fShapeDrag.points = {p, p};
 		fShapes.clear();
 		Invalidate();
@@ -236,11 +376,14 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 	if (fShapes.size() == 1 && inDrawing && part == fShapes[0].part && !shift) {
 		const Shape* s = ShapeAt(fDocument, part, fShapes[0].layer, fShapes[0].index);
 		float px = where.x - x, py = where.y - y;
-		int vertex = s != nullptr && fShapeMode == 2 ? HitVertex(*s, px, py, kHandle + 1) : -1;
-		int handle = s != nullptr && fShapeMode != 2 ? HitHandle(*s, px, py, kHandle + 1) : -1;
-		if (vertex >= 0 || handle >= 0) {
-			startDrag(vertex >= 0 ? 5 : fShapeMode == 1 ? 4 : 3);
-			fShapeDrag.handle = vertex >= 0 ? vertex : handle;
+		bool editable = s != nullptr && !ShapeLocked(*s);
+		int control = editable && fShapeMode == 2 ? HitControlPoint(*s, px, py, kHandle + 1) : -1;
+		int vertex = editable && fShapeMode == 2 && control < 0
+			? HitVertex(*s, px, py, kHandle + 1) : -1;
+		int handle = editable && fShapeMode != 2 ? HitHandle(*s, px, py, kHandle + 1) : -1;
+		if (control >= 0 || vertex >= 0 || handle >= 0) {
+			startDrag(control >= 0 ? 8 : vertex >= 0 ? 5 : fShapeMode == 1 ? 4 : 3);
+			fShapeDrag.handle = control >= 0 ? control : vertex >= 0 ? vertex : handle;
 			ShapeBounds(*s, fShapeDrag.bounds);
 			fShapeDrag.angle = s->angle;
 			return true;
@@ -293,6 +436,26 @@ TPageView::DrawingMoved(BPoint where)
 	if (fShapeDrag.mode == 0)
 		return false;
 	float x = where.x - fShapeDrag.x, y = where.y - fShapeDrag.y;
+	if (fShapeDrag.mode != 2 && fShapeDrag.mode != 4 && fShapeDrag.mode != 6)
+		Snap(fDocument, fShapeDrag.part, x, y);
+	if (fShapeDrag.mode == 7) {
+		// a Bezier point's control points: the one after it where the
+		// pointer is, the one before opposite (a smooth point)
+		Vertex& v = fBezier.back();
+		v.control2[0] = x - v.point[0];
+		v.control2[1] = y - v.point[1];
+		v.control1[0] = -v.control2[0];
+		v.control1[1] = -v.control2[1];
+		v.flags = v.control2[0] != 0 || v.control2[1] != 0 ? 2 : 4;
+		Invalidate();
+		return true;
+	}
+	if (fShapeDrag.mode == 1 && fTool == kToolBezier) {
+		fShapeDrag.now[0] = x;
+		fShapeDrag.now[1] = y;
+		Invalidate();
+		return true;
+	}
 	if (fShapeDrag.mode == 1) {
 		std::array<float, 2> p = {x, y};
 		// freehand: a point wherever the pointer went, the others the end
@@ -319,6 +482,32 @@ TPageView::FinishShape(bool dropFollower)
 	std::vector<DrawPoint> points(fShapeDrag.points.begin(), fShapeDrag.points.end());
 	size_t part = fShapeDrag.part;
 	fShapeDrag = ShapeDrag();
+	if (fTool == kToolBezier || fTool == kToolShapes) {
+		std::vector<Vertex> vertices;
+		vertices.swap(fBezier);
+		BezierPath shape;
+		bool made = fTool == kToolBezier ? vertices.size() >= 2
+			: points.size() >= 2 && ToolbarShapePath(fToolShape, shape)
+				&& points.front()[0] != points.back()[0] && points.front()[1] != points.back()[1];
+		if (!made) {
+			Invalidate();
+			return;
+		}
+		size_t layer = DrawingLayer(fDocument, part);
+		fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, 0).String(),
+			CurrentViewState());
+		int index = fTool == kToolBezier ? AddBezierShape(fDocument, part, layer, vertices)
+			: AddToolbarShape(fDocument, part, layer, shape, points.front(), points.back());
+		if (index >= 0)
+			fShapes = {Ref(part, layer, size_t(index))};
+		fTool = kToolArrow;
+		if (fToolBar != NULL)
+			fToolBar->Update();
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return;
+	}
 	if (dropFollower && fTool == kToolPolygon && points.size() > 2)
 		points.pop_back();		// (the point following the pointer)
 	size_t layer = DrawingLayer(fDocument, part);
@@ -350,8 +539,13 @@ TPageView::DrawingUp(BPoint where)
 	if (fShapeDrag.mode == 0)
 		return false;
 	DrawingMoved(where);
+	if (fShapeDrag.mode == 7) {
+		// a Bezier point placed: the path goes on
+		fShapeDrag.mode = 1;
+		return true;
+	}
 	if (fShapeDrag.mode == 1) {
-		if (fTool != kToolPolygon)
+		if (fTool != kToolPolygon && fTool != kToolBezier)
 			FinishShape();
 		return true;
 	}
@@ -381,6 +575,17 @@ TPageView::DrawingUp(BPoint where)
 	}
 	float dx = drag.now[0] - drag.start[0];
 	float dy = drag.now[1] - drag.start[1];
+	// AutoGrid: a move lands the first shape's corner on the grid
+	if (drag.mode == 2 && !fShapes.empty()) {
+		if (const Shape* first = ShapeAt(fDocument, drag.part, fShapes[0].layer, fShapes[0].index)) {
+			float b[4];
+			ShapeBounds(*first, b);
+			float x = b[0] + dx, y = b[1] + dy;
+			Snap(fDocument, drag.part, x, y);
+			dx = x - b[0];
+			dy = y - b[1];
+		}
+	}
 	if (dx == 0 && dy == 0) {
 		Invalidate();
 		return true;
@@ -396,6 +601,8 @@ TPageView::DrawingUp(BPoint where)
 				|| ref.index >= gr->layers[ref.layer].shapes.size())
 			continue;
 		Shape& s = gr->layers[ref.layer].shapes[ref.index];
+		if (ShapeLocked(s))
+			continue;		// (TShape::GetDeleteMode: a locked shape stays)
 		if (drag.mode == 2)
 			MoveShape(s, dx, dy);
 		else if (drag.mode == 3) {
@@ -408,7 +615,9 @@ TPageView::DrawingUp(BPoint where)
 			float turn = AngleAround(s, drag.now[0], drag.now[1])
 				- AngleAround(s, drag.start[0], drag.start[1]);
 			s.angle = std::fmod(std::round(drag.angle + turn) + 720.0f, 360.0f);
-		} else
+		} else if (drag.mode == 8)
+			MoveControlPoint(s, drag.handle, drag.now[0], drag.now[1]);
+		else
 			MoveVertex(s, drag.handle, drag.now[0], drag.now[1]);
 	}
 	Invalidate();
@@ -423,9 +632,9 @@ TPageView::DrawingKey(const char* bytes, int32 count)
 {
 	if (count < 1)
 		return false;
-	if (fShapeDrag.mode == 1 && fTool == kToolPolygon
+	if (fShapeDrag.mode == 1 && (fTool == kToolPolygon || fTool == kToolBezier)
 			&& (bytes[0] == B_ENTER || bytes[0] == B_ESCAPE)) {
-		FinishShape();
+		FinishShape(fTool == kToolPolygon);
 		return true;
 	}
 	if (fShapes.empty() || (bytes[0] != B_DELETE && bytes[0] != B_BACKSPACE))
@@ -440,7 +649,8 @@ TPageView::DrawingKey(const char* bytes, int32 count)
 	});
 	for (const ShapeRef& ref : doomed)
 		if (gr != nullptr && ref.layer < gr->layers.size()
-				&& ref.index < gr->layers[ref.layer].shapes.size())
+				&& ref.index < gr->layers[ref.layer].shapes.size()
+				&& !ShapeLocked(gr->layers[ref.layer].shapes[ref.index]))
 			gr->layers[ref.layer].shapes.erase(gr->layers[ref.layer].shapes.begin()
 				+ long(ref.index));
 	fShapes.clear();
@@ -448,6 +658,22 @@ TPageView::DrawingKey(const char* bytes, int32 count)
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);
 	return true;
+}
+
+
+// Align Objects' last try taken back (SendKillLastMessage), the selection
+// kept
+void
+TPageView::UndoAlignPreview()
+{
+	std::vector<ShapeRef> shapes = fShapes;
+	UndoStack::ViewState v = CurrentViewState();
+	if (fUndo.Undo(fDocument, v) == UndoStack::kDocumentChanged) {
+		GeometryChanged();
+		RestoreViewState(v);
+	}
+	fShapes = shapes;
+	fAlignPreview = false;
 }
 
 
@@ -459,6 +685,83 @@ TPageView::ShapeCommand(BMessage* message)
 	if (what == 'sM4A' || what == 'sM4B' || what == 'sM4C') {
 		fShapeMode = what == 'sM4A' ? 0 : what == 'sM4B' ? 1 : 2;
 		Invalidate();
+		return true;
+	}
+	// Draw Grid ('sM4D': TGrid +0x5), AutoGrid ('sM4E': +0x4): the drawing's
+	// own, saved with it
+	size_t drawing;
+	if ((what == 'sM4D' || what == 'sM4E') && CurrentDrawing(fDocument, fShapes, drawing)) {
+		if (GRPart* gr = fDocument.EditableGraphicsPart(drawing)) {
+			bool& flag = gr->gridFlags[what == 'sM4D' ? 1 : 0];
+			flag = !flag;
+		}
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return true;
+	}
+	// Align Objects… ('sM44', TDialogAlignObjects): the dialog, its tries
+	if (what == 'sM44') {
+		if (message->GetBool("done", false) || message->GetBool("cancel", false)) {
+			if (message->GetBool("cancel", false) && fAlignPreview)
+				UndoAlignPreview();
+			fAlignPreview = false;
+			return true;
+		}
+		if (!message->HasInt32("AlignX")) {
+			if (fShapes.size() >= 2 && Window() != NULL) {
+				fAlignPreview = false;
+				(new TDialogAlignObjects(Window()))->RunDialog();
+			}
+			return true;
+		}
+		if (fShapes.size() < 2)
+			return true;
+		if (fAlignPreview)
+			UndoAlignPreview();
+		// STR# 1101, 20: Align Shapes
+		fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, 20).String(),
+			CurrentViewState());
+		GRPart* gr = fDocument.EditableGraphicsPart(fShapes[0].part);
+		std::vector<Shape*> shapes;
+		for (const ShapeRef& ref : fShapes)
+			if (gr != nullptr && ref.layer < gr->layers.size()
+					&& ref.index < gr->layers[ref.layer].shapes.size()
+					&& !ShapeLocked(gr->layers[ref.layer].shapes[ref.index]))
+				shapes.push_back(&gr->layers[ref.layer].shapes[ref.index]);
+		AlignShapes(shapes, message->GetInt32("AlignX", 0), message->GetInt32("AlignY", 0));
+		fAlignPreview = true;
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return true;
+	}
+	// Align to Grid (1101, 21), Lock and Unlock (4, 5), Create Outlines (37)
+	if ((what == 'sM45' || what == 'sM48' || what == 'sM49' || what == 'sM4T')
+			&& !fShapes.empty()) {
+		int label = what == 'sM45' ? 21 : what == 'sM48' ? 4 : what == 'sM49' ? 5 : 37;
+		fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, label).String(),
+			CurrentViewState());
+		GRPart* gr = fDocument.EditableGraphicsPart(fShapes[0].part);
+		for (const ShapeRef& ref : fShapes) {
+			if (gr == nullptr || ref.layer >= gr->layers.size()
+					|| ref.index >= gr->layers[ref.layer].shapes.size())
+				continue;
+			Shape& sh = gr->layers[ref.layer].shapes[ref.index];
+			if (what == 'sM48')
+				sh.values[0] |= kShapeLocked;
+			else if (what == 'sM49')
+				sh.values[0] &= ~kShapeLocked;
+			else if (ShapeLocked(sh))
+				continue;
+			else if (what == 'sM45')
+				AlignToGrid(sh, gr->gridSpacing);
+			else
+				OutlineShape(sh);
+		}
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
 		return true;
 	}
 	bool arrange = what == 'sM40' || what == 'sM41' || what == 'sM42' || what == 'sM43';
@@ -575,6 +878,35 @@ TPageView::DrawShapeSelection(float dx, float dy)
 		} else
 			StrokeRect(r, B_MIXED_COLORS);
 	}
+	if (fTool == kToolBezier && !fBezier.empty()
+			&& (fShapeDrag.mode == 1 || fShapeDrag.mode == 7)) {
+		// the Bezier path so far, to the pointer, and the last point's
+		// control points
+		float ox = fShapeDrag.x, oy = fShapeDrag.y;
+		BShape path;
+		path.MoveTo(BPoint(fBezier[0].point[0] + ox, fBezier[0].point[1] + oy));
+		for (size_t i = 1; i < fBezier.size(); i++) {
+			const Vertex& a = fBezier[i - 1];
+			const Vertex& b = fBezier[i];
+			BPoint c[3] = {BPoint(a.point[0] + a.control2[0] + ox, a.point[1] + a.control2[1] + oy),
+				BPoint(b.point[0] + b.control1[0] + ox, b.point[1] + b.control1[1] + oy),
+				BPoint(b.point[0] + ox, b.point[1] + oy)};
+			path.BezierTo(c);
+		}
+		MovePenTo(B_ORIGIN);
+		StrokeShape(&path, B_MIXED_COLORS);
+		const Vertex& last = fBezier.back();
+		BPoint at(last.point[0] + ox, last.point[1] + oy);
+		if (fShapeDrag.mode == 1)
+			StrokeLine(at, BPoint(fShapeDrag.now[0] + ox, fShapeDrag.now[1] + oy), B_MIXED_COLORS);
+		else if (last.control2[0] != 0 || last.control2[1] != 0) {
+			BPoint c1 = at + BPoint(last.control1[0], last.control1[1]);
+			BPoint c2 = at + BPoint(last.control2[0], last.control2[1]);
+			StrokeLine(c1, c2, B_MIXED_COLORS);
+			for (BPoint c : {c1, c2})
+				FillEllipse(BRect(c.x - kHandle, c.y - kHandle, c.x + kHandle, c.y + kHandle));
+		}
+	}
 	if (fShapeDrag.mode == 6) {
 		BRect band(std::min(fShapeDrag.start[0], fShapeDrag.now[0]) + fShapeDrag.x,
 			std::min(fShapeDrag.start[1], fShapeDrag.now[1]) + fShapeDrag.y,
@@ -616,17 +948,30 @@ TPageView::DrawShapeSelection(float dx, float dy)
 			StrokeLine(BPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2),
 				BPoint(fShapeDrag.now[0] + ox, fShapeDrag.now[1] + oy), B_MIXED_COLORS);
 		}
-		if (fShapeMode == 2 && fShapes.size() == 1) {
-			// Reshape: the points (open squares)
+		if (fShapeMode == 2 && fShapes.size() == 1 && !ShapeLocked(*s)) {
+			// Reshape: the points (open squares), a curve's control points
+			// (round, joined to their point)
 			for (const DrawPoint& p : ShapeVertices(*s))
 				StrokeRect(BRect(p[0] + ox - kHandle, p[1] + oy - kHandle, p[0] + ox + kHandle,
 					p[1] + oy + kHandle));
+			const std::vector<Vertex>& vertices = s->paths.empty()
+				? std::vector<Vertex>() : s->paths[0].vertices;
+			for (const auto& [handle, p] : ControlPoints(*s)) {
+				const Vertex& v = vertices[size_t(handle / 2)];
+				BPoint from(s->origin[0] + v.point[0] + ox, s->origin[1] + v.point[1] + oy);
+				BPoint c(p[0] + ox, p[1] + oy);
+				StrokeLine(from, c, B_MIXED_COLORS);
+				FillEllipse(BRect(c.x - kHandle, c.y - kHandle, c.x + kHandle, c.y + kHandle));
+			}
 			continue;
 		}
-		// Rotate: round handles; Resize: squares
+		// Rotate: round handles; Resize: squares; a locked shape's hollow
+		// (TShape::DrawHandle)
 		for (BPoint corner : {box.LeftTop(), box.RightTop(), box.RightBottom(), box.LeftBottom()}) {
 			BRect h(corner.x - kHandle, corner.y - kHandle, corner.x + kHandle, corner.y + kHandle);
-			if (fShapeMode == 1 && fShapes.size() == 1)
+			if (ShapeLocked(*s))
+				StrokeRect(h);
+			else if (fShapeMode == 1 && fShapes.size() == 1)
 				FillEllipse(h);
 			else
 				FillRect(h);

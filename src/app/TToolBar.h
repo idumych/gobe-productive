@@ -3,8 +3,9 @@
 // rectangle, ellipse, round rectangle, arc, line, freehand, Bezier and
 // polygon tools, the toolbar shapes; MICN icons ToolIcons, tips STR# 4,
 // 12-22), 27 points apart, 6 more after the part tool. Choosing one sends
-// the window 'TOOL' with "tool"; the tool chosen stays selected. The part,
-// Bezier and toolbar shapes tools aren't ported (off).
+// the window 'TOOL' with "tool" ("shape" too for the toolbar shapes, a
+// POLY resource chosen in its menu); the tool chosen stays selected. The
+// part frames tool isn't ported (off).
 #ifndef GOBE_TTOOLBAR_H
 #define GOBE_TTOOLBAR_H
 

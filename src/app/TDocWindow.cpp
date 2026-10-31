@@ -498,8 +498,11 @@ TDocWindow::MessageReceived(BMessage* message)
 			return;
 		// the ToolBar's tools (TToolBar: the window's current tool)
 		case TToolBar::kMsgTool:
-			if (fPages != NULL)
+			if (fPages != NULL) {
+				if (message->HasInt32("shape"))
+					fPages->SetToolShape(message->GetInt32("shape", 0));
 				fPages->SetTool(uint32(message->GetInt32("tool", 'ARRW')));
+			}
 			return;
 		// Window > Hide/Show FormatBar
 		case 'sMF4':

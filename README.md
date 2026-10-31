@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress.svg" alt="Port progress: 42 of 48 features done, 6 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 44 of 50 features done, 6 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, spreadsheets have caught up with the original's editing, documents
@@ -120,7 +120,8 @@ Clipboard.
 | Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | next |
 | New Window | not yet |
 | The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | next |
-| The ToolBar's part frames, Bezier and toolbar shapes tools | not yet |
+| The ToolBar's Bezier tool (a press a point, a drag its control points) and toolbar shapes (the original's shapes, chosen from its menu, dragged out) | next |
+| The ToolBar's part frames tool | not yet |
 
 ### Word processor
 
@@ -163,7 +164,8 @@ sizes, headings and options are saved with the document.
 | Creating and linking frames | not yet |
 | Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | next |
 | Drawing tools: several shapes selected (Shift-click, a rubber band in a drawing), moved and deleted together; Arrange's Bring to Front, Send to Back, Move Forward and Move Backward; Rotate (a corner handle turns the shape) and Reshape (a path's points, a line's ends) | next |
-| Drawing tools: Group and Ungroup, Align Objects, Align to Grid, Lock, the grid, Create Outlines, Text Wrap, curves' control points | not yet |
+| Drawing tools: Align Objects… (as the original, each choice tried at once), Align to Grid, Lock and Unlock, Draw Grid and AutoGrid (snapping), Create Outlines; a curve's control points reshaped; turned shapes hit by their turned outline | next |
+| Drawing tools: Group and Ungroup (a new drawing part as a frame), Text Wrap | not yet |
 | Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
 | Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | next |
 | Fill and pen inks for frames in the FormatBar (frames can't be selected yet); the pen's size (the drawing's PartBar) | not yet |
