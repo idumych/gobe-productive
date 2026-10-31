@@ -7,7 +7,7 @@ documents and works the way the original did, down to its menus and dialogs.
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, work has moved to spreadsheets and documents with several sheets:
 most of the original's spreadsheet editing, the SheetBar, new
-spreadsheets, and the HTML, SYLK and text table translators now work in
+spreadsheets, Excel import, and the HTML, SYLK and text table translators now work in
 the sources here and will be in the next release. See [Status](#status).
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
@@ -144,6 +144,10 @@ not released yet: build it to try it.
 - **SYLK:** spreadsheets saved as SYLK (values as calculated, formulas in
   R1C1, number formats, column widths) and SYLK files opened as new
   spreadsheets, dates and currencies included. Fonts aren't carried.
+- **Excel:** workbooks from Excel 5 on (.xls) open as spreadsheets, a
+  sheet per worksheet with its name: numbers, text, booleans, errors,
+  number formats, dates, column widths, and formulas turned into Gobe's
+  (those using names, other sheets or data tables keep their values).
 - **Ranges** are written A1..B2, as Gobe Productive writes them (A1:B2 is
   still understood).
 
@@ -205,7 +209,7 @@ The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; Import and Export Styles; New Window; Show Clipboard; creating
 and linking frames; drawing tools; in spreadsheets charts made from cells;
 new documents of other kinds than word processing and spreadsheets; the
-Word and Excel translators; the thesaurus and dictionary (they need data
+Word translator, Excel export; the thesaurus and dictionary (they need data
 files that weren't part of Gobe Productive). Documents saved by the port
 open in the port; they haven't been tried in the original on BeOS.
 

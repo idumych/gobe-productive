@@ -30,6 +30,7 @@
 #include "SSSylk.h"
 #include "HTMLExport.h"
 #include "HTMLImport.h"
+#include "Excel.h"
 
 namespace gobe {
 
@@ -201,6 +202,11 @@ IdentifyFile(const char* path)
 		update_mime_info(path, false, true, B_UPDATE_MIME_INFO_NO_FORCE);
 		info.GetType(type);
 	}
+	// the Excel translator's: an OLE compound file (its "Workbook" or "Book"
+	// stream is looked for when it's read)
+	static const unsigned char kOLE[8] = {0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1};
+	if (head.size() >= 8 && memcmp(head.data(), kOLE, 8) == 0)
+		return kExcelFile;
 	// the SYLK translator's Identify: its types, or text starting with an ID
 	// record (whatever type the registrar gave it)
 	if ((strcmp(type, "text/sylk") == 0 || strcmp(type, "text/x-sylk") == 0
@@ -227,6 +233,8 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	bool ok = false;
 	if (kind == kRTFFile) {
 		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice);
+	} else if (kind == kExcelFile) {
+		ok = ImportExcel(path, doc, message, &notice);
 	} else if (kind == kHTMLFile) {
 		ok = ImportHTML(path, doc, message);
 	} else if (kind == kSylkFile) {

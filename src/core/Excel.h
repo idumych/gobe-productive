@@ -1,0 +1,81 @@
+// Excel workbooks (BIFF5 and BIFF8 in an OLE compound file) opened as
+// spreadsheets, as the Excel translator reads them (ExcelTranslator/
+// TImportExcel.c, TBiffReader, TExcelParser).
+#ifndef GOBE_EXCEL_H
+#define GOBE_EXCEL_H
+
+#include <cstdint>
+#include <map>
+#include <string>
+#include <vector>
+
+namespace gobe {
+
+struct Document;
+
+// An OLE compound file ([MS-CFB]): its streams by name.
+class CompoundFile {
+public:
+	bool Open(const std::vector<uint8_t>& data, std::string& error);
+	// the stream's bytes; false if there's none of that name
+	bool Stream(const std::string& name, std::vector<uint8_t>& out) const;
+
+private:
+	std::vector<uint8_t> Chain(uint32_t first, uint64_t size, bool mini) const;
+
+	const std::vector<uint8_t>* fData = nullptr;
+	uint32_t fSectorSize = 512, fMiniSectorSize = 64, fMiniCutoff = 4096;
+	std::vector<uint32_t> fFAT, fMiniFAT;
+	std::vector<uint8_t> fMiniStream;
+	struct Entry {
+		std::string name;
+		uint8_t type;
+		uint32_t start;
+		uint64_t size;
+	};
+	std::vector<Entry> fEntries;
+};
+
+struct ExcelCell {
+	uint16_t row = 0, column = 0;
+	enum Kind { kNumber, kString, kBool, kError, kBlank } kind = kBlank;
+	double number = 0;			// kNumber (a date or time already in Gobe's days); kBool 0/1
+	std::string text;			// kString; kError: "#DIV/0!" etc.
+	std::string formula;		// as typed in Gobe ("=SUM(A1..A3)"), "" if none or not convertible
+	bool badFormula = false;	// a formula that couldn't be converted (its value kept)
+	std::string format;			// the cell's number format (its XF's), "" for General
+};
+
+struct ExcelSheet {
+	std::string name;
+	std::vector<ExcelCell> cells;
+	std::map<uint16_t, float> columnWidths;		// column -> width in points
+	uint16_t rows = 0, columns = 0;				// DIMENSIONS: one past the last
+};
+
+struct ExcelBook {
+	int version = 0;			// the BOF's: 0x0500 BIFF5, 0x0600 BIFF8
+	bool date1904 = false;		// DATEMODE
+	std::vector<ExcelSheet> sheets;
+};
+
+// TImportExcel::DoTranslate's reading: the workbook globals (BOUNDSHEET,
+// SST, FORMAT, XF, DATEMODE, CODEPAGE), then each worksheet's cells
+// (NUMBER, RK, MULRK, LABEL, LABELSST, BOOLERR, FORMULA and STRING, BLANK
+// and MULBLANK skipped), COLINFO widths and DIMENSIONS. Formulas are
+// turned from their tokens into Gobe's text (TExcelParser: the function
+// names as the translator's FunctionNames has them, ranges "A1..B2");
+// numbers in date and time formats become Gobe's days (AdjustTimeValue).
+bool ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error);
+
+// Opens a workbook as a new spreadsheet document: a sheet per worksheet
+// (CreateBlankSpreadsheet, AddSheet), named as in the workbook, the cells
+// typed (formulas the parser refuses keep their values), their number
+// formats, the column widths. `notice` gets a message when formulas
+// couldn't be converted.
+bool ImportExcel(const std::string& path, Document& doc, std::string& error,
+	std::string* notice = nullptr);
+
+} // namespace gobe
+
+#endif
