@@ -160,6 +160,17 @@ private:
 	BHandler* fTarget;
 };
 
+// Options > Fill Special… (TDialogFillSpecial; TSSDialog 26): Apply To
+// rows or columns, the type, date units, Step By, Stop At, Trend. In Gobe
+// Productive 2.0.1 OK and Cancel both just close it (ItemHit), so here too.
+class TDialogFillSpecial : public TDialog {
+public:
+	TDialogFillSpecial();
+
+protected:
+	virtual bool ItemHit(int32 index, BMessage* message);
+};
+
 // Options > Sort… (TDialogSort; TSSDialog 25): the range (3), Vertical (4,
 // on a range more than one row high) or Horizontal (5), and three order
 // keys, each a range "A2..A9" (7, 11, 15) with Ascending (8, 12, 16) or

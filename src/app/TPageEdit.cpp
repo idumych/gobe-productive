@@ -3331,6 +3331,9 @@ TPageView::MessageReceived(BMessage* message)
 						if (fEntryBar != NULL)
 							fEntryBar->EndEdit();
 						return;
+					case 'sM72':	// Fill Special… (TDialogFillSpecial: it does nothing)
+						(new TDialogFillSpecial())->RunDialog();
+						return;
 					case 'sM13':	// Paste Special… (TDialogSSPasteSpecial)
 						if (sCopiedCells.rows == 0) {
 							beep();
@@ -5328,7 +5331,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
 		case 'sM65': case 'sM67': case 'sM68': case 'sM69': case 'sM6A': case 'sM6B':
-		case 'sM13': case 's007': case 's008':
+		case 'sM13': case 's007': case 's008': case 'sM72':
 		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':

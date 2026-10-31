@@ -725,6 +725,22 @@ TDialogSSPasteSpecial::ItemHit(int32 index, BMessage* message)
 }
 
 
+TDialogFillSpecial::TDialogFillSpecial()
+	:
+	TDialog(26, 26, 'SPRD', NULL, &GobeResources::Part("Spreadsheet"))
+{
+}
+
+
+bool
+TDialogFillSpecial::ItemHit(int32 index, BMessage* message)
+{
+	if (index < 2)
+		PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
+
 TDialogSort::TDialogSort(BHandler* target, const std::vector<SSRange>& ranges)
 	:
 	TDialog(25, 25, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
