@@ -1951,9 +1951,12 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 					path->MoveTo(at(p.vertices[0].point));
 					size_t n = p.vertices.size();
 					for (size_t i = 1; i < n + (p.closed ? 1 : 0); i++) {
+						// (TVertex's control points are offsets from its point)
 						const Vertex& a = p.vertices[i - 1];
 						const Vertex& b = p.vertices[i % n];
-						BPoint c[3] = {at(a.control2), at(b.control1), at(b.point)};
+						const float c2[2] = {a.point[0] + a.control2[0], a.point[1] + a.control2[1]};
+						const float c1[2] = {b.point[0] + b.control1[0], b.point[1] + b.control1[1]};
+						BPoint c[3] = {at(c2), at(c1), at(b.point)};
 						path->BezierTo(c);
 					}
 					if (p.closed)
@@ -1961,6 +1964,9 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 				}
 			}
 
+			// (a BShape is drawn from the pen's location)
+			if (path != NULL)
+				MovePenTo(B_ORIGIN);
 			BGradient* gradient;
 			// opaque fills in copy mode: gradients in alpha mode come out
 			// striped in offscreen bitmaps
@@ -2061,6 +2067,8 @@ TPageView::Draw(BRect updateRect)
 		PopState();
 	}
 	DrawLines(updateRect, dx, dy);
+	if (!IsPrinting())
+		DrawShapeSelection(dx, dy);
 	PopState();
 	if (fRuler != NULL && !IsPrinting())
 		fRuler->Update();

@@ -1447,6 +1447,15 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 
 	fUndo.Break();
 
+	// the ToolBar's tools: a shape dragged out, a shape selected
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && DrawingClick(where, clicks)) {
+		if (fShape.active && fCaret.active) {
+			fCaret.active = false;
+			Invalidate();
+		}
+		return;
+	}
+
 	size_t part;
 	int row, column;
 	BRect rect;
@@ -1637,6 +1646,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 	// (the document's coordinates; the mouse's are the zoomed view's)
 	where.x /= fZoom;
 	where.y /= fZoom;
+	if (DrawingMoved(where)) {
+		BView::MouseMoved(where, transit, dragMessage);
+		return;
+	}
 	if (fDragging) {
 		Caret c;
 		if (HitText(where, c) && c.part == fCaret.part) {
@@ -1708,6 +1721,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 void
 TPageView::MouseUp(BPoint where)
 {
+	if (DrawingUp(BPoint(where.x / fZoom, where.y / fZoom))) {
+		BView::MouseUp(where);
+		return;
+	}
 	fDragging = false;
 	fDraggingCells = false;
 	fDraggingHeadings = false;
@@ -1725,6 +1742,8 @@ void
 TPageView::KeyDown(const char* bytes, int32 count)
 {
 	if (count < 1)
+		return;
+	if (!fCaret.active && DrawingKey(bytes, count))
 		return;
 	if (fCaret.active) {
 		EditText(bytes, count);
@@ -3977,6 +3996,25 @@ TPageView::RunScript(const std::string& script, Document& document)
 				MouseMoved(BPoint(x2 * fZoom, y2 * fZoom), B_INSIDE_VIEW, NULL);
 				MouseUp(BPoint(x2 * fZoom, y2 * fZoom));
 			}
+		} else if (command.compare(0, 5, "tool ") == 0 && command.size() >= 9) {
+			// "tool ABCD": the ToolBar's tool 'ABCD' chosen (ARRW, RECT, ELPS,
+			// RRCT, ARC , LINE, FREE, POLY)
+			const char* c = command.c_str() + 5;
+			SetTool(uint32(uint8(c[0])) << 24 | uint32(uint8(c[1])) << 16
+				| uint32(uint8(c[2])) << 8 | uint8(c[3]));
+		} else if (command == "shapes") {
+			// "shapes": every drawing's shapes (part, layer, kind, box),
+			// the selected one marked
+			for (const auto& [index, gr] : document.graphicsParts)
+				for (size_t l = 0; l < gr.layers.size(); l++)
+					for (size_t i = 0; i < gr.layers[l].shapes.size(); i++) {
+						const Shape& sh = gr.layers[l].shapes[i];
+						printf("shape part %zu layer %zu %zu %s %g,%g %gx%g%s\n", index, l, i,
+							FourCCString(sh.kind).c_str(), sh.origin[0], sh.origin[1],
+							sh.size[0], sh.size[1], fShape.active && fShape.part == index
+							&& fShape.layer == l && fShape.index == i ? " (selected)" : "");
+					}
+			fflush(stdout);
 		} else if (command.compare(0, 7, "cclick ") == 0) {
 			// "cclick x y": a click with Command held
 			float x, y;

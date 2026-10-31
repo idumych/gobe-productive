@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress.svg" alt="Port progress: 36 of 44 features done, 8 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 38 of 46 features done, 8 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, spreadsheets have caught up with the original's editing, documents
@@ -119,7 +119,8 @@ Clipboard.
 | Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | next |
 | Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | next |
 | New Window | not yet |
-| The ToolBar | in progress |
+| The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | next |
+| The ToolBar's part frames, Bezier and toolbar shapes tools | not yet |
 
 ### Word processor
 
@@ -160,7 +161,8 @@ sizes, headings and options are saved with the document.
 |---|---|
 | Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
 | Creating and linking frames | not yet |
-| Drawing tools | in progress |
+| Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | next |
+| Drawing tools: rotating, reshaping points, grouping, arranging, several shapes selected | not yet |
 | Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
 | Fill and pen inks for frames and drawings in the FormatBar | not yet |
 

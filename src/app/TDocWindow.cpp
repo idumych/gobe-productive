@@ -41,6 +41,7 @@
 #include "TRecentDocs.h"
 #include "TDocView.h"
 #include "TPageView.h"
+#include "TToolBar.h"
 #include "TTranslate.h"
 #include "TFormatBar.h"
 #include "TEntryBar.h"
@@ -187,6 +188,12 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 				fEntryBar->Hide();
 				pages->fEntryBar = fEntryBar;
 			}
+			// the ToolBar (Window > Show ToolBar): shown at first in drawings
+			fToolBar = new TToolBar(pages);
+			pages->fToolBar = fToolBar;
+			int main = document->MainPart();
+			if (main < 0 || document->parts.parts[size_t(main)].kind != Sig("GRFX"))
+				fToolBar->Hide();
 			// the SheetBar, shown for documents with several sheets
 			fSheetBar = new TSheetBar(*document);
 			if (document->SheetCount() < 2)
@@ -247,8 +254,15 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		layout.Add(fEntryBar);
 	if (fSheetBar != NULL)
 		layout.Add(fSheetBar);
+	// the ToolBar beside the document
+	{
+		BLayoutBuilder::Group<>::GroupBuilder middle = layout.AddGroup(B_HORIZONTAL, 0);
+		if (fToolBar != NULL)
+			middle.Add(fToolBar);
+		middle.Add(desk);
+		middle.End();
+	}
 	layout
-		.Add(desk)
 		.AddGroup(B_HORIZONTAL)
 			.SetInsets(B_USE_SMALL_INSETS, 2, B_USE_SMALL_INSETS, 2)
 			.Add(fStatus)
@@ -454,6 +468,20 @@ TDocWindow::MessageReceived(BMessage* message)
 		case 'sMFC':
 		case 'sMFE':
 			be_app->PostMessage(message);
+			return;
+		// Window > Hide/Show ToolBar
+		case 'sMF7':
+			if (fToolBar != NULL) {
+				if (fToolBar->IsHidden())
+					fToolBar->Show();
+				else
+					fToolBar->Hide();
+			}
+			return;
+		// the ToolBar's tools (TToolBar: the window's current tool)
+		case TToolBar::kMsgTool:
+			if (fPages != NULL)
+				fPages->SetTool(uint32(message->GetInt32("tool", 'ARRW')));
 			return;
 		// Window > Hide/Show FormatBar
 		case 'sMF4':
@@ -1439,7 +1467,8 @@ TDocWindow::MenusBeginning()
 			continue;
 		BView* bar = ribbon.command == 'sMF6' ? (BView*)fPartBar
 			: ribbon.command == 'sMF4' ? (BView*)fFormatBar
-			: ribbon.command == 'sMF3' ? (BView*)fSheetBar : NULL;
+			: ribbon.command == 'sMF3' ? (BView*)fSheetBar
+			: ribbon.command == 'sMF7' ? (BView*)fToolBar : NULL;
 		bool shown = bar != NULL && !bar->IsHidden();
 		if (ribbon.command == 'sMFD')
 			shown = sClipboardWindow.IsValid();

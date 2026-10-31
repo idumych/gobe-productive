@@ -80,6 +80,9 @@ struct Document {
 	bool documentFlagsChanged = false;
 	WPPart* EditableWordPart(size_t part);
 	SSPart* EditableSpreadsheetPart(size_t part);
+	// a graphics part to change (marked dirty: its 'GRAP' data is written
+	// anew on save)
+	GRPart* EditableGraphicsPart(size_t part);
 	// writes the document (changed parts written, everything else copied)
 	// and loads it again from `path`
 	bool Save(const std::string& path, std::string& error);
