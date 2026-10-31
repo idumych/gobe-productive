@@ -1209,11 +1209,43 @@ TPageView::RestoreInkLow()
 }
 
 
+// TFrame::Draw: a frame with its border on (flag 2: TFrame::SetBorder)
+// stroked with its pen (a hairline for size 0)
+void
+TPageView::DrawFrameBorder(const Document::PlacedFrame& f, BRect r)
+{
+	if (f.frame == NULL || !(f.frame->values[3] & 2))
+		return;
+	ShapeStyle style = ResolveShapeStyle(fDocument.styles, f.frame->style);
+	BGradient* gradient;
+	if (!style.pen.set || style.penOpacity <= 0
+			|| !SetInk(style.pen, style.penOpacity, r, &gradient))
+		return;
+	delete gradient;	// (pens: solid colors)
+	RestoreInkLow();
+	SetDrawingMode(style.penOpacity >= 0.999f ? B_OP_COPY : B_OP_ALPHA);
+	SetPenSize(std::max(1.0f, style.penSize));
+	StrokeRect(r);
+	SetPenSize(1);
+	SetDrawingMode(B_OP_COPY);
+}
+
+
 void
 TPageView::DrawFrameBackground(const Document::PlacedFrame& f, BRect r)
 {
 	ShapeStyle style = ResolveShapeStyle(fDocument.styles, f.frame->style);
 	BGradient* gradient;
+	// a frame in a drawing (TFrame::Draw: TShape::FillShape) has its fill,
+	// not a background (none of the samples' drawing frames has one; a new
+	// frame's style has a white one)
+	uint32_t container = f.frame->container;
+	if (container < fDocument.parts.parts.size()
+			&& (fDocument.parts.parts[container].kind == Sig("GRFX")
+				|| fDocument.parts.parts[container].kind == Sig("PRES"))) {
+		FillInk(r, style.fill, style.fillOpacity, r);
+		return;
+	}
 	if (!SetInk(style.background, style.backgroundOpacity, r, &gradient))
 		return;
 	SetDrawingMode(B_OP_ALPHA);
@@ -2153,6 +2185,7 @@ TPageView::Draw(BRect updateRect)
 		BRegion frameClip(ContainerClip(f).OffsetByCopy(dx, dy) & bounds);
 		ConstrainClippingRegion(&frameClip);
 		DrawFrame(f, r, kind, dx, dy);
+		DrawFrameBorder(f, r);
 		PopState();
 	}
 	DrawLines(updateRect, dx, dy);

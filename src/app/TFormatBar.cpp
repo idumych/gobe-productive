@@ -209,6 +209,10 @@ public:
 			}
 			menu->AddItem(new TIconMenuItem(kIcons[i], palette));
 		}
+		// the pen's: TPenMenu (MICN 0x1b), MENU 104's sizes (the pen types
+		// from the document's PenMgr aren't ported)
+		if (fColorCommand == 'sf06')
+			menu->AddItem(new TIconMenuItem(0x1b, PenSizeMenu()));
 		ribbon->DrawElement(this, true);
 		ribbon->Sync();
 		BPoint at = ribbon->ConvertToScreen(BPoint(rect.left - 1, rect.top - 2));
@@ -240,6 +244,26 @@ private:
 			transparency->AddItem(item);
 		}
 		return transparency;
+	}
+
+	// MENU 104 (Hairline, 1-8 pt: 'sf09' with the size as "value"); Other…
+	// ('sM0U') sends 'sM0U' as the value, for the dialog
+	BMenu* PenSizeMenu()
+	{
+		BMenu* sizes = new BMenu("");
+		TMenu source(104, true);
+		while (source.CountItems() > 0) {
+			BMenuItem* item = source.RemoveItem((int32)0);
+			if (BMessage* message = item->Message()) {
+				if (message->what == 'sM0U') {
+					message->MakeEmpty();
+					message->what = 'sf09';
+					message->AddInt32(kValueString, int32('sM0U'));
+				}
+			}
+			sizes->AddItem(item);
+		}
+		return sizes;
 	}
 
 	uint32 fColorCommand, fPatternCommand, fGradientCommand, fTransparencyCommand;

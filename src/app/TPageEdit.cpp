@@ -5733,6 +5733,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM44': case 'sM45': case 'sM48': case 'sM49': case 'sM4D': case 'sM4E': case 'sM4T':
 		case 'sM46': case 'sM47':
 		case 'sf06': case 'sf07': case 'sf08': case 'sf0E': case 'sf0S':	// pen, shapes
+		case 'sf09':														// the pen's size
 			return true;
 		default:
 			return false;

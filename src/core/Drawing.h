@@ -89,6 +89,12 @@ std::vector<size_t> ArrangeShapes(GRLayer& layer, const std::vector<size_t>& ind
 // user counts following; false if there's no such shape
 bool SetShapeProperty(Document& doc, size_t part, size_t layer, size_t index,
 	const Property& property);
+// The same for the frame `pointer` names (part, portal id, frame id: a
+// frame in a drawing; TFrame's style, as TFormatCommand sets a frame's):
+// its style made one with `property`; a pen (color, size, transparency)
+// turns its border on (flag 2: the frame's pen is drawn); its part's tail
+// written anew.
+bool SetFrameProperty(Document& doc, const uint32_t pointer[3], const Property& property);
 
 // the angle (degrees, counterclockwise as the shapes' are) of a point
 // around the shape's center, for rotating it by dragging (Arrange >

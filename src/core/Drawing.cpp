@@ -362,6 +362,26 @@ SetShapeProperty(Document& doc, size_t part, size_t layer, size_t index, const P
 }
 
 
+bool
+SetFrameProperty(Document& doc, const uint32_t pointer[3], const Property& property)
+{
+	Frame* frame = const_cast<Frame*>(FrameAt(doc, pointer));
+	if (frame == nullptr)
+		return false;
+	uint32_t to = StyleWithProperty(doc.styles, frame->style, property);
+	SetCellStyle(doc.styles, frame->style, to);
+	// a pen given to a frame: its border on (TFrame::SetBorder, flag 2),
+	// which is when a frame's pen is drawn (the port's choice: the
+	// original turns it on for frames dragged out without a pen)
+	if (property.type == Sig("PCol") || property.type == Sig("PENz")
+			|| property.type == Sig("PTra"))
+		frame->values[3] |= 2;
+	doc.stylesChanged = true;
+	doc.dirtyTails.insert(pointer[0]);
+	return true;
+}
+
+
 float
 AngleAround(const Shape& shape, float x, float y)
 {

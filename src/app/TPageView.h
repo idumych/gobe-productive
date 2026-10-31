@@ -414,6 +414,7 @@ private:
 	void DrawLines(BRect updateRect, float dx, float dy);
 	void DrawGraphics(const Document::PlacedFrame& frame, float dx, float dy);
 	void DrawFrameBackground(const Document::PlacedFrame& frame, BRect rect);
+	void DrawFrameBorder(const Document::PlacedFrame& frame, BRect rect);
 	void DrawPageGuides(const Document::PlacedFrame& frame, BRect rect);
 	void DrawSpreadsheet(const Document::PlacedFrame& frame, BRect rect);
 	void DrawImage(const Document::PlacedFrame& frame, BRect rect);
