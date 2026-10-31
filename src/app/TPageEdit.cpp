@@ -44,6 +44,7 @@
 #include "TStylesEdit.h"
 #include "SSStyle.h"
 #include "SSEval.h"
+#include "SSMove.h"
 #include "TDocWindow.h"
 #include "TTranslate.h"
 
@@ -461,10 +462,7 @@ TPageView::CellContextMenu(size_t part, int row, int column)
 	BMessage* message = new BMessage('sM76');
 	uint16 cell[2] = {uint16(row), uint16(column)};
 	message->AddData("cellID", B_RAW_TYPE, cell, sizeof(cell));
-	BMenuItem* move = new BMenuItem(IndexString(resources, 1505, 0).c_str(), message);
-	// (moving cells isn't ported yet)
-	move->SetEnabled(false);
-	menu->AddItem(move);
+	menu->AddItem(new BMenuItem(IndexString(resources, 1505, 0).c_str(), message));
 	int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
 	int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
 	int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
@@ -2634,6 +2632,53 @@ TPageView::MessageReceived(BMessage* message)
 						Invalidate();
 						return;
 					}
+					case 'sM76': {	// Move Cells… and Move Cells Here (TSSMoveCommand)
+						if (RangeLocked(r0, c0, r1, c1))
+							return;
+						const void* data = NULL;
+						ssize_t size = 0;
+						if (message->FindData("cellID", B_RAW_TYPE, &data, &size) != B_OK
+								|| size < 4) {
+							size_t part = fSelectedCell.part;
+							auto parse = [this, part](const std::string& text, uint16& row,
+									uint16& column) {
+								return ParseCellReference(part, text, row, column);
+							};
+							(new TDialogGotoMove(this, false, CellName({uint16_t(fSelectedCell.row),
+								uint16_t(fSelectedCell.column)}), parse))->RunDialog();
+							return;
+						}
+						// the block's top left cell goes to the cell given
+						const uint16* cell = (const uint16*)data;
+						int rows = int(cell[0]) - r0, columns = int(cell[1]) - c0;
+						if (rows == 0 && columns == 0)
+							return;
+						if (RangeLocked(r0 + rows, c0 + columns, r1 + rows, c1 + columns))
+							return;
+						// named ranges follow the cells, so the step keeps the document
+						fUndo.BeginDocument(fDocument, SSCommandName(6), CurrentViewState());
+						std::vector<SSRange> block{{{uint16_t(r0), uint16_t(c0)},
+							{uint16_t(r1), uint16_t(c1)}}};
+						if (MoveCellsCommand(fDocument, fSelectedCell.part, block, rows, columns)
+								!= MoveResult::moved) {
+							beep();
+							return;
+						}
+						// the moved block selected, the active cell moved with it
+						fSelectedCell.row += rows;
+						fSelectedCell.anchorRow += rows;
+						fSelectedCell.column += columns;
+						fSelectedCell.anchorColumn += columns;
+						fBook->Reset();
+						Rebuild();
+						BRect rect = CellViewRect(fSelectedCell.part, fSelectedCell.row,
+							fSelectedCell.column);
+						if (rect.IsValid() && !Bounds().Contains(rect))
+							ScrollTo(std::max(0.0f, rect.left - 20), std::max(0.0f, rect.top - 20));
+						Invalidate();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 					case 'sM78':	// Calculate Now (ChangeAll: every formula again)
 						fBook->Reset();
 						Invalidate();
@@ -4291,7 +4336,7 @@ TPageView::HandlesCommand(uint32 what)
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
-		case 'sM65': case 'sM77':
+		case 'sM65': case 'sM76': case 'sM77':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

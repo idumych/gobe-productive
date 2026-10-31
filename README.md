@@ -128,8 +128,9 @@ This preview is about the word processor.
   Format and Options menus when cells are selected: Number… (the number
   format categories), Lock and Unlock Cells, Column Width…, Row Height…,
   Display Options… (grid, locked cells shaded, formulas, headings), Fill
-  Down, Right, Up and Left, Go To Cell…, Calculate Now; the cell context
-  menu.
+  Down, Right, Up and Left, Go To Cell…, Move Cells… (formulas and named
+  ranges follow the cells), Calculate Now; the cell context menu, with
+  Move Cells Here.
 - Viewing: drawings, charts (2D), images, tables, clocks and presentations.
 
 **Not yet**
@@ -138,7 +139,7 @@ The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; named selections; Import and Export Styles; New Window; Show
 Clipboard; creating and linking frames; drawing tools; in spreadsheets
 Insert and Delete Cells' dialogs (for now they insert and delete the
-selected rows), Move and Sort Cells, Auto Calculate off, Select Dependents and marking circular
+selected rows), Sort Cells, Auto Calculate off, Select Dependents and marking circular
 references; new documents of other kinds; the Word, Excel, HTML and SYLK
 translators; the thesaurus and dictionary (they need data files that weren't part of
 Gobe Productive). Documents saved by the port open in the port; they
