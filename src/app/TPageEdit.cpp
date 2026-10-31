@@ -40,6 +40,7 @@
 #include <ctime>
 #include <sstream>
 
+#include "ChartPart.h"
 #include "DocWriter.h"
 #include "Editing.h"
 #include "StyleArchive.h"
@@ -495,13 +496,11 @@ TPageView::CellContextMenu(size_t part, int row, int column)
 			new BMessage('sM62')));
 		menu->AddItem(new BMenuItem(IndexString(resources, 1501, 9).c_str(),
 			new BMessage('sM63')));
-		// (with a chart part: making charts isn't ported yet)
+		// Make Chart (the chart part's factory is in every installation)
 		menu->AddSeparatorItem();
 		BMessage* chart = new BMessage('s00T');
 		chart->AddInt32("Kind", 'chrt');
-		BMenuItem* item = new BMenuItem(IndexString(resources, 1501, 15).c_str(), chart);
-		item->SetEnabled(false);
-		menu->AddItem(item);
+		menu->AddItem(new BMenuItem(IndexString(resources, 1501, 15).c_str(), chart));
 	}
 	menu->AddSeparatorItem();
 	TMenu* options = new TMenu(304, resources);
@@ -3333,6 +3332,34 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 's00T': {	// Make Chart (TDocWindow::DoInsertFrame, Kind 'chrt')
+						const SSPart* sheet = fDocument.SpreadsheetPart(fSelectedCell.part);
+						std::vector<SSRange> ranges = SelectedRanges();
+						if (message->GetInt32("Kind", 0) != int32('chrt') || sheet == NULL
+								|| ranges.empty())
+							return;
+						// the first range, within the cells in use (whole rows
+						// and columns selected by their headings)
+						SSRange range = ranges[0];
+						range.to.a = std::min(range.to.a, sheet->used.to.a);
+						range.to.b = std::min(range.to.b, sheet->used.to.b);
+						if (range.to.a < range.from.a || range.to.b < range.from.b) {
+							beep();
+							return;
+						}
+						fUndo.BeginDocument(fDocument, IndexString(GobeResources::Part("Spreadsheet"),
+							1501, 15), CurrentViewState());
+						std::string error;
+						if (MakeChart(fDocument, fSelectedCell.part, range, error) < 0) {
+							fprintf(stderr, "Make Chart: %s\n", error.c_str());
+							beep();
+							return;
+						}
+						// the frames anew (the parts' frames moved in memory)
+						GeometryChanged();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 					case 'sM7A': {	// Select Dependents (TPartSS::HandleMessage)
 						if (fDocument.SpreadsheetPart(fSelectedCell.part) == NULL)
 							return;
@@ -5548,6 +5575,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':
+		case 's00T':	// Make Chart
 			return true;
 		default:
 			return false;
