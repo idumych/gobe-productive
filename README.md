@@ -4,11 +4,13 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 28 of 39 features done, 11 left (see Status)" width="720"></p>
+
 The released **preview** (0.1.1) is focused on the word processor. Since
-then, work has moved to spreadsheets and documents with several sheets:
-most of the original's spreadsheet editing, the SheetBar, new
-spreadsheets, Word import, and the Excel, HTML, SYLK and text table translators now work in
-the sources here and will be in the next release. See [Status](#status).
+then, spreadsheets have caught up with the original's editing, documents
+have several sheets, and Word, Excel, HTML, SYLK and text tables open
+and save; that will be the next release. [Status](#status) lists what
+works and what's left.
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
 > with Gobe Software or the current owners of Gobe Productive. It contains
@@ -96,131 +98,91 @@ On Linux (X11), with Edit Styles:
 
 ## Status
 
-The 0.1.1 preview is about the word processor; spreadsheets in it are
-shown and their cells can be edited, with formulas evaluated. Everything
-listed under the "Since 0.1.1" headings is in the sources but
-not released yet: build it to try it.
+What the original Gobe Productive 2.0.1 does, area by area, and how far
+the port has come. **0.1.1** is in the released preview; **next** works in
+the sources here and will be in the next release (build it to try it);
+**in progress** is being written; **not yet** isn't started. The bar at
+the top counts these rows (`tools/readme_progress.py` redraws it), one row
+per feature, whatever its size: drawing tools weigh as much as Show
+Clipboard.
 
-**Works in 0.1.1**
+### Documents and windows
 
-- Opening and saving Gobe Productive documents. Only what was edited is
-  rewritten; everything else is kept byte for byte. File > New (word
-  processing documents), Open Recent, Revert, Insert… (text and RTF), Page
-  Setup, Print, Help (the original's User's Guide), About.
-- Text: typing, selection (double, triple and quadruple clicks; the arrow
-  keys with Command, Option and Control; Home/End, Page Up/Down), cut, copy
-  and paste with styles, undo and redo, Find/Change, the context menu,
-  fonts, sizes, faces, colours, alignment, Paragraph Format, tabs, line and
-  paragraph spacing, Copy/Paste Format, Show/Hide Invisibles; pages that
-  come and go with the text; margins, headers and footers; columns; page
-  numbers, dates, times and formulas as live fields; footnotes and endnotes;
-  separator lines and line, frame and page breaks; Word Count; the text
-  ruler; the FormatBar and the PartBar; zoom; Page View off (the browse
-  view); spell checking with the original's dictionaries; Preferences;
-  History; Document Size; styles: applying paragraph and basic styles, New
-  Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
-  formatting a style directly).
-- Plain text and RTF: opened as documents, saved with Save As's File Format.
-- Spreadsheets: shown, cells edited (values and formulas, evaluated), cut,
-  copy and paste, Fill Down and Fill Right, the selected rows inserted and
-  deleted.
-- Viewing: drawings, charts (2D), images, tables, clocks and presentations.
+| Feature | State |
+|---|---|
+| Opening and saving Gobe Productive documents; only what was edited is rewritten, everything else is kept byte for byte | 0.1.1 |
+| File menu: New (word processing), Open Recent, Revert, Insert… (text and RTF), Page Setup, Print, Help (the original's User's Guide), About | 0.1.1 |
+| File > New spreadsheets, laid out as the original's (rows 1-500, columns A-T, its grid and heading styles) | next |
+| File > New documents of the other kinds (drawing, presentation) | not yet |
+| Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | next |
+| Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | next |
+| New Window | not yet |
+| The ToolBar | not yet |
 
-### Since 0.1.1: sheets, new spreadsheets and translators
+### Word processor
 
-- **New spreadsheets:** File > New makes spreadsheets too, laid out as the
-  original's (rows 1-500, columns A-T, its grid and heading styles).
-- **Sheets:** the SheetBar (View > Show SheetBar) has a tab per sheet; a
-  tab shows its sheet (CheckBook's Setup, Summary and months), and the
-  document saves showing it. New Sheet… (spreadsheets and text), Delete
-  Sheet and Rename Sheet… in its options menu (or a double click on a
-  tab); a tab dragged along moves its sheet; all of them undo.
-- **HTML:** word processing documents saved as HTML and HTML files opened,
-  as the HTML translator did (paragraphs, headings, alignment, sizes,
-  colors, faces, lists, rules, entities; pictures and tables not yet).
-- **Text tables:** tab, comma or semicolon separated text opens as a
-  spreadsheet, and spreadsheets save as such text (each cell as shown, or
-  its formula with Show Formulas on).
-- **SYLK:** spreadsheets saved as SYLK (values as calculated, formulas in
-  R1C1, number formats, column widths) and SYLK files opened as new
-  spreadsheets, dates and currencies included. Fonts aren't carried.
-- **Excel:** spreadsheets saved as Microsoft Excel 97 workbooks (every
-  spreadsheet sheet, values, formulas, number formats, dates, column
-  widths), and workbooks from Excel 5 on (.xls) opened as spreadsheets, a
-  sheet per worksheet with its name: numbers, text, booleans, errors,
-  number formats, dates, column widths, defined names (as named
-  selections), and formulas turned into Gobe's (those reaching into other
-  sheets or data tables keep their values).
-- **Word:** Word 97 and later documents (.doc) open as text documents:
-  paragraphs, bold, italic, underline, strikeout, super- and subscript,
-  sizes, fonts, colors, alignment, indents and spacing, line breaks,
-  fields as their results.
-- **Show Clipboard** (Window menu) opens a window with what was copied
-  last: text with its styles, or cells with their values.
-- **Ranges** are written A1..B2, as Gobe Productive writes them (A1:B2 is
-  still understood).
+| Feature | State |
+|---|---|
+| Typing, selection (double, triple and quadruple clicks; the arrow keys with Command, Option and Control; Home/End, Page Up/Down), cut, copy and paste with styles, undo and redo, Find/Change, the context menu | 0.1.1 |
+| Fonts, sizes, faces, colours, alignment, Paragraph Format, tabs, line and paragraph spacing, Copy/Paste Format, Show/Hide Invisibles | 0.1.1 |
+| Pages that come and go with the text; margins, headers and footers; columns; line, frame and page breaks; separator lines | 0.1.1 |
+| Page numbers, dates, times and formulas as live fields; footnotes and endnotes | 0.1.1 |
+| Styles: applying paragraph and basic styles, New Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, formatting a style directly) | 0.1.1 |
+| Import Styles and Export Styles | not yet |
+| Spell checking with the original's dictionaries | 0.1.1 |
+| The thesaurus and dictionary (they need data files that weren't part of Gobe Productive) | not yet |
+| Word Count, the text ruler, the FormatBar and PartBar, zoom, the browse view, Preferences, History, Document Size | 0.1.1 |
 
-### Since 0.1.1: spreadsheets
+### Spreadsheets
 
-With cells selected, the original's Format and Options menus appear, and
-these work as they did in Gobe Productive, with its dialogs and alerts:
+With cells selected, the original's Format and Options menus appear and
+work as they did, with its dialogs and alerts; the edits undo (display
+options and Auto Calculate are settings, as in the original), and locks,
+sizes, headings and options are saved with the document.
 
-- **Formats:** Number… (the original's number format categories), Lock
-  Cells and Unlock Cells (locked cells refuse changes), Column Width…, Row
-  Height… (or drag a heading's edge), Display Options… (grid, locked cells shaded, formulas instead of
-  their results, column and row headings, circular references marked).
-- **Filling:** Fill Down, Right, Up and Left.
-- **Moving cells:** Move Cells… and the context menu's Move Cells Here;
-  formulas, and named ranges, follow the cells they refer to.
-- **Inserting and deleting:** Insert Cells… and Delete Cells… shift cells
-  down or right, up or left; whole rows and columns, selected by clicking
-  their headings, go in and out, the sheet growing and shrinking with them.
-  References to deleted cells become #REF!.
-- **Sorting:** Sort… by up to three keys, each ascending or descending, in
-  the original's order (numbers, text, true/false, errors, empty cells).
-- **Copy and paste:** cells copied and pasted as cells, formulas
-  referring to the cells around where they land (absolute references stay)
-  and formats coming along; Paste Special… (values and formulas or values
-  only, with or without the formatting); Copy Format and Paste Format put
-  one cell's formatting on others.
-- **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
-- **The EntryBar:** the active cell's contents under the PartBar; typing
-  on a cell edits there, Enter (or Accept) puts it in and moves down, Tab
-  moves right, Escape (or Cancel) leaves the cell as it was; its function
-  button opens Paste Function (the original's functions by category, with
-  their help) to put a function in. A double click still edits in the cell.
-- **Named selections:** Name Selection… in the FormatBar's Names menu
-  names the selected cells (refusing a name that's taken or isn't valid);
-  the name then appears in that menu to select them again, works in
-  formulas (`=SUM(Rates)`) and is saved with the document. Edit Names…
-  shows each name's cells and renames or deletes them (undoably).
-- **The FormatBar for cells:** font, size, faces, text color and fill
-  color for the selected cells, the bar showing the active cell's.
-- **The PartBar for cells:** the selection's address (a double click goes
-  to a cell), the horizontal and vertical alignment menus with Wrap Text,
-  cell borders (the outline or one side, a color and a transparency),
-  Number Formatting. Make Chart is shown but off.
-- **Selecting:** whole rows and columns by their headings (shift-click or
-  drag for more), the corner for every cell in use; several ranges at once
-  with Command-click (Alt on Haiku), which formats, locks, fills, clears,
-  moves and sorts act on together; Select Dependents (the formulas that
-  depend on the selection); the cell context menu.
-- The edits can be undone (display options and Auto Calculate are
-  settings, not edits, as in the original), and the sheet's locks, sizes,
-  headings and options are saved with the document.
+| Feature | State |
+|---|---|
+| Cells edited (values and formulas, evaluated), cut, copy and paste, Fill Down and Fill Right, rows inserted and deleted | 0.1.1 |
+| The EntryBar (Enter, Tab, Escape, Accept and Cancel) and Paste Function (the original's functions by category, with their help) | next |
+| Number…, Lock and Unlock Cells, Column Width… and Row Height… (or a heading's edge dragged), Display Options… | next |
+| Fill Up and Left; Move Cells… (formulas and names follow); Insert Cells… and Delete Cells…, whole rows and columns (#REF! for deleted references); Sort… by up to three keys | next |
+| Cells copied and pasted as cells (relative references adjusted), Paste Special…, Copy Format and Paste Format | next |
+| Calculate Now, Auto Calculate, Go To Cell…; named selections (Name Selection…, Edit Names…, names in formulas) | next |
+| The FormatBar and PartBar for cells: font, size, faces, colours, alignment, Wrap Text, borders, Number Formatting | next |
+| Selecting rows, columns and every cell by the headings; several ranges at once with Command-click; Select Dependents | next |
+| Charts made from cells (Make Chart is shown but off) | not yet |
+
+### Frames and drawing
+
+| Feature | State |
+|---|---|
+| Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
+| Creating and linking frames | not yet |
+| Drawing tools | not yet |
+| Pattern and gradient inks; fill, pen and transparency in the FormatBar | not yet |
+
+### Other formats (translators)
+
+Opened with File > Open, saved with Save As's File Format menu.
+
+| Feature | State |
+|---|---|
+| Plain text: opened and saved | 0.1.1 |
+| RTF: opened and saved | 0.1.1 |
+| HTML: text documents opened and saved (paragraphs, headings, alignment, sizes, colours, faces, lists, rules, entities) | next |
+| HTML: pictures and tables | not yet |
+| Text tables: tab, comma or semicolon separated, opened as spreadsheets and saved from them (cells as shown, or formulas with Show Formulas on) | next |
+| SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths; not fonts or row heights) | next |
+| Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | next |
+| Microsoft Word: Word 97 and later documents opened (faces, sizes, fonts, colours, alignment, indents, spacing, line breaks, fields as their results) | next |
+| Microsoft Word: documents saved as Word 97 | in progress |
+
+Ranges are written A1..B2, as Gobe Productive writes them (A1:B2 is still
+understood).
 
 Tested on Haiku R1/beta6 in a virtual machine, with the original's sample
-documents.
-
-**Not yet**
-
-The ToolBar; pattern and gradient inks, fill, pen and transparency in the
-FormatBar; Import and Export Styles; New Window; creating
-and linking frames; drawing tools; in spreadsheets charts made from cells;
-new documents of other kinds than word processing and spreadsheets; the
-Word export; the thesaurus and dictionary (they need data
-files that weren't part of Gobe Productive). Documents saved by the port
-open in the port; they haven't been tried in the original on BeOS.
+documents. Documents saved by the port open in the port; they haven't
+been tried in the original on BeOS.
 
 ## Building
 
