@@ -1474,14 +1474,15 @@ RTFWriter::Picture(const WPMiscInfo& frame)
 	const Frame* f = FrameAt(fDoc, frame.frame);
 	const IMPart* image = f != nullptr ? fDoc.ImagePart(f->part) : nullptr;
 	if (image == nullptr) {
-		// a table: its cells' text, a \line before each row, \tab between
-		// the cells (the port's)
+		// a table: its cells' text, each row a paragraph (\par before it;
+		// the original's reader has no \line), \tab between the cells
+		// (the port's)
 		std::string table = TableText(fDoc, frame.frame), segment;
 		for (char c : table) {
 			if (c == '\x01' || c == '\t') {
 				Text(segment);
 				segment.clear();
-				fOut += c == '\t' ? "\\tab " : "\\line ";
+				fOut += c == '\t' ? "\\tab " : "\\par ";
 			} else
 				segment += c;
 		}

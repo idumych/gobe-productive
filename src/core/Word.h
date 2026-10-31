@@ -62,7 +62,8 @@ std::vector<uint8_t> WordFileBytes(const std::vector<WordParagraph>& paragraphs)
 // a table frame's cells as text (`pointer` a FrameRef's): a line break
 // (0x01) before each row, tabs between the cells, a cell's line ends as
 // spaces; empty for a frame of another part. (Save As Word and RTF write
-// tables so: the original writes Word tables and RTF pictures of them.)
+// tables' text from it: the original writes Word tables and RTF pictures
+// of them.)
 std::string TableText(const Document& doc, const uint32_t pointer[3]);
 
 // Save As "Microsoft Word": the document's main word processing part.
