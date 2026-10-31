@@ -13,6 +13,8 @@ class BListView;
 
 namespace gobe {
 
+struct Document;
+
 // the application's number formats (GetNumFormatFactory), loaded from the
 // original's resources on first use
 const NumberFormats& AppNumberFormats();
@@ -158,6 +160,24 @@ protected:
 
 private:
 	BHandler* fTarget;
+};
+
+// Name Selection… (TDialogSelectionName, a TDialogGenericGetString: DIAL
+// 31): the name, STR# 3, 13 its title and (with ":") its label; OK with a
+// name no reference has (else STR# 6, 18) and valid (TString::ValidName,
+// else STR# 6, 19) sends `target` 'sfN0' with "name"
+class TDialogSelectionName : public TDialog {
+public:
+	TDialogSelectionName(BHandler* target, const Document& doc, const std::string& text);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+	const Document& fDocument;
+	std::string fText;
 };
 
 // Options > Fill Special… (TDialogFillSpecial; TSSDialog 26): Apply To

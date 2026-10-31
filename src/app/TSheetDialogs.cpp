@@ -15,6 +15,8 @@
 
 #include "GobeResources.h"
 #include "SSSort.h"
+#include "Names.h"
+#include "Document.h"
 #include "TEntryBar.h"
 #include "SSEval.h"
 #include "SSStyle.h"
@@ -722,6 +724,53 @@ TDialogSSPasteSpecial::ItemHit(int32 index, BMessage* message)
 	}
 	PostMessage(B_QUIT_REQUESTED);
 	return false;
+}
+
+
+TDialogSelectionName::TDialogSelectionName(BHandler* target, const Document& doc,
+		const std::string& text)
+	:
+	TDialog(31, 31, 'APPL', NULL),
+	fTarget(target),
+	fDocument(doc),
+	fText(text)
+{
+}
+
+
+// TDialogGenericGetString::Init
+void
+TDialogSelectionName::Init()
+{
+	BString title = GobeResources::IndexString(3, 13);
+	SetTitle(title.String());
+	title << ":";
+	SetLabelItem(2, title.String());
+	SetTextItem(2, fText.c_str());
+	MakeFocusItem(2);
+}
+
+
+// TDialogSelectionName::ValidateAndSendMsg
+bool
+TDialogSelectionName::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		std::string name = TextItem(2).String();
+		size_t part, reference;
+		int32 alert = fDocument.FindName(name, -1, part, reference) ? 18
+			: !ValidName(name) ? 19 : -1;
+		if (alert >= 0) {
+			(new BAlert("", GobeResources::IndexString(6, alert).String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		BMessage named('sfN0');
+		named.AddString("name", name.c_str());
+		if (fTarget != NULL && fTarget->Looper() != NULL)
+			fTarget->Looper()->PostMessage(&named, fTarget);
+	}
+	return TDialog::ItemHit(index, message);
 }
 
 

@@ -15,6 +15,7 @@
 #include "SSStyle.h"
 #include "TDocWindow.h"
 #include "TInkMenus.h"
+#include "Names.h"
 #include "TMenu.h"
 #include "TPageView.h"
 
@@ -287,13 +288,25 @@ public:
 		tip = GobeResources::IndexString(4, 10).String();
 	}
 
-	// TNamesMenuElement::FixMenu: MENU 111 (Name Selection…, Edit
-	// Names…), then the document's names (not ported yet)
+	// TNamesMenuElement::FixMenu: MENU 111 (Name Selection… with cells
+	// selected; Edit Names… isn't ported), then the document's names
+	// (TSelectionMgr::GetNamedSelections), each sending 'sfN2' with "Name"
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
 	{
 		AddMenuItems(menu, 111);
-		for (int32 i = 0; i < menu->CountItems(); i++)
-			menu->ItemAt(i)->SetEnabled(false);
+		bool cells = bar->Pages()->fSelectedCell.active;
+		for (int32 i = 0; i < menu->CountItems(); i++) {
+			BMenuItem* item = menu->ItemAt(i);
+			item->SetEnabled(item->Message() != NULL && item->Message()->what == 'sfN0' && cells);
+		}
+		std::vector<std::string> names = SelectionNames(bar->Pages()->Doc());
+		if (!names.empty())
+			menu->AddSeparatorItem();
+		for (const std::string& name : names) {
+			BMessage* message = new BMessage('sfN2');
+			message->AddString("Name", name.c_str());
+			menu->AddItem(new BMenuItem(name.c_str(), message));
+		}
 	}
 };
 
@@ -401,7 +414,8 @@ TFormatBar::TFormatBar(TPageView* pages)
 	r.right = r.left + 100;
 	fStyles = new TStylesElement(r);
 	AddElement(fStyles);
-	AddElement(new TNamesElement(BPoint(r.right + 7, 2)));
+	fNames = new TNamesElement(BPoint(r.right + 7, 2));
+	AddElement(fNames);
 }
 
 
@@ -526,6 +540,26 @@ TFormatBar::ChooseStyle(const char* name)
 	fSynchronous = true;
 	Send(&message);
 	fSynchronous = false;
+}
+
+
+std::string
+TFormatBar::NamesMenu(const char* choose)
+{
+	BPopUpMenu menu("names");
+	fNames->Fill(&menu, this);
+	std::string shown;
+	for (int32 i = 0; i < menu.CountItems(); i++) {
+		BMenuItem* item = menu.ItemAt(i);
+		if (choose != NULL && strcmp(item->Label(), choose) == 0 && item->Message() != NULL) {
+			fSynchronous = true;
+			Send(item->Message());
+			fSynchronous = false;
+		}
+		shown += std::string(i > 0 ? "|" : "") + (item->Label()[0] != '\0' ? item->Label() : "-")
+			+ (item->IsEnabled() ? "" : "(off)");
+	}
+	return shown;
 }
 
 

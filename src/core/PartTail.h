@@ -77,6 +77,8 @@ struct Portal {
 struct PartTail {
 	size_t offset = 0;			// in the part record
 	std::vector<Reference> refs;
+	uint32_t refNext = 0;		// TRefTable +0x0: the next reference's id
+	bool refsChanged = false;	// refs written from the parsed form
 	std::vector<Portal> portals;
 	std::vector<uint8_t> refsRaw;	// 'REFT' ... 'RefT' as read
 };

@@ -39,12 +39,16 @@ public:
 	// or style `name` in Styles, sends (handled at once)
 	void ChooseColor(int32 index, bool fill = false);
 	void ChooseStyle(const char* name);
+	// test hook: the Names menu's items ("label" or "label(off)", "|"
+	// between), or with `choose` that item's message sent (handled at once)
+	std::string NamesMenu(const char* choose = NULL);
 
 private:
 	TPageView* fPages;
 	TFormatMenuElement* fFont;
 	TFormatMenuElement* fSize;
 	TFormatMenuElement* fStyles;
+	TFormatMenuElement* fNames;
 	TInkIndicatorElement* fTextInk;
 	TInkIndicatorElement* fFillInk;
 	TInkIndicatorElement* fPenInk;

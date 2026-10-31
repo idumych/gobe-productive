@@ -153,6 +153,10 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
   moves right, Escape (or Cancel) leaves the cell as it was; its function
   button opens Paste Function (the original's functions by category, with
   their help) to put a function in. A double click still edits in the cell.
+- **Named selections:** Name Selection… in the FormatBar's Names menu
+  names the selected cells (refusing a name that's taken or isn't valid);
+  the name then appears in that menu to select them again, works in
+  formulas (`=SUM(Rates)`) and is saved with the document.
 - **The FormatBar for cells:** font, size, faces, text color and fill
   color for the selected cells, the bar showing the active cell's.
 - **The PartBar for cells:** the selection's address (a double click goes

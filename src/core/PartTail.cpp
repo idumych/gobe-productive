@@ -175,7 +175,7 @@ ReadTailAt(DocArchive& a, uint32_t kind, PartTail& out)
 {
 	size_t start = a.Position();
 	a.CheckSig(Sig("REFT"));
-	a.UInt32();
+	out.refNext = a.UInt32();
 	uint32_t refs = a.UInt32();
 	for (uint32_t i = 0; i < refs; i++) {
 		Reference r;
@@ -233,7 +233,26 @@ std::vector<uint8_t>
 WritePartTail(const PartTail& tail, uint32_t kind)
 {
 	DocWriter w;
-	w.Bytes(tail.refsRaw);
+	if (tail.refsChanged) {
+		// TRefTable::Write: each reference's index set first (+0xc)
+		w.Sig(Sig("REFT"));
+		w.UInt32(tail.refNext);
+		w.UInt32(uint32_t(tail.refs.size()));
+		for (size_t i = 0; i < tail.refs.size(); i++) {
+			const Reference& r = tail.refs[i];	// TReference::Write
+			w.UInt32(r.value14);
+			w.Bool(r.flag0);
+			w.Bool(r.flag1);
+			w.String(r.name);
+			w.Bool(r.selection != 0xffffffff);
+			if (r.selection != 0xffffffff)
+				w.UInt32(r.selection);
+			w.UInt32(uint32_t(i));
+			w.UInt32(r.value10);
+		}
+		w.Sig(Sig("RefT"));
+	} else
+		w.Bytes(tail.refsRaw);
 	w.UInt32(uint32_t(tail.portals.size()));
 	for (const Portal& p : tail.portals) {
 		w.Sig(Sig("PORT"));

@@ -49,6 +49,7 @@
 #include "SSMove.h"
 #include "SSSort.h"
 #include "SSPaste.h"
+#include "Names.h"
 #include "TDocWindow.h"
 #include "TEntryBar.h"
 #include "TTranslate.h"
@@ -2690,6 +2691,36 @@ TPageView::MessageReceived(BMessage* message)
 		default: {
 			static const uint32 kCmdClear = 'sM12';
 			// cell selection: handle before text handling
+			if (message->what == 'sfN2') {
+				// a name of the Names menu chosen: its selection selected
+				// (TSelectionMgr's named selection; cells here)
+				const char* name = message->GetString("Name", "");
+				const Selection* sel = fDocument.NamedSelection(name);
+				if (sel == NULL || sel->kind != Sig("SPRD") || sel->ranges.empty()
+						|| fDocument.SpreadsheetPart(sel->part) == NULL) {
+					beep();
+					return;
+				}
+				if (fCellEditor != NULL)
+					EndCellEdit(true);
+				fCaret.active = false;
+				fAnchor.active = false;
+				fSelectedCell.active = true;
+				fSelectedCell.part = sel->part;
+				fSelectedCell.kind = SelectionKind::cells;
+				fSelectedCell.extra.clear();
+				for (size_t k = 0; k + 1 < sel->ranges.size(); k++) {
+					const auto& r = sel->ranges[k];
+					fSelectedCell.extra.push_back({{r[0], r[1]}, {r[2], r[3]}});
+				}
+				const auto& last = sel->ranges.back();
+				fSelectedCell.anchorRow = last[0];
+				fSelectedCell.anchorColumn = last[1];
+				fSelectedCell.row = last[2];
+				fSelectedCell.column = last[3];
+				Invalidate();
+				return;
+			}
 			if (fSelectedCell.active && fCellEditor == NULL) {
 				int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
 				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
@@ -3331,6 +3362,30 @@ TPageView::MessageReceived(BMessage* message)
 						if (fEntryBar != NULL)
 							fEntryBar->EndEdit();
 						return;
+					case 'sfN0': {	// Name Selection… (TNameSelectionCommand)
+						const char* name = NULL;
+						if (message->FindString("name", &name) != B_OK || name == NULL) {
+							// the dialog, the active cell's text as the name if
+							// it makes one (TPart: the selection's text)
+							std::string text;
+							if (const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part))
+								text = CellInput(*ss, uint16_t(fSelectedCell.row),
+									uint16_t(fSelectedCell.column));
+							if (text.size() > 63 || !ValidName(text))
+								text.clear();
+							(new TDialogSelectionName(this, fDocument, text))->RunDialog();
+							return;
+						}
+						fUndo.BeginDocument(fDocument, "Name Selection", CurrentViewState());
+						if (!NameCellSelection(fDocument, fSelectedCell.part, name,
+								SelectedRanges(), CellID{uint16_t(fSelectedCell.row),
+								uint16_t(fSelectedCell.column)})) {
+							beep();
+							return;
+						}
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 					case 'sM72':	// Fill Special… (TDialogFillSpecial: it does nothing)
 						(new TDialogFillSpecial())->RunDialog();
 						return;
@@ -3542,7 +3597,8 @@ TPageView::MessageReceived(BMessage* message)
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
-// "formatbar show|color N|fill N|style NAME" — the format bar (TFormatBar).
+// "formatbar show|color N|fill N|style NAME|names|name LABEL" — the format
+// bar (TFormatBar); "names" prints the Names menu, "name" picks its item.
 // "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
 // dictionaries" — the SpellBar (Spell Check's commands 'sMC0'..'sMC6',
 // "check" the PartBar's button; "show" prints it and the selection).
@@ -3585,6 +3641,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 					bar->ChooseColor(atoi(what.c_str() + 5), true);
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
+				else if (what == "names") {
+					printf("names %s\n", bar->NamesMenu().c_str());
+					fflush(stdout);
+				} else if (what.compare(0, 5, "name ") == 0)
+					bar->NamesMenu(what.c_str() + 5);
 			}
 		} else if (command.compare(0, 8, "context ") == 0
 				|| command.compare(0, 12, "contextpick ") == 0) {
@@ -4017,6 +4078,21 @@ TPageView::RunScript(const std::string& script, Document& document)
 			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
 			if (command.size() > 13)
 				msg.AddInt32(kValueString, atoi(command.c_str() + 13));
+			MessageReceived(&msg);
+		} else if (command.compare(0, 8, "nameset ") == 0 || command.compare(0, 8, "namesel ") == 0
+				|| command == "names") {
+			// "nameset NAME": Name Selection… as its dialog's OK sends it;
+			// "namesel NAME": that name chosen in the Names menu; "names":
+			// the document's names printed
+			if (command == "names") {
+				std::string all;
+				for (const std::string& name : SelectionNames(fDocument))
+					all += " " + name;
+				fprintf(stderr, "names%s\n", all.c_str());
+				continue;
+			}
+			BMessage msg(command[6] == 't' ? 'sfN0' : 'sfN2');
+			msg.AddString(msg.what == 'sfN0' ? "name" : "Name", command.c_str() + 8);
 			MessageReceived(&msg);
 		} else if (command == "headerfooter 0" || command == "headerfooter 1") {
 			// Document > Insert/Remove Header (0), Footer (1)
@@ -5331,7 +5407,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
 		case 'sM65': case 'sM67': case 'sM68': case 'sM69': case 'sM6A': case 'sM6B':
-		case 'sM13': case 's007': case 's008': case 'sM72':
+		case 'sM13': case 's007': case 's008': case 'sM72': case 'sfN0': case 'sfN2':
 		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':
