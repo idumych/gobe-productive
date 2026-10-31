@@ -916,6 +916,18 @@ Document::EditableSpreadsheetPart(size_t part)
 }
 
 
+GRPart*
+Document::EditableGraphicsPart(size_t part)
+{
+	for (auto& [index, gr] : graphicsParts)
+		if (index == part) {
+			dirtyParts.insert(part);
+			return &gr;
+		}
+	return nullptr;
+}
+
+
 bool
 Document::Save(const std::string& to, std::string& error)
 {
@@ -956,6 +968,17 @@ Document::Save(const std::string& to, std::string& error)
 			out = WriteWPPart(*wp, record);
 		else if (dirtyParts.count(part) && SpreadsheetPart(part) != nullptr)
 			out = WriteSSPart(*SpreadsheetPart(part), record);
+		else if (dirtyParts.count(part) && GraphicsPart(part) != nullptr
+				&& GraphicsPart(part)->dataEnd > GraphicsPart(part)->dataStart
+				&& GraphicsPart(part)->dataEnd <= record.size()) {
+			// TPartGR::Write's data between what's around it as read
+			const GRPart* gr = GraphicsPart(part);
+			std::vector<uint8_t> data = WriteGRData(*gr, file.header.version.values[2],
+				file.header.version.values[0]);
+			out.assign(record.begin(), record.begin() + long(gr->dataStart));
+			out.insert(out.end(), data.begin(), data.end());
+			out.insert(out.end(), record.begin() + long(gr->dataEnd), record.end());
+		}
 		else
 			out = record;
 		// the tail (it moved with the body's new size): the frames as they
