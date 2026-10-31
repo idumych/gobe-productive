@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress.svg" alt="Port progress: 36 of 44 features done, 8 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 37 of 44 features done, 7 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, spreadsheets have caught up with the original's editing, documents
@@ -176,7 +176,7 @@ Opened with File > Open, saved with Save As's File Format menu.
 | HTML: text documents opened and saved (paragraphs, headings, alignment, sizes, colours, faces, lists, rules, entities) | next |
 | HTML: tables saved as tables (a table in the text, a table sheet), as the original wrote them | next |
 | HTML: pictures in the text saved as PNG files in a "<name>.images" folder (image parts; the original drew any frame and wrote GIF or JPEG) | next |
-| HTML: pictures opened; tables opened as tables (they open as tab-separated lines) | in progress |
+| HTML: tables opened as tables (a table part in the text, its cells' text formatted, WIDTH, BORDER, CELLPADDING, tables in cells; column spans not yet) and pictures (PNG, and through the system's translators GIF, JPEG and the rest; else the ALT text) | next |
 | Text tables: tab, comma or semicolon separated, opened as spreadsheets and saved from them (cells as shown, or formulas with Show Formulas on) | next |
 | SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths, row heights, the default font) | next |
 | Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | next |

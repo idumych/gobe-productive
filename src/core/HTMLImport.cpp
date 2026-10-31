@@ -329,6 +329,7 @@ struct TableBuild {
 	std::vector<std::vector<CellBuild>> rows;
 	std::string width;			// WIDTH
 	float padding = 1;			// CELLPADDING (TTable's cell inset)
+	float border = 0;			// BORDER (no value: 1)
 	bool cellOpen = false;
 };
 
@@ -465,6 +466,7 @@ TableLayout(const std::vector<Embedded>& objects, TableBuild& t, float available
 		table.columns.push_back(std::max(20.0f, fixed[c] > 0 ? fixed[c]
 			: (width - used) / float(std::max<size_t>(1, free))));
 	table.inset = t.padding;
+	table.border = t.border;
 	for (auto& row : t.rows) {
 		float height = 17;
 		std::vector<std::string> texts;
@@ -735,6 +737,19 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error,
 				if (n == "UL" || n == "OL" || n == "DL" || n == "TD" || n == "TABLE")
 					break;
 			}
+		// in a table, a cell closes the cell open, a row the row open
+		// (their end tags are optional), as far as the innermost TABLE
+		if (name == "TD" || name == "TH" || name == "TR")
+			for (size_t k = open.size(); k > 0; k--) {
+				const std::string& n = open[k - 1].name;
+				if (n == "TABLE")
+					break;
+				if (n == "TR" || ((name == "TD" || name == "TH") && (n == "TD" || n == "TH"))) {
+					if (n != "TR" || name == "TR")
+						close(n);
+					break;
+				}
+			}
 		State saved = state;
 		// doElementPreChildren
 		if (name == "B" || name == "STRONG")
@@ -809,6 +824,8 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error,
 				t->width = *width;
 			if (const std::string* padding = attribute("CELLPADDING"))
 				t->padding = float(atof(padding->c_str()));
+			if (const std::string* border = attribute("BORDER"))
+				t->border = border->empty() ? 1 : float(atof(border->c_str()));
 			cur = &t->limbo;
 			tables.push_back(std::move(t));
 		} else if ((name == "TD" || name == "TH" || name == "TR") && !tables.empty()) {

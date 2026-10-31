@@ -15,6 +15,7 @@
 #include "HTMLExport.h"
 #include "HTMLImport.h"
 #include "InlineParts.h"
+#include "Styles.h"
 
 using namespace gobe;
 
@@ -158,6 +159,19 @@ main(int argc, char** argv)
 		Check(f != nullptr && f->container == o->textPart, "the inner table in the outer's text");
 	}
 	Check(MainText(hand) == "Intro\n[TBLE]\nMissing [no picture] end", "the text: " + MainText(hand));
+	if (hand.tableParts.size() == 2) {
+		// only the TH row bold (the cells' end tags left out)
+		size_t outer = hand.tableParts[0].first;
+		const WPPart* cells = hand.WordPart(hand.Table(outer)->textPart);
+		int h = CellParagraph(hand, outer, 0, 0), a = CellParagraph(hand, outer, 1, 0);
+		auto bold = [&](int p) {
+			if (p < 0 || cells->paragraphs[size_t(p)].runs.empty())
+				return false;
+			return (ResolveTextStyle(hand.styles, cells->paragraphs[size_t(p)].runs[0].style)
+				.faceFlags & 2) != 0;
+		};
+		Check(bold(h) && !bold(a), "TH bold, TD not");
+	}
 	std::string handHTML = HTMLText(hand, "t");
 	Check(handHTML.find("<TD WIDTH=") != std::string::npos
 		&& handHTML.find("<B>H1</B>") != std::string::npos, "TH bold in HTML again");

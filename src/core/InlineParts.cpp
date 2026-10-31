@@ -11,6 +11,7 @@
 #include "DocWriter.h"
 #include "Document.h"
 #include "PartTail.h"
+#include "Styles.h"
 #include "TablePart.h"
 #include "WPPart.h"
 
@@ -205,6 +206,35 @@ WriteBitmap(DocWriter& w, const ArchiveBitmap& bitmap)
 }
 
 
+// a style based on `base` with these properties of its own (the
+// properties found in the style manager's list, else added)
+uint32_t
+DerivedStyle(StyleMgr& styles, uint32_t base, const std::vector<Property>& properties)
+{
+	Style style;
+	if (base < styles.styles.size()) {
+		const Style& b = styles.styles[base];
+		style.id = b.id;
+		style.value4 = b.value4;
+		style.value10 = b.value10;
+	}
+	style.links[0] = base;
+	style.links[1] = kNone;
+	style.links[2] = kNone;
+	for (const Property& p : properties) {
+		size_t i = 0;
+		while (i < styles.properties.size() && !(styles.properties[i].type == p.type
+				&& styles.properties[i].data == p.data))
+			i++;
+		if (i == styles.properties.size())
+			styles.properties.push_back(p);
+		style.props.push_back(uint32_t(i));
+	}
+	styles.styles.push_back(style);
+	return uint32_t(styles.styles.size() - 1);
+}
+
+
 uint32_t
 DefaultStyle(const Document& doc)
 {
@@ -280,12 +310,30 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 	}
 	body.UInt32(text);
 	body.UInt32(0);
-	// its frame in the container (TTableFrame adds nothing)
+	// its frame in the container (TTableFrame adds nothing), its style the
+	// frames' with the border as its pen (TTableImport::DoImport: none
+	// transparent, else that size, black)
+	Color black;
+	Property pen[3] = {Property{Sig("PCol"), {}}, Property{Sig("PENz"), {}},
+		Property{Sig("PTra"), {}}};
+	{
+		Ink ink;
+		ink.set = true;
+		ink.color = black;
+		ink.low = {255, 255, 255, 255};
+		pen[0].data = InkBytes(ink);
+		DocWriter size, opacity;
+		size.Float(table.border > 0 ? table.border : 1);
+		opacity.Float(table.border > 0 ? 1 : 0);
+		pen[1].data = size.Data();
+		pen[2].data = opacity.Data();
+	}
+	uint32_t tableStyle = DerivedStyle(doc.styles, frameStyle, {pen[0], pen[1], pen[2]});
 	Portal shown;
 	shown.part = uint32_t(container);
 	shown.values[2] = 1;
 	shown.frames.push_back(MakeFrame(tablePart, uint32_t(container), 0, 0, width, height,
-		frameStyle, 64, {}));
+		tableStyle, 64, {}));
 	std::vector<uint8_t> record = body.Data();
 	std::vector<uint8_t> tail = Tail({shown}, Sig("TBLE"));
 	record.insert(record.end(), tail.begin(), tail.end());

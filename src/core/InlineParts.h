@@ -23,6 +23,7 @@ struct NewTable {
 	std::vector<float> columns;
 	std::vector<float> rows;
 	float inset = 1;
+	float border = 0;			// the table's pen (TTableImport: 0 transparent)
 	std::vector<std::vector<std::string>> cells;
 };
 
