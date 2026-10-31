@@ -119,6 +119,7 @@ private:
 	class TSpellBar* fSpellBar = NULL;
 	class TEntryBar* fEntryBar = NULL;
 	class TSheetBar* fSheetBar = NULL;
+	class TToolBar* fToolBar = NULL;
 	void ShowActiveRibbon();
 	class TScaleSlider* fScaleSlider = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…

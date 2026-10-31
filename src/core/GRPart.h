@@ -14,7 +14,8 @@
 
 namespace gobe {
 
-// TVertex::TVertex(TInputArchive&): the point, two control points, flags
+// TVertex::TVertex(TInputArchive&): the point, two control points (offsets
+// from the point), flags (4: a corner)
 struct Vertex {
 	float point[2];
 	float control1[2];

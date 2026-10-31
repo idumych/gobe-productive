@@ -17,6 +17,27 @@ ToolMakesShapes(uint32_t tool)
 }
 
 
+bool
+ShapeHasSize(uint32_t tool, const std::vector<DrawPoint>& points)
+{
+	if (points.size() < 2)
+		return false;
+	if (tool == kToolLine)
+		return points.front() != points.back();
+	float left = points[0][0], right = left, top = points[0][1], bottom = top;
+	size_t used = tool == kToolFree || tool == kToolPolygon ? points.size() : 0;
+	for (size_t i = 0; i < points.size(); i++) {
+		if (used == 0 && i != 0 && i + 1 != points.size())
+			continue;
+		left = std::min(left, points[i][0]);
+		right = std::max(right, points[i][0]);
+		top = std::min(top, points[i][1]);
+		bottom = std::max(bottom, points[i][1]);
+	}
+	return right > left && bottom > top;
+}
+
+
 uint32_t
 NewShapeStyle(StyleMgr& styles)
 {
@@ -43,7 +64,7 @@ int
 AddShape(Document& doc, size_t part, size_t layer, uint32_t tool,
 	const std::vector<DrawPoint>& points)
 {
-	if (!ToolMakesShapes(tool) || points.size() < 2)
+	if (!ToolMakesShapes(tool) || !ShapeHasSize(tool, points))
 		return -1;
 	GRPart* gr = doc.EditableGraphicsPart(part);
 	if (gr == nullptr || layer >= gr->layers.size())
@@ -88,16 +109,18 @@ AddShape(Document& doc, size_t part, size_t layer, uint32_t tool,
 			s.arcAngles[0] = 0;
 			s.arcAngles[1] = 90;
 		} else {
-			// a path of straight segments through the points (each
-			// vertex's control points on it)
+			// a path of straight segments through the points: corner
+			// vertices (flag 4) whose control points (offsets from the
+			// point) are 0, as BusinessCards' are
 			s.kind = Sig("BEZI");
 			BezierPath path;
 			path.closed = tool == kToolPolygon;
 			for (const DrawPoint& p : points) {
 				Vertex v;
-				v.point[0] = v.control1[0] = v.control2[0] = p[0] - left;
-				v.point[1] = v.control1[1] = v.control2[1] = p[1] - top;
-				v.flags = 0;
+				v.point[0] = p[0] - left;
+				v.point[1] = p[1] - top;
+				v.control1[0] = v.control1[1] = v.control2[0] = v.control2[1] = 0;
+				v.flags = 4;
 				if (!path.vertices.empty() && path.vertices.back().point[0] == v.point[0]
 						&& path.vertices.back().point[1] == v.point[1])
 					continue;

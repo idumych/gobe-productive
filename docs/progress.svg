@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="92" viewBox="0 0 720 92" role="img" aria-label="34 of 43 features done, 9 left">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="92" viewBox="0 0 720 92" role="img" aria-label="36 of 45 features done, 9 left">
 <style>
 text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; fill: #1f2328; }
 .title { font-size: 15px; font-weight: 600; }
@@ -16,53 +16,55 @@ text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sa
   .left { fill: #3d444d; }
 }
 </style>
-<text class="title" x="0" y="20">Port progress: 34 of 43 features (79%)</text>
+<text class="title" x="0" y="20">Port progress: 36 of 45 features (80%)</text>
 <text class="small" x="720" y="20" text-anchor="end">9 left</text>
-<rect class="released" x="0.0" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="16.8" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="33.6" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="50.4" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="67.3" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="84.1" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="100.9" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="117.7" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="134.5" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="151.3" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="168.1" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="185.0" y="34" width="13.8" height="22" rx="2"/>
-<rect class="released" x="201.8" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="218.6" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="235.4" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="252.2" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="269.0" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="285.8" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="302.7" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="319.5" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="336.3" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="353.1" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="369.9" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="386.7" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="403.5" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="420.3" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="437.2" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="454.0" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="470.8" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="487.6" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="504.4" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="521.2" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="538.0" y="34" width="13.8" height="22" rx="2"/>
-<rect class="sources" x="554.9" y="34" width="13.8" height="22" rx="2"/>
-<rect class="doing" x="571.7" y="34" width="13.8" height="22" rx="2"/>
-<rect class="doing" x="588.5" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="605.3" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="622.1" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="638.9" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="655.7" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="672.6" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="689.4" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="706.2" y="34" width="13.8" height="22" rx="2"/>
+<rect class="released" x="0.0" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="16.1" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="32.1" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="48.2" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="64.3" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="80.3" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="96.4" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="112.5" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="128.5" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="144.6" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="160.7" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="176.7" y="34" width="13.1" height="22" rx="2"/>
+<rect class="released" x="192.8" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="208.9" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="224.9" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="241.0" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="257.1" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="273.1" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="289.2" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="305.3" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="321.3" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="337.4" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="353.5" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="369.5" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="385.6" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="401.7" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="417.7" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="433.8" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="449.9" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="465.9" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="482.0" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="498.1" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="514.1" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="530.2" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="546.3" y="34" width="13.1" height="22" rx="2"/>
+<rect class="sources" x="562.3" y="34" width="13.1" height="22" rx="2"/>
+<rect class="doing" x="578.4" y="34" width="13.1" height="22" rx="2"/>
+<rect class="doing" x="594.5" y="34" width="13.1" height="22" rx="2"/>
+<rect class="left" x="610.5" y="34" width="13.1" height="22" rx="2"/>
+<rect class="left" x="626.6" y="34" width="13.1" height="22" rx="2"/>
+<rect class="left" x="642.7" y="34" width="13.1" height="22" rx="2"/>
+<rect class="left" x="658.7" y="34" width="13.1" height="22" rx="2"/>
+<rect class="left" x="674.8" y="34" width="13.1" height="22" rx="2"/>
+<rect class="left" x="690.9" y="34" width="13.1" height="22" rx="2"/>
+<rect class="left" x="706.9" y="34" width="13.1" height="22" rx="2"/>
 <rect class="released" x="0" y="70" width="12" height="12" rx="2"/><text class="small" x="18" y="80">13 released in 0.1.1</text>
-<rect class="sources" x="180" y="70" width="12" height="12" rx="2"/><text class="small" x="198" y="80">21 in the sources</text>
+<rect class="sources" x="180" y="70" width="12" height="12" rx="2"/><text class="small" x="198" y="80">23 in the sources</text>
 <rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">2 in progress</text>
 <rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">7 not started</text>
 </svg>

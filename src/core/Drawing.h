@@ -34,6 +34,9 @@ enum : uint32_t {
 
 // whether the port makes shapes with `tool`
 bool ToolMakesShapes(uint32_t tool);
+// whether `points` make a shape of `tool` (a line two different points,
+// the others a box with a width and a height)
+bool ShapeHasSize(uint32_t tool, const std::vector<DrawPoint>& points);
 
 // The style a new shape gets: an unnamed one based on "GR Default" (the
 // document's shape style, TStyleID copied in DragOut), as the original's
