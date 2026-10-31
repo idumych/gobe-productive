@@ -156,7 +156,8 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
 - **Named selections:** Name Selection… in the FormatBar's Names menu
   names the selected cells (refusing a name that's taken or isn't valid);
   the name then appears in that menu to select them again, works in
-  formulas (`=SUM(Rates)`) and is saved with the document.
+  formulas (`=SUM(Rates)`) and is saved with the document. Edit Names…
+  shows each name's cells and renames or deletes them (undoably).
 - **The FormatBar for cells:** font, size, faces, text color and fill
   color for the selected cells, the bar showing the active cell's.
 - **The PartBar for cells:** the selection's address (a double click goes

@@ -467,8 +467,11 @@ bool
 Document::FindName(const std::string& name, int fromPart, size_t& part,
 	size_t& reference) const
 {
+	// a dead reference's (a deleted name's, TReference::SetDead: detached
+	// from the links) isn't found
 	auto nameOf = [&](size_t p, size_t r) -> const std::string* {
-		if (p >= tails.size() || !tailRead[p] || r >= tails[p].refs.size())
+		if (p >= tails.size() || !tailRead[p] || r >= tails[p].refs.size()
+				|| tails[p].refs[r].flag1)
 			return nullptr;
 		return &tails[p].refs[r].name;
 	};
@@ -483,7 +486,7 @@ Document::FindName(const std::string& name, int fromPart, size_t& part,
 		}
 	if (fromPart >= 0 && size_t(fromPart) < tails.size() && tailRead[fromPart])
 		for (size_t r = 0; r < tails[fromPart].refs.size(); r++)
-			if (tails[fromPart].refs[r].name == name) {
+			if (nameOf(size_t(fromPart), r) != nullptr && tails[fromPart].refs[r].name == name) {
 				part = size_t(fromPart);
 				reference = r;
 				return true;
@@ -492,7 +495,7 @@ Document::FindName(const std::string& name, int fromPart, size_t& part,
 		if (!tailRead[p])
 			continue;
 		for (size_t r = 0; r < tails[p].refs.size(); r++)
-			if (tails[p].refs[r].name == name) {
+			if (nameOf(p, r) != nullptr && tails[p].refs[r].name == name) {
 				part = p;
 				reference = r;
 				return true;

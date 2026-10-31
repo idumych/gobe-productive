@@ -2691,6 +2691,42 @@ TPageView::MessageReceived(BMessage* message)
 		default: {
 			static const uint32 kCmdClear = 'sM12';
 			// cell selection: handle before text handling
+			if (message->what == 'sfN1') {
+				// Edit Names… (TDialogEditNames), with "Name" selected
+				std::vector<std::string> names = SelectionNames(fDocument), descriptions;
+				for (const std::string& name : names)
+					descriptions.push_back(NameDescription(fDocument, name));
+				(new TDialogEditNames(this, names, descriptions,
+					message->GetString("Name", NULL)))->RunDialog();
+				return;
+			}
+			if (message->what == 'sfN3' || message->what == 'sfN4') {
+				// Edit Names…'s Delete (TDeleteNamedSelectionCommand, STR#
+				// 3, 14) and Rename (TRenameNamedSelectionCommand, 3, 15)
+				const char* name = message->GetString("name", "");
+				const char* newName = message->GetString("newName", "");
+				bool remove = message->what == 'sfN3';
+				size_t part, reference, taken, takenRef;
+				if (!fDocument.FindName(name, -1, part, reference) || (!remove
+						&& (!ValidName(newName) || fDocument.FindName(newName, -1, taken, takenRef)))) {
+					beep();
+					return;
+				}
+				fUndo.BeginDocument(fDocument, GobeResources::IndexString(3,
+					remove ? 14 : 15).String(), CurrentViewState());
+				if (remove ? !DeleteName(fDocument, name) : !RenameName(fDocument, name, newName)) {
+					beep();
+					return;
+				}
+				// the formulas using it found again (or not)
+				if (fDocument.SpreadsheetPart(part) != NULL) {
+					UpdateDependencies(fDocument, part);
+					fBook->Reset();
+				}
+				Window()->PostMessage(kMsgDocumentChanged);
+				Invalidate();
+				return;
+			}
 			if (message->what == 'sfN2') {
 				// a name of the Names menu chosen: its selection selected
 				// (TSelectionMgr's named selection; cells here)
@@ -4094,6 +4130,16 @@ TPageView::RunScript(const std::string& script, Document& document)
 			BMessage msg(command[6] == 't' ? 'sfN0' : 'sfN2');
 			msg.AddString(msg.what == 'sfN0' ? "name" : "Name", command.c_str() + 8);
 			MessageReceived(&msg);
+		} else if (command.compare(0, 8, "namedel ") == 0 || command.compare(0, 8, "nameren ") == 0) {
+			// "namedel NAME", "nameren OLD|NEW": Edit Names…'s Delete and
+			// Rename as the dialog sends them
+			std::string args = command.substr(8);
+			size_t bar = args.find('|');
+			BMessage msg(command[4] == 'd' ? 'sfN3' : 'sfN4');
+			msg.AddString("name", args.substr(0, bar).c_str());
+			if (bar != std::string::npos)
+				msg.AddString("newName", args.substr(bar + 1).c_str());
+			MessageReceived(&msg);
 		} else if (command == "headerfooter 0" || command == "headerfooter 1") {
 			// Document > Insert/Remove Header (0), Footer (1)
 			ToggleHeaderFooter(command.back() - '0');
@@ -5408,6 +5454,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
 		case 'sM65': case 'sM67': case 'sM68': case 'sM69': case 'sM6A': case 'sM6B':
 		case 'sM13': case 's007': case 's008': case 'sM72': case 'sfN0': case 'sfN2':
+		case 'sfN1': case 'sfN3': case 'sfN4':
 		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':

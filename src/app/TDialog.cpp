@@ -463,6 +463,11 @@ TDialog::SetTextItem(int32 index, const char* text, int32 set)
 		control->SetText(text);
 	else if (BStringView* label = dynamic_cast<BStringView*>(Item(index, set)))
 		label->SetText(text);
+	else if (BScrollView* scroll = dynamic_cast<BScrollView*>(Item(index, set))) {
+		// a TEXT item
+		if (BTextView* view = dynamic_cast<BTextView*>(scroll->Target()))
+			view->SetText(text);
+	}
 }
 
 

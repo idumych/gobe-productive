@@ -27,6 +27,20 @@ bool ValidName(const std::string& name);
 bool NameCellSelection(Document& doc, size_t part, const std::string& name,
 	const std::vector<SSRange>& ranges, CellID active);
 
+// TDeleteNamedSelectionCommand::Perform: the name's reference marked dead
+// (TReference::SetDead), so formulas no longer find it and the name can be
+// given again. False if no live reference has that name.
+bool DeleteName(Document& doc, const std::string& name);
+
+// TRenameNamedSelectionCommand::Perform: the reference renamed. Formulas
+// using the old name aren't changed (nor in the original). False, nothing
+// changed, if `name` isn't a name or `newName` is taken or not valid.
+bool RenameName(Document& doc, const std::string& name, const std::string& newName);
+
+// TSSSelection::Description for a named cell selection: its ranges,
+// "A1..B2,C3"; "" if `name` names no cells
+std::string NameDescription(const Document& doc, const std::string& name);
+
 // the names of the document's selections (TSelectionMgr::
 // GetNamedSelections), in the parts' order
 std::vector<std::string> SelectionNames(const Document& doc);

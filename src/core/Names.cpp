@@ -5,6 +5,7 @@
 
 #include "DocWriter.h"
 #include "Document.h"
+#include "SSSort.h"
 
 namespace gobe {
 
@@ -93,6 +94,46 @@ NameCellSelection(Document& doc, size_t part, const std::string& name,
 	tail.refsChanged = true;
 	doc.dirtyTails.insert(part);
 	return true;
+}
+
+
+bool
+DeleteName(Document& doc, const std::string& name)
+{
+	size_t part, reference;
+	if (!doc.FindName(name, -1, part, reference))
+		return false;
+	doc.tails[part].refs[reference].flag1 = true;
+	doc.tails[part].refsChanged = true;
+	doc.dirtyTails.insert(part);
+	return true;
+}
+
+
+bool
+RenameName(Document& doc, const std::string& name, const std::string& newName)
+{
+	size_t part, reference, other, otherRef;
+	if (!doc.FindName(name, -1, part, reference) || !ValidName(newName)
+			|| doc.FindName(newName, -1, other, otherRef))
+		return false;
+	doc.tails[part].refs[reference].name = newName;
+	doc.tails[part].refsChanged = true;
+	doc.dirtyTails.insert(part);
+	return true;
+}
+
+
+std::string
+NameDescription(const Document& doc, const std::string& name)
+{
+	const Selection* sel = doc.NamedSelection(name);
+	if (sel == nullptr || sel->kind != Sig("SPRD"))
+		return "";
+	std::vector<SSRange> ranges;
+	for (const auto& r : sel->ranges)
+		ranges.push_back({{r[0], r[1]}, {r[2], r[3]}});
+	return RangeListName(ranges);
 }
 
 

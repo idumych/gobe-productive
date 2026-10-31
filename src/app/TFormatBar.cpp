@@ -289,17 +289,18 @@ public:
 	}
 
 	// TNamesMenuElement::FixMenu: MENU 111 (Name Selection… with cells
-	// selected; Edit Names… isn't ported), then the document's names
+	// selected, Edit Names… with names), then the document's names
 	// (TSelectionMgr::GetNamedSelections), each sending 'sfN2' with "Name"
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
 	{
 		AddMenuItems(menu, 111);
 		bool cells = bar->Pages()->fSelectedCell.active;
+		std::vector<std::string> names = SelectionNames(bar->Pages()->Doc());
 		for (int32 i = 0; i < menu->CountItems(); i++) {
 			BMenuItem* item = menu->ItemAt(i);
-			item->SetEnabled(item->Message() != NULL && item->Message()->what == 'sfN0' && cells);
+			uint32 what = item->Message() != NULL ? item->Message()->what : 0;
+			item->SetEnabled((what == 'sfN0' && cells) || (what == 'sfN1' && !names.empty()));
 		}
-		std::vector<std::string> names = SelectionNames(bar->Pages()->Doc());
 		if (!names.empty())
 			menu->AddSeparatorItem();
 		for (const std::string& name : names) {

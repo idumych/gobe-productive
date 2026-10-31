@@ -4,6 +4,7 @@
 
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "NumberFormats.h"
 #include "TDialog.h"
@@ -178,6 +179,32 @@ private:
 	BHandler* fTarget;
 	const Document& fDocument;
 	std::string fText;
+};
+
+// Edit Names… (TDialogEditNames, DIAL 80): the document's names (list 4),
+// the selected one's ranges (text 7, STR# 5, 10 "Undefined" if none), a new
+// name (5). Rename (1, when the new name is valid and not taken) sends
+// `target` 'sfN4' with "name" and "newName"; Delete (2) 'sfN3' with "name";
+// Done (0) closes. The names and their ranges are copied in, so the dialog
+// doesn't read the document from its own thread.
+class TDialogEditNames : public TDialog {
+public:
+	TDialogEditNames(BHandler* target, const std::vector<std::string>& names,
+		const std::vector<std::string>& descriptions, const char* selected);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BListView* List() const;
+	int32 Selected() const;
+	void Post(BMessage* message);
+
+	BHandler* fTarget;
+	std::vector<std::string> fNames;
+	std::vector<std::string> fDescriptions;
+	std::string fSelected;
 };
 
 // Options > Fill Special… (TDialogFillSpecial; TSSDialog 26): Apply To

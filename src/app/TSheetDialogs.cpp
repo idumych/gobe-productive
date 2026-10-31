@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include <Alert.h>
+#include <TextControl.h>
 #include <cstring>
 #include <OutlineListView.h>
 #include <RadioButton.h>
@@ -771,6 +772,130 @@ TDialogSelectionName::ItemHit(int32 index, BMessage* message)
 			fTarget->Looper()->PostMessage(&named, fTarget);
 	}
 	return TDialog::ItemHit(index, message);
+}
+
+
+TDialogEditNames::TDialogEditNames(BHandler* target, const std::vector<std::string>& names,
+		const std::vector<std::string>& descriptions, const char* selected)
+	:
+	TDialog(80, 80, 'APPL', NULL),
+	fTarget(target),
+	fNames(names),
+	fDescriptions(descriptions),
+	fSelected(selected != NULL ? selected : "")
+{
+}
+
+
+BListView*
+TDialogEditNames::List() const
+{
+	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(4));
+	return scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL;
+}
+
+
+int32
+TDialogEditNames::Selected() const
+{
+	BListView* list = List();
+	return list != NULL ? list->CurrentSelection() : -1;
+}
+
+
+void
+TDialogEditNames::Post(BMessage* message)
+{
+	if (fTarget != NULL && fTarget->Looper() != NULL)
+		fTarget->Looper()->PostMessage(message, fTarget);
+}
+
+
+// TDialogEditNames::Init: the names listed, the one given selected; the
+// list's selection and the name's typing reach ItemHit (4 with "Select",
+// 5)
+void
+TDialogEditNames::Init()
+{
+	BListView* list = List();
+	if (list == NULL)
+		return;
+	for (const std::string& name : fNames)
+		list->AddItem(new BStringItem(name.c_str()));
+	BMessage* select = new BMessage(*list->InvocationMessage());
+	select->AddBool("Select", true);
+	list->SetSelectionMessage(select);
+	list->SetTarget(this);
+	if (BTextControl* name = dynamic_cast<BTextControl*>(Item(5)))
+		name->SetModificationMessage(new BMessage(*name->Message()));
+	SetItemEnabled(1, false);
+	for (size_t i = 0; i < fNames.size(); i++)
+		if (fNames[i] == fSelected)
+			list->Select(int32(i));
+	if (list->CurrentSelection() < 0)
+		ItemHit(4, NULL);
+}
+
+
+// TDialogEditNames::ItemHit
+bool
+TDialogEditNames::ItemHit(int32 index, BMessage* message)
+{
+	BListView* list = List();
+	int32 selected = Selected();
+	std::string name = selected >= 0 && size_t(selected) < fNames.size() ? fNames[selected] : "";
+	switch (index) {
+		case 0:
+			return TDialog::ItemHit(0, message);
+		case 1: {	// Rename
+			std::string newName = TextItem(5).String();
+			if (name.empty())
+				break;
+			BMessage rename('sfN4');
+			rename.AddString("name", name.c_str());
+			rename.AddString("newName", newName.c_str());
+			Post(&rename);
+			fNames[selected] = newName;
+			if (BStringItem* item = dynamic_cast<BStringItem*>(list->ItemAt(selected)))
+				item->SetText(newName.c_str());
+			list->InvalidateItem(selected);
+			SetItemEnabled(1, false);
+			break;
+		}
+		case 2: {	// Delete
+			if (name.empty())
+				break;
+			BMessage remove('sfN3');
+			remove.AddString("name", name.c_str());
+			Post(&remove);
+			delete list->RemoveItem(selected);
+			fNames.erase(fNames.begin() + selected);
+			fDescriptions.erase(fDescriptions.begin() + selected);
+			SetTextItem(7, "");
+			SetTextItem(5, "");
+			break;
+		}
+		case 4: {	// a name selected: its ranges and the name to edit
+			std::string description = selected >= 0 && size_t(selected) < fDescriptions.size()
+				? fDescriptions[selected] : "";
+			if (description.empty())
+				description = GobeResources::IndexString(5, 10).String();
+			SetTextItem(7, description.c_str());
+			SetTextItem(5, name.c_str());
+			SetItemEnabled(1, false);
+			break;
+		}
+		case 5: {	// typing: Rename when the name is new, valid and free
+			std::string newName = TextItem(5).String();
+			bool taken = false;
+			for (const std::string& other : fNames)
+				taken |= other == newName;
+			SetItemEnabled(1, selected >= 0 && !taken && ValidName(newName));
+			break;
+		}
+	}
+	SetItemEnabled(2, Selected() >= 0);
+	return true;
 }
 
 

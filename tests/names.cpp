@@ -9,6 +9,7 @@
 #include "Editing.h"
 #include "Names.h"
 #include "SSEval.h"
+#include "SSSort.h"
 
 using namespace gobe;
 
@@ -91,6 +92,41 @@ main(int argc, char** argv)
 		for (const std::string& n : names)
 			listed |= n == "Trio";
 		Check(listed, where + ": Trio among the names");
+		Check(NameDescription(again, "Trio") == RangeName(range), where + ": Trio described");
+
+		// renamed: the old name gone, the new one naming the same cells;
+		// refused to a taken or invalid name
+		Check(NameCellSelection(again, p, "Other", {range}, range.from), where + ": Other named");
+		Check(!RenameName(again, "Trio", "Other") && !RenameName(again, "Trio", "C3")
+			&& !RenameName(again, "Nope", "Fresh"), where + ": renames refused");
+		Check(RenameName(again, "Trio", "Triple"), where + ": renamed");
+		Check(again.NamedSelection("Trio", int(p)) == nullptr
+			&& again.NamedSelection("Triple", int(p)) == sel, where + ": the new name's cells");
+		// deleted: not found, not listed, the name free again, and the
+		// formula using it no longer a number
+		Check(DeleteName(again, "Triple") && !DeleteName(again, "Triple"), where + ": deleted once");
+		Check(again.NamedSelection("Triple", int(p)) == nullptr, where + ": deleted not found");
+		listed = false;
+		for (const std::string& n : SelectionNames(again))
+			listed |= n == "Triple";
+		Check(!listed, where + ": deleted not listed");
+		{
+			SSBook book(again);
+			SSEvaluator e(*again.SpreadsheetPart(p), &book, int(p));
+			SSValue v = e.Value(uint16_t(row + 4), column);
+			Check(v.type == SSValue::kError, where + ": SUM(Trio) an error once Trio is renamed");
+		}
+		Check(NameCellSelection(again, p, "Triple", {range}, range.from),
+			where + ": a deleted name given again");
+		// all of it saved
+		Check(again.Save(path, error), where + ": save again " + error);
+		Document third;
+		Check(LoadDocument(path, third, error), where + ": load again " + error);
+		names = SelectionNames(third);
+		Check(names.size() == SelectionNames(again).size(), where + ": names after the second save");
+		Check(third.NamedSelection("Other", int(p)) != nullptr
+			&& third.NamedSelection("Triple", int(p)) != nullptr
+			&& third.NamedSelection("Trio", int(p)) == nullptr, where + ": names read back");
 		remove(path.c_str());
 	}
 	printf("names: parts %d, ok %d, failed %d\n", parts, ok, failures);
