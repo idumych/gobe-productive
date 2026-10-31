@@ -111,9 +111,9 @@ On Haiku, with the History floater:
 
 ![Gobe Productive on Haiku: a document and the History floater](docs/screenshots/haiku-history.png)
 
-On Linux (X11), with Edit Styles:
+On Linux (X11), an HTML page opened with its table and picture:
 
-![Gobe Productive on Linux: the Edit Styles floater](docs/screenshots/linux-edit-styles.png)
+![Gobe Productive on Linux: a document with a picture in the text and a table](docs/screenshots/linux-table-picture.png)
 
 ## Status
 
