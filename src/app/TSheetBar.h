@@ -41,8 +41,12 @@ public:
 private:
 	BRect TabFrame(int32 index) const;
 	int32 TabAt(BPoint where) const;
+	// the arrows that scroll the tabs, when they don't all fit
+	bool Overflows() const;
+	BRect ArrowFrame(bool right) const;
 
 	const Document& fDocument;
+	int32 fFirst = 0;			// the first tab shown (the tabs scrolled)
 	int32 fPressed = -1;		// the tab the mouse went down on
 	int32 fDropAt = -1;			// where it would go, dragged
 };

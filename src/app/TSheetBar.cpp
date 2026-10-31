@@ -9,6 +9,7 @@
 
 #include <MenuItem.h>
 #include <PopUpMenu.h>
+#include <Region.h>
 #include <Window.h>
 
 #include "TMenu.h"
@@ -63,14 +64,39 @@ OptionsFrame()
 BRect
 TSheetBar::TabFrame(int32 index) const
 {
+	// the tabs from the first shown; those before it aren't
+	if (index < fFirst)
+		return BRect();
 	float x = OptionsFrame().right + 6;
-	for (int32 i = 0; i < int32(fDocument.SheetCount()); i++) {
+	for (int32 i = fFirst; i < int32(fDocument.SheetCount()); i++) {
 		float width = StringWidth(fDocument.sheets.sheets[size_t(i)].name.c_str()) + 2 * kPad;
 		if (i == index)
 			return BRect(x, 2, x + width, kHeight - 2);
 		x += width + 2;
 	}
 	return BRect();
+}
+
+
+bool
+TSheetBar::Overflows() const
+{
+	int32 count = int32(fDocument.SheetCount());
+	if (count == 0)
+		return false;
+	float x = OptionsFrame().right + 6;
+	for (int32 i = 0; i < count; i++)
+		x += StringWidth(fDocument.sheets.sheets[size_t(i)].name.c_str()) + 2 * kPad + 2;
+	return x > Bounds().right - 2;
+}
+
+
+BRect
+TSheetBar::ArrowFrame(bool right) const
+{
+	float edge = Bounds().right - 2;
+	return right ? BRect(edge - 14, 3, edge, kHeight - 3)
+		: BRect(edge - 30, 3, edge - 16, kHeight - 3);
 }
 
 
@@ -91,6 +117,12 @@ TSheetBar::Draw(BRect updateRect)
 	font_height fh;
 	GetFontHeight(&fh);
 	int32 shown = fDocument.CurrentSheet();
+	bool arrows = Overflows() || fFirst > 0;
+	if (arrows) {
+		// (tabs under the arrows are clipped)
+		BRegion clip(BRect(0, 0, ArrowFrame(false).left - 2, bounds.bottom));
+		ConstrainClippingRegion(&clip);
+	}
 	for (int32 i = 0; i < int32(fDocument.SheetCount()); i++) {
 		BRect tab = TabFrame(i);
 		if (i == shown)
@@ -115,6 +147,25 @@ TSheetBar::Draw(BRect updateRect)
 		DrawString(fDocument.sheets.sheets[size_t(i)].name.c_str(),
 			BPoint(tab.left + kPad, (tab.top + tab.bottom + fh.ascent - fh.descent) / 2));
 	}
+	if (arrows) {
+		ConstrainClippingRegion(NULL);
+		for (bool right : {false, true}) {
+			BRect r = ArrowFrame(right);
+			SetHighColor(216, 216, 216);
+			FillRect(r);
+			SetHighColor(200, 200, 200);
+			StrokeRect(r);
+			bool on = right ? Overflows() : fFirst > 0;
+			SetHighColor(on ? 80 : 170, on ? 80 : 170, on ? 80 : 170);
+			float cy = (r.top + r.bottom) / 2;
+			if (right)
+				FillTriangle(BPoint(r.left + 4, cy - 4), BPoint(r.left + 4, cy + 4),
+					BPoint(r.right - 4, cy));
+			else
+				FillTriangle(BPoint(r.right - 4, cy - 4), BPoint(r.right - 4, cy + 4),
+					BPoint(r.left + 4, cy));
+		}
+	}
 }
 
 
@@ -135,6 +186,23 @@ TSheetBar::MouseDown(BPoint where)
 		if (chosen != NULL && chosen->Message() != NULL)
 			Window()->PostMessage(chosen->Message());
 		return;
+	}
+	if (Overflows() || fFirst > 0) {
+		// the arrows scroll the tabs a tab at a time
+		if (ArrowFrame(true).Contains(where)) {
+			if (Overflows())
+				fFirst++;
+			Invalidate();
+			return;
+		}
+		if (ArrowFrame(false).Contains(where)) {
+			if (fFirst > 0)
+				fFirst--;
+			Invalidate();
+			return;
+		}
+		if (where.x >= ArrowFrame(false).left - 2)
+			return;
 	}
 	int32 clicks = 1;
 	if (BMessage* current = Window()->CurrentMessage())
@@ -193,6 +261,15 @@ TSheetBar::MouseUp(BPoint where)
 void
 TSheetBar::Update()
 {
+	// the shown sheet's tab in view
+	int32 shown = fDocument.CurrentSheet();
+	if (fFirst >= int32(fDocument.SheetCount()))
+		fFirst = 0;
+	if (shown < fFirst)
+		fFirst = shown;
+	while (fFirst < shown && TabFrame(shown).right > (Overflows() || fFirst > 0
+			? ArrowFrame(false).left - 2 : Bounds().right))
+		fFirst++;
 	Invalidate();
 }
 
