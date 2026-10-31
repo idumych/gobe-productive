@@ -5,6 +5,7 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "GRPart.h"
@@ -144,6 +145,28 @@ bool ParseToolbarShape(const std::vector<uint8_t>& data, BezierPath& path);
 // the shape sized to the drag); -1 as AddShape
 int AddToolbarShape(Document& doc, size_t part, size_t layer, const BezierPath& path,
 	const DrawPoint& from, const DrawPoint& to);
+
+// Arrange > Group (TGRGroupCommand): the shapes at `indices` of `layer`
+// (not other parts' frames) moved into a new drawing part (TPartGR +0xa4
+// set: a group; its size their box's), framed in their place: the frame
+// where their box is, its FRAM entry where the frontmost of them was.
+// Returns the group part, -1 with `error`.
+int GroupShapes(Document& doc, size_t drawing, size_t layer, const std::vector<size_t>& indices,
+	std::string& error);
+
+// a group's frame shape (a FRAM entry showing a group part); the part
+bool IsGroupShape(const Document& doc, const Shape& shape, size_t& group);
+
+// a FRAM entry's box in the drawing (its frame's), and the frame moved
+bool FrameShapeBounds(const Document& doc, const Shape& shape, float bounds[4]);
+void MoveFrameShape(Document& doc, const Shape& shape, float dx, float dy);
+
+// Arrange > Ungroup: the group at `index` of `layer` taken apart: its
+// shapes back in the drawing where it was (in its place, in their order),
+// the FRAM entry and the group's frame gone. The group part stays in the
+// document, empty and not shown (the port doesn't remove parts). Returns
+// how many shapes came back, -1 with `error`.
+int UngroupShape(Document& doc, size_t drawing, size_t layer, size_t index, std::string& error);
 
 // the Bezier tool: a path through `vertices` (drawing coordinates, their
 // control points offsets from them), open; -1 as AddShape

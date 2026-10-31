@@ -9,6 +9,7 @@
 
 #include "Document.h"
 #include "Editing.h"
+#include "InlineParts.h"
 
 namespace gobe {
 
@@ -775,6 +776,163 @@ AddBezierShape(Document& doc, size_t part, size_t layer, const std::vector<Verte
 	path.closed = false;
 	path.vertices = vertices;
 	return AddPathShape(doc, part, layer, path);
+}
+
+
+
+bool
+IsGroupShape(const Document& doc, const Shape& shape, size_t& group)
+{
+	if (shape.kind != Sig("FRAM"))
+		return false;
+	const Frame* frame = FrameAt(doc, shape.frame);
+	if (frame == nullptr)
+		return false;
+	const GRPart* gr = doc.GraphicsPart(frame->part);
+	if (gr == nullptr || !gr->flag)
+		return false;
+	group = frame->part;
+	return true;
+}
+
+
+bool
+FrameShapeBounds(const Document& doc, const Shape& shape, float bounds[4])
+{
+	const Frame* frame = shape.kind == Sig("FRAM") ? FrameAt(doc, shape.frame) : nullptr;
+	if (frame == nullptr)
+		return false;
+	bounds[0] = frame->origin[0];
+	bounds[1] = frame->origin[1];
+	bounds[2] = frame->origin[0] + frame->extent[0];
+	bounds[3] = frame->origin[1] + frame->extent[1];
+	return true;
+}
+
+
+void
+MoveFrameShape(Document& doc, const Shape& shape, float dx, float dy)
+{
+	Frame* frame = const_cast<Frame*>(FrameAt(doc, shape.frame));
+	if (frame == nullptr)
+		return;
+	frame->origin[0] += dx;
+	frame->origin[1] += dy;
+	doc.dirtyTails.insert(shape.frame[0]);
+}
+
+
+int
+GroupShapes(Document& doc, size_t drawing, size_t layer, const std::vector<size_t>& indices,
+	std::string& error)
+{
+	const GRPart* gr = doc.GraphicsPart(drawing);
+	if (gr == nullptr || layer >= gr->layers.size()) {
+		error = "not a drawing";
+		return -1;
+	}
+	// the shapes, back to front, and their box
+	std::vector<size_t> chosen;
+	for (size_t i : indices)
+		if (i < gr->layers[layer].shapes.size() && gr->layers[layer].shapes[i].kind != Sig("FRAM")
+				&& std::find(chosen.begin(), chosen.end(), i) == chosen.end())
+			chosen.push_back(i);
+	std::sort(chosen.begin(), chosen.end());
+	if (chosen.empty()) {
+		error = "no shapes";
+		return -1;
+	}
+	float box[4];
+	ShapeBounds(gr->layers[layer].shapes[chosen[0]], box);
+	for (size_t i : chosen) {
+		float b[4];
+		ShapeBounds(gr->layers[layer].shapes[i], b);
+		box[0] = std::min(box[0], b[0]);
+		box[1] = std::min(box[1], b[1]);
+		box[2] = std::max(box[2], b[2]);
+		box[3] = std::max(box[3], b[3]);
+	}
+	// (a frame needs some size: a line's box can be flat)
+	box[2] = std::max(box[2], box[0] + 4);
+	box[3] = std::max(box[3], box[1] + 4);
+	uint32_t plainStyle = 0;
+	if (drawing < doc.tails.size())
+		for (const Portal& p : doc.tails[drawing].portals)
+			if (!p.frames.empty()) {
+				plainStyle = p.frames[0].style;
+				break;
+			}
+	int group = AddDrawingFrame(doc, drawing, layer, Sig("GRFX"), box, error);
+	if (group < 0)
+		return -1;
+	// the group's frame: transparent, as the drawing's own
+	doc.tails[size_t(group)].portals[0].frames[0].style = plainStyle;
+	doc.dirtyTails.insert(size_t(group));
+	GRPart* parent = doc.EditableGraphicsPart(drawing);
+	GRPart* inside = doc.EditableGraphicsPart(size_t(group));
+	std::vector<Shape>& shapes = parent->layers[layer].shapes;
+	// the FRAM entry AddDrawingFrame put last goes where the frontmost
+	// grouped shape was
+	Shape frameShape = shapes.back();
+	shapes.pop_back();
+	if (inside->layers.empty())
+		inside->layers.push_back({"Layer 1", {}});
+	for (size_t i : chosen) {
+		Shape moved = shapes[i];
+		MoveShape(moved, -box[0], -box[1]);
+		inside->layers[0].shapes.push_back(moved);
+	}
+	size_t front = chosen.back() + 1 - chosen.size();
+	for (size_t k = chosen.size(); k-- > 0;)
+		shapes.erase(shapes.begin() + long(chosen[k]));
+	shapes.insert(shapes.begin() + long(front), frameShape);
+	inside->size[0] = box[2] - box[0];
+	inside->size[1] = box[3] - box[1];
+	inside->flag = true;
+	return group;
+}
+
+
+int
+UngroupShape(Document& doc, size_t drawing, size_t layer, size_t index, std::string& error)
+{
+	const GRPart* gr = doc.GraphicsPart(drawing);
+	size_t group;
+	if (gr == nullptr || layer >= gr->layers.size() || index >= gr->layers[layer].shapes.size()
+			|| !IsGroupShape(doc, gr->layers[layer].shapes[index], group) || group == drawing) {
+		error = "not a group";
+		return -1;
+	}
+	Shape frameShape = gr->layers[layer].shapes[index];
+	const Frame* frame = FrameAt(doc, frameShape.frame);
+	float dx = frame->origin[0], dy = frame->origin[1];
+	GRPart* inside = doc.EditableGraphicsPart(group);
+	std::vector<Shape> back;
+	for (GRLayer& l : inside->layers) {
+		for (Shape& s : l.shapes)
+			if (s.kind != Sig("FRAM")) {
+				Shape moved = s;
+				MoveShape(moved, dx, dy);
+				back.push_back(moved);
+			}
+		l.shapes.clear();
+	}
+	// the group's frame gone: its part shown nowhere
+	doc.tails[group].portals.clear();
+	doc.dirtyTails.insert(group);
+	GRPart* parent = doc.EditableGraphicsPart(drawing);
+	std::vector<Shape>& shapes = parent->layers[layer].shapes;
+	shapes.erase(shapes.begin() + long(index));
+	// fresh ids among the drawing's shapes
+	uint32_t id = 0;
+	for (const GRLayer& l : parent->layers)
+		for (const Shape& s : l.shapes)
+			if (s.kind != Sig("FRAM"))
+				id = std::max(id, s.values[2] + 1);
+	for (Shape& s : back)
+		s.values[2] = id++;
+	shapes.insert(shapes.begin() + long(index), back.begin(), back.end());
+	return int(back.size());
 }
 
 } // namespace gobe

@@ -393,6 +393,87 @@ main(int argc, char** argv)
 			"moved; the smooth point's other one opposite, its length kept");
 	}
 
+	// grouping (TGRGroupCommand): a rectangle, an ellipse and a line; the
+	// rectangle and the line grouped
+	{
+		Document doc2;
+		Check(CreateBlankDrawing(doc2, error), "a drawing to group in " + error);
+		AddShape(doc2, 0, 0, kToolRect, {{10, 20}, {50, 40}});
+		AddShape(doc2, 0, 0, kToolEllipse, {{100, 100}, {140, 130}});
+		AddShape(doc2, 0, 0, kToolLine, {{30, 60}, {80, 90}});
+		std::vector<Shape> before3 = doc2.GraphicsPart(0)->layers[0].shapes;
+		size_t parts = doc2.parts.parts.size();
+		int group = GroupShapes(doc2, 0, 0, {0, 2}, error);
+		Check(group == int(parts), "a group part made " + error);
+		const std::vector<Shape>& top = doc2.GraphicsPart(0)->layers[0].shapes;
+		size_t gp = 0;
+		Check(top.size() == 2 && top[0].kind == Sig("ELPS") && IsGroupShape(doc2, top[1], gp)
+			&& gp == size_t(group), "the ellipse, then the group where the line was");
+		float box[4];
+		Check(FrameShapeBounds(doc2, top[1], box) && box[0] == 10 && box[1] == 20 && box[2] == 80
+			&& box[3] == 90, "the group's frame: the box of the two");
+		const GRPart* inside = doc2.GraphicsPart(size_t(group));
+		Check(inside != nullptr && inside->flag && inside->size[0] == 70 && inside->size[1] == 70
+			&& inside->layers[0].shapes.size() == 2 && inside->layers[0].shapes[0].origin[0] == 0
+			&& inside->layers[0].shapes[1].origin[0] == 20 && inside->layers[0].shapes[1].origin[1] == 40,
+			"inside: a group (flag), 70 x 70, the shapes from its corner");
+		path = "/tmp/draw_shapes_group";
+		Check(doc2.Save(path, error), "saved grouped " + error);
+		Document grouped;
+		Check(LoadDocument(path, grouped, error) && grouped.warnings.empty(), "reloaded " + error);
+		const std::vector<Shape>& top2 = grouped.GraphicsPart(0)->layers[0].shapes;
+		size_t gp2 = 0;
+		Check(top2.size() == 2 && IsGroupShape(grouped, top2[1], gp2)
+			&& grouped.GraphicsPart(gp2)->layers[0].shapes.size() == 2
+			&& grouped.GraphicsPart(gp2)->flag, "reloaded: the group and its two shapes");
+		{
+			// saved again unchanged: the same bytes
+			Document copy;
+			LoadDocument(path, copy, error);
+			std::vector<uint8_t> first = copy.bytes;
+			Check(copy.Save("/tmp/draw_shapes_group2", error), "saved again " + error);
+			Document second;
+			Check(LoadDocument("/tmp/draw_shapes_group2", second, error) && second.bytes == first,
+				"the grouped drawing saves to the same bytes");
+		}
+		int placed = 0;
+		for (const Document::PlacedFrame& f : grouped.PlacedFrames())
+			if (f.part == gp2 && f.width == 70)
+				placed++;
+		Check(placed == 1, "the group placed");
+		Check(UngroupShape(grouped, 0, 0, 1, error) == 2, "ungrouped " + error);
+		const std::vector<Shape>& apart = grouped.GraphicsPart(0)->layers[0].shapes;
+		bool same = apart.size() == 3 && apart[0].kind == Sig("ELPS");
+		for (size_t k = 1; same && k < 3; k++) {
+			const Shape& was = before3[k == 1 ? 0 : 2];
+			same = apart[k].kind == was.kind && apart[k].origin[0] == was.origin[0]
+				&& apart[k].origin[1] == was.origin[1] && apart[k].size[0] == was.size[0]
+				&& apart[k].size[1] == was.size[1] && apart[k].style == was.style;
+		}
+		Check(same, "the shapes back where they were, in their order, with their styles");
+		int stillPlaced = 0;
+		for (const Document::PlacedFrame& f : grouped.PlacedFrames())
+			stillPlaced += f.part == gp2;
+		Check(stillPlaced == 0, "the group shown nowhere");
+		path = "/tmp/draw_shapes_ungrouped";
+		Check(grouped.Save(path, error), "saved ungrouped " + error);
+		Document again;
+		Check(LoadDocument(path, again, error) && again.warnings.empty()
+			&& again.GraphicsPart(0)->layers[0].shapes.size() == 3, "reloaded ungrouped " + error);
+		// undone and redone
+		UndoStack steps;
+		UndoStack::ViewState state;
+		steps.BeginDocument(again, "Group Shapes", state);
+		size_t partsNow = again.parts.parts.size();
+		Check(GroupShapes(again, 0, 0, {1, 2}, error) >= 0, "grouped again");
+		Check(steps.Undo(again, state) == UndoStack::kDocumentChanged
+			&& again.parts.parts.size() == partsNow
+			&& again.GraphicsPart(0)->layers[0].shapes.size() == 3, "the group undone");
+		Check(steps.Redo(again, state) == UndoStack::kDocumentChanged
+			&& again.GraphicsPart(0)->layers[0].shapes.size() == 2, "redone");
+		Check(UngroupShape(again, 0, 0, 0, error) < 0, "the ellipse isn't a group");
+	}
+
 	// a sample's drawing: one more shape, the others as they were
 	for (int i = 1; i < argc; i++) {
 		std::string name = argv[i];

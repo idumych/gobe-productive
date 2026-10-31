@@ -194,6 +194,33 @@ CurrentDrawing(const Document& doc, const std::vector<TPageView::ShapeRef>& shap
 	return true;
 }
 
+// a shape's box, a group's (a FRAM entry's) its frame's
+void
+BoxOf(const Document& doc, const Shape& shape, float b[4])
+{
+	if (shape.kind != Sig("FRAM") || !FrameShapeBounds(doc, shape, b))
+		ShapeBounds(shape, b);
+}
+
+
+// the drawing a group is in and its FRAM entry there
+bool
+GroupOwner(const Document& doc, size_t group, size_t& drawing, size_t& layer, size_t& index)
+{
+	for (const auto& [part, gr] : doc.graphicsParts)
+		for (size_t l = 0; l < gr.layers.size(); l++)
+			for (size_t i = 0; i < gr.layers[l].shapes.size(); i++) {
+				size_t g;
+				if (IsGroupShape(doc, gr.layers[l].shapes[i], g) && g == group) {
+					drawing = part;
+					layer = l;
+					index = i;
+					return true;
+				}
+			}
+	return false;
+}
+
 } // namespace
 
 
@@ -242,9 +269,16 @@ TPageView::FixShapeMenu(BMenu* menu) const
 	// selected; the handles' mode marked; the others off)
 	static const uint32 kModes[3] = {'sM4A', 'sM4B', 'sM4C'};
 	bool locked = false, unlocked = false;
+	int shapes = 0, groups = 0;
 	for (const ShapeRef& ref : fShapes)
-		if (const Shape* s = ShapeAt(fDocument, ref.part, ref.layer, ref.index))
+		if (const Shape* s = ShapeAt(fDocument, ref.part, ref.layer, ref.index)) {
 			(ShapeLocked(*s) ? locked : unlocked) = true;
+			size_t group;
+			if (IsGroupShape(fDocument, *s, group))
+				groups++;
+			else if (s->kind != Sig("FRAM") && ref.layer == fShapes[0].layer)
+				shapes++;
+		}
 	size_t drawing;
 	const GRPart* gr = CurrentDrawing(fDocument, fShapes, drawing)
 		? fDocument.GraphicsPart(drawing) : nullptr;
@@ -254,8 +288,9 @@ TPageView::FixShapeMenu(BMenu* menu) const
 			|| what == 'sM45' || what == 'sM4T';
 		bool mode = what == 'sM4A' || what == 'sM4B' || what == 'sM4C';
 		bool grid = what == 'sM4D' || what == 'sM4E';
-		// (Group, Ungroup and Text Wrap aren't ported: off)
+		// (Text Wrap isn't ported: off)
 		item->SetEnabled((arrange && !fShapes.empty()) || mode || (grid && gr != nullptr)
+			|| (what == 'sM46' && shapes >= 2) || (what == 'sM47' && groups > 0)
 			|| (what == 'sM44' && fShapes.size() >= 2) || (what == 'sM48' && unlocked)
 			|| (what == 'sM49' && locked));
 		if (mode)
@@ -286,7 +321,46 @@ TPageView::DrawingAt(BPoint where, size_t& part, float& x, float& y) const
 	part = found->part;
 	x = found->x + dx;
 	y = found->y + dy;
+	// in a group: its drawing (the group is one of that drawing's shapes)
+	size_t drawing, layer, index;
+	for (int depth = 0; depth < 8 && fDocument.GraphicsPart(part) != nullptr
+			&& fDocument.GraphicsPart(part)->flag
+			&& GroupOwner(fDocument, part, drawing, layer, index); depth++) {
+		bool placed = false;
+		for (const Document::PlacedFrame& f : fFrames)
+			if (f.part == drawing) {
+				x = f.x + dx;
+				y = f.y + dy;
+				placed = true;
+			}
+		if (!placed)
+			break;
+		part = drawing;
+	}
 	return true;
+}
+
+
+// a group under the point in drawing `part` (its frame's box): its index
+// (the topmost)
+static bool
+HitGroup(const Document& doc, size_t part, float x, float y, size_t& layer, size_t& index)
+{
+	const GRPart* gr = doc.GraphicsPart(part);
+	for (size_t l = gr != nullptr ? gr->layers.size() : 0; l-- > 0;)
+		for (size_t i = gr->layers[l].shapes.size(); i-- > 0;) {
+			size_t group;
+			float b[4];
+			if (doc.LayerHidden(part, l) || !IsGroupShape(doc, gr->layers[l].shapes[i], group)
+					|| !FrameShapeBounds(doc, gr->layers[l].shapes[i], b))
+				continue;
+			if (x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3]) {
+				layer = l;
+				index = i;
+				return true;
+			}
+		}
+	return false;
 }
 
 
@@ -376,7 +450,7 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 	if (fShapes.size() == 1 && inDrawing && part == fShapes[0].part && !shift) {
 		const Shape* s = ShapeAt(fDocument, part, fShapes[0].layer, fShapes[0].index);
 		float px = where.x - x, py = where.y - y;
-		bool editable = s != nullptr && !ShapeLocked(*s);
+		bool editable = s != nullptr && !ShapeLocked(*s) && s->kind != Sig("FRAM");
 		int control = editable && fShapeMode == 2 ? HitControlPoint(*s, px, py, kHandle + 1) : -1;
 		int vertex = editable && fShapeMode == 2 && control < 0
 			? HitVertex(*s, px, py, kHandle + 1) : -1;
@@ -390,8 +464,18 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 		}
 	}
 	size_t layer, index;
-	if (inDrawing && HitShape(*fDocument.GraphicsPart(part), where.x - x, where.y - y,
-			kTolerance, HiddenLayers(fDocument, part), layer, index)) {
+	size_t groupLayer, groupIndex;
+	bool shapeHit = inDrawing && HitShape(*fDocument.GraphicsPart(part), where.x - x,
+		where.y - y, kTolerance, HiddenLayers(fDocument, part), layer, index);
+	bool groupHit = inDrawing && HitGroup(fDocument, part, where.x - x, where.y - y, groupLayer,
+		groupIndex);
+	if (groupHit && (!shapeHit || groupLayer > layer
+			|| (groupLayer == layer && groupIndex > index))) {
+		layer = groupLayer;
+		index = groupIndex;
+		shapeHit = true;
+	}
+	if (shapeHit) {
 		bool selected = ShapeSelected(part, layer, index);
 		if (!fShapes.empty() && fShapes[0].part != part)
 			fShapes.clear();
@@ -581,8 +665,9 @@ TPageView::DrawingUp(BPoint where)
 			for (size_t i = 0; i < gr->layers[l].shapes.size(); i++) {
 				const Shape& s = gr->layers[l].shapes[i];
 				float b[4];
-				ShapeBounds(s, b);
-				if (s.kind == Sig("FRAM") || b[0] < band[0] || b[1] < band[1] || b[2] > band[2]
+				BoxOf(fDocument, s, b);
+				size_t group;
+				if ((s.kind == Sig("FRAM") && !IsGroupShape(fDocument, s, group)) || b[0] < band[0] || b[1] < band[1] || b[2] > band[2]
 						|| b[3] > band[3] || ShapeSelected(drag.part, l, i))
 					continue;
 				fShapes.push_back(Ref(drag.part, l, i));
@@ -597,7 +682,7 @@ TPageView::DrawingUp(BPoint where)
 	if (drag.mode == 2 && !fShapes.empty()) {
 		if (const Shape* first = ShapeAt(fDocument, drag.part, fShapes[0].layer, fShapes[0].index)) {
 			float b[4];
-			ShapeBounds(*first, b);
+			BoxOf(fDocument, *first, b);
 			float x = b[0] + dx, y = b[1] + dy;
 			Snap(fDocument, drag.part, x, y);
 			dx = x - b[0];
@@ -614,6 +699,7 @@ TPageView::DrawingUp(BPoint where)
 	fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, label).String(),
 		CurrentViewState());
 	GRPart* gr = fDocument.EditableGraphicsPart(drag.part);
+	bool moved = false;		// a group's frame moved: the frames placed anew
 	for (const ShapeRef& ref : fShapes) {
 		if (gr == nullptr || ref.layer >= gr->layers.size()
 				|| ref.index >= gr->layers[ref.layer].shapes.size())
@@ -621,6 +707,14 @@ TPageView::DrawingUp(BPoint where)
 		Shape& s = gr->layers[ref.layer].shapes[ref.index];
 		if (ShapeLocked(s))
 			continue;		// (TShape::GetDeleteMode: a locked shape stays)
+		if (s.kind == Sig("FRAM")) {
+			// a group: its frame moved
+			if (drag.mode == 2) {
+				MoveFrameShape(fDocument, s, dx, dy);
+				moved = true;
+			}
+			continue;
+		}
 		if (drag.mode == 2)
 			MoveShape(s, dx, dy);
 		else if (drag.mode == 3) {
@@ -638,6 +732,8 @@ TPageView::DrawingUp(BPoint where)
 		else
 			MoveVertex(s, drag.handle, drag.now[0], drag.now[1]);
 	}
+	if (moved)
+		GeometryChanged();
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);
@@ -665,12 +761,32 @@ TPageView::DrawingKey(const char* bytes, int32 count)
 	std::sort(doomed.begin(), doomed.end(), [](const ShapeRef& a, const ShapeRef& b) {
 		return a.layer != b.layer ? a.layer > b.layer : a.index > b.index;
 	});
-	for (const ShapeRef& ref : doomed)
-		if (gr != nullptr && ref.layer < gr->layers.size()
-				&& ref.index < gr->layers[ref.layer].shapes.size()
-				&& !ShapeLocked(gr->layers[ref.layer].shapes[ref.index]))
-			gr->layers[ref.layer].shapes.erase(gr->layers[ref.layer].shapes.begin()
-				+ long(ref.index));
+	bool groups = false;
+	for (const ShapeRef& ref : doomed) {
+		if (gr == nullptr || ref.layer >= gr->layers.size()
+				|| ref.index >= gr->layers[ref.layer].shapes.size()
+				|| ShapeLocked(gr->layers[ref.layer].shapes[ref.index]))
+			continue;
+		size_t group;
+		std::string error;
+		if (IsGroupShape(fDocument, gr->layers[ref.layer].shapes[ref.index], group)) {
+			// a group: taken apart, then its shapes deleted
+			int count = UngroupShape(fDocument, ref.part, ref.layer, ref.index, error);
+			gr = fDocument.EditableGraphicsPart(ref.part);
+			std::vector<Shape>& shapes = gr->layers[ref.layer].shapes;
+			if (count > 0)
+				shapes.erase(shapes.begin() + long(ref.index),
+					shapes.begin() + long(ref.index) + count);
+			groups = true;
+			continue;
+		}
+		if (gr->layers[ref.layer].shapes[ref.index].kind == Sig("FRAM"))
+			continue;		// (another part's frame isn't deleted here)
+		gr->layers[ref.layer].shapes.erase(gr->layers[ref.layer].shapes.begin()
+			+ long(ref.index));
+	}
+	if (groups)
+		GeometryChanged();
 	fShapes.clear();
 	Invalidate();
 	if (Window() != NULL)
@@ -745,10 +861,61 @@ TPageView::ShapeCommand(BMessage* message)
 		for (const ShapeRef& ref : fShapes)
 			if (gr != nullptr && ref.layer < gr->layers.size()
 					&& ref.index < gr->layers[ref.layer].shapes.size()
-					&& !ShapeLocked(gr->layers[ref.layer].shapes[ref.index]))
+					&& !ShapeLocked(gr->layers[ref.layer].shapes[ref.index])
+					&& gr->layers[ref.layer].shapes[ref.index].kind != Sig("FRAM"))
 				shapes.push_back(&gr->layers[ref.layer].shapes[ref.index]);
 		AlignShapes(shapes, message->GetInt32("AlignX", 0), message->GetInt32("AlignY", 0));
 		fAlignPreview = true;
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return true;
+	}
+	// Group ('sM46', TGRGroupCommand, STR# 1101, 22): the selected shapes of
+	// the first one's layer in a new drawing part, framed in their place;
+	// Ungroup ('sM47', 23): the selected groups taken apart
+	if ((what == 'sM46' || what == 'sM47') && !fShapes.empty()) {
+		size_t part = fShapes[0].part, layer = fShapes[0].layer;
+		std::vector<size_t> indices;
+		for (const ShapeRef& ref : fShapes) {
+			const Shape* sh = ShapeAt(fDocument, ref.part, ref.layer, ref.index);
+			size_t group;
+			if (sh == nullptr || ref.layer != layer || ShapeLocked(*sh))
+				continue;
+			bool isGroup = IsGroupShape(fDocument, *sh, group);
+			if (what == 'sM46' ? sh->kind != Sig("FRAM") : isGroup)
+				indices.push_back(ref.index);
+		}
+		if (what == 'sM46' ? indices.size() < 2 : indices.empty())
+			return true;
+		fUndo.BeginDocument(fDocument,
+			GobeResources::IndexString(1101, what == 'sM46' ? 22 : 23).String(), CurrentViewState());
+		std::string error;
+		std::vector<ShapeRef> now;
+		if (what == 'sM46') {
+			int group = GroupShapes(fDocument, part, layer, indices, error);
+			const GRPart* gr = fDocument.GraphicsPart(part);
+			for (size_t i = 0; group >= 0 && gr != nullptr && i < gr->layers[layer].shapes.size(); i++) {
+				size_t g;
+				if (IsGroupShape(fDocument, gr->layers[layer].shapes[i], g) && g == size_t(group))
+					now.push_back(Ref(part, layer, i));
+			}
+		} else {
+			// the last first: the shapes already back are above each one
+			// taken apart now, and move up by its shapes less its frame
+			std::sort(indices.rbegin(), indices.rend());
+			for (size_t index : indices) {
+				int count = UngroupShape(fDocument, part, layer, index, error);
+				if (count < 0)
+					continue;
+				for (ShapeRef& r : now)
+					r.index = r.index + size_t(count) - 1;
+				for (int k = 0; k < count; k++)
+					now.push_back(Ref(part, layer, index + size_t(k)));
+			}
+		}
+		fShapes = now;
+		GeometryChanged();
 		Invalidate();
 		if (Window() != NULL)
 			Window()->PostMessage(kMsgDocumentChanged);
@@ -766,6 +933,8 @@ TPageView::ShapeCommand(BMessage* message)
 					|| ref.index >= gr->layers[ref.layer].shapes.size())
 				continue;
 			Shape& sh = gr->layers[ref.layer].shapes[ref.index];
+			if (sh.kind == Sig("FRAM"))
+				continue;		// (a group's frame)
 			if (what == 'sM48')
 				sh.values[0] |= kShapeLocked;
 			else if (what == 'sM49')
@@ -852,9 +1021,13 @@ TPageView::ShapeCommand(BMessage* message)
 	// formatting's label)
 	fUndo.BeginDocument(fDocument, std::string(GobeResources::IndexString(5, 5).String())
 		+ GobeResources::IndexString(11, 0).String(), CurrentViewState());
-	for (const ShapeRef& ref : fShapes)
+	for (const ShapeRef& ref : fShapes) {
+		const Shape* sh = ShapeAt(fDocument, ref.part, ref.layer, ref.index);
+		if (sh == nullptr || sh->kind == Sig("FRAM"))
+			continue;		// (a group's frame: its shapes keep theirs)
 		for (const Property& p : properties)
 			SetShapeProperty(fDocument, part, ref.layer, ref.index, p);
+	}
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);
@@ -944,7 +1117,7 @@ TPageView::DrawShapeSelection(float dx, float dy)
 				oy = f.y + ddy;
 			}
 		float b[4];
-		ShapeBounds(*s, b);
+		BoxOf(fDocument, *s, b);
 		if (fShapeDrag.mode == 2) {
 			float mx = fShapeDrag.now[0] - fShapeDrag.start[0];
 			float my = fShapeDrag.now[1] - fShapeDrag.start[1];
@@ -966,7 +1139,7 @@ TPageView::DrawShapeSelection(float dx, float dy)
 			StrokeLine(BPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2),
 				BPoint(fShapeDrag.now[0] + ox, fShapeDrag.now[1] + oy), B_MIXED_COLORS);
 		}
-		if (fShapeMode == 2 && fShapes.size() == 1 && !ShapeLocked(*s)) {
+		if (fShapeMode == 2 && fShapes.size() == 1 && !ShapeLocked(*s) && s->kind != Sig("FRAM")) {
 			// Reshape: the points (open squares), a curve's control points
 			// (round, joined to their point)
 			for (const DrawPoint& p : ShapeVertices(*s))
