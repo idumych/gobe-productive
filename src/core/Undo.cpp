@@ -82,6 +82,7 @@ void
 UndoStack::Begin(const Document& doc, size_t part, const std::string& label,
 	const ViewState& view, uint64_t merge)
 {
+	fChanges++;
 	fRedo.clear();
 	if (merge != 0 && merge == fMerge && !fUndo.empty() && fUndo.back()->part == part)
 		return;
@@ -100,6 +101,7 @@ UndoStack::Begin(const Document& doc, size_t part, const std::string& label,
 void
 UndoStack::BeginDocument(const Document& doc, const std::string& label, const ViewState& view)
 {
+	fChanges++;
 	fRedo.clear();
 	fMerge = 0;
 	auto step = std::make_unique<Step>();
@@ -134,6 +136,7 @@ UndoStack::Swap(Document& doc, std::vector<std::unique_ptr<Step>>& from,
 {
 	if (from.empty())
 		return -1;
+	fChanges++;
 	fMerge = 0;
 	std::unique_ptr<Step> step = std::move(from.back());
 	from.pop_back();
@@ -172,6 +175,7 @@ UndoStack::DocumentSaved()
 void
 UndoStack::Clear()
 {
+	fChanges++;
 	fUndo.clear();
 	fRedo.clear();
 	fMerge = 0;

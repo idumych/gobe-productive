@@ -45,7 +45,8 @@ static const uint32 kMsgRunScript = 'Grun';
 
 class TPageView : public BView {
 public:
-	TPageView(Document& document);
+	// `undo`: the document's history, shared by its windows
+	TPageView(Document& document, UndoStack& undo);
 
 	virtual void AttachedToWindow();
 	virtual void Draw(BRect updateRect);
@@ -96,6 +97,9 @@ public:
 	void ImportStyles(BMessage* message);
 	// the page geometry changed (Page Setup, Margins): frames, layout
 	void GeometryChanged();
+	// another window of the document changed it: the values, the frames
+	// and the layout anew, the caret kept within the text
+	void DocumentChangedElsewhere();
 	// the menu commands MessageReceived handles (the window passes them on)
 	static bool HandlesCommand(uint32 what);
 	// TSSFillCommand::IsLocked (and its alert)
@@ -185,7 +189,7 @@ public:
 	BPopUpMenu* ContextMenu(BPoint where);
 	Caret fCaret;
 	Caret fAnchor;
-	UndoStack fUndo;
+	UndoStack& fUndo;		// the document's (TSharedDocument)
 	bool fShowUndoSteps = false;	// THistory +0x1d (History's Options)
 	UndoStack::ViewState CurrentViewState() const;
 	// test hooks used by RunScript

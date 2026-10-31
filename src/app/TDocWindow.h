@@ -77,6 +77,8 @@ public:
 
 	// TApp::FrontDocWindow: the document window last active, or NULL
 	static TDocWindow* Front();
+	// the document's other windows hold this while they use it
+	class BLocker& DocumentLock() const;
 	// the active part has text selected (TFindReplace::hasTextSelection)
 	bool HasTextSelection() const;
 	// THistory: the steps' labels, how many are done, Show Undo Steps
@@ -130,8 +132,9 @@ public:
 private:
 	BFilePanel* fSavePanel = NULL;
 	BMenuField* fFormatField = NULL;	// the Save panel's "File Format"
-	bool fModified = false;
-	bool fBackedUp = false;
+	// the document's windows, history and saved state (New Window)
+	struct TSharedDocument* fShared = NULL;
+	uint32 fSeenGeneration = 0;		// the shared generation laid out for
 
 	// text menus for menu mark tracking
 	TFontMenu* fFontMenu = NULL;
