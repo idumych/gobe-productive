@@ -54,8 +54,8 @@ text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sa
 <rect class="sources" x="554.9" y="34" width="13.8" height="22" rx="2"/>
 <rect class="doing" x="571.7" y="34" width="13.8" height="22" rx="2"/>
 <rect class="doing" x="588.5" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="605.3" y="34" width="13.8" height="22" rx="2"/>
-<rect class="left" x="622.1" y="34" width="13.8" height="22" rx="2"/>
+<rect class="doing" x="605.3" y="34" width="13.8" height="22" rx="2"/>
+<rect class="doing" x="622.1" y="34" width="13.8" height="22" rx="2"/>
 <rect class="left" x="638.9" y="34" width="13.8" height="22" rx="2"/>
 <rect class="left" x="655.7" y="34" width="13.8" height="22" rx="2"/>
 <rect class="left" x="672.6" y="34" width="13.8" height="22" rx="2"/>
@@ -63,6 +63,6 @@ text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sa
 <rect class="left" x="706.2" y="34" width="13.8" height="22" rx="2"/>
 <rect class="released" x="0" y="70" width="12" height="12" rx="2"/><text class="small" x="18" y="80">13 released in 0.1.1</text>
 <rect class="sources" x="180" y="70" width="12" height="12" rx="2"/><text class="small" x="198" y="80">21 in the sources</text>
-<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">2 in progress</text>
-<rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">7 not started</text>
+<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">4 in progress</text>
+<rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">5 not started</text>
 </svg>

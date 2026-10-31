@@ -119,7 +119,7 @@ Clipboard.
 | Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | next |
 | Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | next |
 | New Window | not yet |
-| The ToolBar | not yet |
+| The ToolBar | in progress |
 
 ### Word processor
 
@@ -160,7 +160,7 @@ sizes, headings and options are saved with the document.
 |---|---|
 | Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
 | Creating and linking frames | not yet |
-| Drawing tools | not yet |
+| Drawing tools | in progress |
 | Pattern and gradient inks; fill, pen and transparency in the FormatBar | in progress |
 
 ### Other formats (translators)
