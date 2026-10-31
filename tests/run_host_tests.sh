@@ -33,7 +33,7 @@ for c in src/core/*.cpp; do
 done
 
 # tests that take no arguments; all others get every sample document
-NO_ARGS="text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment spell import_original sylk sylk_formula ss_table ss_excel"
+NO_ARGS="text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment spell import_original sylk sylk_formula ss_table"
 TOOLS="core_dump ss_dump"	# not tests
 
 TESTS=${*:-$(ls tests/*.cpp | xargs -n1 basename | sed 's/\.cpp$//')}

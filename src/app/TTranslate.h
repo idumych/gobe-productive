@@ -53,13 +53,14 @@ enum SaveFormat {
 	kSaveSYLK,			// SYLKTranslator, text/sylk (spreadsheets)
 	kSaveTabText,		// TextTranslator 'TABT', text/tab-separated-values
 	kSaveCommaText,		// 'COMA', text/x-comma-separated-values
-	kSaveSemicolonText	// 'SEMI', text/x-semicolon-separated-values
+	kSaveSemicolonText,	// 'SEMI', text/x-semicolon-separated-values
+	kSaveExcel			// ExcelTranslator 'XLS8', application/vnd.ms-excel
 };
 
 // Adds the "File Format" popup to a save panel (SavePanel::SavePanel);
 // returns the menu field. `textFormats`: whether the document's main part
 // is word processing (the HTML, Plain Text and RTF formats are offered);
-// `sheetFormats`: a spreadsheet (SYLK and the delimited texts).
+// `sheetFormats`: a spreadsheet (Excel 97, SYLK and the delimited texts).
 BMenuField* AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats = false);
 // The format chosen in the field (kSaveGobe if none).
 SaveFormat ChosenFormat(BMenuField* field);

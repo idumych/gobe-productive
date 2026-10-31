@@ -284,6 +284,8 @@ FormatType(SaveFormat format)
 			return "text/x-comma-separated-values";
 		case kSaveSemicolonText:
 			return "text/x-semicolon-separated-values";
+		case kSaveExcel:
+			return "application/vnd.ms-excel";
 		default:
 			return NULL;
 	}
@@ -468,6 +470,7 @@ AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats)
 				SaveFormat format;
 			} formats[] = {
 				{"Comma-delimited text", kSaveCommaText},
+				{"Microsoft Excel 97", kSaveExcel},
 				{"SYLK", kSaveSYLK},
 				{"Semicolon-delimited text", kSaveSemicolonText},
 				{"Tab-delimited text", kSaveTabText}
@@ -517,6 +520,8 @@ ExportFile(const Document& doc, const char* path, SaveFormat format, BString& er
 		ok = ExportHTML(doc, path, BPath(path).Leaf(), message);
 	} else if (format == kSaveSYLK) {
 		ok = ExportSylk(doc, part, path, message);
+	} else if (format == kSaveExcel) {
+		ok = ExportExcel(doc, path, message);
 	} else if (format == kSaveTabText || format == kSaveCommaText
 			|| format == kSaveSemicolonText) {
 		ok = ExportTable(doc, part, path, format == kSaveTabText ? '\t'

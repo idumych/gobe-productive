@@ -6,10 +6,13 @@
 // result with its STRING record), a date in a date format, a column width.
 // Expected values follow the BIFF8 and compound file layouts as Microsoft
 // documents them and TImportExcel's conversions (AdjustTimeValue: 25569).
-// Arguments: none (sample paths, if given, are ignored).
+// Then every sample's spreadsheets written as a workbook (ExcelBytes) and
+// read back: the same sheets, values and formulas.
+// Arguments: the sample documents.
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -138,7 +141,7 @@ Compound(Bytes stream)
 
 
 int
-main()
+main(int argc, char** argv)
 {
 	// the workbook globals
 	Bytes book;
@@ -428,6 +431,73 @@ main()
 		Check(std::fabs(ss->ColumnWidth(0) - 140) < 0.01, "column A's width");
 	}
 	remove(path.c_str());
+
+	// the samples written and read back
+	int documents = 0, cells = 0, formulas = 0;
+	for (int i = 1; i < argc; i++) {
+		Document sample;
+		if (!LoadDocument(argv[i], sample, error))
+			continue;
+		std::vector<size_t> parts;
+		for (size_t s = 0; s < sample.SheetCount(); s++)
+			if (sample.SpreadsheetPart(sample.sheets.sheets[s].mainPart) != nullptr)
+				parts.push_back(sample.sheets.sheets[s].mainPart);
+		if (parts.empty())
+			continue;
+		documents++;
+		std::string name = argv[i];
+		ExcelBook back;
+		Check(ReadExcel(ExcelBytes(sample), back, error), name + ": read back " + error);
+		Check(back.sheets.size() == parts.size(), name + ": a worksheet per spreadsheet");
+		if (back.sheets.size() != parts.size())
+			continue;
+		SSBook sampleBook(sample), again(sample);
+		for (size_t s = 0; s < parts.size(); s++) {
+			const SSPart& ss = *sample.SpreadsheetPart(parts[s]);
+			SSEvaluator e(ss, &sampleBook, int(parts[s])), e2(ss, &again, int(parts[s]));
+			std::map<std::pair<int, int>, const ExcelCell*> byCell;
+			for (const ExcelCell& c : back.sheets[s].cells)
+				byCell[{c.row, c.column}] = &c;
+			for (const SSCell& cell : ss.cells) {
+				if (cell.id.b == 0xffff || cell.id.b > 255)
+					continue;
+				SSValue v = e.Value(cell.id.a, cell.id.b);
+				auto found = byCell.find({cell.id.a, cell.id.b});
+				std::string where = name + " " + CellName(cell.id);
+				// (nothing to write: an empty cell, a formula with no value
+				// Excel can't take; a value that changes each time, RAND's)
+				SSValue v2 = e2.Value(cell.id.a, cell.id.b);
+				if (v.type == SSValue::kNone || v2.number != v.number || v2.text != v.text)
+					continue;
+				if (found == byCell.end()) {
+					Check(false, where + ": missing");
+					continue;
+				}
+				const ExcelCell& c = *found->second;
+				cells++;
+				if (v.type == SSValue::kString)
+					Check(c.text == v.text, where + ": text");
+				else if (v.type == SSValue::kNumber || v.type == SSValue::kTime) {
+					double n = 0;
+					v.GetNum(n);
+					// (a time-only format keeps the time of day: AdjustTimeValue)
+					bool timeOnly = c.format.find_first_of("dDyY") == std::string::npos
+						&& c.format.find_first_of("hHsS") != std::string::npos;
+					if (timeOnly)
+						n -= std::floor(n);
+					Check(c.kind == ExcelCell::kNumber && std::fabs(c.number - n) < 1e-6,
+						where + ": number " + std::to_string(n) + " / " + std::to_string(c.number));
+				}
+				if (!c.formula.empty()) {
+					formulas++;
+					Check(c.formula == CellInput(ss, cell.id.a, cell.id.b), where + ": formula "
+						+ CellInput(ss, cell.id.a, cell.id.b) + " / " + c.formula);
+				}
+			}
+		}
+	}
+	Check(documents > 5 && formulas > 1000, "samples written: " + std::to_string(documents) + ", "
+		+ std::to_string(cells) + " cells, " + std::to_string(formulas) + " formulas");
 	printf("ss_excel: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed != 0 || sOk == 0;
 }

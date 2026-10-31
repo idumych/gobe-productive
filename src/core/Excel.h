@@ -87,6 +87,21 @@ bool ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& e
 bool ImportExcel(const std::string& path, Document& doc, std::string& error,
 	std::string* notice = nullptr);
 
+// The workbook Save As writes in the "Excel" format (TExportExcel, BIFF8
+// in an OLE compound file: the "Workbook" stream): the document's
+// spreadsheet sheets (CountSSSheets), each cell's value and its formula
+// (Gobe's tokens as Excel's; a formula with something Excel can't take,
+// another part's reference or a name, is written as its value), the
+// number formats (FORMAT and XF), the column widths (COLINFO), the 1904
+// date system (DATEMODE 1, as Write_Global_Records sets it).
+std::vector<uint8_t> ExcelBytes(const Document& doc);
+bool ExportExcel(const Document& doc, const std::string& path, std::string& error);
+
+// A compound file with the given streams (root storage only): streams
+// under 4096 bytes in the mini stream, as [MS-CFB] has them.
+std::vector<uint8_t> MakeCompoundFile(
+	const std::vector<std::pair<std::string, std::vector<uint8_t>>>& streams);
+
 } // namespace gobe
 
 #endif

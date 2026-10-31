@@ -3,6 +3,7 @@
 // TExcelParser.c for formulas).
 #include "Excel.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -14,6 +15,8 @@
 #include "Editing.h"
 #include "Names.h"
 #include "SSEval.h"
+#include "SSPart.h"
+#include "Formula.h"
 #include "SSStyle.h"
 
 namespace gobe {
@@ -1101,6 +1104,677 @@ ImportExcel(const std::string& path, Document& doc, std::string& error, std::str
 	if (bad > 0 && notice != nullptr)
 		*notice = std::to_string(bad) + " formulas couldn't be read; their cells have their values.";
 	return true;
+}
+
+} // namespace gobe
+
+
+// #pragma mark - export
+
+namespace gobe {
+
+std::vector<uint8_t>
+MakeCompoundFile(const std::vector<std::pair<std::string, std::vector<uint8_t>>>& streams)
+{
+	const uint32_t kSector = 512, kMini = 64, kCutoff = 4096;
+	// the mini stream (small streams, 64-byte sectors) and its FAT
+	std::vector<uint8_t> mini;
+	std::vector<uint32_t> miniFAT;
+	std::vector<uint32_t> starts(streams.size());
+	for (size_t i = 0; i < streams.size(); i++) {
+		const std::vector<uint8_t>& data = streams[i].second;
+		if (data.size() >= kCutoff)
+			continue;
+		uint32_t first = uint32_t(mini.size() / kMini);
+		uint32_t count = uint32_t((data.size() + kMini - 1) / kMini);
+		starts[i] = count == 0 ? kEndOfChain : first;
+		for (uint32_t k = 0; k < count; k++)
+			miniFAT.push_back(k + 1 < count ? first + k + 1 : kEndOfChain);
+		mini.insert(mini.end(), data.begin(), data.end());
+		mini.resize(size_t(first + count) * kMini, 0);
+	}
+	// the sectors after the header: big streams, the mini stream, the mini
+	// FAT, the directory, then the FAT (whose own size settles last)
+	std::vector<std::vector<uint8_t>> blocks;	// each sector-aligned
+	std::vector<uint32_t> blockStart;
+	uint32_t next = 0;
+	auto place = [&](std::vector<uint8_t> data) {
+		uint32_t count = uint32_t((data.size() + kSector - 1) / kSector);
+		data.resize(size_t(count) * kSector, 0);
+		blockStart.push_back(count == 0 ? kEndOfChain : next);
+		next += count;
+		blocks.push_back(std::move(data));
+		return blockStart.back();
+	};
+	for (size_t i = 0; i < streams.size(); i++)
+		if (streams[i].second.size() >= kCutoff)
+			starts[i] = place(streams[i].second);
+	uint32_t miniStart = place(mini);
+	std::vector<uint8_t> miniFATBytes;
+	for (uint32_t v : miniFAT)
+		for (int b = 0; b < 4; b++)
+			miniFATBytes.push_back(uint8_t(v >> (8 * b)));
+	uint32_t miniFATStart = place(miniFATBytes);
+	uint32_t miniFATSectors = uint32_t((miniFATBytes.size() + kSector - 1) / kSector);
+	// the directory: the root, then the streams as a chain of right siblings
+	std::vector<uint8_t> directory;
+	auto entry = [&](const std::string& name, uint8_t type, uint32_t start, uint32_t size,
+			uint32_t right, uint32_t child) {
+		std::vector<uint8_t> e(128, 0);
+		for (size_t i = 0; i < name.size() && i < 31; i++)
+			e[i * 2] = uint8_t(name[i]);
+		uint16_t length = uint16_t((std::min<size_t>(name.size(), 31) + 1) * 2);
+		e[0x40] = uint8_t(length);
+		e[0x41] = uint8_t(length >> 8);
+		e[0x42] = type;
+		e[0x43] = 1;			// black
+		auto u32at = [&](size_t at, uint32_t v) {
+			for (int b = 0; b < 4; b++)
+				e[at + size_t(b)] = uint8_t(v >> (8 * b));
+		};
+		u32at(0x44, kFree);		// left sibling
+		u32at(0x48, right);
+		u32at(0x4c, child);
+		u32at(0x74, start);
+		u32at(0x78, size);
+		directory.insert(directory.end(), e.begin(), e.end());
+	};
+	entry("Root Entry", 5, mini.empty() ? kEndOfChain : miniStart, uint32_t(mini.size()), kFree,
+		streams.empty() ? kFree : 1);
+	for (size_t i = 0; i < streams.size(); i++)
+		entry(streams[i].first, 2, starts[i], uint32_t(streams[i].second.size()),
+			i + 1 < streams.size() ? uint32_t(i + 2) : kFree, kFree);
+	uint32_t directoryStart = place(directory);
+	// the FAT: every chain, then the FAT's own sectors
+	uint32_t dataSectors = next;
+	uint32_t fatSectors = 1;
+	while ((dataSectors + fatSectors) * 4 > fatSectors * kSector)
+		fatSectors++;
+	std::vector<uint32_t> fat(size_t(fatSectors) * kSector / 4, kFree);
+	for (size_t b = 0; b < blocks.size(); b++) {
+		uint32_t count = uint32_t(blocks[b].size() / kSector);
+		for (uint32_t k = 0; k < count; k++)
+			fat[blockStart[b] + k] = k + 1 < count ? blockStart[b] + k + 1 : kEndOfChain;
+	}
+	for (uint32_t k = 0; k < fatSectors; k++)
+		fat[dataSectors + k] = 0xfffffffd;		// FATSECT
+	// the header
+	std::vector<uint8_t> out(512, 0);
+	static const uint8_t kSignature[8] = {0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1};
+	memcpy(out.data(), kSignature, 8);
+	auto u16at = [&](size_t at, uint16_t v) { out[at] = uint8_t(v); out[at + 1] = uint8_t(v >> 8); };
+	auto u32at = [&](size_t at, uint32_t v) {
+		for (int b = 0; b < 4; b++)
+			out[at + size_t(b)] = uint8_t(v >> (8 * b));
+	};
+	u16at(0x18, 0x3e);
+	u16at(0x1a, 3);
+	u16at(0x1c, 0xfffe);
+	u16at(0x1e, 9);
+	u16at(0x20, 6);
+	u32at(0x2c, fatSectors);
+	u32at(0x30, directoryStart);
+	u32at(0x38, kCutoff);
+	u32at(0x3c, miniFAT.empty() ? kEndOfChain : miniFATStart);
+	u32at(0x40, miniFAT.empty() ? 0 : miniFATSectors);
+	u32at(0x44, kEndOfChain);
+	for (int i = 0; i < 109; i++)
+		u32at(0x4c + size_t(i) * 4, uint32_t(i) < fatSectors ? dataSectors + uint32_t(i) : kFree);
+	for (const std::vector<uint8_t>& block : blocks)
+		out.insert(out.end(), block.begin(), block.end());
+	for (uint32_t v : fat)
+		for (int b = 0; b < 4; b++)
+			out.push_back(uint8_t(v >> (8 * b)));
+	return out;
+}
+
+
+namespace {
+
+struct BiffOut {
+	std::vector<uint8_t> data;
+	void u8(uint8_t v) { data.push_back(v); }
+	void u16(uint16_t v) { u8(uint8_t(v)); u8(uint8_t(v >> 8)); }
+	void u32(uint32_t v) { u16(uint16_t(v)); u16(uint16_t(v >> 16)); }
+	void f64(double v) { uint8_t b[8]; memcpy(b, &v, 8); data.insert(data.end(), b, b + 8); }
+	void bytes(const std::vector<uint8_t>& b) { data.insert(data.end(), b.begin(), b.end()); }
+};
+
+
+void
+Record(BiffOut& out, uint16_t type, const std::vector<uint8_t>& body)
+{
+	// (records over 8224 bytes go on in CONTINUE records)
+	size_t at = 0;
+	do {
+		size_t n = std::min<size_t>(body.size() - at, 8224);
+		out.u16(at == 0 ? type : 0x3c);
+		out.u16(uint16_t(n));
+		out.data.insert(out.data.end(), body.begin() + long(at), body.begin() + long(at + n));
+		at += n;
+	} while (at < body.size());
+}
+
+
+// UTF-8 as UTF-16 code units
+std::vector<uint16_t>
+Units(const std::string& text)
+{
+	std::vector<uint16_t> out;
+	for (size_t i = 0; i < text.size();) {
+		unsigned char c = (unsigned char)text[i];
+		uint32_t code = c;
+		int length = c >= 0xf0 ? 4 : c >= 0xe0 ? 3 : c >= 0xc0 ? 2 : 1;
+		if (length > 1)
+			code = c & (0x3f >> (length - 1));
+		for (int k = 1; k < length && i + size_t(k) < text.size(); k++)
+			code = code << 6 | ((unsigned char)text[i + size_t(k)] & 0x3f);
+		i += size_t(length);
+		if (code >= 0x10000) {
+			code -= 0x10000;
+			out.push_back(uint16_t(0xd800 | (code >> 10)));
+			out.push_back(uint16_t(0xdc00 | (code & 0x3ff)));
+		} else
+			out.push_back(uint16_t(code));
+	}
+	return out;
+}
+
+
+// a BIFF8 string: its length (8 or 16 bits), 1 (16-bit characters), them
+void
+UnicodeString(BiffOut& out, const std::string& text, bool longLength)
+{
+	std::vector<uint16_t> units = Units(text);
+	if (longLength)
+		out.u16(uint16_t(std::min<size_t>(units.size(), 65535)));
+	else
+		out.u8(uint8_t(std::min<size_t>(units.size(), 255)));
+	out.u8(1);
+	for (size_t i = 0; i < units.size() && i < (longLength ? 65535u : 255u); i++)
+		out.u16(units[i]);
+}
+
+
+// TExportExcel::Write_FORMULA_Record's tokens: Gobe's (operator first) as
+// Excel's (operands first); false for what Excel can't take
+bool
+ExcelTokens(const std::vector<FormulaToken>& t, size_t& i, CellID at, BiffOut& out)
+{
+	if (i >= t.size())
+		return false;
+	const FormulaToken& k = t[i++];
+	static const uint8_t kBinary[12] = {0x0a, 0x0c, 0x0e, 0x09, 0x0d, 0x0b, 0x08, 0x03, 0x04,
+		0x05, 0x06, 0x07};
+	if (k.kind < 0x0c) {
+		if (!ExcelTokens(t, i, at, out) || !ExcelTokens(t, i, at, out))
+			return false;
+		out.u8(kBinary[k.kind]);
+		return true;
+	}
+	auto ref = [&](const CellRef& r, uint16_t& row, uint16_t& column) {
+		CellID id;
+		// (CellRef: flags 1 invalid, 2 the row absolute, 4 the column)
+		if (r.flags & 1)
+			return false;
+		int rr = (r.flags & 2) ? int16_t(r.cell.a) : at.a + int16_t(r.cell.a);
+		int cc = (r.flags & 4) ? int16_t(r.cell.b) : at.b + int16_t(r.cell.b);
+		if (rr < 0 || cc < 0 || cc > 255)
+			return false;
+		(void)id;
+		row = uint16_t(rr);
+		column = uint16_t(cc | ((r.flags & 2) ? 0 : 0x8000) | ((r.flags & 4) ? 0 : 0x4000));
+		return true;
+	};
+	switch (k.kind) {
+		case 0x0c:
+			if (!ExcelTokens(t, i, at, out))
+				return false;
+			out.u8(0x14);
+			return true;
+		case 0x0d:
+			if (!ExcelTokens(t, i, at, out))
+				return false;
+			out.u8(0x13);
+			return true;
+		case 0x0e:
+			if (!ExcelTokens(t, i, at, out))
+				return false;
+			if (i < t.size() && t[i].kind == 0x0f)
+				i++;
+			out.u8(0x15);
+			return true;
+		case 0x11: {
+			std::string s = k.strings.empty() ? "" : k.strings[0];
+			out.u8(0x17);
+			UnicodeString(out, s, false);
+			return true;
+		}
+		case 0x12:
+			out.u8(0x1d);
+			out.u8(k.value ? 1 : 0);
+			return true;
+		case 0x13:
+		case 0x14:
+		case 0x15:
+		case 0x16:
+			if (k.number >= 0 && k.number <= 65535 && k.number == std::floor(k.number)) {
+				out.u8(0x1e);
+				out.u16(uint16_t(k.number));
+			} else {
+				out.u8(0x1f);
+				out.f64(k.number);
+			}
+			return true;
+		case 0x17: {
+			std::string name = ErrorText(int(k.value));
+			uint8_t code = 0x0f;
+			for (size_t e = 0; e < sizeof kErrorCodes; e++)
+				if (name == kErrorNames[e])
+					code = kErrorCodes[e];
+			out.u8(0x1c);
+			out.u8(code);
+			return true;
+		}
+		case 0x18:	// a date: Excel's 1904 count (DATEMODE 1)
+			out.u8(0x1f);
+			out.f64(double(k.value) / 86400.0 + 24107);
+			return true;
+		case 0x19: {
+			uint16_t row, column;
+			if (k.refs.empty() || !ref(k.refs[0], row, column))
+				return false;
+			out.u8(0x44);		// tRefV
+			out.u16(row);
+			out.u16(column);
+			return true;
+		}
+		case 0x1a: {
+			uint16_t r1, c1, r2, c2;
+			if (k.refs.size() < 2 || !ref(k.refs[0], r1, c1) || !ref(k.refs[1], r2, c2))
+				return false;
+			out.u8(0x25);		// tAreaR
+			out.u16(r1);
+			out.u16(r2);
+			out.u16(c1);
+			out.u16(c2);
+			return true;
+		}
+		case 0x1c: {
+			std::string name = k.strings.empty() ? "" : k.strings[0];
+			for (char& c : name)
+				c = char(toupper((unsigned char)c));
+			const ExcelFunction* f = nullptr;
+			for (const ExcelFunction& g : kFunctions)
+				if (name == g.name)
+					f = &g;
+			if (f == nullptr)
+				return false;
+			for (uint32_t n = 0; n < k.value; n++)
+				if (!ExcelTokens(t, i, at, out))
+					return false;
+			if (f->arguments != 255 && uint32_t(f->arguments) == k.value) {
+				out.u8(0x41);	// tFuncV
+				out.u16(uint16_t(f->index));
+			} else {
+				out.u8(0x42);	// tFuncVarV
+				out.u8(uint8_t(k.value));
+				out.u16(uint16_t(f->index));
+			}
+			return true;
+		}
+		default:
+			return false;
+	}
+}
+
+} // namespace
+
+
+std::vector<uint8_t>
+ExcelBytes(const Document& doc)
+{
+	// the spreadsheet sheets (TExportExcel::CountSSSheets)
+	std::vector<size_t> parts;
+	std::vector<std::string> names;
+	for (size_t s = 0; s < doc.SheetCount(); s++)
+		if (doc.SpreadsheetPart(doc.sheets.sheets[s].mainPart) != nullptr) {
+			parts.push_back(doc.sheets.sheets[s].mainPart);
+			names.push_back(doc.sheets.sheets[s].name);
+		}
+	// what the globals hold: the strings (SST), the number formats
+	std::vector<std::string> strings;
+	std::map<std::string, uint32_t> stringIndex;
+	std::vector<std::string> formats;				// custom, from FORMAT index 164
+	struct Cell {
+		uint16_t row, column;
+		SSValue value;
+		std::vector<uint8_t> tokens;
+		bool formula = false;
+		uint16_t xf = 15;
+	};
+	std::vector<std::vector<Cell>> sheetCells(parts.size());
+	std::vector<std::map<uint16_t, float>> widths(parts.size());
+	std::vector<SSRange> used(parts.size());
+	std::vector<std::string> xfFormats;			// a cell XF per format, from XF 16
+	SSBook book(doc);
+	for (size_t s = 0; s < parts.size(); s++) {
+		const SSPart& ss = *doc.SpreadsheetPart(parts[s]);
+		SSEvaluator eval(ss, &book, int(parts[s]));
+		used[s] = ss.used;
+		for (const SSHeader& column : ss.columns)
+			if (column.index < 256 && column.cell.number != ss.defaultWidth && column.cell.number > 0)
+				widths[s][uint16_t(column.index)] = float(column.cell.number);
+		for (const SSCell& cell : ss.cells) {
+			if (cell.id.b == 0xffff || cell.id.b > 255)
+				continue;
+			Cell out;
+			out.row = cell.id.a;
+			out.column = cell.id.b;
+			out.value = eval.Value(cell.id.a, cell.id.b);
+			if (cell.kind == Sig("Fmla")) {
+				BiffOut tokens;
+				size_t i = 0;
+				bool ok = ExcelTokens(cell.formula, i, cell.id, tokens);
+				while (i < cell.formula.size() && cell.formula[i].kind == 0x1d)
+					i++;	// (the formula's end)
+				if (ok && i == cell.formula.size()) {
+					out.tokens = tokens.data;
+					out.formula = true;
+				}
+			}
+			if (out.value.type == SSValue::kNone && !out.formula)
+				continue;
+			// the format: a cell XF of its own
+			std::vector<uint32_t> stack = {ss.style};
+			if (const SSHeader* h = ss.Column(cell.id.b))
+				stack.push_back(h->cell.style);
+			if (const SSHeader* h = ss.Row(cell.id.a))
+				stack.push_back(h->cell.style);
+			stack.push_back(cell.style);
+			std::string format = ResolveCellStyle(doc.styles, stack).format;
+			if (!format.empty() && format != "General") {
+				auto x = std::find(xfFormats.begin(), xfFormats.end(), format);
+				out.xf = uint16_t(16 + (x - xfFormats.begin()));
+				if (x == xfFormats.end())
+					xfFormats.push_back(format);
+			}
+			if (out.value.type == SSValue::kString && !out.formula) {
+				auto found = stringIndex.find(out.value.text);
+				if (found == stringIndex.end()) {
+					stringIndex[out.value.text] = uint32_t(strings.size());
+					strings.push_back(out.value.text);
+				}
+			}
+			sheetCells[s].push_back(out);
+		}
+		std::stable_sort(sheetCells[s].begin(), sheetCells[s].end(), [](const Cell& a, const Cell& b) {
+			return a.row != b.row ? a.row < b.row : a.column < b.column;
+		});
+	}
+	uint32_t totalStrings = 0;
+	for (const auto& cells : sheetCells)
+		for (const Cell& c : cells)
+			totalStrings += c.value.type == SSValue::kString && !c.formula;
+
+	BiffOut out;
+	auto bof = [&](uint16_t type) {
+		BiffOut b;
+		b.u16(0x0600);
+		b.u16(type);
+		b.u16(0x0dbb);
+		b.u16(0x07cc);
+		b.u32(0);
+		b.u32(6);
+		Record(out, 0x809, b.data);
+	};
+	bof(0x0005);
+	{
+		BiffOut b;
+		b.u16(1200);		// CODEPAGE: UTF-16
+		Record(out, 0x42, b.data);
+	}
+	{
+		// WINDOW1 as Write_Global_Records writes it
+		BiffOut b;
+		for (uint16_t v : {uint16_t(0x370), uint16_t(0x118), uint16_t(0x2bd4), uint16_t(0x1d60),
+				uint16_t(0x38), uint16_t(0), uint16_t(0), uint16_t(1), uint16_t(600)})
+			b.u16(v);
+		Record(out, 0x3d, b.data);
+	}
+	{
+		BiffOut b;
+		b.u16(1);			// DATEMODE: 1904
+		Record(out, 0x22, b.data);
+	}
+	for (int f = 0; f < 4; f++) {
+		// FONT: Arial 10 points (Excel needs four; the fifth is index 5)
+		BiffOut b;
+		b.u16(200);
+		b.u16(0);
+		b.u16(0x7fff);
+		b.u16(400);
+		b.u16(0);
+		b.u8(0);
+		b.u8(0);
+		b.u8(0);
+		b.u8(0);
+		UnicodeString(b, "Arial", false);
+		Record(out, 0x31, b.data);
+	}
+	// FORMAT for each format of the cells (from 164)
+	std::vector<uint16_t> formatIndex;
+	for (const std::string& format : xfFormats) {
+		uint16_t index = 0;
+		for (uint16_t builtin = 1; builtin < 50 && index == 0; builtin++)
+			if (BuiltinFormat(builtin) == format)
+				index = builtin;
+		if (index == 0) {
+			index = uint16_t(164 + formats.size());
+			formats.push_back(format);
+			BiffOut b;
+			b.u16(index);
+			UnicodeString(b, format, true);
+			Record(out, 0x41e, b.data);
+		}
+		formatIndex.push_back(index);
+	}
+	// XF: 15 style XFs (Normal and the built-in styles), the default cell
+	// XF (15), a cell XF per format (16 on)
+	auto xf = [&](uint16_t format, bool style) {
+		BiffOut b;
+		b.u16(0);
+		b.u16(format);
+		b.u16(style ? 0xfff5 : 0x0001);
+		b.u8(0x20);			// general, bottom
+		b.u8(0);
+		b.u8(0);
+		b.u8(style ? 0 : 0xf8);
+		b.u32(0);
+		b.u32(0);
+		b.u16(0x20c0);
+		Record(out, 0xe0, b.data);
+	};
+	for (int i = 0; i < 15; i++)
+		xf(0, true);
+	xf(0, false);
+	for (uint16_t index : formatIndex)
+		xf(index, false);
+	{
+		BiffOut b;			// STYLE: Normal on XF 0
+		b.u16(0x8000);
+		b.u8(0);
+		b.u8(0xff);
+		Record(out, 0x293, b.data);
+	}
+	std::vector<size_t> boundAt;
+	for (const std::string& name : names) {
+		BiffOut b;
+		b.u32(0);			// (the sheet's BOF, patched)
+		b.u8(0);
+		b.u8(0);
+		UnicodeString(b, name.empty() ? "Sheet" : name, false);
+		boundAt.push_back(out.data.size() + 4);
+		Record(out, 0x85, b.data);
+	}
+	{
+		// SST: whole strings per record (a string that doesn't fit starts the
+		// next CONTINUE)
+		std::vector<std::vector<uint8_t>> pieces;
+		BiffOut piece;
+		piece.u32(totalStrings);
+		piece.u32(uint32_t(strings.size()));
+		for (const std::string& s : strings) {
+			BiffOut one;
+			UnicodeString(one, s.size() > 8000 ? s.substr(0, 8000) : s, true);
+			if (piece.data.size() + one.data.size() > 8224) {
+				pieces.push_back(piece.data);
+				piece.data.clear();
+			}
+			piece.bytes(one.data);
+		}
+		pieces.push_back(piece.data);
+		for (size_t k = 0; k < pieces.size(); k++) {
+			out.u16(k == 0 ? 0xfc : 0x3c);
+			out.u16(uint16_t(pieces[k].size()));
+			out.bytes(pieces[k]);
+		}
+	}
+	Record(out, 0x0a, {});
+	// the sheets
+	for (size_t s = 0; s < parts.size(); s++) {
+		uint32_t at = uint32_t(out.data.size());
+		memcpy(&out.data[boundAt[s]], &at, 4);
+		bof(0x0010);
+		{
+			BiffOut b;		// DIMENSIONS
+			uint32_t rows = 0;
+			uint16_t columns = 0;
+			for (const Cell& c : sheetCells[s]) {
+				rows = std::max<uint32_t>(rows, uint32_t(c.row) + 1);
+				columns = std::max<uint16_t>(columns, uint16_t(c.column + 1));
+			}
+			b.u32(0);
+			b.u32(rows);
+			b.u16(0);
+			b.u16(columns);
+			b.u16(0);
+			Record(out, 0x200, b.data);
+		}
+		for (const auto& width : widths[s]) {
+			BiffOut b;		// COLINFO: 1/256 of a character, 7 points each
+			b.u16(width.first);
+			b.u16(width.first);
+			b.u16(uint16_t(std::min(65535.0f, width.second / 7.0f * 256.0f)));
+			b.u16(15);
+			b.u16(0);
+			b.u16(0);
+			Record(out, 0x7d, b.data);
+		}
+		for (const Cell& c : sheetCells[s]) {
+			BiffOut b;
+			b.u16(c.row);
+			b.u16(c.column);
+			b.u16(c.xf);
+			double number = 0;
+			bool isNumber = c.value.GetNum(number) && (c.value.type == SSValue::kNumber
+				|| c.value.type == SSValue::kTime);
+			if (c.value.type == SSValue::kTime || (isNumber && c.xf >= 16
+					&& IsDateNumberFormat(xfFormats[c.xf - 16])))
+				number += 24107;	// Gobe's days in Excel's 1904 count
+			if (c.formula) {
+				// FORMULA: the value (a string after it in STRING), always
+				// calculated again
+				if (c.value.type == SSValue::kString) {
+					b.u8(0);
+					for (int k = 0; k < 5; k++)
+						b.u8(0);
+					b.u16(0xffff);
+				} else if (c.value.type == SSValue::kBool || c.value.type == SSValue::kError) {
+					b.u8(c.value.type == SSValue::kBool ? 1 : 2);
+					b.u8(0);
+					uint8_t v = uint8_t(c.value.number != 0);
+					if (c.value.type == SSValue::kError) {
+						v = 0x0f;
+						std::string name = ErrorText(c.value.error);
+						for (size_t e = 0; e < sizeof kErrorCodes; e++)
+							if (name == kErrorNames[e])
+								v = kErrorCodes[e];
+					}
+					b.u8(v);
+					b.u8(0);
+					b.u8(0);
+					b.u8(0);
+					b.u16(0xffff);
+				} else
+					b.f64(number);
+				b.u16(0x0002);
+				b.u32(0);
+				b.u16(uint16_t(c.tokens.size()));
+				b.bytes(c.tokens);
+				Record(out, 0x06, b.data);
+				if (c.value.type == SSValue::kString) {
+					BiffOut str;
+					UnicodeString(str, c.value.text, true);
+					Record(out, 0x207, str.data);
+				}
+				continue;
+			}
+			switch (c.value.type) {
+				case SSValue::kString:
+					b.u32(stringIndex[c.value.text]);
+					Record(out, 0xfd, b.data);
+					break;
+				case SSValue::kBool:
+				case SSValue::kError: {
+					uint8_t v = uint8_t(c.value.number != 0);
+					if (c.value.type == SSValue::kError) {
+						v = 0x0f;
+						std::string name = ErrorText(c.value.error);
+						for (size_t e = 0; e < sizeof kErrorCodes; e++)
+							if (name == kErrorNames[e])
+								v = kErrorCodes[e];
+					}
+					b.u8(v);
+					b.u8(c.value.type == SSValue::kError ? 1 : 0);
+					Record(out, 0x205, b.data);
+					break;
+				}
+				default:
+					b.f64(number);
+					Record(out, 0x203, b.data);
+					break;
+			}
+		}
+		{
+			BiffOut b;		// WINDOW2: grid, headings, zeros; the first sheet selected
+			b.u16(uint16_t(0x06b6 | (s == 0 ? 0x0600 : 0)));
+			b.u16(0);
+			b.u16(0);
+			b.u16(64);
+			b.u16(0);
+			b.u16(0);
+			b.u16(0);
+			b.u32(0);
+			Record(out, 0x23e, b.data);
+		}
+		Record(out, 0x0a, {});
+	}
+	return MakeCompoundFile({{"Workbook", out.data}});
+}
+
+
+bool
+ExportExcel(const Document& doc, const std::string& path, std::string& error)
+{
+	std::vector<uint8_t> bytes = ExcelBytes(doc);
+	std::ofstream file(path, std::ios::binary | std::ios::trunc);
+	if (!file) {
+		error = "cannot write " + path;
+		return false;
+	}
+	file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+	return bool(file);
 }
 
 } // namespace gobe
