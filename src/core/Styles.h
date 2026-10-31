@@ -101,6 +101,12 @@ std::vector<uint8_t> InkBytes(const Ink& ink);
 // a property of `type` ('TCol', 'FCol', 'PCol', ...) holding the ink
 Property InkProperty(uint32_t type, const Ink& ink);
 
+// A bitmap pattern fill's pixels ('FPAT' in `otherFill`: TFillPattern,
+// TPattern's bitmap, tiled to fill): its width and height and `rgba`
+// (width * height * 4 bytes, R, G, B, A, rows top down). False if the ink
+// isn't one or its bitmap can't be decoded.
+bool FillPatternPixels(const Ink& ink, int& width, int& height, std::vector<uint8_t>& rgba);
+
 bool ApplyShapeProperty(const Property& property, ShapeStyle& style);
 ShapeStyle ResolveShapeStyle(const StyleMgr& styles, uint32_t index);
 
