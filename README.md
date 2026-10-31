@@ -142,9 +142,8 @@ not released yet: build it to try it.
   spreadsheet, and spreadsheets save as such text (each cell as shown, or
   its formula with Show Formulas on).
 - **SYLK:** spreadsheets saved as SYLK (values as calculated, formulas in
-  R1C1, column widths) and SYLK files opened as new spreadsheets. Number
-  formats and fonts (SYLK's P records) aren't carried yet, so dates
-  arrive as numbers.
+  R1C1, number formats, column widths) and SYLK files opened as new
+  spreadsheets, dates and currencies included. Fonts aren't carried.
 - **Ranges** are written A1..B2, as Gobe Productive writes them (A1:B2 is
   still understood).
 

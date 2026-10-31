@@ -2,6 +2,7 @@
 // TExportSYLK.c): write_header, write_cell.
 #include "SSSylk.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cmath>
 #include <cstdio>
@@ -10,6 +11,7 @@
 #include "Document.h"
 #include "Editing.h"
 #include "SSEval.h"
+#include "SSStyle.h"
 
 namespace gobe {
 
@@ -41,6 +43,8 @@ SpreadsheetToSylk(const Document& doc, size_t part)
 		return sheet;
 	SSBook book(doc);
 	SSEvaluator eval(*ss, &book, int(part));
+	// TNumberFormatsTable: the default formats, then each cell's own
+	sheet.formats = DefaultSylkFormats();
 	bool any = false;
 	for (const SSCell& cell : ss->cells) {
 		if (cell.id.b == 0xffff)
@@ -48,6 +52,19 @@ SpreadsheetToSylk(const Document& doc, size_t part)
 		SylkCell out;
 		out.row = cell.id.a;
 		out.column = cell.id.b;
+		std::vector<uint32_t> stack = {ss->style};
+		if (const SSHeader* h = ss->Column(cell.id.b))
+			stack.push_back(h->cell.style);
+		if (const SSHeader* h = ss->Row(cell.id.a))
+			stack.push_back(h->cell.style);
+		stack.push_back(cell.style);
+		std::string format = ResolveCellStyle(doc.styles, stack).format;
+		if (!format.empty() && format != "General") {
+			auto at = std::find(sheet.formats.begin(), sheet.formats.end(), format);
+			out.format = int(at - sheet.formats.begin());
+			if (at == sheet.formats.end())
+				sheet.formats.push_back(format);
+		}
 		if (cell.kind == Sig("Fmla") || cell.kind == Sig("FmEr")) {
 			std::string input = CellInput(*ss, cell.id.a, cell.id.b);
 			out.formula = FormulaToSylk(input, cell.id.a, cell.id.b);
@@ -55,8 +72,12 @@ SpreadsheetToSylk(const Document& doc, size_t part)
 		SSValue v = eval.Value(cell.id.a, cell.id.b);
 		switch (v.type) {
 			case SSValue::kNumber:
+				// (a number shown as a date is Gobe's days too: counted as the
+				// times are, so it reads back the same; write_cell offset only
+				// 'Time' cells)
 				out.kind = SylkCell::kNumber;
-				out.number = v.number;
+				out.number = v.number + (out.format >= 0
+					&& IsDateNumberFormat(sheet.formats[size_t(out.format)]) ? 24106 : 0);
 				break;
 			case SSValue::kTime:
 				out.kind = SylkCell::kNumber;
@@ -120,6 +141,15 @@ SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFo
 	};
 	for (const SylkCell& cell : sheet.cells) {
 		uint16_t row = cell.row, column = cell.column;
+		// the cell's format (an F record's P); rtd_C_field_K: a number in a
+		// date or time format is days since 1900 (as Excel counts): back to
+		// Gobe's count
+		std::string format = cell.format >= 0 && size_t(cell.format) < sheet.formats.size()
+			? sheet.formats[size_t(cell.format)] : "";
+		if (!format.empty() && format != "General")
+			ApplyCellProperty(doc, part, row, column, row, column, NumberFormatProperty(format));
+		ss = doc.EditableSpreadsheetPart(part);
+		bool date = !format.empty() && IsDateNumberFormat(format);
 		if (!cell.formula.empty()) {
 			std::string formula = FormulaFromSylk(cell.formula, row, column);
 			if (SetCellInput(*ss, row, column, formula, isName, error))
@@ -129,7 +159,7 @@ SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFo
 		switch (cell.kind) {
 			case SylkCell::kNumber: {
 				char text[32];
-				snprintf(text, sizeof text, "%.17g", cell.number);
+				snprintf(text, sizeof text, "%.17g", date ? cell.number - 24106 : cell.number);
 				SetCellInput(*ss, row, column, text, nullptr, error);
 				break;
 			}

@@ -12,6 +12,7 @@
 #include "Document.h"
 #include "Editing.h"
 #include "SSEval.h"
+#include "SSStyle.h"
 #include "SSSylk.h"
 
 using namespace gobe;
@@ -89,7 +90,9 @@ main(int argc, char** argv)
 					case SSValue::kRange:
 						break;
 					case SSValue::kNumber:
-						Check(c.kind == SylkCell::kNumber && c.number == v.number, name + ": number");
+						Check(c.kind == SylkCell::kNumber && (c.number == v.number
+							|| (c.format >= 0 && std::fabs(c.number - v.number - 24106) < 1e-9)),
+							name + ": number");
 						break;
 					case SSValue::kTime:
 						Check(c.kind == SylkCell::kNumber
@@ -160,14 +163,42 @@ main(int argc, char** argv)
 					}
 					SSValue v = eval.Value(cell.id.a, cell.id.b);
 					SSValue w = ie.Value(cell.id.a, cell.id.b);
+					// the format comes along (F;P), and a date or time format
+					// turns the number back into Gobe's days
+					auto formatOf = [&](const SSPart& part, const SSCell* c, uint16_t r, uint16_t col) {
+						std::vector<uint32_t> stack = {part.style};
+						if (const SSHeader* h = part.Column(col))
+							stack.push_back(h->cell.style);
+						if (const SSHeader* h = part.Row(r))
+							stack.push_back(h->cell.style);
+						if (c != nullptr)
+							stack.push_back(c->style);
+						std::string f = ResolveCellStyle(doc.styles, stack).format;
+						return f.empty() ? std::string("General") : f;
+					};
+					std::string format = formatOf(ss, &cell, cell.id.a, cell.id.b);
+					std::string importedFormat = [&]() {
+						std::vector<uint32_t> stack = {is.style};
+						if (const SSCell* c = is.Cell(cell.id.a, cell.id.b))
+							stack.push_back(c->style);
+						std::string f = ResolveCellStyle(imported.styles, stack).format;
+						return f.empty() ? std::string("General") : f;
+					}();
+					if (v.type != SSValue::kNone)
+						Check(importedFormat == format, name + ": format " + format + " / "
+							+ importedFormat);
+					bool date = IsDateNumberFormat(format) && format != "General";
 					switch (v.type) {
 						case SSValue::kNumber:
+							Check(w.type == v.type && std::fabs(w.number - v.number) < 1e-6,
+								name + ": number");
+							break;
 						case SSValue::kBool:
-							Check(w.type == v.type && w.number == v.number, name + ": number");
+							Check(w.type == v.type && w.number == v.number, name + ": bool");
 							break;
 						case SSValue::kTime:
-							Check(w.type == SSValue::kNumber
-								&& std::fabs(w.number - (v.time / 86400.0 + 24106)) < 1e-9,
+							Check(w.type == SSValue::kNumber && std::fabs(w.number
+								- (v.time / 86400.0 + (date ? 0 : 24106))) < 1e-6,
 								name + ": time as a number");
 							break;
 						case SSValue::kString:

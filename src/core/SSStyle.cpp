@@ -303,6 +303,13 @@ ResolveCellStyle(const StyleMgr& styles, const std::vector<uint32_t>& stack)
 }
 
 
+bool
+IsDateNumberFormat(const std::string& format)
+{
+	return IsDateFormat(format);
+}
+
+
 std::string
 FormatCellValue(const SSValue& value, const std::string& format, bool* red)
 {

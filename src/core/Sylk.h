@@ -17,19 +17,30 @@ struct SylkCell {
 	double number = 0;				// kNumber; kBool: 0 or 1
 	std::string text;				// kString: the text; kError: "#DIV/0!" etc.
 	std::string formula;			// the E field as written (R1C1), "" if none
+	int format = -1;				// an F record's P field: an index into formats
 };
 
 struct SylkSheet {
 	std::vector<SylkCell> cells;	// in the order read
 	std::map<uint16_t, int> columnWidths;	// column (from 0) -> width in characters
 	uint16_t rows = 0, columns = 0;	// the B record's Y and X (0 if none)
+	// the P records' number formats (P fields) in order, as Gobe writes
+	// them ("m/d/yy": SYLK's '\' escapes taken out)
+	std::vector<std::string> formats;
 };
+
+// TExportSYLK::write_default_format: the formats every file starts with
+// (Gobe's syntax)
+const std::vector<std::string>& DefaultSylkFormats();
 
 // Reads SYLK text. False with an error if it doesn't start with an ID
 // record or a record is malformed.
 bool ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error);
-// Writes the sheet as SYLK: ID, B, the F width records, a C record per
-// cell, E. Lines end in "\r\n" as SYLK files do.
+// Writes the sheet as SYLK: ID, the P records (TNumberFormatsTable::
+// StyleToNumberFormat: ';' doubled, ':', '-', '/', '(' and ')' after a
+// '\'), B, the F width records, a C record per cell (after an F record
+// with the cell's format: P the index, F the kind as convert_number_format
+// finds it), E. Lines end in "\r\n" as SYLK files do.
 std::string WriteSylk(const SylkSheet& sheet);
 
 // TExportSYLK::convertToSYLKformula: a Gobe formula of the cell at `row`,

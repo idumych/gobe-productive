@@ -821,6 +821,33 @@ main()
 		Check(ReadSylk(WriteSylk(one), back, error) && back.cells.size() == 1
 			&& back.cells[0].number == number, "17-digit number round trip");
 	}
+	{
+		// number formats: P records (escapes out), F records' P on the cell
+		// at their position
+		SylkSheet f;
+		std::string error;
+		Check(ReadSylk("ID;PGOBE\r\nP;PGeneral\r\nP;Pm\\/d\\/yy\r\nP;P\"$\"#,##0\\ ;;\\(\"$\"#,##0\\)\r\n"
+			"F;P1;FG0G;X2;Y3\r\nC;K34545\r\nC;X1;Y1;K2\r\nF;P2;FC0G;Y1\r\nE\r\n", f, error),
+			"formats read " + error);
+		Check(f.formats.size() == 3 && f.formats[1] == "m/d/yy"
+			&& f.formats[2] == "\"$\"#,##0 ;(\"$\"#,##0)", "P records unescaped");
+		Check(f.cells.size() == 2 && f.cells[0].row == 2 && f.cells[0].column == 1
+			&& f.cells[0].format == 1, "an F record's position is the C record's");
+		Check(f.cells.size() == 2 && f.cells[1].format == 2, "an F record after its cell");
+		// written: P records escaped, F before the cell; read back the same
+		std::string text = WriteSylk(f);
+		Check(text.find("P;Pm\\/d\\/yy\r\n") != std::string::npos
+			&& text.find("P;P\"$\"#,##0 ;;\\(\"$\"#,##0\\)\r\n") != std::string::npos,
+			"P records escaped");
+		Check(text.find("F;P1;FG0G;X2;Y3\r\nC;X2;Y3;K34545") != std::string::npos,
+			"an F record before its cell");
+		Check(text.find("F;P2;FC0G;X1;Y1\r\nC;X1;Y1;K2") != std::string::npos, "currency 'C'");
+		SylkSheet back;
+		Check(ReadSylk(text, back, error) && back.formats == f.formats && back.cells.size() == 2
+			&& back.cells[0].format == 1 && back.cells[1].format == 2, "formats read back");
+		Check(DefaultSylkFormats().size() == 32 && DefaultSylkFormats()[10] == "m/d/yy",
+			"write_default_format's 32");
+	}
 	ExpectRead(false, "ID;PGOBE\r\nC;X1;Y1;K1x\r\n", "a number with junk fails");
 	ExpectRead(false, "ID;PGOBE\r\nC;X1;Y1;K\"open\r\n", "an unclosed string fails");
 	ExpectRead(false, "ID;PGOBE\r\nC;X1;Y1;Kword\r\n", "an unquoted word fails");

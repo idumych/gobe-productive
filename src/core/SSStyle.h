@@ -39,6 +39,10 @@ CellStyle ResolveCellStyle(const StyleMgr& styles, const std::vector<uint32_t>& 
 // [Red]-$#.00", "m/d/yyyy", ...); `red` is set by a [Red] section.
 std::string FormatCellValue(const SSValue& value, const std::string& format, bool* red = nullptr);
 
+// whether a number format shows dates or times (its first section has
+// d, m, y, h or s outside quotes and brackets)
+bool IsDateNumberFormat(const std::string& format);
+
 // HAln 0 (general) resolved by value type (CellHAlignment): text left,
 // numbers and times right, booleans and errors centered.
 int CellHAlign(const CellStyle& style, const SSValue& value);

@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <map>
 
 namespace gobe {
 
@@ -120,7 +121,76 @@ NumberText(double value)
 	return text;
 }
 
+// a P record's format with SYLK's escapes taken out
+std::string
+Unescaped(const std::string& format)
+{
+	std::string out;
+	for (size_t i = 0; i < format.size(); i++) {
+		if (format[i] == '\\' && i + 1 < format.size())
+			i++;
+		out += format[i];
+	}
+	return out;
+}
+
+
+// TNumberFormatsTable::StyleToNumberFormat's escapes (';' is doubled when
+// the record is written)
+std::string
+EscapedFormat(const std::string& format)
+{
+	std::string out;
+	for (char c : format) {
+		if (c == ':' || c == '-' || c == '/' || c == '(' || c == ')')
+			out += '\\';
+		out += c;
+	}
+	return out;
+}
+
+
+// convert_number_format: 'G' general, 'F' fixed with its decimals, '%',
+// 'E' exponential, 'C' currency (the original counted the decimals into
+// the pointer, leaving 0; counted here)
+void
+FormatKind(const std::string& format, char& kind, int& decimals)
+{
+	kind = 'G';
+	decimals = 0;
+	size_t dot = format.find('.');
+	if (dot != std::string::npos)
+		for (size_t i = dot + 1; i < format.size() && isdigit((unsigned char)format[i]); i++)
+			decimals++;
+	if (decimals != 0)
+		kind = 'F';
+	if (format.find('%') != std::string::npos)
+		kind = '%';
+	if (format.find("E+") != std::string::npos)
+		kind = 'E';
+	if (format.find('$') != std::string::npos)
+		kind = 'C';
+}
+
 } // namespace
+
+
+const std::vector<std::string>&
+DefaultSylkFormats()
+{
+	// write_default_format's P records, unescaped
+	static const std::vector<std::string> kFormats = {
+		"General", "0", "0.00", "#,##0", "#,##0.00",
+		"\"$\"#,##0 ;(\"$\"#,##0)", "\"$\"#,##0.00 ;(\"$\"#,##0.00)",
+		"0%", "0.00%", "0.00E+00", "m/d/yy", "d-mmm-yy", "d-mmm", "mmm-yy",
+		"h:mm AM/PM", "h:mm:ss AM/PM", "h:mm", "h:mm:ss", "hh:mm AM/PM", "hh:mm:ss AM/PM",
+		"h:mm", "h:mm:ss", "m/d/yy h:mm", "m-dd-yy", "m-dd",
+		"\"$\"#,##0 ;[Red](\"$\"#,##0)", "\"$\"#,##0.00 ;[Red](\"$\"#,##0.00)",
+		"mmm d, yyyy", "mmmm d, yyyy", "ddd,\\ mmm d, yyyy", "dddd, mmmm d, yyyy",
+		"d, mmmm yyyy"
+	};
+	return kFormats;
+}
 
 
 bool
@@ -128,6 +198,7 @@ ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error)
 {
 	sheet = SylkSheet();
 	long x = 0, y = 0;	// the current position, from 1 (0: none yet)
+	std::map<std::pair<uint16_t, uint16_t>, int> cellFormats;
 	bool first = true;
 	size_t at = 0;
 	for (int lineNumber = 1; at < data.size(); lineNumber++) {
@@ -195,7 +266,24 @@ ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error)
 			cell.row = uint16_t(y - 1);
 			cell.column = uint16_t(x - 1);
 			sheet.cells.push_back(cell);
+		} else if (type == "P") {
+			// a number format (P), or a font (F, E, L: not kept)
+			for (const Field& field : fields)
+				if (field.letter == 'P')
+					sheet.formats.push_back(Unescaped(field.value));
 		} else if (type == "F") {
+			// the cell's format: its position (it moves the current one too)
+			long format = -1;
+			for (const Field& field : fields) {
+				long value;
+				if ((field.letter == 'X' || field.letter == 'Y') && ParseInt(field.value, value)
+						&& value >= 1 && value <= 65536)
+					(field.letter == 'X' ? x : y) = value;
+				else if (field.letter == 'P' && ParseInt(field.value, value) && value >= 0)
+					format = value;
+			}
+			if (format >= 0 && x > 0 && y > 0)
+				cellFormats[{uint16_t(y - 1), uint16_t(x - 1)}] = int(format);
 			for (const Field& field : fields) {
 				if (field.letter != 'W')
 					continue;
@@ -216,6 +304,11 @@ ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error)
 		error = "no ID record";
 		return false;
 	}
+	for (SylkCell& cell : sheet.cells) {
+		auto f = cellFormats.find({cell.row, cell.column});
+		if (f != cellFormats.end() && f->second < int(sheet.formats.size()))
+			cell.format = f->second;
+	}
 	return true;
 }
 
@@ -225,6 +318,8 @@ WriteSylk(const SylkSheet& sheet)
 {
 	// "ID;PGOBE": SYLK's P field names the program
 	std::string out = "ID;PGOBE\r\n";
+	for (const std::string& format : sheet.formats)
+		out += "P;P" + Escaped(EscapedFormat(format)) + "\r\n";
 	if (sheet.rows != 0 || sheet.columns != 0)
 		out += "B;Y" + std::to_string(sheet.rows) + ";X" + std::to_string(sheet.columns) + "\r\n";
 	for (const auto& width : sheet.columnWidths) {
@@ -232,6 +327,15 @@ WriteSylk(const SylkSheet& sheet)
 		out += "F;W" + column + " " + column + " " + std::to_string(width.second) + "\r\n";
 	}
 	for (const SylkCell& cell : sheet.cells) {
+		if (cell.format >= 0 && size_t(cell.format) < sheet.formats.size()) {
+			// write_cell_format: the format's index and kind (alignment G)
+			char kind;
+			int decimals;
+			FormatKind(sheet.formats[size_t(cell.format)], kind, decimals);
+			out += "F;P" + std::to_string(cell.format) + ";F" + kind + std::to_string(decimals)
+				+ "G;X" + std::to_string(cell.column + 1) + ";Y" + std::to_string(cell.row + 1)
+				+ "\r\n";
+		}
 		out += "C;X" + std::to_string(cell.column + 1) + ";Y" + std::to_string(cell.row + 1);
 		switch (cell.kind) {
 			case SylkCell::kNumber:
