@@ -165,6 +165,28 @@ private:
 };
 
 
+// TArrowsMenu (a TMICNMenuElement, MICN 0x1c): the arrows of the
+// selected lines and paths as line samples, sending 'sf0F' with the
+// value (STR# 11, 20-23: none, at the start, at the end, both ends)
+class TArrowsElement : public TMenuElement {
+public:
+	TArrowsElement(BRect rect)
+		:
+		TMenuElement('GRAR', rect, NULL, TMICNElement::LoadIcon(0x1c))
+	{
+	}
+
+	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon)
+	{
+		for (int32 i = 0; i < 4; i++) {
+			BMessage* message = new BMessage('sf0F');
+			message->AddInt32(kValueString, i);
+			menu->AddItem(new TLineSampleItem(PenType(), i, message));
+		}
+	}
+};
+
+
 // TSSBorderMenuElement (a TMICNMenuBarElement): a color set (MICN 0x16)
 // and the transparencies (MENU 103, MICN 0x20) for the outline ('sM6A',
 // 'sM6B') or one side ('sM68', 'sM69' with "border": 0 left, 1 top, 2
@@ -359,6 +381,7 @@ TPartBar::Build(bool text, uint16 kind)
 	}
 	fText = text;
 	fSheet = false;
+	fDrawing = false;
 	fKind = kind;
 	fAlignment = -2;
 	fLineSpacing = -1;
@@ -440,6 +463,7 @@ TPartBar::BuildSheet()
 	}
 	fText = false;
 	fSheet = true;
+	fDrawing = false;
 	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4), PartIcon('SPRD'));
 	part->tip = GobeResources::IndexString(4, 23).String();
 	AddElement(part);
@@ -467,6 +491,69 @@ TPartBar::BuildSheet()
 	TMICNButtonElement* make = new TMICNButtonElement('chrt', at, PartIcon('chrt'), chart);
 	make->tip = IndexString(SheetResources(), 1507, 9);
 	AddElement(make);
+}
+
+
+// TPartGR::AddPartBarElements: from 29, four vertical alignments ('GRAV':
+// top, middle, bottom, to each other: "AlignY" 1-4), 15 on four
+// horizontal ones ('GRAH': "AlignX" 1-4), then Text Wrap ('GRTW', MICN
+// 0x127) and the arrows ('GRAR'), each group 15 after the last; the tips
+// STR# 1103, 7-16
+void
+TPartBar::BuildDrawing()
+{
+	RemoveAllElements();
+	if (fSpacing != NULL) {
+		fSpacing->RemoveSelf();
+		delete fSpacing;
+		fSpacing = NULL;
+	}
+	fText = false;
+	fSheet = false;
+	fDrawing = true;
+	fShapeCount = size_t(-1);
+	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4), PartIcon('GRFX'));
+	part->tip = GobeResources::IndexString(4, 23).String();
+	AddElement(part);
+	auto tip = [](int32 index) { return std::string(GobeResources::IndexString(1103, index).String()); };
+	BPoint at(29, 2);
+	for (int32 axis = 0; axis < 2; axis++) {
+		for (int32 i = 0; i < 4; i++) {
+			BMessage* message = new BMessage('sM44');
+			message->AddInt32(axis == 0 ? "AlignY" : "AlignX", i + 1);
+			TMICNButtonElement* button = new TMICNButtonElement(
+				(axis == 0 ? 'GRAV' : 'GRAH') + i, at, (axis == 0 ? 0x11f : 0x123) + i, message);
+			button->tip = tip((axis == 0 ? 7 : 11) + i);
+			AddElement(button);
+			at.x += 22;
+		}
+		at.x += 15;
+	}
+	TMICNButtonElement* wrap = new TMICNButtonElement('GRTW', at, 0x127, new BMessage('sf0U'));
+	wrap->tip = tip(15);
+	AddElement(wrap);
+	at.x += 22 + 15;
+	TArrowsElement* arrows = new TArrowsElement(BRect(at, at + BPoint(19, 19)));
+	arrows->tip = tip(16);
+	AddElement(arrows);
+}
+
+
+// TPartGR::PartBarUpdateContents: the alignments with more than one
+// shape selected, Text Wrap and the arrows with any
+void
+TPartBar::UpdateDrawing()
+{
+	size_t count = fPages->SelectedShapeCount();
+	if (count == fShapeCount)
+		return;
+	fShapeCount = count;
+	for (int32 i = 0; i < 4; i++) {
+		SetEnabled('GRAV' + i, count > 1);
+		SetEnabled('GRAH' + i, count > 1);
+	}
+	SetEnabled('GRTW', count > 0);
+	SetEnabled('GRAR', count > 0);
 }
 
 
@@ -500,8 +587,17 @@ TPartBar::Update()
 	}
 	const WPPart* wp = fPages->fCaret.active ? doc.WordPart(fPages->fCaret.part) : NULL;
 	bool text = wp != NULL && fPages->fCaret.paragraph < wp->paragraphs.size();
+	// the drawing's: shapes selected, or a drawing with no text being typed
+	int main = doc.MainPart();
+	if (!text && (fPages->ShapesSelected()
+			|| (main >= 0 && doc.parts.parts[size_t(main)].kind == Sig("GRFX")))) {
+		if (!fDrawing)
+			BuildDrawing();
+		UpdateDrawing();
+		return;
+	}
 	uint16 kind = text ? wp->version98 : 0;
-	if (text != fText || kind != fKind || fSheet)
+	if (text != fText || kind != fKind || fSheet || fDrawing)
 		Build(text, kind);
 	if (!text)
 		return;

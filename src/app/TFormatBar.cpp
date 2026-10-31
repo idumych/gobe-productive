@@ -209,8 +209,8 @@ public:
 			}
 			menu->AddItem(new TIconMenuItem(kIcons[i], palette));
 		}
-		// the pen's: TPenMenu (MICN 0x1b), MENU 104's sizes (the pen types
-		// from the document's PenMgr aren't ported)
+		// the pen's: TPenMenu (MICN 0x1b), MENU 104's sizes, then the pen
+		// types (the application's pens)
 		if (fColorCommand == 'sf06')
 			menu->AddItem(new TIconMenuItem(0x1b, PenSizeMenu()));
 		ribbon->DrawElement(this, true);
@@ -263,6 +263,8 @@ private:
 			}
 			sizes->AddItem(item);
 		}
+		sizes->AddSeparatorItem();
+		AddPenTypeItems(sizes);
 		return sizes;
 	}
 

@@ -171,6 +171,7 @@ public:
 	};
 	// shapes selected (the drawing part active: Arrange, MENU 50)
 	bool ShapesSelected() const { return !fShapes.empty(); }
+	size_t SelectedShapeCount() const { return fShapes.size(); }
 	// the first selected shape's look (the FormatBar's fill and pen)
 	bool SelectedShapeStyle(ShapeStyle& style) const;
 	// Arrange's items enabled and marked (Resize, Rotate, Reshape)

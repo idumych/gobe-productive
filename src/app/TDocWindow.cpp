@@ -180,8 +180,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 				text = text || part.kind == Sig("WORD");
 				cells = cells || part.kind == Sig("SPRD");
 			}
-			// (a drawing document: the FormatBar for its shapes' inks; the
-			// drawing's PartBar, TGRRibbon, isn't ported)
+			// (a drawing document: the FormatBar for its shapes' inks, the
+			// PartBar for its alignments and arrows)
 			int mainPart = document->MainPart();
 			bool drawing = mainPart >= 0
 				&& document->parts.parts[size_t(mainPart)].kind == Sig("GRFX");
@@ -189,7 +189,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 				fFormatBar = new TFormatBar(pages);
 				pages->fFormatBar = fFormatBar;
 			}
-			if (text || cells) {
+			if (text || cells || drawing) {
 				fPartBar = new TPartBar(pages);
 				pages->fPartBar = fPartBar;
 			}

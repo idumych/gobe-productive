@@ -10,6 +10,8 @@
 #include "Document.h"
 #include "Editing.h"
 #include "InlineParts.h"
+#include "DocArchive.h"
+#include "DocWriter.h"
 
 namespace gobe {
 
@@ -953,6 +955,305 @@ UngroupShape(Document& doc, size_t drawing, size_t layer, size_t index, std::str
 		s.values[2] = id++;
 	shapes.insert(shapes.begin() + long(index), back.begin(), back.end());
 	return int(back.size());
+}
+
+
+
+namespace {
+
+const uint32_t kPenKinds[4] = {Sig("NORM"), Sig("PDOT"), Sig("DASH"), Sig("HASH")};
+
+} // namespace
+
+
+bool
+ParsePenResource(const std::vector<uint8_t>& data, PenType& pen)
+{
+	auto u32 = [&](size_t at) {
+		return uint32_t(data[at]) | uint32_t(data[at + 1]) << 8 | uint32_t(data[at + 2]) << 16
+			| uint32_t(data[at + 3]) << 24;
+	};
+	if (data.size() < 5)
+		return false;
+	pen = PenType();
+	pen.kind = int(u32(0));
+	if (pen.kind < 0 || pen.kind > 3)
+		return false;
+	size_t at = 4;
+	while (at < data.size() && data[at] != 0)
+		pen.name += char(data[at++]);
+	at++;
+	if (at + 4 > data.size())
+		return false;
+	pen.print = u32(at) != 0;
+	at += 4;
+	auto next = [&](float& value) {
+		if (at + 4 > data.size())
+			return false;
+		value = float(u32(at));
+		at += 4;
+		return true;
+	};
+	float filled = 0;
+	if (pen.kind == 2)
+		return next(pen.dash) && next(pen.gap);
+	if (pen.kind == 1) {
+		if (!next(pen.gap) || !next(filled))
+			return false;
+		pen.filled = filled != 0;
+	}
+	if (pen.kind == 3)
+		return next(pen.gap);
+	return true;
+}
+
+
+Property
+PenTypeProperty(const PenType& pen)
+{
+	DocWriter data;
+	data.String(pen.name);
+	data.Bool(pen.print);
+	if (pen.kind == 2) {
+		data.Float(pen.dash);
+		data.Float(pen.gap);
+	} else if (pen.kind == 1) {
+		data.Float(pen.gap);
+		data.Bool(pen.filled);
+	} else if (pen.kind == 3)
+		data.Float(pen.gap);
+	DocWriter w;
+	w.UInt32(0xffffffff);
+	w.UInt32(kPenKinds[std::max(0, std::min(3, pen.kind))]);
+	w.UInt32(uint32_t(data.Data().size()));
+	w.Bytes(data.Data());
+	return Property{Sig("PEN "), w.Data()};
+}
+
+
+bool
+ReadPenType(const Property& property, PenType& pen)
+{
+	if (property.type != Sig("PEN "))
+		return false;
+	DocArchive a(property.data);
+	try {
+		pen = PenType();
+		if (a.UInt32() == 0)
+			return true;		// (no pen: a normal one)
+		uint32_t kind = a.UInt32();
+		int index = int(std::find(kPenKinds, kPenKinds + 4, kind) - kPenKinds);
+		if (index > 3)
+			return false;
+		pen.kind = index;
+		a.UInt32();
+		pen.name = a.String();
+		pen.print = a.Bool();
+		if (index == 2) {
+			pen.dash = a.Float();
+			pen.gap = a.Float();
+		} else if (index == 1) {
+			pen.gap = a.Float();
+			pen.filled = a.Bool();
+		} else if (index == 3)
+			pen.gap = a.Float();
+	} catch (const ArchiveError&) {
+		return false;
+	}
+	return true;
+}
+
+
+Property
+ArrowsProperty(int arrows)
+{
+	DocWriter w;
+	w.UInt16(uint16_t(arrows));
+	return Property{Sig("Arrw"), w.Data()};
+}
+
+
+void
+ShapePenAndArrows(const StyleMgr& styles, uint32_t style, PenType& pen, int& arrows)
+{
+	pen = PenType();
+	arrows = 0;
+	std::vector<const Style*> chain;
+	for (int depth = 0; style < styles.styles.size() && depth < 32; depth++) {
+		chain.push_back(&styles.styles[style]);
+		style = styles.styles[style].links[0];
+	}
+	for (auto it = chain.rbegin(); it != chain.rend(); ++it)
+		for (uint32_t p : (*it)->props) {
+			if (p >= styles.properties.size())
+				continue;
+			const Property& property = styles.properties[p];
+			if (property.type == Sig("PEN "))
+				ReadPenType(property, pen);
+			else if (property.type == Sig("Arrw") && property.data.size() >= 2)
+				arrows = int16_t(property.data[0] << 8 | property.data[1]);
+		}
+}
+
+
+std::vector<Outline>
+ShapeOutline(const Shape& s)
+{
+	std::vector<Outline> out;
+	float b[4];
+	ShapeBounds(s, b);
+	float cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+	float rx = (b[2] - b[0]) / 2, ry = (b[3] - b[1]) / 2;
+	auto ellipse = [&](float from, float sweep, Outline& o) {
+		int steps = std::max(8, int(std::fabs(sweep) / 6));
+		for (int i = 0; i <= steps; i++) {
+			float a = float((from + sweep * float(i) / float(steps)) * M_PI / 180);
+			o.points.push_back({cx + rx * std::cos(a), cy - ry * std::sin(a)});
+		}
+	};
+	if (s.kind == Sig("LINE")) {
+		out.push_back({{{s.origin[0], s.origin[1]},
+			{s.origin[0] + s.size[0], s.origin[1] + s.size[1]}}, false});
+	} else if (s.kind == Sig("ELPS")) {
+		Outline o;
+		o.closed = true;
+		ellipse(0, 360, o);
+		o.points.pop_back();
+		out.push_back(o);
+	} else if (s.kind == Sig("ARC ")) {
+		Outline o;
+		ellipse(s.arcAngles[0], s.arcAngles[1], o);
+		out.push_back(o);
+	} else if (s.kind == Sig("RRCT") || s.kind == Sig("RECT")) {
+		Shape copy = s;
+		if (copy.radius[0] <= 0 && copy.radius[1] <= 0) {
+			out.push_back({{{b[0], b[1]}, {b[2], b[1]}, {b[2], b[3]}, {b[0], b[3]}}, true});
+			return out;
+		}
+		OutlineShape(copy);
+		return ShapeOutline(copy);
+	} else if (s.kind == Sig("BEZI")) {
+		for (const BezierPath& p : s.paths) {
+			Outline o;
+			o.closed = p.closed;
+			size_t n = p.vertices.size();
+			if (n == 0)
+				continue;
+			auto at = [&](const Vertex& v) {
+				return DrawPoint{s.origin[0] + v.point[0], s.origin[1] + v.point[1]};
+			};
+			o.points.push_back(at(p.vertices[0]));
+			for (size_t i = 1; i < n + (p.closed ? 1 : 0); i++) {
+				const Vertex& a = p.vertices[i - 1];
+				const Vertex& c = p.vertices[i % n];
+				DrawPoint p0 = at(a), p3 = at(c);
+				DrawPoint p1 = {p0[0] + a.control2[0], p0[1] + a.control2[1]};
+				DrawPoint p2 = {p3[0] + c.control1[0], p3[1] + c.control1[1]};
+				bool straight = a.control2[0] == 0 && a.control2[1] == 0 && c.control1[0] == 0
+					&& c.control1[1] == 0;
+				int steps = straight ? 1 : 16;
+				for (int k = 1; k <= steps; k++) {
+					float t = float(k) / float(steps), u = 1 - t;
+					o.points.push_back({u * u * u * p0[0] + 3 * u * u * t * p1[0]
+						+ 3 * u * t * t * p2[0] + t * t * t * p3[0],
+						u * u * u * p0[1] + 3 * u * u * t * p1[1] + 3 * u * t * t * p2[1]
+						+ t * t * t * p3[1]});
+				}
+			}
+			if (p.closed && o.points.size() > 1)
+				o.points.pop_back();
+			out.push_back(o);
+		}
+	}
+	return out;
+}
+
+
+PenMarks
+MarksAlong(const Outline& outline, const PenType& pen, float size)
+{
+	PenMarks marks;
+	std::vector<DrawPoint> points = outline.points;
+	if (outline.closed && !points.empty())
+		points.push_back(points.front());
+	if (pen.kind == 0 || points.size() < 2)
+		return marks;
+	size = PenTypeSize(pen, size);
+	marks.dotSize = size;
+	// (TGRPathWalker: the point and direction a distance along)
+	std::vector<float> along(1, 0);
+	for (size_t i = 1; i < points.size(); i++)
+		along.push_back(along.back() + std::hypot(points[i][0] - points[i - 1][0],
+			points[i][1] - points[i - 1][1]));
+	float total = along.back();
+	auto at = [&](float d, DrawPoint& point, DrawPoint& direction) {
+		size_t i = 1;
+		while (i + 1 < points.size() && along[i] < d)
+			i++;
+		float length = along[i] - along[i - 1];
+		float t = length > 0 ? (d - along[i - 1]) / length : 0;
+		DrawPoint a = points[i - 1], b = points[i];
+		point = {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t};
+		direction = {length > 0 ? (b[0] - a[0]) / length : 1, length > 0 ? (b[1] - a[1]) / length : 0};
+	};
+	// the dashes' corners: the outline's points between a dash's ends
+	auto dash = [&](float from, float to) {
+		DrawPoint p, u, q;
+		at(from, p, u);
+		std::vector<DrawPoint> run(1, p);
+		for (size_t i = 1; i + 1 < points.size(); i++)
+			if (along[i] > from && along[i] < to)
+				run.push_back(points[i]);
+		at(to, q, u);
+		run.push_back(q);
+		for (size_t i = 1; i < run.size(); i++)
+			marks.segments.push_back({run[i - 1], run[i]});
+	};
+	const float kEpsilon = 1e-3f;
+	if (pen.kind == 2) {
+		// TDashPen: a dash, then a gap, from the start
+		float on = std::max(pen.dash, 1.0f), off = std::max(pen.gap, 1.0f);
+		for (float d = 0; d < total - kEpsilon; d += on + off)
+			dash(d, std::min(d + on, total));
+		return marks;
+	}
+	// TDotPen: a dot (the pen's size across) half its size in, then every
+	// gap; THashPen: a mark across (the pen's size long) every gap
+	float step = std::max(pen.gap, 1.0f);
+	for (float d = pen.kind == 1 ? size / 2 : step; d <= total + kEpsilon; d += step) {
+		DrawPoint p, u;
+		at(std::min(d, total), p, u);
+		if (pen.kind == 1)
+			marks.dots.push_back(p);
+		else {
+			float half = size / 2;
+			marks.segments.push_back({{p[0] - u[1] * half, p[1] + u[0] * half},
+				{p[0] + u[1] * half, p[1] - u[0] * half}});
+		}
+	}
+	return marks;
+}
+
+
+float
+PenTypeSize(const PenType& pen, float size)
+{
+	// (TDotPen::MinPenSize 3, THashPen's 4)
+	return std::max(size, pen.kind == 1 ? 3.0f : pen.kind == 3 ? 4.0f : 1.0f);
+}
+
+
+void
+ArrowHead(const DrawPoint& from, const DrawPoint& end, float size, DrawPoint head[3])
+{
+	size = std::max(size, 1.0f);
+	float dx = end[0] - from[0], dy = end[1] - from[1];
+	float length = std::sqrt(dx * dx + dy * dy);
+	float ux = length > 0 ? dx / length : 1, uy = length > 0 ? dy / length : 0;
+	head[0] = {end[0] + ux * (size + 2), end[1] + uy * (size + 2)};
+	DrawPoint base = {end[0] - ux * (size + 5), end[1] - uy * (size + 5)};
+	head[1] = {base[0] - uy * (size + 3), base[1] + ux * (size + 3)};
+	head[2] = {base[0] + uy * (size + 3), base[1] - ux * (size + 3)};
 }
 
 } // namespace gobe

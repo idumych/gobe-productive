@@ -180,4 +180,106 @@ TIconMenuItem::GetContentSize(float* width, float* height)
 	*height = 16;
 }
 
+
+
+void
+StrokePenType(BView* view, const Outline& outline, const PenType& pen, float size, BPoint offset)
+{
+	auto at = [&](const DrawPoint& p) { return BPoint(p[0], p[1]) + offset; };
+	float was = view->PenSize();
+	if (pen.kind == 0 || pen.kind == 3) {
+		// (the hash pen's line at a third of its size)
+		view->SetPenSize(pen.kind == 3 ? PenTypeSize(pen, size) / 3 : size);
+		for (size_t i = 1; i < outline.points.size(); i++)
+			view->StrokeLine(at(outline.points[i - 1]), at(outline.points[i]));
+		if (outline.closed && outline.points.size() > 2)
+			view->StrokeLine(at(outline.points.back()), at(outline.points.front()));
+		if (pen.kind == 0) {
+			view->SetPenSize(was);
+			return;
+		}
+	}
+	PenMarks marks = MarksAlong(outline, pen, size);
+	// (THashPen: its marks at a third of its size too)
+	view->SetPenSize(pen.kind == 2 ? std::max(size, 1.0f) : PenTypeSize(pen, size) / 3);
+	cap_mode cap = view->LineCapMode();
+	join_mode join = view->LineJoinMode();
+	view->SetLineMode(B_BUTT_CAP, B_MITER_JOIN);
+	for (const auto& segment : marks.segments)
+		view->StrokeLine(at(segment.first), at(segment.second));
+	// dots: filled ones filled, all outlined with a hairline
+	view->SetPenSize(1);
+	float r = marks.dotSize / 2;
+	for (const DrawPoint& dot : marks.dots) {
+		if (pen.filled)
+			view->FillEllipse(at(dot), r, r);
+		view->StrokeEllipse(at(dot), r, r);
+	}
+	view->SetLineMode(cap, join);
+	view->SetPenSize(was);
+}
+
+
+void
+FillArrowHeads(BView* view, const Outline& outline, int arrows, float size, BPoint offset)
+{
+	const std::vector<DrawPoint>& p = outline.points;
+	if (arrows <= 0 || outline.closed || p.size() < 2)
+		return;
+	auto fill = [&](const DrawPoint& from, const DrawPoint& end) {
+		DrawPoint head[3];
+		ArrowHead(from, end, size, head);
+		view->FillTriangle(BPoint(head[0][0], head[0][1]) + offset,
+			BPoint(head[1][0], head[1][1]) + offset, BPoint(head[2][0], head[2][1]) + offset);
+	};
+	if (arrows & 1)
+		fill(p[1], p[0]);
+	if (arrows & 2)
+		fill(p[p.size() - 2], p.back());
+}
+
+
+TLineSampleItem::TLineSampleItem(const PenType& pen, int arrows, BMessage* message)
+	:
+	BMenuItem("", message),
+	fPen(pen),
+	fArrows(arrows)
+{
+}
+
+
+void
+TLineSampleItem::DrawContent()
+{
+	BMenu* menu = Menu();
+	BPoint where = ContentLocation();
+	float y = std::floor(where.y + 8);
+	Outline line{{{where.x + 6, y}, {where.x + 58, y}}, false};
+	menu->SetHighColor(IsEnabled() ? rgb_color{0, 0, 0, 255} : rgb_color{150, 150, 150, 255});
+	StrokePenType(menu, line, fPen, fArrows > 0 ? 1 : 2);
+	FillArrowHeads(menu, line, fArrows, 1);
+}
+
+
+void
+TLineSampleItem::GetContentSize(float* width, float* height)
+{
+	*width = 64;
+	*height = 16;
+}
+
+
+void
+AddPenTypeItems(BMenu* menu)
+{
+	for (const ResourceFile::Resource* r : GobeResources::File().All('PENS')) {
+		PenType pen;
+		if (!ParsePenResource(r->data, pen))
+			continue;
+		BMessage* message = new BMessage('sf0A');
+		message->AddData("pen", B_RAW_TYPE, r->data.data(), ssize_t(r->data.size()));
+		menu->AddItem(new TLineSampleItem(pen, 0, message));
+	}
+}
+
 } // namespace gobe

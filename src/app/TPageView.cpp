@@ -2,6 +2,7 @@
 
 #include "GobeResources.h"
 #include "TEntryBar.h"
+#include "TInkMenus.h"
 #include "TPreferences.h"
 #include "TPageBar.h"
 #include "TRibbon.h"
@@ -2195,11 +2196,25 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 				RestoreInkLow();
 			}
 			SetDrawingMode(style.penOpacity >= 0.999f ? B_OP_COPY : B_OP_ALPHA);
-			if (style.penSize > 0 && SetInk(style.pen, style.penOpacity, r, &gradient)) {
+			// the pen's type ('PEN ': dashes, dots, hash marks along the
+			// outline; the non-printing one not printed) and arrows ('Arrw')
+			PenType penType;
+			int arrows = 0;
+			ShapePenAndArrows(fDocument.styles, s.style, penType, arrows);
+			bool printed = penType.print || !IsPrinting();
+			if (printed && style.penSize > 0
+					&& SetInk(style.pen, style.penOpacity, r, &gradient)) {
 				delete gradient;	// pens: solid color only for now
 				RestoreInkLow();
 				SetPenSize(style.penSize);
-				if (s.kind == Sig("RECT"))
+				BPoint offset(f.x + dx, f.y + dy);
+				std::vector<Outline> outlines;
+				if (penType.kind != 0 || arrows != 0)
+					outlines = ShapeOutline(s);
+				if (penType.kind != 0) {
+					for (const Outline& outline : outlines)
+						StrokePenType(this, outline, penType, style.penSize, offset);
+				} else if (s.kind == Sig("RECT"))
 					StrokeRect(r);
 				else if (s.kind == Sig("RRCT"))
 					StrokeRoundRect(r, s.radius[0], s.radius[1]);
@@ -2211,6 +2226,8 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 					StrokeLine(o, o + BPoint(s.size[0], s.size[1]));
 				else if (path != NULL)
 					StrokeShape(path);
+				for (const Outline& outline : outlines)
+					FillArrowHeads(this, outline, arrows, style.penSize, offset);
 				SetPenSize(1);
 			}
 			delete path;

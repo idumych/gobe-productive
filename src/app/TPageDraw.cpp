@@ -853,7 +853,7 @@ TPageView::ShapeCommand(BMessage* message)
 			fAlignPreview = false;
 			return true;
 		}
-		if (!message->HasInt32("AlignX")) {
+		if (!message->HasInt32("AlignX") && !message->HasInt32("AlignY")) {
 			if (fShapes.size() >= 2 && Window() != NULL) {
 				fAlignPreview = false;
 				(new TDialogAlignObjects(Window()))->RunDialog();
@@ -876,7 +876,9 @@ TPageView::ShapeCommand(BMessage* message)
 					&& gr->layers[ref.layer].shapes[ref.index].kind != Sig("FRAM"))
 				shapes.push_back(&gr->layers[ref.layer].shapes[ref.index]);
 		AlignShapes(shapes, message->GetInt32("AlignX", 0), message->GetInt32("AlignY", 0));
-		fAlignPreview = true;
+		// (the dialog's tries are undone by the next; the PartBar's
+		// buttons align at once)
+		fAlignPreview = message->GetBool("preview", false);
 		Invalidate();
 		if (Window() != NULL)
 			Window()->PostMessage(kMsgDocumentChanged);
@@ -965,7 +967,7 @@ TPageView::ShapeCommand(BMessage* message)
 	bool arrange = what == 'sM40' || what == 'sM41' || what == 'sM42' || what == 'sM43';
 	bool format = what == 'sf03' || what == 'sf04' || what == 'sf05' || what == 'sf06'
 		|| what == 'sf07' || what == 'sf08' || what == 'sf0D' || what == 'sf0E' || what == 'sf0S'
-		|| what == 'sf09';
+		|| what == 'sf09' || what == 'sf0A' || what == 'sf0F';
 	// (a frame selected by its edge takes the formats too)
 	bool frame = fShapes.empty() && fFrame.active && format
 		&& FrameAt(fDocument, fFrame.pointer) != nullptr;
@@ -1019,6 +1021,24 @@ TPageView::ShapeCommand(BMessage* message)
 		if (size < 0)
 			return true;
 		properties.push_back(OpacityProperty(Sig("PENz"), size));
+	} else if (what == 'sf0A') {
+		// the pen's type (TPenTypeMenuItem: TPropPenType 'PEN ', the pen
+		// as its PENS resource has it)
+		const void* data = NULL;
+		ssize_t size = 0;
+		PenType pen;
+		if (message->FindData("pen", B_RAW_TYPE, &data, &size) != B_OK
+				|| !ParsePenResource(std::vector<uint8_t>((const uint8_t*)data,
+					(const uint8_t*)data + size), pen))
+			return true;
+		properties.push_back(PenTypeProperty(pen));
+	} else if (what == 'sf0F') {
+		// the arrows (TArrowsMenu: TPropArrows 'Arrw', 0 none, 1 at the
+		// start, 2 at the end, 3 both)
+		int32 value = message->GetInt32(kValueString, -1);
+		if (value < 0 || value > 3)
+			return true;
+		properties.push_back(ArrowsProperty(value));
 	} else if (what == 'sf0D' || what == 'sf0E' || what == 'sf0S') {
 		int32 value = message->GetInt32(kValueString, 100);
 		if (value == int32('sM0U')) {
@@ -1061,7 +1081,7 @@ TPageView::ShapeCommand(BMessage* message)
 		for (const Property& p : properties)
 			SetShapeProperty(fDocument, part, ref.layer, ref.index, p);
 	}
-	if (frame)
+	if (frame && what != 'sf0F')
 		for (const Property& p : properties)
 			SetFrameProperty(fDocument, fFrame.pointer, p);
 	Invalidate();

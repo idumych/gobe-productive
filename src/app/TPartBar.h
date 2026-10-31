@@ -8,6 +8,9 @@
 // click: Go To Cell…), the horizontal and vertical alignments (MENU 302 and
 // 303, 'sM67'), the borders ('sM68'-'sM6B'), Number Formatting ('sM60')
 // and Make Chart (not ported: off).
+// For drawings (TPartGR::AddPartBarElements): the vertical and horizontal
+// alignments of the selected shapes ('sM44' with "AlignY" or "AlignX"),
+// Text Wrap ('sf0U') and the arrows menu (TArrowsMenu: 'sf0F').
 #ifndef GOBE_TPARTBAR_H
 #define GOBE_TPARTBAR_H
 
@@ -36,9 +39,14 @@ private:
 	void BuildSheet();
 	// TPartSS::PartBarUpdateContents
 	void UpdateSheet();
+	// TPartGR::AddPartBarElements and PartBarUpdateContents
+	void BuildDrawing();
+	void UpdateDrawing();
 
 	TPageView* fPages;
 	bool fSheet = false;
+	bool fDrawing = false;
+	size_t fShapeCount = size_t(-1);
 	TSpacingEdit* fSpacing = NULL;
 	bool fText = false;
 	uint16 fKind = 0;

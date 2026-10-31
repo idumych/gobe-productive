@@ -11,6 +11,7 @@
 #include <memory>
 #include <vector>
 
+#include "Drawing.h"
 #include "Styles.h"
 
 namespace gobe {
@@ -62,6 +63,34 @@ public:
 private:
 	std::unique_ptr<BBitmap> fIcon;
 };
+
+// A pen type's marks along an outline (TDashPen, TDotPen, THashPen::
+// StrokePath) in the view's high color, at `size`; a normal pen strokes
+// it as is. `offset` is added to the outline's points.
+void StrokePenType(BView* view, const Outline& outline, const PenType& pen, float size,
+	BPoint offset = B_ORIGIN);
+// TArrow::Draw: the arrowheads (0 none, 1 at the start, 2 at the end, 3
+// both) of an open outline, filled in the high color
+void FillArrowHeads(BView* view, const Outline& outline, int arrows, float size,
+	BPoint offset = B_ORIGIN);
+
+// TPenTypeMenuItem and TArrowsMenu's items: a line drawn with a pen type
+// or with arrows
+class TLineSampleItem : public BMenuItem {
+public:
+	TLineSampleItem(const PenType& pen, int arrows, BMessage* message);
+
+	virtual void DrawContent();
+	virtual void GetContentSize(float* width, float* height);
+
+private:
+	PenType fPen;
+	int fArrows;
+};
+
+// TPenMenu's pen types: the application's pens (PENS, TPenMgr) as line
+// samples sending 'sf0A' with "pen" (the PENS resource's bytes)
+void AddPenTypeItems(BMenu* menu);
 
 } // namespace gobe
 

@@ -178,6 +178,61 @@ int UngroupShape(Document& doc, size_t drawing, size_t layer, size_t index, std:
 // control points offsets from them), open; -1 as AddShape
 int AddBezierShape(Document& doc, size_t part, size_t layer, const std::vector<Vertex>& vertices);
 
+// A pen's kind (TPen and its subclasses; TPropPenType 'PEN '): 0 a
+// normal pen (NORM), 1 dots (PDOT: the gap, filled or hollow), 2 dashes
+// (DASH: the dash and the gap), 3 hash marks (HASH: the gap); its name,
+// whether it prints
+struct PenType {
+	int kind = 0;
+	std::string name;
+	bool print = true;
+	float dash = 0, gap = 0;
+	bool filled = false;
+};
+// a 'PENS' resource (the application's pens, TPenMgr's): the kind, the
+// name (C string), printable, then the kind's numbers (u32s,
+// little-endian); false if it isn't one
+bool ParsePenResource(const std::vector<uint8_t>& data, PenType& pen);
+// the 'PEN ' property of a pen (TPropPenType::WritePropData: present, the
+// kind's signature, the data's size, TPen::WritePenData and its
+// subclass's) and back
+Property PenTypeProperty(const PenType& pen);
+bool ReadPenType(const Property& property, PenType& pen);
+// TPropArrows 'Arrw' (a short: 0 none, 1 at the start, 2 at the end, 3
+// both ends; STR# 11, 20-23)
+Property ArrowsProperty(int arrows);
+
+// a shape style's pen type and arrows, through its bases (none: a normal
+// pen, no arrows)
+void ShapePenAndArrows(const StyleMgr& styles, uint32_t style, PenType& pen, int& arrows);
+
+// a shape's outline as polylines (drawing coordinates, curves flattened):
+// each with whether it's closed. A turned shape's isn't turned.
+struct Outline {
+	std::vector<DrawPoint> points;
+	bool closed = false;
+};
+std::vector<Outline> ShapeOutline(const Shape& shape);
+
+// the marks a pen draws along a polyline (TDashPen, TDotPen, THashPen
+// StrokePath): dashes as segments, dots as centers (`dotSize` across: the
+// filled ones filled, all outlined with a hairline), hash marks as
+// segments across it (over the line itself at a third of the size);
+// `size` the pen's size
+struct PenMarks {
+	std::vector<std::pair<DrawPoint, DrawPoint>> segments;
+	std::vector<DrawPoint> dots;
+	float dotSize = 0;
+};
+PenMarks MarksAlong(const Outline& outline, const PenType& pen, float size);
+// the size a pen draws at: dots at least 3, hash marks 4 (MinPenSize)
+float PenTypeSize(const PenType& pen, float size);
+
+// TArrow: an arrowhead at `end` of a line coming from `from`: its tip
+// size + 2 past the end, its base size + 5 back, size + 3 to each side
+// (`size` the pen's, at least 1)
+void ArrowHead(const DrawPoint& from, const DrawPoint& end, float size, DrawPoint head[3]);
+
 } // namespace gobe
 
 #endif

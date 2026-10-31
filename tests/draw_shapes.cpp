@@ -474,6 +474,96 @@ main(int argc, char** argv)
 		Check(UngroupShape(again, 0, 0, 0, error) < 0, "the ellipse isn't a group");
 	}
 
+	// the pens: the original's PENS resources, the 'PEN ' and 'Arrw'
+	// properties, the marks they draw, arrowheads
+	{
+		std::string base = "../original/resources/Gobe Productive/PENS/";
+		const char* files[] = {"0_Normal_Pen", "1_NonPrinting_Pen", "2_Dash_Pen_4x2",
+			"3_Dash_Pen_8x4", "4_Dash_Pen_16x4", "5_Dot_Pen_6S", "6_Dot_Pen_6F", "7_Hash_Pen"};
+		std::vector<PenType> pens;
+		for (const char* name : files) {
+			FILE* f = fopen((base + name + ".bin").c_str(), "rb");
+			if (f == nullptr)
+				continue;
+			std::vector<uint8_t> bytes;
+			int c;
+			while ((c = fgetc(f)) != EOF)
+				bytes.push_back(uint8_t(c));
+			fclose(f);
+			PenType pen;
+			if (ParsePenResource(bytes, pen))
+				pens.push_back(pen);
+		}
+		if (pens.size() == 8) {
+			Check(pens[0].kind == 0 && pens[0].name == "Default" && pens[0].print
+				&& !pens[1].print && pens[2].kind == 2 && pens[2].dash == 4 && pens[2].gap == 2
+				&& pens[4].dash == 16 && pens[5].kind == 1 && !pens[5].filled && pens[6].filled
+				&& pens[7].kind == 3 && pens[7].name == "Hash Marks", "the PENS resources");
+			for (const PenType& pen : pens) {
+				PenType back;
+				Check(ReadPenType(PenTypeProperty(pen), back) && back.kind == pen.kind
+					&& back.name == pen.name && back.print == pen.print && back.dash == pen.dash
+					&& back.gap == pen.gap && back.filled == pen.filled, "a pen's property: " + pen.name);
+			}
+		} else
+			printf("draw_shapes: no PENS resources, %zu read\n", pens.size());
+		PenType dash;
+		dash.kind = 2;
+		dash.dash = 8;
+		dash.gap = 4;
+		Outline line{{{0, 0}, {100, 0}}, false};
+		PenMarks m = MarksAlong(line, dash, 1);
+		Check(m.segments.size() == 9 && m.segments[0].first[0] == 0
+			&& m.segments[0].second[0] == 8 && m.segments[1].first[0] == 12
+			&& m.segments.back().second[0] == 100, "dashes along a line");
+		PenType dots;
+		dots.kind = 1;
+		dots.gap = 6;
+		m = MarksAlong(line, dots, 2);
+		Check(m.dots.size() == 17 && m.dotSize == 3 && std::fabs(m.dots[0][0] - 1.5f) < 1e-3
+			&& std::fabs(m.dots[1][0] - 7.5f) < 1e-3, "dots every gap, half the size in, at least 3 across");
+		PenType hash;
+		hash.kind = 3;
+		hash.gap = 9;
+		m = MarksAlong(line, hash, 1);
+		Check(m.segments.size() == 11 && std::fabs(m.segments[0].first[0] - 9) < 1e-3
+			&& m.segments[0].first[1] == 2 && m.segments[0].second[1] == -2,
+			"hash marks across a line every gap, at least 4 long");
+		Check(MarksAlong(line, PenType(), 1).segments.empty(), "a normal pen: no marks");
+		Outline square{{{0, 0}, {10, 0}, {10, 10}, {0, 10}}, true};
+		m = MarksAlong(square, dash, 1);
+		float total = 0;
+		for (auto& seg : m.segments)
+			total += std::fabs(seg.second[0] - seg.first[0]) + std::fabs(seg.second[1] - seg.first[1]);
+		Check(total > 26 && total < 28.1, "dashes around a closed outline");
+		DrawPoint head[3];
+		ArrowHead({0, 0}, {50, 0}, 1, head);
+		Check(head[0][0] == 53 && head[1][0] == 44 && head[2][0] == 44
+			&& std::fabs(head[1][1]) == 4 && head[1][1] == -head[2][1], "an arrowhead");
+
+		Document doc;
+		std::string error;
+		Check(CreateBlankDrawing(doc, error), "a drawing for the pens " + error);
+		int lineShape = AddShape(doc, 0, 0, kToolLine, {{10, 10}, {60, 40}});
+		std::vector<Outline> lo = ShapeOutline(doc.GraphicsPart(0)->layers[0].shapes[lineShape]);
+		Check(lo.size() == 1 && !lo[0].closed && lo[0].points.size() == 2
+			&& lo[0].points[1][0] == 60 && lo[0].points[1][1] == 40, "a line's outline");
+		SetShapeProperty(doc, 0, 0, lineShape, ArrowsProperty(3));
+		SetShapeProperty(doc, 0, 0, lineShape, PenTypeProperty(dash));
+		std::string path = "/tmp/draw_shapes_pens";
+		Check(doc.Save(path, error), "pens saved " + error);
+		Document again;
+		Check(LoadDocument(path, again, error), "pens reloaded " + error);
+		PenType pen;
+		int arrows = 0;
+		ShapePenAndArrows(again.styles, again.GraphicsPart(0)->layers[0].shapes[lineShape].style,
+			pen, arrows);
+		Check(arrows == 3 && pen.kind == 2 && pen.dash == 8, "a shape's pen and arrows kept");
+		int ellipse = AddShape(again, 0, 0, kToolEllipse, {{0, 0}, {40, 20}});
+		lo = ShapeOutline(again.GraphicsPart(0)->layers[0].shapes[ellipse]);
+		Check(lo.size() == 1 && lo[0].closed && lo[0].points.size() > 16, "an ellipse's outline");
+	}
+
 	// a sample's drawing: one more shape, the others as they were
 	for (int i = 1; i < argc; i++) {
 		std::string name = argv[i];

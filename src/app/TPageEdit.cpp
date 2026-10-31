@@ -3828,8 +3828,9 @@ TPageView::MessageReceived(BMessage* message)
 // "{sright}" work for cell selection too.
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
-// "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
-// "formatbar show|color N|fill N|pen N|style NAME|names|name LABEL|ink text|fill
+// "partbar ABCD", "partbar spacing text", "partbar arrows N" — the part
+// bar (TPartBar).
+// "formatbar show|color N|fill N|pen N|pentype N|style NAME|names|name LABEL|ink text|fill
 // pattern|gradient|transparency N" — the format
 // bar (TFormatBar); "names" prints the Names menu, "name" picks its item.
 // "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
@@ -3881,6 +3882,13 @@ TPageView::RunScript(const std::string& script, Document& document)
 						pen.AddData("color", B_RGB_COLOR_TYPE, &set.colors[index], 4);
 						MessageReceived(&pen);
 					}
+				} else if (what.compare(0, 8, "pentype ") == 0) {
+					// "formatbar pentype N": the pen menu's pen type N ('sf0A')
+					BMenu types("");
+					AddPenTypeItems(&types);
+					BMenuItem* item = types.ItemAt(atoi(what.c_str() + 8));
+					if (item != NULL && item->Message() != NULL)
+						MessageReceived(item->Message());
 				}
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
@@ -3984,6 +3992,12 @@ TPageView::RunScript(const std::string& script, Document& document)
 				bar->Update();
 				if (command.compare(8, 8, "spacing ") == 0)
 					bar->TypeSpacing(command.c_str() + 16);
+				else if (command.compare(8, 7, "arrows ") == 0) {
+					// "partbar arrows N": the arrows menu's item N ('sf0F')
+					BMessage arrows('sf0F');
+					arrows.AddInt32(kValueString, atoi(command.c_str() + 15));
+					MessageReceived(&arrows);
+				}
 				else if (command.size() == 12) {
 					const char* c = command.c_str() + 8;
 					uint32 id = uint32(uint8(c[0])) << 24 | uint32(uint8(c[1])) << 16
@@ -5751,6 +5765,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM46': case 'sM47':
 		case 'sf06': case 'sf07': case 'sf08': case 'sf0E': case 'sf0S':	// pen, shapes
 		case 'sf09':														// the pen's size
+		case 'sf0A': case 'sf0F':							// the pen's type, arrows
 			return true;
 		default:
 			return false;
