@@ -176,7 +176,7 @@ Opened with File > Open, saved with Save As's File Format menu.
 | HTML: pictures in the text saved as PNG files in a "<name>.images" folder (image parts; the original drew any frame and wrote GIF or JPEG) | next |
 | HTML: pictures opened; tables opened as tables (they open as tab-separated lines) | not yet |
 | Text tables: tab, comma or semicolon separated, opened as spreadsheets and saved from them (cells as shown, or formulas with Show Formulas on) | next |
-| SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths; not fonts or row heights) | next |
+| SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths, row heights, the default font) | next |
 | Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | next |
 | Microsoft Word: Word 97 and later documents opened (faces, sizes, fonts, colours, alignment, indents, spacing, line breaks, fields as their results) | next |
 | Microsoft Word: text documents saved as Word 97 (text, faces, sizes, fonts, colours, alignment, indents, spacing, line and page breaks, fields as their text; not frames, tables or styles) | next |

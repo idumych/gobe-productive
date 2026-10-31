@@ -112,6 +112,14 @@ SpreadsheetToSylk(const Document& doc, size_t part)
 	for (const SSHeader& column : ss->columns)
 		if (column.index < 0xffff && column.cell.number != ss->defaultWidth)
 			sheet.columnWidths[uint16_t(column.index)] = int(std::lround(column.cell.number / 7.45));
+	// the rows whose height isn't the default (F;M;R)
+	for (const SSHeader& row : ss->rows)
+		if (row.index < 0xffff && row.cell.number != ss->defaultHeight)
+			sheet.rowHeights[uint16_t(row.index)] = row.cell.number;
+	// the default style's font (TTranslatorPart_SS::DefaultStyle: the
+	// part's own)
+	CellStyle defaults = ResolveCellStyle(doc.styles, {ss->style});
+	sheet.fonts.push_back({defaults.text.family, defaults.text.size});
 	return sheet;
 }
 
@@ -191,6 +199,14 @@ SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFo
 	for (const auto& width : sheet.columnWidths)
 		if (width.second > 0)
 			SetLineSize(*ss, true, width.first, width.first, float(width.second * 7));
+	// rtd_F, sendRowHeight: the default height (F;D...;M) and each row's
+	// (F;M;R); the fonts (P;F) are kept for cells that refer to them
+	// (F;SM), which the port doesn't read
+	if (sheet.defaultRowHeight > 0)
+		ss->defaultHeight = sheet.defaultRowHeight;
+	for (const auto& height : sheet.rowHeights)
+		if (height.second > 0)
+			SetLineSize(*ss, false, height.first, height.first, height.second);
 	if (sheet.rows > ss->used.to.a + 1)
 		ss->used.to.a = uint16_t(sheet.rows - 1);
 	if (sheet.columns > ss->used.to.b + 1)

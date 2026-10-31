@@ -27,6 +27,18 @@ struct SylkSheet {
 	// the P records' number formats (P fields) in order, as Gobe writes
 	// them ("m/d/yy": SYLK's '\' escapes taken out)
 	std::vector<std::string> formats;
+	// the P;F records (TImportSYLK::rtd_P: name, size M / 20 in whole
+	// points); the export writes one, the sheet's default font
+	struct Font {
+		std::string name;
+		float size = 0;
+	};
+	std::vector<Font> fonts;
+	// F;M;R records: a row's (from 0) height in points (M / 20, whole
+	// points as TImportSYLK::rtd_F divides); an F;D record's M is the
+	// default height (0: none)
+	std::map<uint16_t, float> rowHeights;
+	float defaultRowHeight = 0;
 };
 
 // TExportSYLK::write_default_format: the formats every file starts with
@@ -38,7 +50,8 @@ const std::vector<std::string>& DefaultSylkFormats();
 bool ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error);
 // Writes the sheet as SYLK: ID, the P records (TNumberFormatsTable::
 // StyleToNumberFormat: ';' doubled, ':', '-', '/', '(' and ')' after a
-// '\'), B, the F width records, a C record per cell (after an F record
+// '\'), the P;F font records ("P;F<name>;M<size rounded x 20>"), B, the F
+// width records, the row heights ("F;M<height x 20>;R<row>"), a C record per cell (after an F record
 // with the cell's format: P the index, F the kind as convert_number_format
 // finds it), E. Lines end in "\r\n" as SYLK files do.
 std::string WriteSylk(const SylkSheet& sheet);

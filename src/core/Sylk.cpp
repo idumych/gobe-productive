@@ -4,6 +4,7 @@
 
 #include <cctype>
 #include <cerrno>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -267,10 +268,21 @@ ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error)
 			cell.column = uint16_t(x - 1);
 			sheet.cells.push_back(cell);
 		} else if (type == "P") {
-			// a number format (P), or a font (F, E, L: not kept)
-			for (const Field& field : fields)
+			// a number format (P), or a font (F or E, its size M)
+			SylkSheet::Font font;
+			bool isFont = false;
+			for (const Field& field : fields) {
+				long value;
 				if (field.letter == 'P')
 					sheet.formats.push_back(Unescaped(field.value));
+				else if (field.letter == 'F' || field.letter == 'E') {
+					font.name = field.value;
+					isFont = true;
+				} else if (field.letter == 'M' && ParseInt(field.value, value))
+					font.size = float(value / 20);
+			}
+			if (isFont)
+				sheet.fonts.push_back(font);
 		} else if (type == "F") {
 			// the cell's format: its position (it moves the current one too)
 			long format = -1;
@@ -284,6 +296,24 @@ ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error)
 			}
 			if (format >= 0 && x > 0 && y > 0)
 				cellFormats[{uint16_t(y - 1), uint16_t(x - 1)}] = int(format);
+			// a row's height (M with R), or with D the default height
+			// (TImportSYLK::rtd_F, sendRowHeight: M / 20)
+			long height = -1, row = 0;
+			bool defaults = false;
+			for (const Field& field : fields) {
+				long value;
+				if (field.letter == 'M' && ParseInt(field.value, value) && value >= 0)
+					height = value / 20;
+				else if (field.letter == 'R' && ParseInt(field.value, value) && value >= 1
+						&& value <= 65536)
+					row = value;
+				else if (field.letter == 'D')
+					defaults = true;
+			}
+			if (height >= 0 && defaults)
+				sheet.defaultRowHeight = float(height);
+			else if (height >= 0 && row > 0)
+				sheet.rowHeights[uint16_t(row - 1)] = float(height);
 			for (const Field& field : fields) {
 				if (field.letter != 'W')
 					continue;
@@ -320,12 +350,20 @@ WriteSylk(const SylkSheet& sheet)
 	std::string out = "ID;PGOBE\r\n";
 	for (const std::string& format : sheet.formats)
 		out += "P;P" + Escaped(EscapedFormat(format)) + "\r\n";
+	// TExportSYLK::DoTranslate: the default style's font (its size
+	// rounded, in twentieths of a point)
+	for (const SylkSheet::Font& font : sheet.fonts)
+		out += "P;F" + Escaped(font.name) + ";M" + std::to_string(std::lround(font.size) * 20)
+			+ "\r\n";
 	if (sheet.rows != 0 || sheet.columns != 0)
 		out += "B;Y" + std::to_string(sheet.rows) + ";X" + std::to_string(sheet.columns) + "\r\n";
 	for (const auto& width : sheet.columnWidths) {
 		std::string column = std::to_string(width.first + 1);
 		out += "F;W" + column + " " + column + " " + std::to_string(width.second) + "\r\n";
 	}
+	for (const auto& height : sheet.rowHeights)
+		out += "F;M" + std::to_string(std::lround(height.second * 20)) + ";R"
+			+ std::to_string(height.first + 1) + "\r\n";
 	for (const SylkCell& cell : sheet.cells) {
 		if (cell.format >= 0 && size_t(cell.format) < sheet.formats.size()) {
 			// write_cell_format: the format's index and kind (alignment G)
