@@ -56,6 +56,7 @@
 #include "TPreferences.h"
 #include "TWPDialogs.h"
 #include "TSharedDocument.h"
+#include "TLexiconDialogs.h"
 #include "TStylesEdit.h"
 #include "InlineParts.h"
 #include "Find.h"
@@ -1033,17 +1034,22 @@ TDocWindow::MessageReceived(BMessage* message)
 	// part's SelectWord, then TThesaurus::GUI, TDictionary::GUI): the word
 	// at the caret selected; the data file is the first of STR# 38 (37)
 	// there ("~etc": the system's etc folder); none: STR# 6's alert with
-	// the last. (The dialogs need the BeOS goodies' files; not ported.)
+	// the last. The port also looks in its settings folder, where
+	// tools/wordnet_to_gobe.py's files from WordNet go.
 	if (message->what == 'sM27' || message->what == 'sM28') {
+		BString word;
 		if (fPages != NULL && fPages->fCaret.active && fDocument != NULL) {
 			if (const WPPart* wp = fDocument->WordPart(fPages->fCaret.part)) {
 				TextPosition from, to;
 				if (!fPages->TextSelection(from, to))
 					from = {fPages->fCaret.paragraph, fPages->fCaret.offset};
 				size_t start, end;
-				WordBounds(wp->paragraphs[from.paragraph].text, from.offset, true, start, end);
-				if (start != end)
+				const std::string& text = wp->paragraphs[from.paragraph].text;
+				WordBounds(text, from.offset, true, start, end);
+				if (start != end) {
 					fPages->SelectText(fPages->fCaret.part, {from.paragraph, start}, end);
+					word.SetTo(text.c_str() + start, int32(end - start));
+				}
 			}
 		}
 		int32 list = message->what == 'sM27' ? 38 : 37;
@@ -1064,11 +1070,26 @@ TDocWindow::MessageReceived(BMessage* message)
 			found = BEntry(path.String()).Exists();
 		}
 		if (!found) {
+			// the port's: made from WordNet (tools/wordnet_to_gobe.py) in
+			// its settings folder
+			BPath settings;
+			if (find_directory(B_USER_SETTINGS_DIRECTORY, &settings) == B_OK) {
+				settings.Append("Gobe Productive port");
+				settings.Append(message->what == 'sM27' ? "thesaurus" : "dictionary");
+				if (BEntry(settings.Path()).Exists()) {
+					path = settings.Path();
+					found = true;
+				}
+			}
+		}
+		if (!found) {
 			BString text;
 			text.SetToFormat(GobeResources::IndexString(6, 0).String(), path.String());
 			(new BAlert("", text.String(), "OK"))->Go(NULL);
-		} else if (fStatus != NULL)
-			fStatus->SetText("The thesaurus and dictionary dialogs are not ported yet");
+		} else if (message->what == 'sM27')
+			TDialogThesaurus::Show(path, word);
+		else
+			TDialogDictionary::Show(path, word);
 		return;
 	}
 	// Document > Document Size… (the main part's HandleMessage: for text,

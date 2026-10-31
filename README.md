@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-47-51-0.svg" alt="Port progress: 47 of 51 features done, 4 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-48-51-0.svg" alt="Port progress: 48 of 51 features done, 3 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -147,7 +147,7 @@ Clipboard.
 | Styles: applying paragraph and basic styles, New Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, formatting a style directly) | 0.1.1 |
 | Import Styles and Export Styles (Edit Styles' File menu): the styles picked, written as the original's styles files and read back | next |
 | Spell checking with the original's dictionaries | 0.1.1 |
-| The thesaurus and dictionary (they need data files that weren't part of Gobe Productive) | not yet |
+| Writing Tools' Thesaurus… and Dictionary…, on files made from WordNet (see [The thesaurus and dictionary](#the-thesaurus-and-dictionary)) | next |
 | Word Count, the text ruler, the FormatBar and PartBar, zoom, the browse view, Preferences, History, Document Size | 0.1.1 |
 
 ### Spreadsheets
@@ -213,6 +213,21 @@ correctly by antiword (text, breaks, alignment, indents, faces) but
 haven't been opened in Microsoft Word; Excel files open in xlrd but
 haven't been opened in Excel; styles files haven't been tried in the
 original.
+
+## The thesaurus and dictionary
+
+Gobe Productive's Thesaurus… and Dictionary… read the thesaurus and
+dictionary files BeOS kept in `/boot/optional/goodies`, which aren't
+available any more. The port reads files in the same formats made from
+[WordNet 3.0](https://wordnet.princeton.edu) instead: download its
+database (`WNdb-3.0.tar.gz`), unpack it, and run
+
+    tools/wordnet_to_gobe.py <the unpacked dict folder> <a folder>
+
+then put the `thesaurus` and `dictionary` it writes into the port's
+settings folder (`~/config/settings/Gobe Productive port` on Haiku,
+`~/.config/cosmoe/Gobe Productive port` on Linux). WordNet's licence
+comes with them (`LICENSE-WordNet`) and must stay with the files.
 
 ## Building
 
