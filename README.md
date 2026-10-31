@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress.svg" alt="Port progress: 33 of 42 features done, 9 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 34 of 43 features done, 9 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, spreadsheets have caught up with the original's editing, documents
@@ -160,7 +160,8 @@ sizes, headings and options are saved with the document.
 | Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
 | Creating and linking frames | not yet |
 | Drawing tools | not yet |
-| Pattern and gradient inks; fill, pen and transparency in the FormatBar | not yet |
+| Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
+| Fill and pen inks for frames and drawings in the FormatBar | not yet |
 
 ### Other formats (translators)
 

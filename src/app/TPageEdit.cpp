@@ -2492,25 +2492,44 @@ TPageView::MessageReceived(BMessage* message)
 		// the format bar's text ink, a color ('sf02', TFormatCommand::
 		// ParsePropertyMesg: TPropTextColor of the ink chosen; "color" for a
 		// solid one)
-		case 'sf02':
-		case 'sf03': {	// the text ink, the fill ink (cells: FCol)
+		case 'sf02': case 'sf0M': case 'sf0N':
+		case 'sf03': case 'sf04': case 'sf05': {
+			// the text ink, the fill ink (cells: FCol): a color, or a
+			// pattern or a gradient of the ink sets ("ink": its bytes;
+			// TFormatCommand takes it from its set by name and index)
+			bool fillInk = message->what == 'sf03' || message->what == 'sf04'
+				|| message->what == 'sf05';
 			const void* data;
 			ssize_t size;
-			if (message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) != B_OK
-					|| size < 4) {
-				beep();
-				return;
+			Property inkProperty;
+			if (message->FindData("ink", B_RAW_TYPE, &data, &size) == B_OK && size > 0) {
+				std::vector<uint8_t> bytes((const uint8*)data, (const uint8*)data + size);
+				Ink ink;
+				try {
+					DocArchive a(bytes);
+					ReadInk(a, ink);
+				} catch (const ArchiveError&) {
+					beep();
+					return;
+				}
+				inkProperty = InkProperty(fillInk ? Sig("FCol") : Sig("TCol"), ink);
+			} else {
+				if (message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) != B_OK
+						|| size < 4) {
+					beep();
+					return;
+				}
+				const rgb_color* c = (const rgb_color*)data;
+				Color color;
+				color.r = c->red;
+				color.g = c->green;
+				color.b = c->blue;
+				color.a = 255;
+				inkProperty = fillInk ? CellFillProperty(color) : TextColorProperty(color);
 			}
-			const rgb_color* c = (const rgb_color*)data;
-			Color color;
-			color.r = c->red;
-			color.g = c->green;
-			color.b = c->blue;
-			color.a = 255;
 			if (!fCaret.active) {
-				bool fill = message->what == 'sf03';
-				if (!FormatCells(fill ? CellFillProperty(color) : TextColorProperty(color),
-						fill ? "Cell Fill" : "Text Color")) {
+				bool fill = fillInk;
+				if (!FormatCells(inkProperty, fill ? "Cell Fill" : "Text Color")) {
 					beep();
 					return;
 				}
@@ -2525,15 +2544,43 @@ TPageView::MessageReceived(BMessage* message)
 				}
 				return;
 			}
-			if (message->what != 'sf02' || fDocument.WordPart(fCaret.part) == NULL) {
+			if (fillInk || fDocument.WordPart(fCaret.part) == NULL) {
 				beep();
 				return;
 			}
 			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(5, 5).String())
 				+ GobeResources::IndexString(11, 0).String(), CurrentViewState());
 			auto sel = TextSelectionRange();
-			ApplyCharacter(sel.first, sel.second,
-				TextColorProperty(color));
+			ApplyCharacter(sel.first, sel.second, inkProperty);
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
+		// the text's and the fill's transparency (TFormatCommand: 'sf0R'
+		// TPropTextTransparent, 'sf0D' TPropFillTransparent, value / 100)
+		case 'sf0R':
+		case 'sf0D': {
+			float opacity = message->GetInt32(kValueString, 100) / 100.0f;
+			if (opacity < 0 || opacity > 1) {
+				beep();
+				return;
+			}
+			bool fill = message->what == 'sf0D';
+			Property transparency = fill ? FillTransparencyProperty(opacity)
+				: OpacityProperty(Sig("TTra"), opacity);
+			if (!fCaret.active) {
+				if (!FormatCells(transparency, fill ? "Cell Fill" : "Text Color"))
+					beep();
+				return;
+			}
+			if (fill || fDocument.WordPart(fCaret.part) == NULL) {
+				beep();
+				return;
+			}
+			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(5, 5).String())
+				+ GobeResources::IndexString(11, 0).String(), CurrentViewState());
+			auto sel = TextSelectionRange();
+			ApplyCharacter(sel.first, sel.second, transparency);
 			TextChanged();
 			UpdateMarks();
 			return;
@@ -3682,7 +3729,8 @@ TPageView::MessageReceived(BMessage* message)
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
-// "formatbar show|color N|fill N|style NAME|names|name LABEL" — the format
+// "formatbar show|color N|fill N|style NAME|names|name LABEL|ink text|fill
+// pattern|gradient|transparency N" — the format
 // bar (TFormatBar); "names" prints the Names menu, "name" picks its item.
 // "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
 // dictionaries" — the SpellBar (Spell Check's commands 'sMC0'..'sMC6',
@@ -3726,6 +3774,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 					bar->ChooseColor(atoi(what.c_str() + 5), true);
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
+				else if (what.compare(0, 4, "ink ") == 0) {
+					// "formatbar ink text|fill pattern|gradient|transparency N"
+					char target[8] = {}, kind[16] = {};
+					int n = 0;
+					if (sscanf(what.c_str() + 4, "%7s %15s %d", target, kind, &n) == 3)
+						bar->ChooseInk(strcmp(kind, "pattern") == 0 ? 1
+							: strcmp(kind, "gradient") == 0 ? 2 : 3, n,
+							strcmp(target, "fill") == 0);
+				}
 				else if (what == "names") {
 					printf("names %s\n", bar->NamesMenu().c_str());
 					fflush(stdout);
@@ -5537,6 +5594,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
 		case 'sf02': case 'sf03': case 'sf0L': case 'sf0V': case 'sMB6':	// format bar
+		case 'sf0M': case 'sf0N': case 'sf04': case 'sf05': case 'sf0R': case 'sf0D':
 		case 'sMB0': case 'sMB1':	// Edit Styles' Import and Export Styles
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:

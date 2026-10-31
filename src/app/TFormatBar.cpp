@@ -163,8 +163,11 @@ public:
 };
 
 
-// TTextMenuElement (a TMICNMenuBarElement): the ink sets' menus behind a
-// row of their icons (color 22, pattern 24, gradient 25, transparency 32)
+// TTextMenuElement, TFillMenuElement (TMICNMenuBarElements): the ink
+// sets' menus behind a row of their icons (color 22, pattern 24, gradient
+// 25, transparency 32), each with its command: the text's 'sf02', 'sf0M',
+// 'sf0N' and MENU 103 as 'sf0R'; the fill's 'sf03', 'sf04', 'sf05' and
+// 'sf0D'
 class TInkElement : public TFormatMenuElement {
 public:
 	TInkElement(uint32 id, BRect rect, int32 micn, uint32 colorCommand, int32 tipIndex)
@@ -173,6 +176,10 @@ public:
 		fColorCommand(colorCommand)
 	{
 		tip = GobeResources::IndexString(4, tipIndex).String();
+		bool text = colorCommand == 'sf02';
+		fPatternCommand = text ? 'sf0M' : 'sf04';
+		fGradientCommand = text ? 'sf0N' : 'sf05';
+		fTransparencyCommand = text ? 'sf0R' : 'sf0D';
 	}
 
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
@@ -184,13 +191,17 @@ public:
 		BPopUpMenu* menu = new BPopUpMenu("ink", false, false, B_ITEMS_IN_ROW);
 		static const int32 kIcons[4] = {0x16, 0x18, 0x19, 0x20};
 		for (int32 i = 0; i < 4; i++) {
-			BMenu* palette;
+			BMenu* palette = NULL;
 			if (i == 0) {
 				// TInkSetMenu: the active color set (COLR 0) as a matrix
 				palette = ColorSetMenu(BMessage(fColorCommand));
-			} else {
-				// (the pattern and gradient sets and transparency aren't
-				// ported yet)
+			} else if (i < 3) {
+				// the pattern set (BPAT 0) and the gradient set (GRAD 0)
+				palette = InkSetMenu(i == 1 ? 'BPAT' : 'GRAD',
+					BMessage(i == 1 ? fPatternCommand : fGradientCommand));
+			} else
+				palette = TransparencyMenu();
+			if (palette == NULL) {
 				palette = new BMenu("");
 				palette->SetEnabled(false);
 			}
@@ -208,7 +219,31 @@ public:
 	}
 
 private:
-	uint32 fColorCommand;
+	// MENU 103 (100 Opaque, 90-10, 0 Transparent) sending the
+	// transparency command with its "value" (a percent); Other… ('sM0U')
+	// is off (its dialog is the cell borders')
+	BMenu* TransparencyMenu()
+	{
+		BMenu* transparency = new BMenu("");
+		TMenu source(103, true);
+		while (source.CountItems() > 0) {
+			BMenuItem* item = source.RemoveItem((int32)0);
+			if (BMessage* message = item->Message()) {
+				if (message->what == 'sM0U')
+					item->SetEnabled(false);
+				else {
+					int32 value = message->GetInt32(kValueString, 0);
+					message->MakeEmpty();
+					message->what = fTransparencyCommand;
+					message->AddInt32(kValueString, value);
+				}
+			}
+			transparency->AddItem(item);
+		}
+		return transparency;
+	}
+
+	uint32 fColorCommand, fPatternCommand, fGradientCommand, fTransparencyCommand;
 };
 
 
@@ -525,6 +560,30 @@ TFormatBar::ChooseColor(int32 index, bool fill)
 	message.AddString("ink name", "Standard");
 	message.AddData("color", B_RGB_COLOR_TYPE, &set.colors[index], 4);
 	message.AddInt32("ink index", index);
+	fSynchronous = true;
+	Send(&message);
+	fSynchronous = false;
+}
+
+
+void
+TFormatBar::ChooseInk(int32 set, int32 index, bool fill)
+{
+	BMessage message;
+	if (set == 3) {
+		message.what = fill ? 'sf0D' : 'sf0R';
+		message.AddInt32(kValueString, index);
+	} else {
+		uint32 command = set == 1 ? (fill ? 'sf04' : 'sf0M') : (fill ? 'sf05' : 'sf0N');
+		BMenu* menu = InkSetMenu(set == 1 ? 'BPAT' : 'GRAD', BMessage(command));
+		BMenuItem* item = menu != NULL ? menu->ItemAt(index) : NULL;
+		if (item == NULL || item->Message() == NULL) {
+			delete menu;
+			return;
+		}
+		message = *item->Message();
+		delete menu;
+	}
 	fSynchronous = true;
 	Send(&message);
 	fSynchronous = false;

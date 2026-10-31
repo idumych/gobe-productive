@@ -348,6 +348,13 @@ private:
 	void FillInk(BRect rect, const Ink& ink, float opacity, BRect inkRect);
 	const CellStyle& SpreadsheetStyle(const std::vector<uint32_t>& stack);
 	bool SetInk(const Ink& ink, float opacity, BRect rect, BGradient** gradient);
+	// the pattern SetInk's ink fills with (its high and low colors set);
+	// B_SOLID_HIGH for a gradient or a plain color. The low color changes
+	// only for a pattern: fInkLowChanged, put back with RestoreInkLow.
+	pattern fInkPattern = B_SOLID_HIGH;
+	bool fInkLowChanged = false;
+	rgb_color fInkOldLow;
+	void RestoreInkLow();
 	LayoutResult LayoutPart(size_t part, const std::vector<FrameGeometry>& frames);
 	static BRect RotatedBounds(BRect rect, float angle);
 	// the area a frame may draw in: its containers' frames intersected

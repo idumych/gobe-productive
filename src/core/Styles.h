@@ -41,6 +41,7 @@ struct TextStyle {
 	float size = 12;							// TSiz
 	uint32_t faceFlags = 0;						// TFac: bold/italic/... bits
 	Color color;								// TCol
+	float opacity = 1;							// TTra (TPropTextTransparent)
 	int alignment = 0;							// PAlg: 0 left, 1 center, 2 right, 3 justify (TLineRun)
 	float leftIndent = 0, firstIndent = 0, rightIndent = 0;	// PLef, PInd, PRig
 	float spaceBefore = 0, spaceAfter = 0;		// SpaB, SpaA
@@ -62,8 +63,13 @@ struct Ink {
 	Color colors[4];				// gradient colors
 	int colorCount = 2;				// how many of them are used
 	uint32_t gradientType = 0;		// 'GDdr' directional, 'GDrl' radial
-	float angle = 0;				// directional: degrees
+	float angle = 0;				// degrees (a radial one has one too)
 	float center[2] = {0.5f, 0.5f};	// radial
+	float echo = 0;					// TGradient "echo" (the float after the count)
+	// a fill of another kind ('FPAT', a bitmap pattern; `gradient` set as
+	// for any fill): its kind, size and data as read, written back as they
+	// are
+	std::vector<uint8_t> otherFill;
 	// a solid ink's low color and 8x8 pattern (TColorPattern: the bits
 	// set show `color`; all 0xff, solid, in nearly every document)
 	Color low;
@@ -85,6 +91,13 @@ struct ShapeStyle {
 
 // ReadInk: parse an ink (solid color or gradient) from a DocArchive.
 bool ReadInk(DocArchive& a, Ink& ink);
+// TPenInk::Write: the ink's bytes as ReadInk reads them (a solid or
+// pattern ink: true, the color, the low color, the pattern; a gradient:
+// false, 'FGRD', the size, 'GRAD', the type, the count, the echo, four
+// colors, a directional one's angle or a radial one's center and angle)
+std::vector<uint8_t> InkBytes(const Ink& ink);
+// a property of `type` ('TCol', 'FCol', 'PCol', ...) holding the ink
+Property InkProperty(uint32_t type, const Ink& ink);
 
 bool ApplyShapeProperty(const Property& property, ShapeStyle& style);
 ShapeStyle ResolveShapeStyle(const StyleMgr& styles, uint32_t index);
@@ -101,6 +114,8 @@ Property TextFaceProperty(uint32_t faceFlags);
 Property TextColorProperty(Color color);
 Property AlignmentProperty(int alignment);
 Property IndentProperty(uint32_t type, float value);	// 'PLef', 'PInd' or 'PRig'
+// TPropTransparent ('TTra', 'FTra', 'PTra'): the opacity, 0 to 1
+Property OpacityProperty(uint32_t type, float opacity);
 Property SpacingProperty(uint32_t type, float value, bool lines = true);	// 'SpaB' or 'SpaA'
 Property LineSpacingProperty(float value, bool multiple);
 Property TabsProperty(const std::vector<TabStop>& tabs);
