@@ -21,6 +21,8 @@
 #include "DocArchive.h"
 #include "Drawing.h"
 #include "GobeResources.h"
+#include "InlineParts.h"
+#include "TMenu.h"
 #include "SSStyle.h"
 #include "TRibbon.h"
 #include "TDialog.h"
@@ -225,6 +227,14 @@ TPageView::SetTool(uint32 tool)
 bool
 TPageView::SelectedShapeStyle(ShapeStyle& style) const
 {
+	// a frame selected by its edge: its style (its fill and border)
+	if (fShapes.empty() && fFrame.active) {
+		const gobe::Frame* frame = FrameAt(fDocument, fFrame.pointer);
+		if (frame == nullptr)
+			return false;
+		style = ResolveShapeStyle(fDocument.styles, frame->style);
+		return true;
+	}
 	if (fShapes.empty())
 		return false;
 	const Shape* s = ShapeAt(fDocument, fShapes[0].part, fShapes[0].layer, fShapes[0].index);
@@ -784,10 +794,14 @@ TPageView::ShapeCommand(BMessage* message)
 	}
 	bool arrange = what == 'sM40' || what == 'sM41' || what == 'sM42' || what == 'sM43';
 	bool format = what == 'sf03' || what == 'sf04' || what == 'sf05' || what == 'sf06'
-		|| what == 'sf07' || what == 'sf08' || what == 'sf0D' || what == 'sf0E' || what == 'sf0S';
-	if ((!arrange && !format) || fShapes.empty())
+		|| what == 'sf07' || what == 'sf08' || what == 'sf0D' || what == 'sf0E' || what == 'sf0S'
+		|| what == 'sf09';
+	// (a frame selected by its edge takes the formats too)
+	bool frame = fShapes.empty() && fFrame.active && format
+		&& FrameAt(fDocument, fFrame.pointer) != nullptr;
+	if ((!arrange && !format) || (fShapes.empty() && !frame))
 		return false;
-	size_t part = fShapes[0].part;
+	size_t part = frame ? 0 : fShapes[0].part;
 	if (arrange) {
 		// TGRArrangeCommand (STR# 1101: 10 Bring Shapes to Front, 11 Send
 		// Shapes to Back, 12 Move Shapes Forward, 13 Move Shapes Backward),
@@ -817,7 +831,25 @@ TPageView::ShapeCommand(BMessage* message)
 	// gradient: FCol; 'sf0D' FTra), the pen ('sf06', 'sf07', 'sf08': PCol;
 	// 'sf0E' PTra), the shapes' transparency ('sf0S': fill and pen)
 	std::vector<Property> properties;
-	if (what == 'sf0D' || what == 'sf0E' || what == 'sf0S') {
+	if (what == 'sf09') {
+		// the pen's size (TPropPenSize: the FormatBar pen menu's Pen Size,
+		// MENU 104: Hairline 0, 1-8 points; Other…: the dialog)
+		float size = message->GetFloat(kValueString, -1);
+		if (size < 0)
+			size = float(message->GetInt32(kValueString, -1));
+		if (size == float(int32('sM0U'))) {
+			ShapeStyle style;
+			float current = SelectedShapeStyle(style) ? style.penSize : 1;
+			// (MENU 104's title, "Pen Size")
+			BString title = TMenu(104, true).Name();
+			(new TDialogGetTransparent(Window(), *message, int32(std::lround(current)),
+				title, title))->RunDialog();
+			return true;
+		}
+		if (size < 0)
+			return true;
+		properties.push_back(OpacityProperty(Sig("PENz"), size));
+	} else if (what == 'sf0D' || what == 'sf0E' || what == 'sf0S') {
 		int32 value = message->GetInt32(kValueString, 100);
 		if (value == int32('sM0U')) {
 			// Other… (TPart::HandleMessage): the dialog, with the first
@@ -855,6 +887,9 @@ TPageView::ShapeCommand(BMessage* message)
 	for (const ShapeRef& ref : fShapes)
 		for (const Property& p : properties)
 			SetShapeProperty(fDocument, part, ref.layer, ref.index, p);
+	if (frame)
+		for (const Property& p : properties)
+			SetFrameProperty(fDocument, fFrame.pointer, p);
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);

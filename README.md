@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-48-51-3.svg" alt="Port progress: 48 of 51 features done, 3 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-49-52-2.svg" alt="Port progress: 49 of 52 features done, 3 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -182,7 +182,8 @@ sizes, headings and options are saved with the document.
 | Drawing tools: Group and Ungroup (a new drawing part as a frame), Text Wrap | in progress |
 | Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
 | Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | next |
-| Fill and pen inks for frames in the FormatBar (frames can't be selected yet); the pen's size (the drawing's PartBar) | in progress |
+| Fill and pen inks for frames in the FormatBar: a selected frame's fill (its background in a drawing), its pen (its border) and their transparency; the pen's size (Hairline to 8 pt, Other…) in the pen ink's menu, for shapes and frames | next |
+| The drawing's PartBar (vertical and horizontal align buttons, Text Wrap, arrows); the pen ink's pen types | not yet |
 
 ### Other formats (translators)
 
