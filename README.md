@@ -127,7 +127,8 @@ This preview is about the word processor.
 - Spreadsheets: formulas evaluated, cells editable, with the original's
   Format and Options menus when cells are selected: Number… (the number
   format categories), Lock and Unlock Cells, Column Width…, Row Height…,
-  Display Options… (grid, locked cells shaded, formulas, headings), Fill
+  Display Options… (grid, locked cells shaded, formulas, headings, circular
+  references marked), Fill
   Down, Right, Up and Left, Go To Cell…, Move Cells… (formulas and named
   ranges follow the cells), Insert Cells… and Delete Cells… (shifting the
   cells down or right, up or left; whole rows and columns, selected by
@@ -141,11 +142,11 @@ This preview is about the word processor.
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; named selections; Import and Export Styles; New Window; Show
 Clipboard; creating and linking frames; drawing tools; in spreadsheets
-resizing rows and columns by dragging their headings, Select Dependents
-and marking circular references; new documents of other kinds; the Word,
-Excel, HTML and SYLK translators; the thesaurus and dictionary (they need
-data files that weren't part of Gobe Productive). Documents saved by the
-port open in the port; they haven't been tried in the original on BeOS.
+resizing rows and columns by dragging their headings, Select Dependents;
+new documents of other kinds; the Word, Excel, HTML and SYLK translators;
+the thesaurus and dictionary (they need data files that weren't part of
+Gobe Productive). Documents saved by the port open in the port; they
+haven't been tried in the original on BeOS.
 
 ## Building
 

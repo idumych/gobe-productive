@@ -1313,6 +1313,10 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 		const CellStyle& style = SpreadsheetStyle(stackFor(row, column, &cell));
 		bool red;
 		std::string text = FormatCellValue(value, style.format, &red);
+		// Mark Circular Refs (TSSDisplayManager::CellText): a formula in a
+		// circle of references (TFormulaCell::Circular) between bullets
+		if (ss.options[5] && cell.kind == Sig("Fmla") && (cell.flags & 4))
+			text = "\xe2\x80\xa2 " + text + " \xe2\x80\xa2";
 		if (text.empty())
 			continue;
 		Text t;

@@ -2157,6 +2157,11 @@ UpdateDependencies(Document& doc, size_t partIndex)
 	};
 
 	// TSSDepManager::FixFormulaCells: a depth-first walk in list order
+	// (VisitFormula). The formula cells' flags (TDataCell +0x0c) keep the
+	// walk: 1 visiting, 2 visited, 4 circular (TFormulaCell::SetVisiting,
+	// SetVisited, SetCircular), cleared first. A formula met again while it
+	// is being visited is circular, and so is one that refers to a circular
+	// one; circular references keep their place in the order.
 	std::vector<uint32_t> order;
 	std::set<uint32_t> seen;
 	for (const CellID& id : part->dependents)
@@ -2165,18 +2170,30 @@ UpdateDependencies(Document& doc, size_t partIndex)
 	for (auto& [k, f] : formulas)
 		if (seen.insert(k).second)
 			order.push_back(k);
+	std::map<uint32_t, uint16_t*> flags;
+	for (SSCell& c : part->cells)
+		if (c.kind == Sig("Fmla")) {
+			c.flags &= ~uint16_t(7);
+			flags[key(c.id.a, c.id.b)] = &c.flags;
+		}
 	std::vector<CellID> sorted;
-	std::set<uint32_t> done, visiting;
-	std::function<void(uint32_t)> visit = [&](uint32_t k) {
-		if (done.count(k) || visiting.count(k))
-			return;	// circular references keep their place
-		visiting.insert(k);
+	std::function<bool(uint32_t)> visit = [&](uint32_t k) {
+		uint16_t& f = *flags[k];
+		bool circular = (f & 4) != 0;
+		if (f & 2)
+			return circular;
+		if (f & 1) {
+			f |= 4;
+			return true;
+		}
+		f |= 1;
 		for (uint32_t p : precedents(*formulas[k]))
-			if (p != k)
-				visit(p);
-		visiting.erase(k);
-		done.insert(k);
+			circular |= visit(p);
+		f |= 2;
+		if (circular)
+			f |= 4;
 		sorted.push_back({uint16_t(k >> 16), uint16_t(k & 0xffff)});
+		return circular;
 	};
 	for (uint32_t k : order)
 		visit(k);

@@ -1285,6 +1285,9 @@ TPageView::EndCellEdit(bool commit, int moveRows, int moveColumns)
 				fCellEditor->SetText(text.c_str());
 			return;
 		}
+		// the calculation order and the circular marks (ChangeCells:
+		// TSSDepManager::CellsChanged)
+		UpdateDependencies(fDocument, fSelectedCell.part);
 		fBook->Reset();
 		// fields in the text show the new values (TPartMgr::CheckDependencies)
 		if (!fDocument.wordParts.empty())
@@ -3648,6 +3651,19 @@ TPageView::RunScript(const std::string& script, Document& document)
 			std::string name = command.substr(9);
 			// TODO: look up style by name and apply
 			fprintf(stderr, "cellstyle '%s': not yet implemented\n", name.c_str());
+		} else if (command.compare(0, 10, "cellflags ") == 0) {
+			// "cellflags R C": the cell's flags (TDataCell +0x0c) and the
+			// part's display options
+			int row, column;
+			const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+			if (ss != NULL && sscanf(command.c_str() + 10, "%d %d", &row, &column) == 2) {
+				const SSCell* c = ss->Cell(uint16_t(row), uint16_t(column));
+				fprintf(stderr, "cellflags %d %d 0x%x options", row, column,
+					c != NULL ? c->flags : 0);
+				for (bool o : ss->options)
+					fprintf(stderr, " %d", o);
+				fprintf(stderr, "\n");
+			}
 		} else if (command.size() >= 5 && command.substr(0, 5) == "cell ") {
 			int row, column;
 			if (sscanf(command.c_str() + 5, "%d %d", &row, &column) == 2) {
