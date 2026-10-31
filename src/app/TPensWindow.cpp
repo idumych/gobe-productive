@@ -20,6 +20,7 @@
 #include "GobeResources.h"
 #include "Measure.h"
 #include "TDocWindow.h"
+#include "TInkEditors.h"
 #include "TInkMenus.h"
 #include "TMenu.h"
 #include "TRibbon.h"
@@ -199,7 +200,7 @@ TPensWindow::Init()
 		item->SetEnabled(i == 1);
 	}
 	bar->AddItem(kind);
-	// Edit: Cut, Copy, Paste (not ported), Clear, New Pen…, Edit Pen…
+	// Edit: Cut, Copy, Paste, Clear, New Pen…, Edit Pen…
 	// (STR# 8, 3 and 11)
 	fEdit = new TMenu(152);
 	if (BMenuItem* item = fEdit->FindItem('sMA4'))
@@ -213,6 +214,11 @@ TPensWindow::Init()
 	BListView* list = new BListView("pens");
 	list->SetInvocationMessage(new BMessage(kMsgApplyPen));
 	FillUserItem(Item(1), new BScrollView("scroll", list, 0, false, true));
+	// TPenView's width controls, right of the list
+	if (BGroupLayout* layout = dynamic_cast<BGroupLayout*>(Item(1)->GetLayout())) {
+		layout->SetOrientation(B_HORIZONTAL);
+		layout->AddView(fWidth = new TPenWidthView());
+	}
 	Update();
 }
 
@@ -247,12 +253,14 @@ TPensWindow::Update()
 		list->AddItem(new TPenListItem(pen));
 	if (selected >= 0)
 		list->Select(std::min(selected, list->CountItems() - 1));
+	if (fWidth != NULL)
+		fWidth->Update();
 }
 
 
-// TDialogNewColor::MenusBeginning: with the pens, Clear and Edit Pen… for
-// a pen selected (Edit for the pens that can be edited); Cut, Copy and
-// Paste not ported
+// TDialogNewColor::MenusBeginning: with the pens, Cut, Copy, Clear and
+// Edit Pen… for a pen selected that can be edited (TPen::IsEditable: not
+// the normal pen); Paste for a pen copied (+0x88)
 void
 TPensWindow::MenusBeginning()
 {
@@ -265,8 +273,9 @@ TPensWindow::MenusBeginning()
 		return;
 	for (int32 i = 0; BMenuItem* item = fEdit->ItemAt(i); i++) {
 		uint32 what = item->Message() != NULL ? item->Message()->what : 0;
-		item->SetEnabled(what == 'sMA4' || (what == 'sM12' && selected >= 0)
-			|| (what == 'sMA3' && editable));
+		item->SetEnabled(what == 'sMA4' || (what == 'PSTE' && InkClipboard::Kind() == 3)
+			|| ((what == 'sMA3' || what == 'sM12' || what == 'CCUT' || what == 'COPY')
+				&& editable));
 	}
 }
 
@@ -304,12 +313,30 @@ TPensWindow::MessageReceived(BMessage* message)
 		case 'sMA3':
 			EditPen(message->what == 'sMA4');
 			return;
+		case 'COPY':
+		case 'CCUT':
+			// DoCopy: the pen kept for Paste; Cut: DoCopy, then DoClear
+			if (selected >= 0 && size_t(selected) < fPens.size())
+				InkClipboard::CopyPen(fPens[size_t(selected)]);
+			if (message->what == 'COPY')
+				return;
+			// fall through
 		case 'sM12':
 			// Clear (DoClear: TPenMgr::DeletePen)
 			if (selected >= 0 && front != NULL) {
 				BMessage clear(kMsgDeletePen);
 				clear.AddInt32("ink index", selected);
 				front->PostMessage(&clear);
+			}
+			return;
+		case 'PSTE':
+			// DoPaste: a colour pasted is kept as the ink copied; the pen
+			// copied added to the front document's pens (DoAddPen)
+			InkClipboard::TakeColor(message);
+			if (InkClipboard::HasPen() && front != NULL) {
+				BMessage add(kMsgAddPen);
+				AddPenToMessage(&add, InkClipboard::CopiedPen());
+				front->PostMessage(&add);
 			}
 			return;
 		case kMsgApplyPen:
@@ -328,6 +355,19 @@ TPensWindow::MessageReceived(BMessage* message)
 			if (front != NULL)
 				front->PostMessage(message);
 			return;
+		case 'GieR':
+		{
+			// (the test hook's ink editor replied)
+			const void* data;
+			ssize_t size = 0;
+			message->FindData("ink", B_RAW_TYPE, &data, &size);
+			printf("pens ink replied %d bytes:", int(size));
+			for (ssize_t i = 0; i < size; i++)
+				printf(" %02x", ((const uint8*)data)[i]);
+			printf("\n");
+			fflush(stdout);
+			return;
+		}
 		case kMsgScript:
 		{
 			std::string command = message->GetString("command", "");
@@ -336,9 +376,25 @@ TPensWindow::MessageReceived(BMessage* message)
 			else if (command == "new" || command == "edit") {
 				MenusBeginning();
 				EditPen(command == "new");
-			} else if (command == "clear") {
-				BMessage clear('sM12');
-				MessageReceived(&clear);
+			} else if (command == "clear" || command == "cut" || command == "copy"
+					|| command == "paste") {
+				BMessage edit(command == "clear" ? 'sM12' : command == "cut" ? 'CCUT'
+					: command == "copy" ? 'COPY' : 'PSTE');
+				MessageReceived(&edit);
+			} else if (command.compare(0, 6, "width ") == 0 && fWidth != NULL) {
+				// "width +|-|N": the width buttons or the slider at N
+				BMessage width(command[6] == '+' ? 'PEN+' : command[6] == '-' ? 'PEN-'
+					: 'PEN#');
+				if (width.what == 'PEN#')
+					fWidth->SetPenWidth(float(atof(command.c_str() + 6)));
+				fWidth->MessageReceived(&width);
+				printf("pens width %.1f\n", fWidth->PenWidth());
+				fflush(stdout);
+			} else if (command.compare(0, 8, "editink ") == 0) {
+				// "editink 0|1|2": a new ink's editor, its reply printed
+				EditInk(atoi(command.c_str() + 8), NULL, this, BMessage('GieR'));
+			} else if (command.compare(0, 7, "editor ") == 0) {
+				InkEditorScript(command.substr(7));
 			} else if (command == "apply") {
 				BMessage apply(kMsgApplyPen);
 				MessageReceived(&apply);
