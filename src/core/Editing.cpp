@@ -1,4 +1,5 @@
 #include "Editing.h"
+#include "SSStyle.h"
 
 #include "StyleEdit.h"
 
@@ -1115,7 +1116,8 @@ StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 		for (uint32_t& p : style.props)
 			if (p < styles.properties.size() && styles.properties[p].type == property.type
 					&& (property.type != Sig("PTab")
-						|| TabPosition(styles.properties[p]) == TabPosition(property))) {
+						|| TabPosition(styles.properties[p]) == TabPosition(property))
+					&& BorderSide(styles.properties[p]) == BorderSide(property)) {
 				p = index;
 				replaced = true;
 			}

@@ -13,6 +13,7 @@
 #include "GobeResources.h"
 #include "Measure.h"
 #include "Styles.h"
+#include "TInkMenus.h"
 #include "TMenu.h"
 #include "TPageView.h"
 
@@ -164,20 +165,63 @@ private:
 };
 
 
-// TSSBorderMenuElement: the borders' menus (cell borders aren't ported:
-// shown, off)
+// TSSBorderMenuElement (a TMICNMenuBarElement): a color set (MICN 0x16)
+// and the transparencies (MENU 103, MICN 0x20) for the outline ('sM6A',
+// 'sM6B') or one side ('sM68', 'sM69' with "border": 0 left, 1 top, 2
+// right, 3 bottom)
 class TCellBorderElement : public TMenuElement {
 public:
-	TCellBorderElement(uint32 id, BPoint where, int32 micn, int32 tipIndex)
+	TCellBorderElement(uint32 id, BPoint where, int32 micn, int32 tipIndex, int32 side)
 		:
 		TMenuElement(id, BRect(where, where), NULL,
-			TMICNElement::LoadIcon(micn, &SheetResources()))
+			TMICNElement::LoadIcon(micn, &SheetResources())),
+		fSide(side)
 	{
 		tip = IndexString(SheetResources(), 1507, tipIndex);
-		enabled = false;
 	}
 
 	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon) {}
+
+	virtual bool MouseDown(TRibbon* ribbon, BPoint where)
+	{
+		BPopUpMenu* menu = new BPopUpMenu("border", false, false, B_ITEMS_IN_ROW);
+		BMessage color(fSide < 0 ? 'sM6A' : 'sM68');
+		if (fSide >= 0)
+			color.AddInt32("border", fSide);
+		menu->AddItem(new TIconMenuItem(0x16, ColorSetMenu(color)));
+		BMenu* transparency = new BMenu("");
+		TMenu source(103, true);
+		while (source.CountItems() > 0) {
+			BMenuItem* item = source.RemoveItem((int32)0);
+			if (BMessage* message = item->Message()) {
+				if (message->what == 'sM0U') {
+					// (Other…: its dialog isn't ported)
+					item->SetEnabled(false);
+				} else {
+					int32 value = message->GetInt32(kValueString, 0);
+					message->MakeEmpty();
+					message->what = fSide < 0 ? 'sM6B' : 'sM69';
+					message->AddInt32(kValueString, value);
+					if (fSide >= 0)
+						message->AddInt32("border", fSide);
+				}
+			}
+			transparency->AddItem(item);
+		}
+		menu->AddItem(new TIconMenuItem(0x20, transparency));
+		ribbon->DrawElement(this, true);
+		ribbon->Sync();
+		BPoint at = ribbon->ConvertToScreen(BPoint(rect.left - 1, rect.top - 2));
+		BMenuItem* chosen = menu->Go(at, false, true, false);
+		ribbon->DrawElement(this, false);
+		if (chosen != NULL && chosen->Message() != NULL)
+			ribbon->Send(chosen->Message());
+		delete menu;
+		return true;
+	}
+
+private:
+	int32 fSide;
 };
 
 } // namespace
@@ -407,9 +451,10 @@ TPartBar::BuildSheet()
 	r.OffsetBy(22, 0);
 	AddElement(new TCellAlignElement('VAln', r, 303, 0x424, 2, fPages));
 	BPoint at(r.right + 1 + 15, 2);
+	// the outline, then left, top, right and bottom
 	static const int32 kBorders[5] = {0x41b, 0x425, 0x426, 0x427, 0x428};
 	for (int32 i = 0; i < 5; i++) {
-		AddElement(new TCellBorderElement('Bor0' + i, at, kBorders[i], 3 + i));
+		AddElement(new TCellBorderElement('Bor0' + i, at, kBorders[i], 3 + i, i - 1));
 		at.x += 20 + 3;
 	}
 	at.x += 15 - 3;

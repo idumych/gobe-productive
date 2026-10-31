@@ -436,4 +436,41 @@ CellFillProperty(Color color)
 }
 
 
+Property
+BorderColorProperty(int side, Color color)
+{
+	Property p = CellFillProperty(color);
+	DocWriter w;
+	w.Bytes(p.data.data(), p.data.size());
+	w.UInt32(uint32_t(side));
+	p.type = Sig("BCol");
+	p.data = w.Data();
+	return p;
+}
+
+
+Property
+BorderTransparencyProperty(int side, float opacity)
+{
+	DocWriter w;
+	w.Float(opacity);
+	w.UInt32(uint32_t(side));
+	Property p;
+	p.type = Sig("BTra");
+	p.data = w.Data();
+	return p;
+}
+
+
+int
+BorderSide(const Property& p)
+{
+	if ((p.type != Sig("BCol") && p.type != Sig("BTra") && p.type != Sig("BSiz")
+			&& p.type != Sig("BPen")) || p.data.size() < 4)
+		return -1;
+	size_t n = p.data.size();
+	return int(uint32_t(p.data[n - 4]) << 24 | uint32_t(p.data[n - 3]) << 16
+		| uint32_t(p.data[n - 2]) << 8 | p.data[n - 1]);
+}
+
 } // namespace gobe

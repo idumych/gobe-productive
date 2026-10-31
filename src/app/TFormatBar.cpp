@@ -13,6 +13,7 @@
 #include "StyleText.h"
 #include "Styles.h"
 #include "TDocWindow.h"
+#include "TInkMenus.h"
 #include "TMenu.h"
 #include "TPageView.h"
 
@@ -26,71 +27,7 @@ const rgb_color kWhite = {255, 255, 255, 255};
 const rgb_color kWash = {0xa0, 0xa0, 0xa0, 255};
 
 
-// the inks of a COLR resource (TInkSet::LoadColorSetResource): columns,
-// cell size, gap, then RGB as three u32s each
-struct ColorSet {
-	int32 columns = 1, cell = 10, gap = 2;
-	std::vector<rgb_color> colors;
-};
-
-ColorSet
-LoadColorSet(int32 id)
-{
-	ColorSet set;
-	const ResourceFile::Resource* r = GobeResources::File().Find('COLR', id);
-	if (r == NULL)
-		return set;
-	const std::vector<uint8_t>& d = r->data;
-	auto u32 = [&](size_t at) {
-		return uint32(d[at + 3]) << 24 | uint32(d[at + 2]) << 16 | uint32(d[at + 1]) << 8 | d[at];
-	};
-	if (d.size() < 12)
-		return set;
-	set.columns = std::max<int32>(1, int32(u32(0)));
-	set.cell = int32(u32(4));
-	set.gap = int32(u32(8));
-	for (size_t at = 12; at + 12 <= d.size(); at += 12)
-		set.colors.push_back({uint8(u32(at)), uint8(u32(at + 4)), uint8(u32(at + 8)), 255});
-	return set;
-}
-
 } // namespace
-
-
-// TInkMenuItem: a cell of an ink set's matrix menu
-class TInkMenuItem : public BMenuItem {
-public:
-	TInkMenuItem(rgb_color color, int32 cell, BMessage* message)
-		:
-		BMenuItem("", message),
-		fColor(color),
-		fCell(cell)
-	{
-	}
-
-	virtual void DrawContent()
-	{
-		BMenu* menu = Menu();
-		BRect r = Frame();
-		r.right = r.left + fCell - 1;
-		r.bottom = r.top + fCell - 1;
-		menu->SetHighColor(fColor);
-		menu->FillRect(r);
-		menu->SetHighColor(IsSelected() ? kBlack : kWash);
-		menu->StrokeRect(r);
-		menu->SetHighColor(kBlack);
-	}
-
-	virtual void GetContentSize(float* width, float* height)
-	{
-		*width = fCell;
-		*height = fCell;
-	}
-
-private:
-	rgb_color fColor;
-	int32 fCell;
-};
 
 
 // a FormatBar menu (TMenuElement), filled from the FormatBar's state
@@ -248,19 +185,7 @@ public:
 			BMenu* palette;
 			if (i == 0) {
 				// TInkSetMenu: the active color set (COLR 0) as a matrix
-				ColorSet set = LoadColorSet(0);
-				palette = new BMenu("", B_ITEMS_IN_MATRIX);
-				int32 step = set.cell + set.gap;
-				for (size_t k = 0; k < set.colors.size(); k++) {
-					BMessage* message = new BMessage(fColorCommand);
-					message->AddString("ink name", "Standard");
-					message->AddData("color", B_RGB_COLOR_TYPE, &set.colors[k], 4);
-					message->AddInt32("ink index", int32(k));
-					float x = set.gap + (k % set.columns) * step;
-					float y = set.gap + (k / set.columns) * step;
-					palette->AddItem(new TInkMenuItem(set.colors[k], set.cell, message),
-						BRect(x, y, x + set.cell - 1, y + set.cell - 1));
-				}
+				palette = ColorSetMenu(BMessage(fColorCommand));
 			} else {
 				// (the pattern and gradient sets and transparency aren't
 				// ported yet)
@@ -281,36 +206,6 @@ public:
 	}
 
 private:
-	// TMICNPickView's icons: an item showing a MICN, with its set's menu
-	class TIconMenuItem : public BMenuItem {
-	public:
-		TIconMenuItem(int32 micn, BMenu* menu)
-			:
-			BMenuItem(menu),
-			fIcon(TMICNElement::LoadIcon(micn))
-		{
-		}
-
-		virtual void DrawContent()
-		{
-			if (fIcon == NULL)
-				return;
-			BMenu* menu = Menu();
-			menu->SetDrawingMode(B_OP_OVER);
-			menu->DrawBitmap(fIcon.get(), ContentLocation());
-			menu->SetDrawingMode(B_OP_COPY);
-		}
-
-		virtual void GetContentSize(float* width, float* height)
-		{
-			*width = 16;
-			*height = 16;
-		}
-
-	private:
-		std::unique_ptr<BBitmap> fIcon;
-	};
-
 	uint32 fColorCommand;
 };
 

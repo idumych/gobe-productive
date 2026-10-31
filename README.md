@@ -146,7 +146,8 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
 - **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
 - **The PartBar for cells:** the selection's address (a double click goes
   to a cell), the horizontal and vertical alignment menus with Wrap Text,
-  Number Formatting. Its border menus and Make Chart are shown but off.
+  cell borders (the outline or one side, a color and a transparency),
+  Number Formatting. Make Chart is shown but off.
 - **Selecting:** whole rows and columns by their headings (shift-click or
   drag for more), the corner for every cell in use; several ranges at once
   with Command-click (Alt on Haiku), which formats, locks, fills, clears,

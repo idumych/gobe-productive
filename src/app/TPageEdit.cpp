@@ -3196,6 +3196,61 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 'sM68':	// a side's border color (TPropBorderColor)
+					case 'sM69':	// its transparency (TPropBorderTransparency)
+					case 'sM6A':	// the outline's color
+					case 'sM6B': {	// the outline's transparency
+						bool color = message->what == 'sM68' || message->what == 'sM6A';
+						bool outline = message->what == 'sM6A' || message->what == 'sM6B';
+						const void* data = NULL;
+						ssize_t size = 0;
+						Color ink{0, 0, 0, 255};
+						float opacity = 1;
+						if (color) {
+							if (message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) != B_OK
+									|| size < 3)
+								return;
+							const uint8* c = (const uint8*)data;
+							ink = {c[0], c[1], c[2], 255};
+						} else
+							opacity = message->GetInt32(kValueString, 0) / 100.0f;
+						int32 side = message->GetInt32("border", -1);
+						if ((!outline && (side < 0 || side > 3)) || SelectionLocked())
+							return;
+						// (TPartSS::HandleMessage: the outline of cells only)
+						if (outline && fSelectedCell.kind != SelectionKind::cells) {
+							beep();
+							return;
+						}
+						auto property = [&](int edge) {
+							return color ? BorderColorProperty(edge, ink)
+								: BorderTransparencyProperty(edge, opacity);
+						};
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Borders",
+							CurrentViewState());
+						for (const SSRange& r : SelectedRanges()) {
+							if (!outline) {
+								ApplyCellProperty(fDocument, fSelectedCell.part, r.from.a, r.from.b,
+									r.to.a, r.to.b, property(side));
+								continue;
+							}
+							// TSSBorderOutlineCommand::PerformCmd: the first row's
+							// top, the last row's bottom, the first column's left
+							// and the last column's right
+							ApplyCellProperty(fDocument, fSelectedCell.part, r.from.a, r.from.b,
+								r.from.a, r.to.b, property(1));
+							ApplyCellProperty(fDocument, fSelectedCell.part, r.to.a, r.from.b,
+								r.to.a, r.to.b, property(3));
+							ApplyCellProperty(fDocument, fSelectedCell.part, r.from.a, r.from.b,
+								r.to.a, r.from.b, property(0));
+							ApplyCellProperty(fDocument, fSelectedCell.part, r.from.a, r.to.b,
+								r.to.a, r.to.b, property(2));
+						}
+						fBook->Reset();
+						Invalidate();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 					case kCmdCellHAlign: {	// Cell horizontal alignment
 						int32 align = 0;
 						if (message->FindInt32(kValueString, &align) != B_OK) {
@@ -3491,6 +3546,27 @@ TPageView::RunScript(const std::string& script, Document& document)
 				fScriptShift = true;
 				Click(BPoint(x, y), 1, B_PRIMARY_MOUSE_BUTTON);
 				fScriptShift = false;
+			}
+		} else if (command.compare(0, 11, "cellborder ") == 0) {
+			// "cellborder SIDE R G B" (a color) or "cellborder SIDE N%" (a
+			// transparency): SIDE -1 is the outline, 0-3 left, top, right,
+			// bottom, as the PartBar's border menus send them
+			int side = 0, r = 0, g = 0, b = 0, percent = 0;
+			const char* args = command.c_str() + 11;
+			bool percentForm = command.back() == '%';
+			if (percentForm ? sscanf(args, "%d %d%%", &side, &percent) == 2
+					: sscanf(args, "%d %d %d %d", &side, &r, &g, &b) == 4) {
+				BMessage msg(percentForm ? (side < 0 ? 'sM6B' : 'sM69')
+					: (side < 0 ? 'sM6A' : 'sM68'));
+				if (side >= 0)
+					msg.AddInt32("border", side);
+				if (percentForm)
+					msg.AddInt32(kValueString, percent);
+				else {
+					rgb_color color = {uint8(r), uint8(g), uint8(b), 255};
+					msg.AddData("color", B_RGB_COLOR_TYPE, &color, 4);
+				}
+				MessageReceived(&msg);
 			}
 		} else if (command.compare(0, 5, "drag ") == 0) {
 			// "drag x1 y1 x2 y2": pressed at the first point, moved to the
@@ -4978,7 +5054,8 @@ TPageView::HandlesCommand(uint32 what)
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
-		case 'sM65': case 'sM67': case 'sM75': case 'sM76': case 'sM77': case 'sM79':
+		case 'sM65': case 'sM67': case 'sM68': case 'sM69': case 'sM6A': case 'sM6B':
+		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':
 			return true;

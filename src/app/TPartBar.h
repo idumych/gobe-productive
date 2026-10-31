@@ -6,7 +6,7 @@
 // of kind 2); Check Spelling ('sMC5'); Show/Hide Invisibles ('sM5J').
 // For cells (TPartSS::AddPartBarElements): the cell address (a double
 // click: Go To Cell…), the horizontal and vertical alignments (MENU 302 and
-// 303, 'sM67'), the borders (not ported: off), Number Formatting ('sM60')
+// 303, 'sM67'), the borders ('sM68'-'sM6B'), Number Formatting ('sM60')
 // and Make Chart (not ported: off).
 #ifndef GOBE_TPARTBAR_H
 #define GOBE_TPARTBAR_H
