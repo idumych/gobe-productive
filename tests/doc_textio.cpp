@@ -16,6 +16,7 @@
 #include "DocArchive.h"
 #include "Document.h"
 #include "Editing.h"
+#include "HTMLImport.h"
 #include "RTF.h"
 #include "Styles.h"
 #include "TextImport.h"
@@ -451,6 +452,18 @@ main(int argc, char** argv)
 	TestRTFExport();
 	TestSamples(argc, argv);
 	TestSpecialChars();
+	{
+		// Save As RTF of a document with a table: its cells' text, \line
+		// before each row, \tab between the cells
+		Document tabled;
+		std::string error;
+		Check(ImportHTMLText("<HTML><BODY><P>Before</P><TABLE><TR><TD>Name<TD>Count"
+			"<TR><TD>Apples<TD>12</TABLE><P>After</P></BODY></HTML>", tabled, error),
+			"a table opened " + error);
+		std::string rtf = ExportedRTF(tabled, size_t(tabled.MainPart()), TestFonts());
+		Check(rtf.find("\\line Name\\tab Count\\line Apples\\tab 12") != std::string::npos,
+			"RTF: the table's cells written");
+	}
 	printf("textio checks ok %d, failed %d\n", sOk, sFailed);
 	return sFailed > 0 ? 1 : 0;
 }
