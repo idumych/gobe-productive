@@ -4178,6 +4178,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 				TPensWindow::Open();
 			else
 				TPensWindow::Script(command.substr(5));
+		} else if (command.compare(0, 5, "inks ") == 0) {
+			// "inks open MAJOR MINOR": the Inks window on that ink and
+			// kind; "inks kind N|tab N|set NAME|select N|apply|show|...":
+			// as "pens"
+			int major = 1, minor = 3;
+			if (sscanf(command.c_str(), "inks open %d %d", &major, &minor) == 2)
+				TPensWindow::Open(major, minor);
+			else
+				TPensWindow::Script(command.substr(5));
 		} else if (command.compare(0, 10, "pendialog ") == 0) {
 			// "pendialog name X|type DASH|gap X|dash X|filled 0|1|print 0|1|
 			// check|ok|cancel|revert": the open pen dialog
@@ -5796,6 +5805,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf09':														// the pen's size
 		case 'sf0A': case 'sf0F':							// the pen's type, arrows
 		case kMsgAddPen: case kMsgReplacePen: case kMsgDeletePen:		// the Inks window's pens
+		case kMsgDocInkSet:												// its sets
 			return true;
 		default:
 			return false;

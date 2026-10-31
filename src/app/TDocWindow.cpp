@@ -1813,6 +1813,13 @@ TDocWindow::Front()
 }
 
 
+SetMgr
+TDocWindow::InkSets() const
+{
+	return fPages != NULL ? fPages->Doc().inkSets : SetMgr();
+}
+
+
 std::vector<PenType>
 TDocWindow::Pens() const
 {

@@ -887,6 +887,39 @@ TPageView::ShapeCommand(BMessage* message)
 		}
 		return true;
 	}
+	// the Inks window's sets of the document's own (TInkSetManager::
+	// AddInkSet, a set edited): its SetMgr, saved with it
+	if (what == kMsgDocInkSet) {
+		int32 kind = message->GetInt32("kind", -1);
+		const void* data = NULL;
+		ssize_t size = 0;
+		InkSet set;
+		if (kind < 0 || kind > 2 || message->FindData("set", B_RAW_TYPE, &data, &size) != B_OK)
+			return true;
+		try {
+			DocArchive a(std::vector<uint8_t>((const uint8_t*)data, (const uint8_t*)data + size));
+			ReadInkSet(a, set);
+		} catch (const ArchiveError&) {
+			return true;
+		}
+		std::vector<InkSet>& sets = fDocument.inkSets.sets[kind];
+		std::string name = message->GetString("ink name", "");
+		auto it = std::find_if(sets.begin(), sets.end(),
+			[&](const InkSet& s) { return s.name == (message->GetBool("add") ? set.name : name); });
+		if (message->GetBool("add")) {
+			if (it != sets.end())
+				return true;
+			sets.push_back(set);
+		} else if (it != sets.end())
+			*it = set;
+		else
+			return true;
+		fDocument.inkSetsChanged = true;
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		TPensWindow::Refresh();
+		return true;
+	}
 	// Arrange > Resize, Rotate, Reshape: what a handle does
 	if (what == 'sM4A' || what == 'sM4B' || what == 'sM4C') {
 		fShapeMode = what == 'sM4A' ? 0 : what == 'sM4B' ? 1 : 2;

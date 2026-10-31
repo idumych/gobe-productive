@@ -22,6 +22,7 @@ class BMenuField;
 
 #include <string>
 
+#include "InkSets.h"
 #include "Pens.h"
 #include "TDialog.h"
 
@@ -81,6 +82,8 @@ public:
 	// the document's pens (TPenMgr: its own or the application's), for the
 	// Inks window (lock the window first)
 	std::vector<PenType> Pens() const;
+	// its own ink sets (the SetMgr), for the Inks window (locked)
+	SetMgr InkSets() const;
 	// the document's other windows hold this while they use it
 	class BLocker& DocumentLock() const;
 	// the active part has text selected (TFindReplace::hasTextSelection)
