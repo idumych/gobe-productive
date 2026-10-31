@@ -4058,6 +4058,10 @@ TPageView::RunScript(const std::string& script, Document& document)
 			const char* c = command.c_str() + 5;
 			SetTool(uint32(uint8(c[0])) << 24 | uint32(uint8(c[1])) << 16
 				| uint32(uint8(c[2])) << 8 | uint8(c[3]));
+		} else if (command.compare(0, 10, "toolshape ") == 0) {
+			// "toolshape N": the toolbar shapes tool with shape N (a POLY)
+			SetToolShape(atoi(command.c_str() + 10));
+			SetTool('TOOS');
 		} else if (command == "shapes") {
 			// "shapes": every drawing's shapes (part, layer, kind, box),
 			// the selected one marked
@@ -4067,8 +4071,10 @@ TPageView::RunScript(const std::string& script, Document& document)
 						const Shape& sh = gr.layers[l].shapes[i];
 						printf("shape part %zu layer %zu %zu %s %g,%g %gx%g%s%s\n", index, l, i,
 							FourCCString(sh.kind).c_str(), sh.origin[0], sh.origin[1],
-							sh.size[0], sh.size[1], sh.angle != 0 ? (" angle "
-							+ std::to_string(int(sh.angle))).c_str() : "",
+							sh.size[0], sh.size[1], (std::string(sh.angle != 0 ? " angle "
+							+ std::to_string(int(sh.angle)) : "") + ((sh.values[0] & 0x20) != 0
+							? " locked" : "") + (sh.kind == Sig("BEZI") && !sh.paths.empty()
+							? " points " + std::to_string(sh.paths[0].vertices.size()) : "")).c_str(),
 							ShapeSelected(index, l, i) ? " (selected)" : "");
 					}
 			fflush(stdout);
@@ -5724,6 +5730,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 's00T':	// Make Chart
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange
 		case 'sM4A': case 'sM4B': case 'sM4C':
+		case 'sM44': case 'sM45': case 'sM48': case 'sM49': case 'sM4D': case 'sM4E': case 'sM4T':
 		case 'sf06': case 'sf07': case 'sf08': case 'sf0E': case 'sf0S':	// pen, shapes
 			return true;
 		default:

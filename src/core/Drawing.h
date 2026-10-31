@@ -103,6 +103,52 @@ void MoveVertex(Shape& shape, int vertex, float x, float y);
 // the points Reshape shows (drawing coordinates)
 std::vector<DrawPoint> ShapeVertices(const Shape& shape);
 
+// a curve's control points (Reshape): a path vertex's control points
+// that aren't on it (TVertex: offsets from the point), as handles numbered
+// vertex * 2 (the one before) and vertex * 2 + 1 (the one after); their
+// positions (drawing coordinates), the one within `tolerance` (-1 none),
+// and one moved (a smooth vertex, flag 2, its other one opposite)
+std::vector<std::pair<int, DrawPoint>> ControlPoints(const Shape& shape);
+int HitControlPoint(const Shape& shape, float x, float y, float tolerance);
+void MoveControlPoint(Shape& shape, int handle, float x, float y);
+
+// Arrange > Lock, Unlock (TLockShapesCommand): TShape +0x24's 0x20; a
+// locked shape isn't moved, resized, reshaped or deleted
+const uint32_t kShapeLocked = 0x20;
+inline bool ShapeLocked(const Shape& shape) { return (shape.values[0] & kShapeLocked) != 0; }
+
+// Align Objects (TGRAlignShapesCommand, DIAL 202: "AlignX", "AlignY"):
+// 0 as they are, 1 the left (top) edges, 2 the centers, 3 the right
+// (bottom) edges to those of all of them together, 4 the space between
+// them made equal (in their order, the outer ones staying)
+void AlignShapes(std::vector<Shape*>& shapes, int alignX, int alignY);
+
+// the grid (TGrid: the spacing; AutoGrid snaps, Draw Grid shows it)
+float SnapToGrid(float value, float spacing);
+// Align to Grid (TGRAlignToGridCommand): a shape's corner moved to the
+// nearest grid point
+void AlignToGrid(Shape& shape, float spacing);
+
+// Create Outlines (TGRCreateOutlineCommand): a shape as a path (BEZI) of
+// the same look: rectangles and round rectangles, ellipses and arcs by
+// their curves (quarter ellipses as Bezier curves), a line as an open
+// path; a path as it is. False for other kinds.
+bool OutlineShape(Shape& shape);
+
+// a toolbar shape (TToolbarShapes::loadToolbarShapes: a 'POLY' resource:
+// the count, closed (four bytes), then each vertex's flags and its point
+// and control points as six numbers in text, little-endian); false if it
+// isn't one
+bool ParseToolbarShape(const std::vector<uint8_t>& data, BezierPath& path);
+// a toolbar shape made a shape in the box from `from` to `to` (DragOut:
+// the shape sized to the drag); -1 as AddShape
+int AddToolbarShape(Document& doc, size_t part, size_t layer, const BezierPath& path,
+	const DrawPoint& from, const DrawPoint& to);
+
+// the Bezier tool: a path through `vertices` (drawing coordinates, their
+// control points offsets from them), open; -1 as AddShape
+int AddBezierShape(Document& doc, size_t part, size_t layer, const std::vector<Vertex>& vertices);
+
 } // namespace gobe
 
 #endif

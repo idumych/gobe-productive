@@ -4,13 +4,26 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-44-50-3.svg" alt="Port progress: 44 of 50 features done, 6 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-46-51-1.svg" alt="Port progress: 46 of 51 features done, 5 left (see Status)" width="720"></p>
 
-The released **preview** (0.1.1) is focused on the word processor. Since
-then, spreadsheets have caught up with the original's editing, documents
-have several sheets, styles can be exported and imported, and Word,
-Excel, HTML, SYLK and text tables open and save (HTML and RTF with
-their tables and pictures); that will be the next release.
+The released **preview** (0.1.1) is focused on the word processor. A
+lot has come since, in the sources here and in the next release:
+
+- **Spreadsheets** edit as the original's did, with Make Chart for charts
+  of the selected cells.
+- **Drawings:** the ToolBar and its tools draw shapes. They can be
+  selected, moved, resized, rotated, reshaped, aligned, locked and given
+  fill and pen inks.
+- **Frames:** text, spreadsheet, drawing, table and picture frames can be
+  dragged out with the part tool, and text frames linked so text flows on.
+- **New documents:** File > New makes text documents, spreadsheets,
+  drawings and presentations.
+- **Inks:** the original's pattern and gradient inks and transparency,
+  for text, cells and shapes.
+- **Styles** can be exported and imported.
+- **Other formats:** Word, Excel, HTML, RTF, SYLK and text tables open and
+  save, HTML with its tables and pictures.
+
 [Status](#status) lists what works and what's left.
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
@@ -121,7 +134,7 @@ Clipboard.
 | New Window | in progress |
 | The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | next |
 | The ToolBar's part tool: text, spreadsheet, drawing, table and picture frames dragged out in a drawing | next |
-| The ToolBar's Bezier and toolbar shapes tools | in progress |
+| The ToolBar's Bezier tool (a press a point, a drag its control points) and toolbar shapes (the original's shapes, chosen from its menu, dragged out) | next |
 
 ### Word processor
 
@@ -165,7 +178,8 @@ sizes, headings and options are saved with the document.
 | Frames: moved and resized, Open Frame Window, text wrapped around frames, a growing frame's size | not yet |
 | Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | next |
 | Drawing tools: several shapes selected (Shift-click, a rubber band in a drawing), moved and deleted together; Arrange's Bring to Front, Send to Back, Move Forward and Move Backward; Rotate (a corner handle turns the shape) and Reshape (a path's points, a line's ends) | next |
-| Drawing tools: Group and Ungroup, Align Objects, Align to Grid, Lock, the grid, Create Outlines, Text Wrap, curves' control points | in progress |
+| Drawing tools: Align Objects… (as the original, each choice tried at once), Align to Grid, Lock and Unlock, Draw Grid and AutoGrid (snapping), Create Outlines; a curve's control points reshaped; turned shapes hit by their turned outline | next |
+| Drawing tools: Group and Ungroup (a new drawing part as a frame), Text Wrap | not yet |
 | Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
 | Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | next |
 | Fill and pen inks for frames in the FormatBar (frames can't be selected yet); the pen's size (the drawing's PartBar) | not yet |

@@ -8,6 +8,7 @@
 #include <string>
 
 #include "Document.h"
+#include "ResourceFile.h"
 #include "Drawing.h"
 #include "Styles.h"
 #include "Undo.h"
@@ -244,6 +245,152 @@ main(int argc, char** argv)
 		Check(line.origin[0] == 0 && line.size[0] == 30 && line.size[1] == 5, "a line's end");
 		MoveVertex(line, 0, 10, 10);
 		Check(line.origin[0] == 10 && line.size[0] == 20 && line.size[1] == -5, "its start");
+	}
+
+	// a turned shape hit by its turned outline: 100 x 20 at 0, 0 turned 90
+	// degrees stands up about its center (50, 10)
+	{
+		GRPart turned;
+		turned.layers.resize(1);
+		Shape bar;
+		bar.kind = Sig("RRCT");
+		bar.size[0] = 100;
+		bar.size[1] = 20;
+		bar.angle = 90;
+		turned.layers[0].shapes = {bar};
+		Check(HitShape(turned, 50, -30, 1, {}, layer, index), "turned: hit above the center");
+		Check(!HitShape(turned, 90, 10, 1, {}, layer, index), "turned: not where it was");
+		turned.layers[0].shapes[0].angle = 0;
+		Check(HitShape(turned, 90, 10, 1, {}, layer, index), "unturned: hit there");
+	}
+
+	// aligning: three boxes
+	{
+		Shape a, b, c;
+		for (Shape* sh : {&a, &b, &c})
+			sh->kind = Sig("RRCT");
+		a.origin[0] = 0; a.origin[1] = 0; a.size[0] = 10; a.size[1] = 10;
+		b.origin[0] = 40; b.origin[1] = 20; b.size[0] = 20; b.size[1] = 30;
+		c.origin[0] = 100; c.origin[1] = 5; c.size[0] = 10; c.size[1] = 10;
+		std::vector<Shape*> three = {&a, &b, &c};
+		AlignShapes(three, 0, 1);
+		Check(a.origin[1] == 0 && b.origin[1] == 0 && c.origin[1] == 0 && b.origin[0] == 40,
+			"top edges aligned, x kept");
+		AlignShapes(three, 3, 0);
+		Check(a.origin[0] == 100 && b.origin[0] == 90 && c.origin[0] == 100, "right edges");
+		a.origin[0] = 0; b.origin[0] = 40; c.origin[0] = 100;
+		AlignShapes(three, 2, 3);
+		Check(a.origin[0] == 50 && b.origin[0] == 45 && a.origin[1] == 20 && b.origin[1] == 0,
+			"centers across, bottom edges");
+		a.origin[0] = 0; b.origin[0] = 20; c.origin[0] = 100;
+		AlignShapes(three, 4, 0);
+		// 110 wide in all, 40 of shapes: two gaps of 35
+		Check(a.origin[0] == 0 && b.origin[0] == 45 && c.origin[0] == 100, "space distributed");
+	}
+
+	// the grid
+	{
+		Check(SnapToGrid(13, 9) == 9 && SnapToGrid(14, 9) == 18 && SnapToGrid(7, 0) == 7, "snapped");
+		Shape sh;
+		sh.kind = Sig("ELPS");
+		sh.origin[0] = 13;
+		sh.origin[1] = 22;
+		sh.size[0] = 10;
+		sh.size[1] = 10;
+		AlignToGrid(sh, 9);
+		Check(sh.origin[0] == 9 && sh.origin[1] == 18 && sh.size[0] == 10, "aligned to the grid");
+		Shape locked = sh;
+		locked.values[0] |= kShapeLocked;
+		Check(ShapeLocked(locked) && !ShapeLocked(sh), "the lock flag");
+	}
+
+	// outlines: each kind as a path of the same box
+	{
+		Shape r, e, rr, arc, line;
+		r.kind = Sig("RRCT"); rr.kind = Sig("RRCT"); e.kind = Sig("ELPS"); arc.kind = Sig("ARC ");
+		line.kind = Sig("LINE");
+		for (Shape* sh : {&r, &e, &rr, &arc}) {
+			sh->origin[0] = 10; sh->origin[1] = 20; sh->size[0] = 40; sh->size[1] = 30;
+		}
+		rr.radius[0] = rr.radius[1] = 5;
+		arc.arcAngles[1] = 90;
+		line.origin[0] = 50; line.origin[1] = 50; line.size[0] = -30; line.size[1] = 10;
+		line.values[0] = 0x100;
+		Check(OutlineShape(r) && r.kind == Sig("BEZI") && r.paths[0].closed
+			&& r.paths[0].vertices.size() == 4 && r.paths[0].vertices[2].point[0] == 40
+			&& r.paths[0].vertices[2].point[1] == 30 && r.origin[0] == 10, "a rectangle's outline");
+		Check(OutlineShape(e) && e.paths[0].vertices.size() == 4 && e.paths[0].vertices[1].point[0] == 40
+			&& std::fabs(e.paths[0].vertices[0].control2[0] - 20 * 0.5522847f) < 0.001f,
+			"an ellipse's: four smooth quarters");
+		Check(OutlineShape(rr) && rr.paths[0].vertices.size() == 8, "a round rectangle's: eight");
+		Check(OutlineShape(arc) && arc.paths[0].vertices.size() == 3
+			&& arc.paths[0].vertices[0].point[0] == 20 && arc.paths[0].vertices[1].point[0] == 40
+			&& std::fabs(arc.paths[0].vertices[2].point[1]) < 0.001f, "an arc's: center, 0 to 90");
+		Check(OutlineShape(line) && !line.paths[0].closed && line.origin[0] == 20
+			&& line.paths[0].vertices[0].point[0] == 30 && line.paths[0].vertices[1].point[0] == 0
+			&& (line.values[0] & 0x100) == 0, "a line's: open, its direction kept");
+	}
+
+	// the toolbar shapes: the original's POLY resources
+	{
+		ResourceFile app;
+		std::string base = "../original/resources/Gobe Productive/POLY/";
+		size_t parsed = 0;
+		BezierPath star;
+		for (int id = 0; id < 64; id++) {
+			FILE* f = fopen((base + std::to_string(id) + ".bin").c_str(), "rb");
+			if (f == nullptr)
+				continue;
+			std::vector<uint8_t> bytes;
+			int c;
+			while ((c = fgetc(f)) != EOF)
+				bytes.push_back(uint8_t(c));
+			fclose(f);
+			BezierPath p;
+			if (ParseToolbarShape(bytes, p))
+				parsed++;
+			if (id == 0)
+				star = p;
+		}
+		if (parsed > 0) {
+			Check(star.vertices.size() == 10 && star.closed && star.vertices[0].point[0] == 0
+				&& star.vertices[0].point[1] == 1, "POLY 0: ten points from (0, 1), closed");
+			Document shapes;
+			Check(CreateBlankDrawing(shapes, error), "a drawing for toolbar shapes " + error);
+			int made = AddToolbarShape(shapes, 0, 0, star, {100, 100}, {160, 140});
+			Check(made == 0, "a toolbar shape made");
+			if (made == 0) {
+				const Shape& sh = shapes.GraphicsPart(0)->layers[0].shapes[0];
+				Check(sh.kind == Sig("BEZI") && sh.origin[0] == 100 && sh.origin[1] == 100
+					&& std::fabs(sh.size[0] - 60) < 0.01f && std::fabs(sh.size[1] - 40) < 0.01f,
+					"in the dragged box");
+			}
+			printf("toolbar shapes %zu\n", parsed);
+		}
+		// a cut resource is refused
+		std::vector<uint8_t> cut = {2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, '1', 0};
+		BezierPath p;
+		Check(!ParseToolbarShape(cut, p), "a cut POLY refused");
+	}
+
+	// the Bezier tool's path and its control points
+	{
+		Document curves;
+		Check(CreateBlankDrawing(curves, error), "a drawing for curves " + error);
+		Vertex a{{10, 10}, {0, 0}, {20, 0}, 4}, b{{60, 40}, {-10, -10}, {10, 10}, 2};
+		Check(AddBezierShape(curves, 0, 0, {a, b}) == 0, "a Bezier path");
+		Shape& sh = curves.EditableGraphicsPart(0)->layers[0].shapes[0];
+		Check(sh.origin[0] == 10 && sh.size[0] == 50 && !sh.paths[0].closed
+			&& sh.paths[0].vertices[1].point[0] == 50, "its box the points'");
+		std::vector<std::pair<int, DrawPoint>> handles = ControlPoints(sh);
+		Check(handles.size() == 3 && handles[0].first == 1 && handles[0].second[0] == 30,
+			"three control points, the first after point 0");
+		Check(HitControlPoint(sh, 50, 30, 2) == 2, "the one before point 1 hit");
+		MoveControlPoint(sh, 2, 60, 20);
+		Check(sh.paths[0].vertices[1].control1[0] == 0 && sh.paths[0].vertices[1].control1[1] == -20
+			&& sh.paths[0].vertices[1].control2[0] == 0
+			&& std::fabs(sh.paths[0].vertices[1].control2[1] - 14.1421f) < 0.01f,
+			"moved; the smooth point's other one opposite, its length kept");
 	}
 
 	// a sample's drawing: one more shape, the others as they were
