@@ -9,6 +9,7 @@
 
 #include "Document.h"
 #include "Drawing.h"
+#include "Styles.h"
 #include "Undo.h"
 
 using namespace gobe;
@@ -152,6 +153,98 @@ main(int argc, char** argv)
 		&& textBack.GraphicsPart(1)->layers[0].shapes.size() == 1
 		&& textBack.GraphicsPart(1)->layers[0].shapes[0].kind == Sig("ELPS")
 		&& textBack.WordPart(0) != nullptr, "reloaded with its ellipse and its text");
+
+	// arranging: shapes 0 and 2 of a, b, c, d, e
+	{
+		GRLayer layer;
+		for (int i = 0; i < 5; i++) {
+			Shape sh;
+			sh.values[2] = uint32_t(i);
+			layer.shapes.push_back(sh);
+		}
+		auto ids = [&]() {
+			std::string out;
+			for (const Shape& sh : layer.shapes)
+				out += char('a' + sh.values[2]);
+			return out;
+		};
+		GRLayer copy = layer;
+		std::vector<size_t> now = ArrangeShapes(layer, {0, 2}, 0);
+		Check(ids() == "bdeac" && now == std::vector<size_t>{3, 4}, "to the front: " + ids());
+		layer = copy;
+		now = ArrangeShapes(layer, {2, 4}, 1);
+		Check(ids() == "ceabd" && now == std::vector<size_t>{0, 1}, "to the back: " + ids());
+		layer = copy;
+		now = ArrangeShapes(layer, {0, 2}, 2);
+		Check(ids() == "badce" && now == std::vector<size_t>{1, 3}, "forward: " + ids());
+		layer = copy;
+		now = ArrangeShapes(layer, {2, 4}, 3);
+		Check(ids() == "acbed" && now == std::vector<size_t>{1, 3}, "backward: " + ids());
+		layer = copy;
+		ArrangeShapes(layer, {3, 4}, 2);
+		Check(ids() == "abcde", "the top ones forward: as they were");
+	}
+
+	// a shape's fill and pen (its own style changed, the others' not)
+	{
+		Document fills;
+		Check(CreateBlankDrawing(fills, error), "a drawing for inks " + error);
+		AddShape(fills, 0, 0, kToolRect, {{0, 0}, {20, 20}});
+		AddShape(fills, 0, 0, kToolRect, {{30, 0}, {50, 20}});
+		Ink red;
+		red.set = true;
+		red.color.r = 255;
+		Check(SetShapeProperty(fills, 0, 0, 0, InkProperty(Sig("FCol"), red)), "a red fill");
+		Check(SetShapeProperty(fills, 0, 0, 0, OpacityProperty(Sig("PTra"), 0.5f)), "a half pen");
+		const std::vector<Shape>& two = fills.GraphicsPart(0)->layers[0].shapes;
+		ShapeStyle a = ResolveShapeStyle(fills.styles, two[0].style);
+		ShapeStyle b = ResolveShapeStyle(fills.styles, two[1].style);
+		Check(a.fill.color.r == 255 && a.fill.color.g == 0 && a.penOpacity == 0.5f,
+			"the first: red, its pen half transparent");
+		Check(b.fill.color.r == 255 && b.fill.color.g == 255 && b.penOpacity == 1,
+			"the second as it was (white, opaque)");
+		Check(fills.styles.styles[two[0].style].links[0]
+			< fills.styles.styles.size(), "still based on GR Default");
+		path = "/tmp/draw_shapes_inks";
+		Check(fills.Save(path, error), "saved with inks " + error);
+		Document inks;
+		Check(LoadDocument(path, inks, error) && ResolveShapeStyle(inks.styles,
+			inks.GraphicsPart(0)->layers[0].shapes[0].style).fill.color.r == 255,
+			"reloaded red");
+	}
+
+	// rotating and reshaping
+	{
+		Shape box;
+		box.kind = Sig("RRCT");
+		box.origin[0] = 0;
+		box.origin[1] = 0;
+		box.size[0] = 20;
+		box.size[1] = 20;
+		Check(std::fabs(AngleAround(box, 20, 10)) < 0.01f, "right of the center: 0 degrees");
+		Check(std::fabs(AngleAround(box, 10, 0) - 90) < 0.01f, "above it: 90");
+		Document paths;
+		Check(CreateBlankDrawing(paths, error), "a drawing for paths " + error);
+		AddShape(paths, 0, 0, kToolPolygon, {{10, 10}, {50, 10}, {30, 40}});
+		AddShape(paths, 0, 0, kToolLine, {{0, 0}, {10, 10}});
+		GRPart* edit = paths.EditableGraphicsPart(0);
+		Shape& poly = edit->layers[0].shapes[0];
+		Check(HitVertex(poly, 50, 10, 2) == 1 && HitVertex(poly, 40, 30, 2) < 0, "a point hit");
+		MoveVertex(poly, 2, 30, 70);
+		std::vector<DrawPoint> points = ShapeVertices(poly);
+		Check(points.size() == 3 && points[2][0] == 30 && points[2][1] == 70
+			&& points[0][0] == 10 && points[0][1] == 10, "a point moved, the others kept");
+		Check(poly.origin[1] == 10 && poly.size[1] == 60, "the box follows: 60 high");
+		MoveVertex(poly, 0, 0, 0);
+		points = ShapeVertices(poly);
+		Check(poly.origin[0] == 0 && poly.origin[1] == 0 && points[1][0] == 50 && points[1][1] == 10,
+			"the box's corner moved, the other points kept");
+		Shape& line = edit->layers[0].shapes[1];
+		MoveVertex(line, 1, 30, 5);
+		Check(line.origin[0] == 0 && line.size[0] == 30 && line.size[1] == 5, "a line's end");
+		MoveVertex(line, 0, 10, 10);
+		Check(line.origin[0] == 10 && line.size[0] == 20 && line.size[1] == -5, "its start");
+	}
 
 	// a sample's drawing: one more shape, the others as they were
 	for (int i = 1; i < argc; i++) {

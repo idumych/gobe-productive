@@ -6,6 +6,7 @@
 #include <cmath>
 
 #include "Document.h"
+#include "Editing.h"
 
 namespace gobe {
 
@@ -292,6 +293,148 @@ DragHandle(const float bounds[4], int handle, float x, float y, float out[4])
 		std::swap(out[0], out[2]);
 	if (out[1] > out[3])
 		std::swap(out[1], out[3]);
+}
+
+
+
+std::vector<size_t>
+ArrangeShapes(GRLayer& layer, const std::vector<size_t>& indices, int order)
+{
+	std::vector<Shape>& shapes = layer.shapes;
+	std::vector<bool> chosen(shapes.size(), false);
+	for (size_t i : indices)
+		if (i < shapes.size())
+			chosen[i] = true;
+	// the shapes in their places, each with whether it's chosen and where
+	// it was
+	std::vector<std::pair<size_t, bool>> order2;
+	for (size_t i = 0; i < shapes.size(); i++)
+		order2.push_back({i, chosen[i]});
+	if (order == 0 || order == 1) {
+		std::stable_partition(order2.begin(), order2.end(),
+			[order](const std::pair<size_t, bool>& e) { return order == 0 ? !e.second : e.second; });
+	} else if (order == 2) {
+		// forward: from the top down, each chosen one past the next one up
+		for (size_t i = order2.size(); i-- > 1;)
+			if (order2[i - 1].second && !order2[i].second)
+				std::swap(order2[i - 1], order2[i]);
+	} else {
+		for (size_t i = 1; i < order2.size(); i++)
+			if (order2[i].second && !order2[i - 1].second)
+				std::swap(order2[i - 1], order2[i]);
+	}
+	std::vector<Shape> arranged;
+	std::vector<size_t> where(shapes.size());
+	for (size_t k = 0; k < order2.size(); k++) {
+		arranged.push_back(shapes[order2[k].first]);
+		where[order2[k].first] = k;
+	}
+	shapes = std::move(arranged);
+	std::vector<size_t> now;
+	for (size_t i : indices)
+		now.push_back(i < where.size() ? where[i] : i);
+	return now;
+}
+
+
+bool
+SetShapeProperty(Document& doc, size_t part, size_t layer, size_t index, const Property& property)
+{
+	GRPart* gr = doc.EditableGraphicsPart(part);
+	if (gr == nullptr || layer >= gr->layers.size() || index >= gr->layers[layer].shapes.size())
+		return false;
+	Shape& shape = gr->layers[layer].shapes[index];
+	uint32_t to = StyleWithProperty(doc.styles, shape.style, property);
+	SetCellStyle(doc.styles, shape.style, to);
+	doc.stylesChanged = true;
+	return true;
+}
+
+
+float
+AngleAround(const Shape& shape, float x, float y)
+{
+	float b[4];
+	ShapeBounds(shape, b);
+	float cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
+	// (y down: counterclockwise on screen is a falling atan2)
+	return float(-std::atan2(y - cy, x - cx) * 180 / M_PI);
+}
+
+
+std::vector<DrawPoint>
+ShapeVertices(const Shape& shape)
+{
+	std::vector<DrawPoint> points;
+	if (shape.kind == Sig("LINE")) {
+		points.push_back({shape.origin[0], shape.origin[1]});
+		points.push_back({shape.origin[0] + shape.size[0], shape.origin[1] + shape.size[1]});
+	} else if (shape.kind == Sig("BEZI") && !shape.paths.empty()) {
+		for (const Vertex& v : shape.paths[0].vertices)
+			points.push_back({shape.origin[0] + v.point[0], shape.origin[1] + v.point[1]});
+	}
+	return points;
+}
+
+
+int
+HitVertex(const Shape& shape, float x, float y, float tolerance)
+{
+	std::vector<DrawPoint> points = ShapeVertices(shape);
+	for (size_t i = 0; i < points.size(); i++)
+		if (std::fabs(points[i][0] - x) <= tolerance && std::fabs(points[i][1] - y) <= tolerance)
+			return int(i);
+	return -1;
+}
+
+
+void
+MoveVertex(Shape& shape, int vertex, float x, float y)
+{
+	if (shape.kind == Sig("LINE")) {
+		if (vertex == 0) {
+			float endX = shape.origin[0] + shape.size[0], endY = shape.origin[1] + shape.size[1];
+			shape.origin[0] = x;
+			shape.origin[1] = y;
+			shape.size[0] = endX - x;
+			shape.size[1] = endY - y;
+		} else if (vertex == 1) {
+			shape.size[0] = x - shape.origin[0];
+			shape.size[1] = y - shape.origin[1];
+		}
+		return;
+	}
+	if (shape.kind != Sig("BEZI") || shape.paths.empty() || vertex < 0
+			|| size_t(vertex) >= shape.paths[0].vertices.size())
+		return;
+	Vertex& v = shape.paths[0].vertices[size_t(vertex)];
+	v.point[0] = x - shape.origin[0];
+	v.point[1] = y - shape.origin[1];
+	// TShape::Recalc: the box around the points again (the control
+	// points are offsets: they move with theirs)
+	float left = 0, top = 0, right = 0, bottom = 0;
+	bool first = true;
+	for (const BezierPath& p : shape.paths)
+		for (const Vertex& w : p.vertices) {
+			if (first) {
+				left = right = w.point[0];
+				top = bottom = w.point[1];
+				first = false;
+			}
+			left = std::min(left, w.point[0]);
+			right = std::max(right, w.point[0]);
+			top = std::min(top, w.point[1]);
+			bottom = std::max(bottom, w.point[1]);
+		}
+	for (BezierPath& p : shape.paths)
+		for (Vertex& w : p.vertices) {
+			w.point[0] -= left;
+			w.point[1] -= top;
+		}
+	shape.origin[0] += left;
+	shape.origin[1] += top;
+	shape.size[0] = right - left;
+	shape.size[1] = bottom - top;
 }
 
 } // namespace gobe

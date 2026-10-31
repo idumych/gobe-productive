@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress.svg" alt="Port progress: 38 of 46 features done, 8 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 40 of 48 features done, 8 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, spreadsheets have caught up with the original's editing, documents
@@ -162,9 +162,11 @@ sizes, headings and options are saved with the document.
 | Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
 | Creating and linking frames | not yet |
 | Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | next |
-| Drawing tools: rotating, reshaping points, grouping, arranging, several shapes selected | not yet |
+| Drawing tools: several shapes selected (Shift-click, a rubber band in a drawing), moved and deleted together; Arrange's Bring to Front, Send to Back, Move Forward and Move Backward; Rotate (a corner handle turns the shape) and Reshape (a path's points, a line's ends) | next |
+| Drawing tools: Group and Ungroup, Align Objects, Align to Grid, Lock, the grid, Create Outlines, Text Wrap, curves' control points | not yet |
 | Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
-| Fill and pen inks for frames and drawings in the FormatBar | not yet |
+| Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | next |
+| Fill and pen inks for frames in the FormatBar (frames can't be selected yet); the pen's size (the drawing's PartBar) | not yet |
 
 ### Other formats (translators)
 

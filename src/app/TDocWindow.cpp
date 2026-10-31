@@ -173,9 +173,16 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 				text = text || part.kind == Sig("WORD");
 				cells = cells || part.kind == Sig("SPRD");
 			}
-			if (text || cells) {
+			// (a drawing document: the FormatBar for its shapes' inks; the
+			// drawing's PartBar, TGRRibbon, isn't ported)
+			int mainPart = document->MainPart();
+			bool drawing = mainPart >= 0
+				&& document->parts.parts[size_t(mainPart)].kind == Sig("GRFX");
+			if (text || cells || drawing) {
 				fFormatBar = new TFormatBar(pages);
 				pages->fFormatBar = fFormatBar;
+			}
+			if (text || cells) {
 				fPartBar = new TPartBar(pages);
 				pages->fPartBar = fPartBar;
 			}
@@ -378,8 +385,17 @@ TDocWindow::InstallPartMenus()
 	if (fBar == NULL)
 		return;
 	bool sheet = fPages != NULL && fPages->fSelectedCell.active;
-	if (!fPartMenus.empty() && sheet == fSheetMenus)
+	// the drawing part's Arrange (MENU 50): shapes selected, or a drawing
+	// document's drawing active
+	bool drawing = false;
+	if (fPages != NULL && !sheet && fDocument != NULL) {
+		int main = fDocument->MainPart();
+		drawing = fPages->ShapesSelected() || (main >= 0
+			&& fDocument->parts.parts[size_t(main)].kind == Sig("GRFX"));
+	}
+	if (!fPartMenus.empty() && sheet == fSheetMenus && drawing == fDrawingMenus)
 		return;
+	fDrawingMenus = drawing;
 	for (BMenu* menu : fPartMenus) {
 		fBar->RemoveItem(menu);
 		delete menu;
@@ -390,7 +406,9 @@ TDocWindow::InstallPartMenus()
 		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
 		fPartMenus.push_back(new TMenu(52, resources));
 		fPartMenus.push_back(new TMenu(53, resources));
-	} else
+	} else if (drawing)
+		fPartMenus.push_back(new TMenu(50));
+	else
 		fPartMenus.push_back(new TMenu(51));
 	// after MENU 2-6
 	int32 at = 5;
@@ -1405,7 +1423,11 @@ TDocWindow::MenusBeginning()
 {
 	InstallPartMenus();
 	BWindow::MenusBeginning();
-	// TPartSS::FixMenus: Fill Down and Up with a block more than one cell
+	// TPartGR::FixMenus: Arrange's ported items
+	if (fDrawingMenus && fPages != NULL)
+		for (BMenu* menu : fPartMenus)
+			fPages->FixShapeMenu(menu);
+		// TPartSS::FixMenus: Fill Down and Up with a block more than one cell
 	// high, Fill Right and Left more than one wide, Sort Cells either way.
 	// (Commands not ported yet are off.)
 	if (fSheetMenus && fPages != NULL && KeyMenuBar() != NULL) {

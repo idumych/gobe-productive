@@ -152,6 +152,17 @@ public:
 	uint32 Tool() const { return fTool; }
 	void SetTool(uint32 tool);
 	class TRibbon* fToolBar = NULL;
+	// a selected shape
+	struct ShapeRef {
+		bool active = false;
+		size_t part = 0, layer = 0, index = 0;
+	};
+	// shapes selected (the drawing part active: Arrange, MENU 50)
+	bool ShapesSelected() const { return !fShapes.empty(); }
+	// the first selected shape's look (the FormatBar's fill and pen)
+	bool SelectedShapeStyle(ShapeStyle& style) const;
+	// Arrange's items enabled and marked (Resize, Rotate, Reshape)
+	void FixShapeMenu(BMenu* menu) const;
 	// Show Invisibles: the marks on line `index`
 	void DrawInvisibles(size_t index);
 	// printing: page `index`'s area the printer prints (`printable` is the
@@ -236,18 +247,16 @@ public:
 private:
 	// the drawing tools (TPageDraw.cpp): a shape dragged out, moved or
 	// resized, the shape selected
-	struct ShapeRef {
-		bool active = false;
-		size_t part = 0, layer = 0, index = 0;
-	};
 	struct ShapeDrag {
-		int mode = 0;			// 1 creating, 2 moving, 3 resizing
+		int mode = 0;			// 1 creating, 2 moving, 3 resizing, 4 rotating,
+								// 5 reshaping (a point), 6 a rubber band
 		size_t part = 0;
 		float x = 0, y = 0;		// the drawing's origin in the view
 		std::vector<std::array<float, 2>> points;	// creating: drawing coordinates
 		float start[2] = {0, 0}, now[2] = {0, 0};
 		float bounds[4] = {0, 0, 0, 0};
 		int handle = -1;
+		float angle = 0;		// rotating: the shape's angle at the start
 	};
 	// a drawing frame under `where` (the topmost), its part and origin
 	bool DrawingAt(BPoint where, size_t& part, float& x, float& y) const;
@@ -255,11 +264,17 @@ private:
 	bool DrawingMoved(BPoint where);
 	bool DrawingUp(BPoint where);
 	bool DrawingKey(const char* bytes, int32 count);
-	void FinishShape();
+	bool ShapeCommand(BMessage* message);
+	bool ShapeSelected(size_t part, size_t layer, size_t index) const;
+	// the shape dragged out made; a polygon ended by Enter drops the point
+	// that was following the pointer
+	void FinishShape(bool dropFollower = true);
 	void DrawShapeSelection(float dx, float dy);
 	uint32 fTool = 0x41525257;	// 'ARRW'
-	ShapeRef fShape;
+	std::vector<ShapeRef> fShapes;	// selected, all in one part
 	ShapeDrag fShapeDrag;
+	int fShapeMode = 0;			// what a handle does: 0 resize, 1 rotate, 2 reshape
+	bool fShapesWereSelected = false;
 	struct FrameGeometry {
 		BRect rect;					// in view coordinates, unrotated
 		float angle;				// degrees, counterclockwise, about the center

@@ -120,6 +120,7 @@ private:
 	class TEntryBar* fEntryBar = NULL;
 	class TSheetBar* fSheetBar = NULL;
 	class TToolBar* fToolBar = NULL;
+	bool fDrawingMenus = false;	// the part menu is MENU 50 (Arrange)
 	void ShowActiveRibbon();
 	class TScaleSlider* fScaleSlider = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
