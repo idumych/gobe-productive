@@ -5,9 +5,10 @@ systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and 
 documents and works the way the original did, down to its menus and dialogs.
 
 The released **preview** (0.1.1) is focused on the word processor. Since
-then, work has moved to spreadsheets: most of the original's spreadsheet
-editing now works in the sources here and will be in the next release. See
-[Status](#status).
+then, work has moved to spreadsheets and documents with several sheets:
+most of the original's spreadsheet editing, the SheetBar, new
+spreadsheets, and the HTML, SYLK and text table translators now work in
+the sources here and will be in the next release. See [Status](#status).
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
 > with Gobe Software or the current owners of Gobe Productive. It contains
@@ -97,14 +98,14 @@ On Linux (X11), with Edit Styles:
 
 The 0.1.1 preview is about the word processor; spreadsheets in it are
 shown and their cells can be edited, with formulas evaluated. Everything
-listed under [Since 0.1.1](#since-011-spreadsheets) is in the sources but
+listed under the "Since 0.1.1" headings is in the sources but
 not released yet: build it to try it.
 
 **Works in 0.1.1**
 
 - Opening and saving Gobe Productive documents. Only what was edited is
   rewritten; everything else is kept byte for byte. File > New (word
-  processing documents and spreadsheets), Open Recent, Revert, Insert… (text and RTF), Page
+  processing documents), Open Recent, Revert, Insert… (text and RTF), Page
   Setup, Print, Help (the original's User's Guide), About.
 - Text: typing, selection (double, triple and quadruple clicks; the arrow
   keys with Command, Option and Control; Home/End, Page Up/Down), cut, copy
@@ -119,26 +120,33 @@ not released yet: build it to try it.
   History; Document Size; styles: applying paragraph and basic styles, New
   Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
   formatting a style directly).
-- Plain text and RTF: opened as documents, saved with Save As's File Format;
-  HTML too, written and read as the HTML translator did (paragraphs,
-  headings, alignment, sizes, colors, faces, lists, rules, entities;
-  pictures and tables not yet).
-  Text tables (tab, comma or semicolon separated) open as spreadsheets,
-  and spreadsheets save as them (each cell as shown, or its formula with
-  Show Formulas on).
-- SYLK: a spreadsheet saved as SYLK with Save As's File Format (values as
-  calculated, formulas in R1C1, column widths); SYLK files opened as new
-  spreadsheets. Number formats and fonts (SYLK's P records) aren't carried
-  yet, so dates arrive as numbers.
+- Plain text and RTF: opened as documents, saved with Save As's File Format.
 - Spreadsheets: shown, cells edited (values and formulas, evaluated), cut,
   copy and paste, Fill Down and Fill Right, the selected rows inserted and
   deleted.
-- Sheets: the SheetBar (View > Show SheetBar) has a tab per sheet; a tab
-  shows its sheet (CheckBook's Setup, Summary and months), and the
-  document saves showing it. New Sheet… (spreadsheets and text), Delete Sheet and
-  Rename Sheet… (its options menu, or a double click on the tab); a tab
-  dragged along moves its sheet; all of them undo.
 - Viewing: drawings, charts (2D), images, tables, clocks and presentations.
+
+### Since 0.1.1: sheets, new spreadsheets and translators
+
+- **New spreadsheets:** File > New makes spreadsheets too, laid out as the
+  original's (rows 1-500, columns A-T, its grid and heading styles).
+- **Sheets:** the SheetBar (View > Show SheetBar) has a tab per sheet; a
+  tab shows its sheet (CheckBook's Setup, Summary and months), and the
+  document saves showing it. New Sheet… (spreadsheets and text), Delete
+  Sheet and Rename Sheet… in its options menu (or a double click on a
+  tab); a tab dragged along moves its sheet; all of them undo.
+- **HTML:** word processing documents saved as HTML and HTML files opened,
+  as the HTML translator did (paragraphs, headings, alignment, sizes,
+  colors, faces, lists, rules, entities; pictures and tables not yet).
+- **Text tables:** tab, comma or semicolon separated text opens as a
+  spreadsheet, and spreadsheets save as such text (each cell as shown, or
+  its formula with Show Formulas on).
+- **SYLK:** spreadsheets saved as SYLK (values as calculated, formulas in
+  R1C1, column widths) and SYLK files opened as new spreadsheets. Number
+  formats and fonts (SYLK's P records) aren't carried yet, so dates
+  arrive as numbers.
+- **Ranges** are written A1..B2, as Gobe Productive writes them (A1:B2 is
+  still understood).
 
 ### Since 0.1.1: spreadsheets
 
