@@ -4933,6 +4933,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 				fDocument.SetPageGeometry(paper, printable);
 				GeometryChanged();
 			}
+		} else if (command.compare(0, 10, "exporttab ") == 0
+				|| command.compare(0, 12, "exportcomma ") == 0) {
+			// "exporttab <path>", "exportcomma <path>": Save As in the
+			// delimited text formats
+			bool tab = command[6] == 't';
+			BString error;
+			if (!ExportFile(fDocument, command.c_str() + (tab ? 10 : 12),
+					tab ? kSaveTabText : kSaveCommaText, error))
+				fprintf(stderr, "export: %s\n", error.String());
 		} else if (command.compare(0, 11, "exportsylk ") == 0) {
 			// "exportsylk <path>": Save As in the SYLK format
 			BString error;

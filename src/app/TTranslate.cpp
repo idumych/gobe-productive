@@ -256,6 +256,12 @@ FormatType(SaveFormat format)
 			return "text/rtf";
 		case kSaveSYLK:
 			return "text/sylk";
+		case kSaveTabText:
+			return "text/tab-separated-values";
+		case kSaveCommaText:
+			return "text/x-comma-separated-values";
+		case kSaveSemicolonText:
+			return "text/x-semicolon-separated-values";
 		default:
 			return NULL;
 	}
@@ -429,11 +435,22 @@ AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats)
 			rtf->AddInt32("format", kSaveRTF);
 			menu->AddItem(new BMenuItem("RTF", rtf));
 		} else if (sheetFormats) {
-			// the SYLK translator's output format ("SYLK")
+			// the SYLK and Text translators' spreadsheet formats, by name
 			menu->AddSeparatorItem();
-			BMessage* sylk = new BMessage(kMsgFormat);
-			sylk->AddInt32("format", kSaveSYLK);
-			menu->AddItem(new BMenuItem("SYLK", sylk));
+			const struct {
+				const char* name;
+				SaveFormat format;
+			} formats[] = {
+				{"Comma-delimited text", kSaveCommaText},
+				{"SYLK", kSaveSYLK},
+				{"Semicolon-delimited text", kSaveSemicolonText},
+				{"Tab-delimited text", kSaveTabText}
+			};
+			for (const auto& f : formats) {
+				BMessage* message = new BMessage(kMsgFormat);
+				message->AddInt32("format", f.format);
+				menu->AddItem(new BMenuItem(f.name, message));
+			}
 		}
 		menu->SetTargetForItems(handler);
 	}
@@ -471,6 +488,10 @@ ExportFile(const Document& doc, const char* path, SaveFormat format, BString& er
 		ok = ExportRTF(doc, part, path, message, InstalledFonts());
 	} else if (format == kSaveSYLK) {
 		ok = ExportSylk(doc, part, path, message);
+	} else if (format == kSaveTabText || format == kSaveCommaText
+			|| format == kSaveSemicolonText) {
+		ok = ExportTable(doc, part, path, format == kSaveTabText ? '\t'
+			: format == kSaveCommaText ? ',' : ';', message);
 	}
 	if (!ok) {
 		// "Error writing file!"

@@ -11,6 +11,7 @@
 #include "Document.h"
 #include "Editing.h"
 #include "SSEval.h"
+#include "SSStyle.h"
 #include "TextImport.h"
 
 using namespace gobe;
@@ -120,6 +121,45 @@ main()
 		Check(LoadDocument("/tmp/ss_table_saved.gobe", back, error), "reload " + error);
 		Check(Shown(back, 0, 1) == "2", "reloaded");
 		remove("/tmp/ss_table_saved.gobe");
+	}
+	{
+		// written as text: rows from row 1, delimiters up to each cell's
+		// column, an LF per row; the shown text (a currency format here)
+		Document doc;
+		std::string error;
+		Check(CreateBlankSpreadsheet(doc, error), "blank " + error);
+		SSPart& ss = *doc.EditableSpreadsheetPart(0);
+		SetCellInput(ss, 1, 0, "Pens", nullptr, error);
+		SetCellInput(ss, 1, 2, "3", nullptr, error);
+		SetCellInput(ss, 3, 1, "=C2*2", nullptr, error);
+		UpdateDependencies(doc, 0);
+		std::string path = "/tmp/ss_table_out.txt";
+		auto written = [&]() {
+			FILE* f = fopen(path.c_str(), "rb");
+			std::string text;
+			char buffer[4096];
+			size_t n;
+			while (f != nullptr && (n = fread(buffer, 1, sizeof buffer, f)) > 0)
+				text.append(buffer, n);
+			if (f != nullptr)
+				fclose(f);
+			return text;
+		};
+		Check(ExportTable(doc, 0, path, ',', error), "export " + error);
+		Check(written() == "\nPens,,3\n\n,6\n", "comma text: [" + written() + "]");
+		Check(ApplyCellProperty(doc, 0, 3, 1, 3, 1, NumberFormatProperty("$#,##0.00")),
+			"a currency format");
+		Check(ExportTable(doc, 0, path, '\t', error) && written() == "\nPens\t\t3\n\n\t$6.00\n",
+			"tab text, the format shown: [" + written() + "]");
+		doc.EditableSpreadsheetPart(0)->options[2] = true;	// Show Formulas
+		Check(ExportTable(doc, 0, path, ';', error) && written() == "\nPens;;3\n\n;=C2*2\n",
+			"Show Formulas: the formula: [" + written() + "]");
+		// read back: the same cells
+		Document back;
+		Check(ImportTable(path, back, error, ';'), "import " + error);
+		Check(Shown(back, 1, 0) == "'Pens" && Shown(back, 1, 2) == "3" && Shown(back, 3, 1) == "6",
+			"read back: " + Shown(back, 3, 1));
+		remove(path.c_str());
 	}
 	printf("ss_table: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed != 0 || sOk == 0;

@@ -107,6 +107,13 @@ char TableDelimiter(const std::string& head);
 // that doesn't parse).
 bool ImportTable(const std::string& path, Document& doc, std::string& error,
 	char delimiter = 0);
+// The reverse (TBlockStreamToText::HandleRowData, HandleCellData): part
+// `part`'s cells row by row from row 1, `delimiter` before each column
+// up to a cell's, LF after each row (an empty row is an LF); each cell's
+// text as shown (its number format) or, with Show Formulas on, its
+// formula. UTF-8.
+bool ExportTable(const Document& doc, size_t part, const std::string& path, char delimiter,
+	std::string& error);
 
 // Imports a text file into `doc` (made with CreateBlankDocument): the
 // encoding detected, CR LF and lone CR turned into LF, control characters

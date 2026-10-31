@@ -3,10 +3,13 @@
 
 #include "Document.h"
 #include "Editing.h"
+#include "SSEval.h"
+#include "SSStyle.h"
 
 #include <algorithm>
 #include <fstream>
 #include <iterator>
+#include <map>
 
 namespace gobe {
 
@@ -423,6 +426,61 @@ ImportTable(const std::string& path, Document& doc, std::string& error, char del
 	}
 	UpdateDependencies(doc, part);
 	return true;
+}
+
+
+bool
+ExportTable(const Document& doc, size_t part, const std::string& path, char delimiter,
+	std::string& error)
+{
+	const SSPart* ss = doc.SpreadsheetPart(part);
+	if (ss == nullptr) {
+		error = "not a spreadsheet";
+		return false;
+	}
+	SSBook book(doc);
+	SSEvaluator eval(*ss, &book, int(part));
+	// the cells with something to show, by row then column
+	std::map<std::pair<uint16_t, uint16_t>, std::string> shown;
+	for (const SSCell& cell : ss->cells) {
+		if (cell.id.b == 0xffff)
+			continue;
+		SSValue value = eval.Value(cell.id.a, cell.id.b);
+		if (ss->options[2] && cell.kind == Sig("Fmla"))
+			value = SSValue::String(CellInput(*ss, cell.id.a, cell.id.b));
+		if (value.type == SSValue::kNone)
+			continue;
+		// the format as the view finds it: the part's style, the column's,
+		// the row's, the cell's
+		std::vector<uint32_t> stack = {ss->style};
+		if (const SSHeader* h = ss->Column(cell.id.b))
+			stack.push_back(h->cell.style);
+		if (const SSHeader* h = ss->Row(cell.id.a))
+			stack.push_back(h->cell.style);
+		stack.push_back(cell.style);
+		CellStyle style = ResolveCellStyle(doc.styles, stack);
+		shown[{cell.id.a, cell.id.b}] = FormatCellValue(value, style.format);
+	}
+	std::string text;
+	uint32_t row = 0, column = 0;
+	for (const auto& entry : shown) {
+		for (; row < entry.first.first; row++) {
+			text += '\n';
+			column = 0;
+		}
+		for (; column < entry.first.second; column++)
+			text += delimiter;
+		text += entry.second;
+	}
+	if (!shown.empty())
+		text += '\n';
+	std::ofstream file(path, std::ios::binary | std::ios::trunc);
+	if (!file) {
+		error = "cannot write " + path;
+		return false;
+	}
+	file.write(text.data(), std::streamsize(text.size()));
+	return bool(file);
 }
 
 
