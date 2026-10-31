@@ -20,6 +20,7 @@
 #include <Alert.h>
 #include <Beep.h>
 #include <Clipboard.h>
+#include <Cursor.h>
 #include <MenuItem.h>
 #include <MessageRunner.h>
 #include <Path.h>
@@ -1133,8 +1134,8 @@ TPageView::HitCell(BPoint where, size_t& part, int& row, int& column, BRect& rec
 }
 
 
-bool
-TPageView::HitHeading(BPoint where, size_t& part, SelectionKind& kind, int& index) const
+const Document::PlacedFrame*
+TPageView::SheetFrameAt(BPoint where, BRect& rect) const
 {
 	float dx = fMargin - fBounds.left;
 	float dy = fMargin - fBounds.top;
@@ -1147,9 +1148,76 @@ TPageView::HitHeading(BPoint where, size_t& part, SelectionKind& kind, int& inde
 		if (r.Contains(where) && (hit == NULL || f.depth >= hit->depth))
 			hit = &f;
 	}
+	if (hit != NULL)
+		rect.Set(hit->x + dx, hit->y + dy, hit->x + dx + hit->width, hit->y + dy + hit->height);
+	return hit;
+}
+
+
+bool
+TPageView::HitResize(BPoint where, size_t& part, bool& columns, int& index, float& start,
+	float& offset) const
+{
+	BRect r;
+	const Document::PlacedFrame* hit = SheetFrameAt(where, r);
 	if (hit == NULL)
 		return false;
-	BRect r(hit->x + dx, hit->y + dy, hit->x + dx + hit->width, hit->y + dy + hit->height);
+	SheetGeometry g = SheetLayout(*hit, r);
+	bool inColumns = g.headerHeight > 0 && where.y < r.top + g.headerHeight;
+	bool inRows = g.headerWidth > 0 && where.x < r.left + g.headerWidth;
+	if (inColumns == inRows)
+		return false;
+	columns = inColumns;
+	const std::vector<float>& edges = columns ? g.xs : g.ys;
+	float at = columns ? where.x : where.y;
+	int first = columns ? g.firstColumn : g.firstRow;
+	// the edge within 2 to the left of (above) the point; a zero-sized line
+	// isn't grabbed
+	bool found = false;
+	for (size_t k = 0; !found && k + 1 < edges.size(); k++) {
+		if (k == 0 && at >= edges[0] && at - edges[0] <= 2 && first > 0) {
+			// the edge of the line before the first one shown
+			const SSPart& ss = *fDocument.SpreadsheetPart(hit->part);
+			index = first - 1;
+			float size = roundf(columns ? ss.ColumnWidth(uint16_t(index))
+				: ss.RowHeight(uint16_t(index)));
+			if (size <= 0)
+				continue;
+			start = edges[0] - size;
+			offset = roundf(at - edges[0]);
+			found = true;
+		} else if (edges[k + 1] > edges[k] && at <= edges[k + 1] && edges[k + 1] - at <= 2) {
+			index = first + int(k);
+			start = edges[k];
+			offset = roundf(at - edges[k + 1]);
+			found = true;
+		}
+	}
+	if (!found)
+		return false;
+	part = hit->part;
+	// with whole columns (rows) selected, one of them: not when a selected
+	// range begins before it (the original then selects instead)
+	if (fSelectedCell.active && fSelectedCell.part == part
+			&& fSelectedCell.kind == (columns ? SelectionKind::columns : SelectionKind::rows)) {
+		int from = columns ? std::min(fSelectedCell.column, fSelectedCell.anchorColumn)
+			: std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+		int to = columns ? std::max(fSelectedCell.column, fSelectedCell.anchorColumn)
+			: std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+		if (index >= from && index <= to && from < index)
+			return false;
+	}
+	return true;
+}
+
+
+bool
+TPageView::HitHeading(BPoint where, size_t& part, SelectionKind& kind, int& index) const
+{
+	BRect r;
+	const Document::PlacedFrame* hit = SheetFrameAt(where, r);
+	if (hit == NULL)
+		return false;
 	SheetGeometry g = SheetLayout(*hit, r);
 	bool inColumns = g.headerHeight > 0 && where.y < r.top + g.headerHeight;
 	bool inRows = g.headerWidth > 0 && where.x < r.left + g.headerWidth;
@@ -1337,6 +1405,38 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	BRect rect;
 	SelectionKind headingKind;
 	int heading;
+	bool resizeColumns;
+	float resizeStart, resizeOffset;
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0
+			&& HitResize(where, part, resizeColumns, heading, resizeStart, resizeOffset)) {
+		// TSSDisplayManager::ResizeColumn (ResizeRow): the selected columns
+		// (rows) when the selection is of them and holds this one, else this
+		// one; one command for the whole drag
+		const SSPart* ss = fDocument.SpreadsheetPart(part);
+		fResizing.active = true;
+		fResizing.part = part;
+		fResizing.columns = resizeColumns;
+		fResizing.start = resizeStart;
+		fResizing.offset = resizeOffset;
+		fResizing.size = resizeColumns ? ss->ColumnWidth(uint16_t(heading))
+			: ss->RowHeight(uint16_t(heading));
+		fResizing.lines.clear();
+		SelectionKind lines = resizeColumns ? SelectionKind::columns : SelectionKind::rows;
+		if (fSelectedCell.active && fSelectedCell.part == part && fSelectedCell.kind == lines) {
+			int from = resizeColumns ? std::min(fSelectedCell.column, fSelectedCell.anchorColumn)
+				: std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			int to = resizeColumns ? std::max(fSelectedCell.column, fSelectedCell.anchorColumn)
+				: std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			if (heading >= from && heading <= to)
+				fResizing.lines.push_back({from, to});
+		}
+		if (fResizing.lines.empty())
+			fResizing.lines.push_back({heading, heading});
+		fUndo.Begin(fDocument, part, SSCommandName(resizeColumns ? 1 : 2), CurrentViewState());
+		if (Window() != NULL)
+			SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+		return;
+	}
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0
 			&& HitHeading(where, part, headingKind, heading)) {
 		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
@@ -1497,6 +1597,35 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 			Invalidate();
 		}
 	}
+	// over a heading's edge: the resizing cursor
+	if (!fResizing.active && !fDraggingCells && !fDraggingHeadings && !fDragging) {
+		size_t part;
+		bool columns;
+		int index;
+		float start, offset;
+		int shown = HitResize(where, part, columns, index, start, offset) ? (columns ? 1 : 2) : 0;
+		if (shown != fCursorShown) {
+			fCursorShown = shown;
+			BCursor cursor(shown == 1 ? B_CURSOR_ID_RESIZE_EAST_WEST
+				: shown == 2 ? B_CURSOR_ID_RESIZE_NORTH_SOUTH : B_CURSOR_ID_SYSTEM_DEFAULT);
+			SetViewCursor(&cursor);
+		}
+	}
+	if (fResizing.active) {
+		// the size follows the pointer (whole pixels, 0 to 512)
+		float size = roundf((fResizing.columns ? where.x : where.y) - fResizing.start
+			- fResizing.offset);
+		size = std::max(0.0f, std::min(512.0f, size));
+		if (size != fResizing.size) {
+			fResizing.size = size;
+			SSPart* ss = fDocument.EditableSpreadsheetPart(fResizing.part);
+			for (const auto& line : fResizing.lines)
+				SetLineSize(*ss, fResizing.columns, uint16_t(line.first), uint16_t(line.second),
+					size);
+			Rebuild();
+			Invalidate();
+		}
+	}
 	if (fDraggingHeadings) {
 		// TSSDisplayManager::ColumnClick's tracking: over the headings or
 		// the cells, the column (row) under the pointer
@@ -1535,6 +1664,12 @@ TPageView::MouseUp(BPoint where)
 	fDragging = false;
 	fDraggingCells = false;
 	fDraggingHeadings = false;
+	if (fResizing.active) {
+		fResizing.active = false;
+		fBook->Reset();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+	}
 	BView::MouseUp(where);
 }
 
@@ -3334,6 +3469,15 @@ TPageView::RunScript(const std::string& script, Document& document)
 				fScriptShift = true;
 				Click(BPoint(x, y), 1, B_PRIMARY_MOUSE_BUTTON);
 				fScriptShift = false;
+			}
+		} else if (command.compare(0, 5, "drag ") == 0) {
+			// "drag x1 y1 x2 y2": pressed at the first point, moved to the
+			// second and released there
+			float x1, y1, x2, y2;
+			if (sscanf(command.c_str() + 5, "%f %f %f %f", &x1, &y1, &x2, &y2) == 4) {
+				Click(BPoint(x1, y1), 1, B_PRIMARY_MOUSE_BUTTON);
+				MouseMoved(BPoint(x2 * fZoom, y2 * fZoom), B_INSIDE_VIEW, NULL);
+				MouseUp(BPoint(x2 * fZoom, y2 * fZoom));
 			}
 		} else if (command.compare(0, 7, "cclick ") == 0) {
 			// "cclick x y": a click with Command held

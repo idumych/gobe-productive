@@ -276,6 +276,13 @@ private:
 	// the corner both meet in (index -1), a column heading (kind columns,
 	// its column) or a row heading (rows, its row)
 	bool HitHeading(BPoint where, size_t& part, SelectionKind& kind, int& index) const;
+	// TSSFrame::ColumnResizeClick / RowResizeClick: within 2 of a heading's
+	// right (bottom) edge; `start` is that column's (row's) left (top) edge
+	// and `offset` where the click is from its right (bottom) edge
+	bool HitResize(BPoint where, size_t& part, bool& columns, int& index, float& start,
+		float& offset) const;
+	// the innermost spreadsheet frame at `where` and its view rect
+	const Document::PlacedFrame* SheetFrameAt(BPoint where, BRect& rect) const;
 	// TSSDisplayManager::ColumnClick / RowClick: the whole column (row)
 	// `index` selected, or the selection of columns (rows) extended to it
 	void SelectLines(size_t part, SelectionKind kind, int index, bool extend);
@@ -314,6 +321,15 @@ private:
 	bool fDragging = false;
 	bool fDraggingCells = false;	// cell range: drag from first click
 	bool fDraggingHeadings = false;	// whole rows or columns: the same
+	// TSSDisplayManager::ResizeColumn / ResizeRow: a heading's edge dragged
+	struct {
+		bool active = false;
+		size_t part = 0;
+		bool columns = true;
+		std::vector<std::pair<int, int>> lines;	// the columns (rows) sized
+		float start = 0, offset = 0, size = 0;
+	} fResizing;
+	int fCursorShown = 0;	// 0 the default, 1 resizing columns, 2 rows
 	bool fScriptShift = false;		// RunScript: shift held
 	bool fScriptCommand = false;	// RunScript: Command held
 	uint32 fScriptModifiers = 0;	// RunScript: Command, Option, Control held

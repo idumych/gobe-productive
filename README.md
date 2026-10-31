@@ -132,7 +132,7 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
 
 - **Formats:** Number… (the original's number format categories), Lock
   Cells and Unlock Cells (locked cells refuse changes), Column Width…, Row
-  Height…, Display Options… (grid, locked cells shaded, formulas instead of
+  Height… (or drag a heading's edge), Display Options… (grid, locked cells shaded, formulas instead of
   their results, column and row headings, circular references marked).
 - **Filling:** Fill Down, Right, Up and Left.
 - **Moving cells:** Move Cells… and the context menu's Move Cells Here;
@@ -161,11 +161,10 @@ documents.
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; named selections; Import and Export Styles; New Window; Show
 Clipboard; creating and linking frames; drawing tools; in spreadsheets
-resizing rows and columns by dragging their headings, charts made from
-cells; new documents of other kinds; the Word, Excel, HTML and SYLK
-translators; the thesaurus and dictionary (they need data files that
-weren't part of Gobe Productive). Documents saved by the port open in the
-port; they haven't been tried in the original on BeOS.
+charts made from cells; new documents of other kinds; the Word, Excel,
+HTML and SYLK translators; the thesaurus and dictionary (they need data
+files that weren't part of Gobe Productive). Documents saved by the port
+open in the port; they haven't been tried in the original on BeOS.
 
 ## Building
 
