@@ -287,7 +287,8 @@ public:
 	// Test hook: draw the page view offscreen and save it as PNG.
 	void Render(Document& doc, const std::string& out)
 	{
-		TPageView* view = new TPageView(doc);
+		static UndoStack undo;		// (nothing is edited)
+		TPageView* view = new TPageView(doc, undo);
 		BSize size = view->PreferredSize();
 		BRect bounds(0, 0, ceilf(size.width), ceilf(size.height));
 		BBitmap* bitmap = new BBitmap(bounds, B_RGBA32, true);

@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include <Alert.h>
+#include <Autolock.h>
 #include <Application.h>
 #include <Messenger.h>
 #include <PrintJob.h>
@@ -54,6 +55,7 @@
 #include "TFindDialog.h"
 #include "TPreferences.h"
 #include "TWPDialogs.h"
+#include "TSharedDocument.h"
 #include "TStylesEdit.h"
 #include "InlineParts.h"
 #include "Find.h"
@@ -132,6 +134,9 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	:
 	BWindow(frame, title, B_DOCUMENT_WINDOW, B_AUTO_UPDATE_SIZE_LIMITS)
 {
+	// the document's windows share its history and saved state
+	fShared = TSharedDocument::Attach(document, this);
+	fSeenGeneration = fShared->generation;
 	sWindows.insert(sWindows.begin(), this);
 	// the floaters' subsets take the new window (TFloaterMgr 'sE05')
 	for (BWindow* floater : {(BWindow*)TDialogHistory::Open(),
@@ -156,7 +161,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	if (document != NULL) {
 		fDocument = document;
 		if (TPageView::CanShow(*document)) {
-			TPageView* pages = new TPageView(*document);
+			TPageView* pages = new TPageView(*document, fShared->undo);
 			fPages = pages;
 			// the SpellBar (TNormalDocWinHelper: hidden until wanted)
 			fSpellBar = new TSpellBar(pages);
@@ -432,9 +437,38 @@ TDocWindow::InstallPartMenus()
 void
 TDocWindow::DispatchMessage(BMessage* message, BHandler* handler)
 {
+	// a window that closes (Quit) doesn't come back from dispatching: it
+	// holds the document only to decide (QuitRequested locks it itself)
+	if (message->what == B_QUIT_REQUESTED) {
+		BWindow::DispatchMessage(message, handler);
+		return;
+	}
+	// one window at a time uses the document (each window has a thread)
+	BAutolock locker(fShared->lock);
+	// another window changed it: the view laid out anew first
+	if (fSeenGeneration != fShared->generation) {
+		fSeenGeneration = fShared->generation;
+		if (fPages != NULL)
+			fPages->DocumentChangedElsewhere();
+		if (fSheetBar != NULL)
+			fSheetBar->Update();
+	}
+	uint64 changes = fShared->undo.Changes();
 	if (message->what == B_KEY_DOWN)
 		InstallPartMenus();
 	BWindow::DispatchMessage(message, handler);
+	// this one changed it: the others are told
+	if (fShared->undo.Changes() != changes || message->what == kMsgDocumentChanged) {
+		fShared->Changed(this);
+		fSeenGeneration = fShared->generation;
+	}
+}
+
+
+BLocker&
+TDocWindow::DocumentLock() const
+{
+	return fShared->lock;
 }
 
 
@@ -460,9 +494,9 @@ TDocWindow::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
 		case kMsgDocumentChanged:
-			if (!fModified) {
-				fModified = true;
-				UpdateTitle();
+			if (!fShared->modified) {
+				fShared->modified = true;
+				fShared->TitlesChanged();
 			}
 			// (an undone sheet switch or rename)
 			if (fSheetBar != NULL)
@@ -470,6 +504,29 @@ TDocWindow::MessageReceived(BMessage* message)
 			TDialogHistory::Refresh();
 			TDialogStylesEdit::Refresh();
 			return;
+		// another window of the document changed it (laid out anew in
+		// DispatchMessage) or its windows' titles changed
+		case kMsgSharedDocumentChanged:
+			UpdateTitle();
+			if (fPages != NULL)
+				fPages->Invalidate();
+			TDialogHistory::Refresh();
+			return;
+		case kMsgSharedTitles:
+			UpdateTitle();
+			return;
+		// Window > New Window (TDoc::NewWindow: another window on the
+		// document and its sheet, its own view; the titles get ":N")
+		case 'sMF0': {
+			if (fDocument == NULL)
+				return;
+			BRect frame = Frame();
+			frame.OffsetBy(20, 20);
+			TDocWindow* window = new TDocWindow(frame, fDocument->name.c_str(), fDocument);
+			fShared->TitlesChanged();
+			window->Show();
+			return;
+		}
 		// the zoom tool (TDocWindow::ScaleTo)
 		case 's003':
 			if (fPages != NULL)
@@ -767,7 +824,7 @@ TDocWindow::MessageReceived(BMessage* message)
 						targetInfo.SetType("application/x-vnd.gobe.productive-document");
 					SetTitle(path.Leaf());
 					if (fCloseAfterSave) {
-						fModified = false;
+						fShared->modified = false;
 						PostMessage(B_QUIT_REQUESTED);
 					}
 				}
@@ -845,7 +902,7 @@ TDocWindow::MessageReceived(BMessage* message)
 			return;
 		case kCmdRevert:
 		{
-			if (fDocument == NULL || !fModified || fDocument->path.empty())
+			if (fDocument == NULL || !fShared->modified || fDocument->path.empty())
 				return;
 			// TDoc::RevertAlert: "Revert “name” to last saved version?",
 			// Cancel (Esc) or Revert
@@ -869,7 +926,7 @@ TDocWindow::MessageReceived(BMessage* message)
 				fPages->DocumentReloaded();
 				fPages->ClearUndo();
 			}
-			fModified = false;
+			fShared->modified = false;
 			UpdateTitle();
 			return;
 		}
@@ -1090,11 +1147,11 @@ TDocWindow::MessageReceived(BMessage* message)
 				return;
 			}
 			fPages->fUndo.SetLimit(size_t(std::max<int32>(1, levels)));
-			fModified = true;
+			fShared->modified = true;
 			UpdateTitle();
 		} else if (message->what == 'sM2E') {
 			fPages->fUndo.Clear();
-			fModified = true;
+			fShared->modified = true;
 			UpdateTitle();
 		} else
 			fPages->fShowUndoSteps = !fPages->fShowUndoSteps;
@@ -1264,7 +1321,7 @@ TDocWindow::GeometryChanged()
 {
 	if (fPages != NULL)
 		fPages->GeometryChanged();
-	fModified = true;
+	fShared->modified = true;
 	UpdateTitle();
 }
 
@@ -1277,7 +1334,7 @@ TDocWindow::Save(const std::string& path)
 {
 	if (fDocument == NULL)
 		return false;
-	if (path == fDocument->path && !fBackedUp) {
+	if (path == fDocument->path && !fShared->backedUp) {
 		BEntry backup((path + "~").c_str());
 		if (!backup.Exists()) {
 			std::string error;
@@ -1286,7 +1343,7 @@ TDocWindow::Save(const std::string& path)
 				return false;
 			}
 		}
-		fBackedUp = true;
+		fShared->backedUp = true;
 	}
 	std::string error;
 	if (!fDocument->Save(path, error)) {
@@ -1300,8 +1357,9 @@ TDocWindow::Save(const std::string& path)
 		fPages->DocumentSaved();
 		fPages->DocumentReloaded();
 	}
-	fModified = false;
-	UpdateTitle();
+	fShared->modified = false;
+	fShared->Changed(this);
+	fShared->TitlesChanged();
 	fStatus->SetText(("Saved " + path).c_str());
 	return true;
 }
@@ -1310,10 +1368,19 @@ TDocWindow::Save(const std::string& path)
 void
 TDocWindow::UpdateTitle()
 {
+	// TDoc: the document's name, ":N" with more than one window
 	BString title = Title();
 	if (title.EndsWith(" *"))
 		title.Truncate(title.Length() - 2);
-	if (fModified)
+	if (fDocument != NULL) {
+		// a new document's "untitled N", else the file's name
+		title = fDocument->name.c_str();
+		if (title.IsEmpty() && !fDocument->path.empty())
+			title = BPath(fDocument->path.c_str()).Leaf();
+		if (int number = fShared->Number(this))
+			title << ":" << number;
+	}
+	if (fShared->modified)
 		title << " *";
 	SetTitle(title.String());
 }
@@ -1536,8 +1603,8 @@ TDocWindow::MenusBeginning()
 				item->SetEnabled(on);
 		};
 		bool saved = fDocument != NULL && !fDocument->path.empty();
-		enable('sM02', fModified);
-		enable('sM04', fModified && saved);
+		enable('sM02', fShared->modified);
+		enable('sM04', fShared->modified && saved);
 		enable('sM13', fPages != NULL && fPages->fSelectedCell.active
 			&& TPageView::HasCopiedCells());
 		enable('sM15', false);
@@ -1616,9 +1683,9 @@ TDocWindow::MenusBeginning()
 			on = fSpellBar->ReplaceEnabled();
 		item->SetEnabled(on);
 	}
-	// (New Window: a second window on a document isn't ported)
+	// New Window: for a document
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMF0'))
-		item->SetEnabled(false);
+		item->SetEnabled(fDocument != NULL);
 	// TWPPart::SetupMenus: Show Invisibles or Hide Invisibles (STR# 1302)
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sM5J'))
 		item->SetLabel(GobeResources::IndexString(0x516,
@@ -1632,7 +1699,15 @@ TDocWindow::QuitRequested()
 	// TDoc::SaveChanges: "Save changes to “name” before closing?" (before
 	// quitting, when the application quits): Don't Save (d), Cancel (Esc),
 	// Save
-	if (fModified && fDocument != NULL) {
+	// TDoc::RemoveWindow: one of several windows just closes
+	{
+		BAutolock locker(fShared->lock);
+		if (fShared->windows.size() > 1) {
+			fAppQuitting = false;
+			return true;
+		}
+	}
+	if (fShared->modified && fDocument != NULL) {
 		BString text = GobeResources::IndexString(2, 13);
 		text << fDocument->name.c_str() << GobeResources::IndexString(2, fAppQuitting ? 14 : 15);
 		BAlert* alert = new BAlert("Alert Thread", text.String(),
@@ -1670,6 +1745,7 @@ TDocWindow::QuitRequested()
 TDocWindow::~TDocWindow()
 {
 	sWindows.erase(std::remove(sWindows.begin(), sWindows.end(), this), sWindows.end());
+	TSharedDocument::Detach(fShared, this);
 }
 
 
@@ -1704,6 +1780,7 @@ TDocWindow::HistoryState(std::vector<std::string>& labels, size_t& done, bool& s
 	show = false;
 	if (fPages == NULL)
 		return;
+	BAutolock locker(fShared->lock);
 	labels = fPages->fUndo.Labels(done);
 	show = fPages->fShowUndoSteps;
 }
@@ -1718,6 +1795,7 @@ TDocWindow::GetStylesSnapshot(StylesSnapshot& snapshot) const
 	snapshot = StylesSnapshot();
 	if (fDocument == NULL || fPages == NULL)
 		return;
+	BAutolock locker(fShared->lock);
 	snapshot.document = fDocument;
 	snapshot.styles = fDocument->styles;
 	size_t part = fPages->fCaret.active ? fPages->fCaret.part : size_t(fDocument->MainPart());

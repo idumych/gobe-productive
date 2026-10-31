@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-46-51-1.svg" alt="Port progress: 46 of 51 features done, 5 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-47-51-0.svg" alt="Port progress: 47 of 51 features done, 4 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -131,7 +131,7 @@ Clipboard.
 | File > New presentations: one blank slide on a "Background" layer, the screen's size, as the original makes it | next |
 | Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | next |
 | Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | next |
-| New Window | in progress |
+| New Window: more windows on a document (titled "name:1", "name:2"), each scrolled, zoomed and selected on its own, one undo history and saved state; an edit shows in all; the last window to close asks to save (the sheet shown is the document's, for all its windows) | next |
 | The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | next |
 | The ToolBar's part tool: text, spreadsheet, drawing, table and picture frames dragged out in a drawing | next |
 | The ToolBar's Bezier tool (a press a point, a drag its control points) and toolbar shapes (the original's shapes, chosen from its menu, dragged out) | next |

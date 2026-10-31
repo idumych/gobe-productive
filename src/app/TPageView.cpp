@@ -41,9 +41,10 @@ TPageView::CanShow(const Document& document)
 }
 
 
-TPageView::TPageView(Document& document)
+TPageView::TPageView(Document& document, UndoStack& undo)
 	:
 	BView("TPageView", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE | B_NAVIGABLE),
+	fUndo(undo),
 	fMargin(kDesk),
 	fBook(new SSBook(document)),
 	fDocument(document)
@@ -2421,6 +2422,26 @@ TPageView::DrawPageGuides(const Document::PlacedFrame& f, BRect r)
 			break;
 		StrokeRect(c.InsetByCopy(-1, -1));
 	}
+}
+
+
+void
+TPageView::DocumentChangedElsewhere()
+{
+	fBook->Reset();
+	for (Caret* c : {&fCaret, &fAnchor}) {
+		const WPPart* wp = fDocument.WordPart(c->part);
+		if (wp == NULL || wp->paragraphs.empty()) {
+			c->paragraph = c->offset = 0;
+			continue;
+		}
+		if (c->paragraph >= wp->paragraphs.size()) {
+			c->paragraph = wp->paragraphs.size() - 1;
+			c->offset = EditableLength(wp->paragraphs[c->paragraph]);
+		}
+		c->offset = std::min(c->offset, EditableLength(wp->paragraphs[c->paragraph]));
+	}
+	GeometryChanged();
 }
 
 

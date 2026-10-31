@@ -64,6 +64,11 @@ public:
 	// others), and how many are done
 	std::vector<std::string> Labels(size_t& done) const;
 
+	// counts every Begin, BeginDocument, step undone or redone and Clear:
+	// the windows sharing a document (and its stack) tell from it that
+	// another window changed the document
+	uint64_t Changes() const { return fChanges; }
+
 private:
 	struct Step;
 	int Swap(Document& doc, std::vector<std::unique_ptr<Step>>& from,
@@ -72,6 +77,7 @@ private:
 	std::vector<std::unique_ptr<Step>> fUndo, fRedo;
 	uint64_t fMerge = 0;
 	size_t fLimit = kMaxSteps;
+	uint64_t fChanges = 0;
 };
 
 } // namespace gobe
