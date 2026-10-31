@@ -96,6 +96,15 @@ bool CloneFrame(Document& doc, const uint32_t pointer[3], uint32_t made[3], std:
 // scroll bars the growing.
 uint32_t FrameCommandFlags(uint32_t flags, uint32_t command);
 
+// A frame moved by dx, dy in its container (TShape::SetPosition).
+bool MoveFrame(Document& doc, const uint32_t pointer[3], float dx, float dy);
+
+// A frame's rectangle made `rect` (left, top, right, bottom in its
+// container; TFrame::SetSize): a spreadsheet frame shows as many cells as
+// fit, a drawing's or a picture's frame as much of it. False if it's
+// smaller than 4 points.
+bool ResizeFrame(Document& doc, const uint32_t pointer[3], const float rect[4]);
+
 } // namespace gobe
 
 #endif

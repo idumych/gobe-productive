@@ -835,4 +835,112 @@ TDialogWPDocSize::ItemHit(int32 index, BMessage* message)
 	return TDialog::ItemHit(index, message);
 }
 
+TDialogTextWrap::TDialogTextWrap(BLooper* window, int32 kind, int32 to,
+	const float margins[4], int unit)
+	:
+	TDialog(205, 205, 'APPL', NULL),
+	fWindow(window),
+	fKind(std::min(std::max(kind, int32(0)), int32(3))),
+	fTo(std::min(std::max(to, int32(0)), int32(3))),
+	fUnit(unit)
+{
+	std::copy(margins, margins + 4, fMargins);
+	for (int i = 0; i < 6; i++)
+		fUnitNames.push_back(GobeResources::IndexString(7, i).String());
+}
+
+
+// the margins' items: top, bottom, left, right (fMargins 1, 3, 0, 2)
+static const int32 kMarginItems[4] = {21, 22, 23, 24};
+static const int kMarginOf[4] = {1, 3, 0, 2};
+
+
+void
+TDialogTextWrap::Init()
+{
+	SetCheckBoxItem(fKind * 2 + 3, true);
+	SetCheckBoxItem(fTo * 2 + 12, true);
+	for (int i = 0; i < 4; i++)
+		SetTextItem(kMarginItems[i], MeasureText(fMargins[kMarginOf[i]], fUnit,
+			kMeasureWithUnit | kMeasureTwoPlaces, fUnitNames).c_str());
+	FixEnabled();
+}
+
+
+// TDialogTextWrap::FixEnabled: Tight has one distance (STR# 2, 37 "Gap:"), the
+// others the four; a side's distance only where the text goes; no side
+// for None or Top & Bottom
+void
+TDialogTextWrap::FixEnabled()
+{
+	for (int i = 1; i < 4; i++)
+		if (BView* view = Item(kMarginItems[i])) {
+			if (fKind == 2 && !view->IsHidden())
+				view->Hide();
+			else if (fKind != 2 && view->IsHidden())
+				view->Show();
+		}
+	SetLabelItem(21, GobeResources::IndexString(2, fKind == 2 ? 37 : 36).String());
+	bool regular = fKind == 1;
+	SetItemEnabled(23, regular && fTo != 2);
+	SetItemEnabled(24, regular && fTo != 1);
+	SetItemEnabled(21, fKind != 0);
+	SetItemEnabled(22, fKind != 0 && fKind != 2);
+	for (int i = 0; i < 4; i++)
+		SetItemEnabled(12 + 2 * i, fKind != 0 && fKind != 3);
+}
+
+
+bool
+TDialogTextWrap::ReadMargins()
+{
+	for (int i = 0; i < 4; i++) {
+		if (i > 0 && fKind == 2)
+			break;
+		float points;
+		if (!ParseMeasure(TextItem(kMarginItems[i]).String(), fUnit, fUnitNames, false, false,
+				points)) {
+			// STR# 6, 4: Bad value.
+			(new BAlert("", GobeResources::IndexString(6, 4).String(), "OK"))->Go(NULL);
+			MakeFocusItem(kMarginItems[i]);
+			return false;
+		}
+		fMargins[kMarginOf[i]] = points;
+	}
+	// Tight: the one distance all round
+	if (fKind == 2)
+		fMargins[0] = fMargins[2] = fMargins[3] = fMargins[1];
+	return true;
+}
+
+
+bool
+TDialogTextWrap::ItemHit(int32 index, BMessage* message)
+{
+	if (index >= 3 && index <= 9 && (index & 1) == 1) {
+		SetCheckBoxItem(fKind * 2 + 3, false);
+		fKind = (index - 3) / 2;
+		SetCheckBoxItem(index, true);
+		FixEnabled();
+		return true;
+	}
+	if (index >= 12 && index <= 18 && (index & 1) == 0) {
+		SetCheckBoxItem(fTo * 2 + 12, false);
+		fTo = (index - 12) / 2;
+		SetCheckBoxItem(index, true);
+		FixEnabled();
+		return true;
+	}
+	if (index == 0) {
+		if (!ReadMargins())
+			return true;
+		BMessage wrap('sf0U');
+		wrap.AddInt32("Wrap Kind", fKind);
+		wrap.AddInt32("Wrap To", fTo);
+		wrap.AddRect("margins", BRect(fMargins[0], fMargins[1], fMargins[2], fMargins[3]));
+		fWindow->PostMessage(&wrap);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
 } // namespace gobe

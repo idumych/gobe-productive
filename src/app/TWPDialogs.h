@@ -266,6 +266,31 @@ private:
 	bool fTitlePage;
 };
 
+// Text Wrap… (TDialogTextWrap, DIAL/Item 205): the kind (icon buttons 3
+// None, 5 Regular, 7 Tight, 9 Top & Bottom), the side (12 Both Sides, 14
+// Left, 16 Right, 18 Largest Side) and the distance from the text (21
+// top, 22 bottom, 23 left, 24 right, in `unit`; Tight one distance, the
+// top's); OK sends `window` 'sf0U' with "Wrap Kind", "Wrap To" and
+// "margins" (a BRect)
+class TDialogTextWrap : public TDialog {
+public:
+	TDialogTextWrap(BLooper* window, int32 kind, int32 to, const float margins[4], int unit);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	void FixEnabled();
+	bool ReadMargins();
+
+	BLooper* fWindow;
+	int32 fKind, fTo;
+	float fMargins[4];		// left, top, right, bottom
+	int fUnit;
+	std::vector<std::string> fUnitNames;
+};
+
 } // namespace gobe
 
 #endif

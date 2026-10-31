@@ -140,6 +140,8 @@ ApplyShapeProperty(const Property& property, ShapeStyle& style)
 			case Sig("BTra"):
 				style.backgroundOpacity = a.Float();
 				return true;
+			case Sig("SWra"):
+				return ReadWrapProperty(property, style.wrap);
 		}
 	} catch (const ArchiveError&) {
 	}

@@ -114,6 +114,8 @@ TPageView::RebuildFrames()
 		}
 	}
 	fMargin = kDesk;
+	if (fFrameOnly.active)
+		KeepFrameOnly();
 	if (fBrowse) {
 		// TBrowseRootFrame, TWPPortal: the main text in one frame growing
 		// with its text, as wide as the sheet's printable area (468 points
@@ -418,6 +420,7 @@ TPageView::LayoutText()
 		fLines.clear();
 		fRules.clear();
 		fInlinePlacements.clear();
+		CollectWrapObstacles();
 		// group each word processing part's frames, in flow order
 		std::vector<std::pair<size_t, std::vector<FrameGeometry>>> flows;
 		// a frame on several pages (the header, the footer) is laid out once
@@ -446,8 +449,12 @@ TPageView::LayoutText()
 			auto it = std::find_if(flows.begin(), flows.end(),
 				[&](const auto& fl) { return fl.first == f.part; });
 			FrameGeometry g{r, f.frame->angle, ContainerClip(f), f.index, f.page};
-			if (f.frame->container < fDocument.parts.parts.size()
-					&& fDocument.parts.parts[f.frame->container].kind == Sig("TBLE")) {
+			// (a frame window's text frame of several: the text it shows)
+			bool ownRange = fFrameOnly.active && f.frame->textLength > 0
+				&& fDocument.parts.parts[f.part].kind == Sig("WORD")
+				&& FrameAt(fDocument, fFrameOnly.pointer) == f.frame;
+			if (ownRange || (f.frame->container < fDocument.parts.parts.size()
+					&& fDocument.parts.parts[f.frame->container].kind == Sig("TBLE"))) {
 				r.bottom = r.top + f.height;
 				g.rect = r;
 				cellFlows.push_back({f.part, g, f.frame->textStart,
@@ -518,8 +525,39 @@ TPageView::LayoutText()
 			RebuildFrames();
 			continue;
 		}
-		// the header and footer, once edited, are as high as their text
+		// a growing frame in a drawing (flag 8, TWPFrame::AutoGrow) as high
+		// as its text, a line at least
 		bool resized = false;
+		for (const auto& f : fFrames) {
+			if ((f.frame->values[3] & 8) == 0 || fDocument.parts.parts[f.part].kind != Sig("WORD")
+					|| f.frame->container >= fDocument.parts.parts.size()
+					|| fDocument.parts.parts[f.frame->container].kind == Sig("PAGE")
+					|| fDocument.parts.parts[f.frame->container].kind == Sig("TBLE"))
+				continue;
+			float left = f.x - fBounds.left + fMargin, top = f.y - fBounds.top + fMargin;
+			float bottom = top;
+			bool any = false;
+			for (const Line& line : fLines)
+				if (line.part == f.part && fabsf(line.textFrame.left - left) < 0.5f
+						&& fabsf(line.textFrame.top - top) < 0.5f) {
+					bottom = std::max(bottom, line.frame.bottom);
+					any = true;
+				}
+			if (!any)
+				continue;
+			float height = ceilf(bottom - top);
+			gobe::Frame* grown = const_cast<gobe::Frame*>(f.frame);
+			if (height >= 4 && fabsf(grown->extent[1] - height) > 0.5f) {
+				grown->extent[1] = height;
+				for (size_t p = 0; p < fDocument.tails.size(); p++)
+					for (const Portal& portal : fDocument.tails[p].portals)
+						for (const gobe::Frame& in : portal.frames)
+							if (&in == f.frame)
+								fDocument.dirtyTails.insert(p);
+				resized = true;
+			}
+		}
+		// the header and footer, once edited, are as high as their text
 		for (int which = 0; which < 2; which++) {
 			int part = fDocument.HeaderPart(which);
 			if (part < 0 || !fDocument.dirtyParts.count(size_t(part)))
@@ -539,7 +577,7 @@ TPageView::LayoutText()
 			continue;
 		}
 		// a runaway document stops at 2000 pages
-		if (pass >= 2000 || !Paginate(main))
+		if (pass >= 2000 || fFrameOnly.active || !Paginate(main))
 			break;
 		paginated = true;
 		RebuildFrames();
@@ -558,7 +596,8 @@ TPageView::LayoutText()
 	// once pages came or went or the frames were made anew (Columns), the
 	// main text's frames show what the layout put in them
 	int mainIndex = fDocument.MainPart();
-	if (!paginated && (mainIndex < 0 || !fDocument.dirtyTails.count(size_t(mainIndex))))
+	if (fFrameOnly.active
+			|| (!paginated && (mainIndex < 0 || !fDocument.dirtyTails.count(size_t(mainIndex)))))
 		return;
 	int mainPart = fDocument.MainPart();
 	uint32_t total = 0;
@@ -844,6 +883,43 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 			float left = frame.left + pad
 				+ (firstLine ? parStyle.firstIndent : parStyle.leftIndent);
 			float right = frame.right - pad - parStyle.rightIndent;
+			float slack = 2 * pad;		// how far past `right` a line may run
+			// TTextWrapMgr: around the shapes and frames that wrap text (not
+			// one this frame is in); no room beside them: further down
+			if (!fWrapObstacles.empty()) {
+				std::vector<WrapObstacle> around;
+				for (size_t k = 0; k < fWrapObstacles.size(); k++) {
+					const BRect& r = fWrapBounds[k];
+					if (!(r.left <= frame.left + 0.5f && r.top <= frame.top + 0.5f
+							&& r.right >= frame.right - 0.5f))
+						around.push_back(fWrapObstacles[k]);
+				}
+				float lineGuess = lineFont.Size() * 1.2f;
+				float next, before = right;
+				// (a line may run 2 pads past `right`, into the frame's
+				// padding: not into what it wraps around)
+				right += 2 * pad;
+				bool fits = around.empty() || WrapLine(around, y, y + lineGuess, left, right, 36,
+					next);
+				if (right < before + 2 * pad)
+					slack = 0;
+				else
+					right = before;
+				if (!fits) {
+					if (next + lineGuess > frame.bottom && y > frame.top) {
+						finishFrame(frameIndex, y);
+						frameIndex++;
+						if (frameIndex >= frames.size()) {
+							result.overflow = true;
+							return result;
+						}
+						y = frames[frameIndex].top;
+					} else
+						y = next;
+					moved = true;
+					continue;
+				}
+			}
 			float avail = std::max(10.0f, right - left);
 
 			// fill a line: (token index, x)
@@ -895,7 +971,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 					// on the baseline, the line as high as it
 					const gobe::Frame* inner = FrameAt(fDocument, tk.misc->frame);
 					float ww = inner->extent[0];
-					if (!placed.empty() && x + ww > avail + 2 * pad)
+					if (!placed.empty() && x + ww > avail + slack)
 						break;
 					placed.push_back({t, x});
 					x += ww;
@@ -952,7 +1028,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 				// the padding is the port's, not Gobe's: words may use it; a
 				// word at a tab stop inside the frame stays on the line
 				bool atTab = t > 0 && tokens[t - 1].kind == Token::kTab && x <= avail;
-				if (!placed.empty() && !atTab && x + ww > avail + 2 * pad)
+				if (!placed.empty() && !atTab && x + ww > avail + slack)
 					break;
 				placed.push_back({t, x});
 				x += ww + (tk.space ? TDocView::TextWidth(tk.font, " ") : 0);

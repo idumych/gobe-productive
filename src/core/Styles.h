@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "DocSections.h"
+#include "TextWrap.h"
 
 namespace gobe {
 
@@ -87,6 +88,7 @@ struct ShapeStyle {
 	float fillOpacity = 1;			// FTra
 	float penOpacity = 1;			// PTra
 	float backgroundOpacity = 0;	// BTra
+	ShapeWrap wrap;					// SWra (used with the shape's flag 0x40)
 };
 
 // ReadInk: parse an ink (solid color or gradient) from a DocArchive.
