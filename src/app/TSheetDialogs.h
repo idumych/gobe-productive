@@ -7,6 +7,7 @@
 
 #include "NumberFormats.h"
 #include "TDialog.h"
+#include "SSPart.h"
 
 class BListView;
 
@@ -124,6 +125,29 @@ private:
 	BHandler* fTarget;
 	bool fDelete;
 	bool fVertical;
+};
+
+// Options > Sort… (TDialogSort; TSSDialog 25): the range (3), Vertical (4,
+// on a range more than one row high) or Horizontal (5), and three order
+// keys, each a range "A2..A9" (7, 11, 15) with Ascending (8, 12, 16) or
+// Descending (9, 13, 17). The direction begins as the range's shape says
+// and the first key as the range's first column (row). OK checks each key
+// (STR# 1503: 6 the first is needed, 7 not a range, 8/9 not as high/wide as
+// the range) and sends `target` 'sM75' with "SortRanges", "vertical",
+// "Key 1".. and "Key 1ascending"...
+class TDialogSort : public TDialog {
+public:
+	TDialogSort(BHandler* target, const SSRange& range);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+	SSRange fRange;
+	bool fVertical;
+	SSRange fKey;
 };
 
 } // namespace gobe

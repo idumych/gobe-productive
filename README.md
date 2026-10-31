@@ -131,7 +131,8 @@ This preview is about the word processor.
   Down, Right, Up and Left, Go To Cell…, Move Cells… (formulas and named
   ranges follow the cells), Insert Cells… and Delete Cells… (shifting the
   cells down or right, up or left; whole rows and columns, selected by
-  their headings, go in and out), Calculate Now; the cell context menu,
+  their headings, go in and out), Sort… (up to three keys, ascending or
+  descending), Calculate Now; the cell context menu,
   with Move Cells Here.
 - Viewing: drawings, charts (2D), images, tables, clocks and presentations.
 
@@ -140,12 +141,12 @@ This preview is about the word processor.
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; named selections; Import and Export Styles; New Window; Show
 Clipboard; creating and linking frames; drawing tools; in spreadsheets
-resizing rows and columns by dragging their headings, Sort Cells, Auto
-Calculate off, Select Dependents and marking circular references; new
-documents of other kinds; the Word, Excel, HTML and SYLK translators; the
-thesaurus and dictionary (they need data files that weren't part of Gobe
-Productive). Documents saved by the port open in the port; they haven't
-been tried in the original on BeOS.
+resizing rows and columns by dragging their headings, Auto Calculate off,
+Select Dependents and marking circular references; new documents of other
+kinds; the Word, Excel, HTML and SYLK translators; the thesaurus and
+dictionary (they need data files that weren't part of Gobe Productive).
+Documents saved by the port open in the port; they haven't been tried in
+the original on BeOS.
 
 ## Building
 

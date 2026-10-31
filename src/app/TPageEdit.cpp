@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <sstream>
 
 #include "Editing.h"
 #include "StyleEdit.h"
@@ -45,6 +46,7 @@
 #include "SSStyle.h"
 #include "SSEval.h"
 #include "SSMove.h"
+#include "SSSort.h"
 #include "TDocWindow.h"
 #include "TTranslate.h"
 
@@ -2857,6 +2859,56 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 'sM75': {	// Sort… (TPartSS::HandleMessage, TSSSortCommand)
+						if (RangeLocked(r0, c0, r1, c1))
+							return;
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						if (ss == NULL)
+							return;
+						// (TCellsList::Pin: the selection inside the sheet)
+						SSRange range{{uint16_t(std::max<int>(r0, ss->used.from.a)),
+							uint16_t(std::max<int>(c0, ss->used.from.b))},
+							{uint16_t(std::min<int>(r1, ss->used.to.a)),
+							uint16_t(std::min<int>(c1, ss->used.to.b))}};
+						const char* ranges = NULL;
+						if (message->FindString("SortRanges", &ranges) != B_OK) {
+							(new TDialogSort(this, range))->RunDialog();
+							return;
+						}
+						// (TCellsList::Set: one cell is named alone)
+						if (!ParseRangeName(ranges, range)
+								&& !ParseRangeName(std::string(ranges) + ".." + ranges, range))
+							return;
+						if (RangeLocked(range.from.a, range.from.b, range.to.a, range.to.b))
+							return;
+						// TSSSortTable(BMessage*): "Key 1", "Key 2"... until one is missing
+						std::vector<SortKey> keys;
+						for (int k = 1; ; k++) {
+							BString name;
+							name.SetToFormat("Key %d", k);
+							const char* text = NULL;
+							if (message->FindString(name.String(), &text) != B_OK)
+								break;
+							SortKey key;
+							if (!ParseRangeName(text, key.range))
+								continue;
+							name << "ascending";
+							if (message->FindBool(name.String(), &key.ascending) != B_OK)
+								key.ascending = true;
+							keys.push_back(key);
+						}
+						bool vertical = true;
+						if (message->FindBool("vertical", &vertical) != B_OK)
+							vertical = true;
+						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(4),
+							CurrentViewState());
+						if (!SortCells(fDocument, fSelectedCell.part, range, vertical, keys))
+							return;
+						fBook->Reset();
+						Invalidate();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 					case 'sM78':	// Calculate Now (ChangeAll: every formula again)
 						fBook->Reset();
 						Invalidate();
@@ -3431,6 +3483,23 @@ TPageView::RunScript(const std::string& script, Document& document)
 			MessageReceived(&msg);
 		} else if (command == "deleterows") {
 			BMessage msg(kCmdDeleteRows);
+			MessageReceived(&msg);
+		} else if (command.compare(0, 5, "sort ") == 0) {
+			// "sort RANGE v|h KEY a|d [KEY a|d...]": Sort… as its dialog's OK
+			// sends it
+			std::istringstream words(command.substr(5));
+			std::string range, way, key, order;
+			words >> range >> way;
+			BMessage msg('sM75');
+			msg.AddString("SortRanges", range.c_str());
+			msg.AddBool("vertical", way == "v");
+			for (int k = 1; words >> key >> order; k++) {
+				BString name;
+				name.SetToFormat("Key %d", k);
+				msg.AddString(name.String(), key.c_str());
+				name << "ascending";
+				msg.AddBool(name.String(), order == "a");
+			}
 			MessageReceived(&msg);
 		} else if (command.compare(0, 12, "insertcells ") == 0
 				|| command.compare(0, 12, "deletecells ") == 0) {
@@ -4524,7 +4593,7 @@ TPageView::HandlesCommand(uint32 what)
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
-		case 'sM65': case 'sM76': case 'sM77':
+		case 'sM65': case 'sM75': case 'sM76': case 'sM77':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

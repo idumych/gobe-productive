@@ -1142,6 +1142,76 @@ StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 }
 
 
+
+uint32_t
+StyleWithBorders(StyleMgr& styles, uint32_t base, uint32_t borders)
+{
+	auto isBorder = [](uint32_t type) {
+		return type == Sig("BCol") || type == Sig("BTra") || type == Sig("BSiz")
+			|| type == Sig("BPen");
+	};
+	auto valid = [&](uint32_t style) { return style < styles.styles.size(); };
+	if ((base != 0xffffffff && !valid(base)) || (borders != 0xffffffff && !valid(borders)))
+		return base;
+	std::vector<uint32_t> wanted;	// the borders' own border properties
+	if (borders != 0xffffffff)
+		for (uint32_t p : styles.styles[borders].props)
+			if (p < styles.properties.size() && isBorder(styles.properties[p].type))
+				wanted.push_back(p);
+	std::vector<uint32_t> had;
+	if (base != 0xffffffff && styles.styles[base].name.empty())
+		for (uint32_t p : styles.styles[base].props)
+			if (p < styles.properties.size() && isBorder(styles.properties[p].type))
+				had.push_back(p);
+	if (had == wanted)
+		return base;
+	Style style;
+	if (base == 0xffffffff) {
+		if (wanted.empty())
+			return base;
+		style.id = styles.styles.empty() ? 0 : styles.styles[0].id;
+		style.value8 = 32;
+		style.valueC = 0xffff;
+		style.value10 = Sig("Basi");
+		style.links[0] = style.links[1] = style.links[2] = 0xffffffff;
+	} else if (styles.styles[base].name.empty()) {
+		style = styles.styles[base];
+		std::vector<uint32_t> props;
+		for (uint32_t p : style.props)
+			if (p >= styles.properties.size() || !isBorder(styles.properties[p].type))
+				props.push_back(p);
+		style.props = props;
+	} else {
+		style = styles.styles[base];
+		style.name.clear();
+		style.value8 = 32;
+		style.links[0] = base;
+		style.props.clear();
+	}
+	style.props.insert(style.props.end(), wanted.begin(), wanted.end());
+	SortProps(styles, style.props);
+	style.props2 = UnionSet(styles, style);
+	style.substyles.clear();
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (SameStyle(styles.styles[i], style))
+			return uint32_t(i);
+	style.value4 = 1;
+	Retain(styles, style.links[0]);
+	styles.styles.push_back(style);
+	return uint32_t(styles.styles.size() - 1);
+}
+
+
+void
+SetCellStyle(StyleMgr& styles, uint32_t& style, uint32_t to)
+{
+	if (to == style)
+		return;
+	Retain(styles, to);
+	Release(styles, style);
+	style = to;
+}
+
 bool
 ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextPosition to,
 	const Property& property)

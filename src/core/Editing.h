@@ -154,6 +154,12 @@ bool PropsSorted(const StyleMgr& styles, const std::vector<uint32_t>& props);
 // same type): an existing identical unnamed style, or a new one (added
 // with no users yet).
 uint32_t StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property);
+// The cell style like `base` but with the border properties ('BCol',
+// 'BTra', 'BSiz', 'BPen', one per side) of `borders` instead of its own
+// (0xffffffff: none). A named base keeps the borders it inherits.
+uint32_t StyleWithBorders(StyleMgr& styles, uint32_t base, uint32_t borders);
+// `style` (a cell's) becomes `to`, the styles' user counts following
+void SetCellStyle(StyleMgr& styles, uint32_t& style, uint32_t to);
 // Character properties (TFon, TSiz, TFac, TCol, ...) for the text in
 // [from, to), which may span paragraphs; runs are split at the ends and
 // merged again where neighbours end up alike. False if nothing changed.

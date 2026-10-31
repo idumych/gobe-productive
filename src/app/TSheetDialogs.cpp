@@ -12,6 +12,7 @@
 #include <TextView.h>
 
 #include "GobeResources.h"
+#include "SSSort.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 
@@ -482,6 +483,85 @@ TDialogDeleteInsert::ItemHit(int32 index, BMessage* message)
 			fTarget->Looper()->PostMessage(&apply, fTarget);
 	} else if (index != 1)
 		return false;
+	PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
+
+TDialogSort::TDialogSort(BHandler* target, const SSRange& range)
+	:
+	TDialog(25, 25, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
+	fTarget(target),
+	fRange(range),
+	fVertical(true)
+{
+	int height = range.to.a - range.from.a + 1, width = range.to.b - range.from.b + 1;
+	if (height < 2)
+		fVertical = false;
+	else if (width < 2)
+		fVertical = true;
+	// the first key: the range's first column (row)
+	fKey = fVertical ? SSRange{range.from, {range.to.a, range.from.b}}
+		: SSRange{range.from, {range.from.a, range.to.b}};
+}
+
+
+void
+TDialogSort::Init()
+{
+	SetRadioItem(4, fVertical);
+	SetRadioItem(5, !fVertical);
+	for (int32 key = 0; key < 3; key++)
+		SetRadioItem(8 + key * 4, true);
+	SetItemEnabled(4, fRange.to.a > fRange.from.a);
+	SetItemEnabled(5, fRange.to.b > fRange.from.b);
+	SetTextItem(3, RangeName(fRange).c_str());
+	SetTextItem(7, RangeName(fKey).c_str());
+}
+
+
+bool
+TDialogSort::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 1) {
+		PostMessage(B_QUIT_REQUESTED);
+		return false;
+	}
+	if (index != 0)
+		return false;
+	const ResourceFile& resources = GobeResources::Part("Spreadsheet");
+	auto alert = [&](int32 which, int32 focus) {
+		(new BAlert("", IndexString(resources, 1503, which).c_str(), "OK"))->Go(NULL);
+		MakeFocusItem(focus);
+		return true;
+	};
+	BRadioButton* vertical = dynamic_cast<BRadioButton*>(Item(4));
+	bool down = vertical != NULL && vertical->Value() == B_CONTROL_ON;
+	BMessage sort('sM75');
+	sort.AddString("SortRanges", RangeName(fRange).c_str());
+	for (int32 key = 0; key < 3; key++) {
+		BString text = TextItem(7 + key * 4);
+		if (text.Length() == 0) {
+			if (key == 0)
+				return alert(6, 7);
+			continue;
+		}
+		SSRange range;
+		if (!ParseRangeName(text.String(), range))
+			return alert(7, 7 + key * 4);
+		if (down ? uint16(range.to.a - range.from.a + 1) != fRange.to.a - fRange.from.a + 1
+				: uint16(range.to.b - range.from.b + 1) != fRange.to.b - fRange.from.b + 1)
+			return alert(down ? 8 : 9, 7 + key * 4);
+		BString name;
+		name.SetToFormat("Key %d", int(key + 1));
+		sort.AddString(name.String(), RangeName(range).c_str());
+		BRadioButton* ascending = dynamic_cast<BRadioButton*>(Item(8 + key * 4));
+		name << "ascending";
+		sort.AddBool(name.String(), ascending != NULL && ascending->Value() == B_CONTROL_ON);
+	}
+	sort.AddBool("vertical", down);
+	if (fTarget != NULL && fTarget->Looper() != NULL)
+		fTarget->Looper()->PostMessage(&sort, fTarget);
 	PostMessage(B_QUIT_REQUESTED);
 	return false;
 }

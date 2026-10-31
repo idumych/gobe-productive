@@ -1192,7 +1192,8 @@ TDocWindow::MenusBeginning()
 		enable('sM7B', height > 1);
 		enable('sM71', width > 1);
 		enable('sM7C', width > 1);
-		for (uint32 command : {'sM75', 'sM7A'})
+		enable('sM75', height > 1 || width > 1);
+		for (uint32 command : {'sM7A'})
 			enable(command, false);
 		// Auto Calculate marked when on; off, the original recalculates only
 		// on Calculate Now, which the port can't yet (it evaluates after every
