@@ -12,9 +12,12 @@
 #include "Document.h"
 #include "Excel.h"
 #include "Fields.h"
+#include "IMPart.h"
 #include "InlineParts.h"
+#include "PNG.h"
 #include "SSEval.h"
 #include "Styles.h"
+#include "TablePart.h"
 #include "WPPart.h"
 
 namespace gobe {
@@ -214,13 +217,53 @@ Twips(float points)
 }
 
 
+// a Brc80 ([MS-DOC] 2.9.17): a single line `width` points wide (in
+// eighths), black (ico 1); none for 0
+uint32_t
+Brc80(float width)
+{
+	if (width <= 0)
+		return 0;
+	uint32_t eighths = uint32_t(std::max(2L, std::min(255L, std::lround(width * 8))));
+	return eighths | 1u << 8 | 1u << 16;
+}
+
+
 // a paragraph's PAPX: the istd (Normal), then sprmPJc, the indents
-// (sprmPDxaLeft1 the first line's from the left) and the spacing
+// (sprmPDxaLeft1 the first line's from the left) and the spacing; in a
+// table sprmPFInTable, and a row's end mark sprmPFTtp and sprmTDefTable
+// (TDefTableOperand: cb, the cell count, the cells' edges from the left
+// in twips, a TC80 per cell: flags, width, top, left, bottom and right
+// Brc80s)
 std::vector<uint8_t>
 Papx(const WordParagraph& p)
 {
 	std::vector<uint8_t> g;
 	Add16(g, 0);
+	if (p.inTable)
+		Sprm(g, 0x2416, 1);
+	if (p.rowEnd) {
+		Sprm(g, 0x2417, 1);
+		size_t cells = std::min<size_t>(p.cellWidths.size(), 63);
+		std::vector<uint8_t> operand;
+		operand.push_back(uint8_t(cells));
+		float edge = 0;
+		Add16(operand, 0);
+		for (size_t c = 0; c < cells; c++) {
+			edge += p.cellWidths[c];
+			Add16(operand, Twips(edge));
+		}
+		uint32_t brc = Brc80(p.border);
+		for (size_t c = 0; c < cells; c++) {
+			Add16(operand, 0);
+			Add16(operand, 0);
+			for (int side = 0; side < 4; side++)
+				Add32(operand, brc);
+		}
+		Add16(g, 0xd608);
+		Add16(g, uint16_t(operand.size() + 1));
+		g.insert(g.end(), operand.begin(), operand.end());
+	}
 	if (p.alignment != 0)
 		Sprm(g, 0x2403, uint32_t(p.alignment));
 	if (p.left != 0)
@@ -381,6 +424,79 @@ Dop()
 	return dop;
 }
 
+// an OfficeArt record header ([MS-ODRAW] OfficeArtRecordHeader): the
+// version and instance, the type, the length
+void
+RecordHeader(std::vector<uint8_t>& d, uint16_t version, uint16_t instance, uint16_t type,
+	uint32_t length)
+{
+	Add16(d, uint16_t(version | instance << 4));
+	Add16(d, type);
+	Add32(d, length);
+}
+
+
+// a picture in the Data stream as Word 97 stores one inline: a PICF
+// ([MS-DOC] 2.9.192: lcb, cbHeader 0x44, mfpf.mm MM_SHAPE 0x64, the goal
+// size in twips at 100%) and an OfficeArtInlineSpContainer: the shape
+// (an OfficeArtSpContainer: an FSP of a picture frame, msosptPictureFrame
+// 75, and an FOPT with pib 1) and its BSE holding the PNG BLIP
+// (msoblipPNG 6, OfficeArtBlipPNG 0xF01E: one UID, the tag, the PNG)
+void
+AppendPicture(std::vector<uint8_t>& data, const WordRun& r)
+{
+	const std::vector<uint8_t>& png = r.picture;
+	std::vector<uint8_t> blip;
+	RecordHeader(blip, 0, 0x6e0, 0xf01e, uint32_t(17 + png.size()));
+	// the UID: an MD4 of the image in Word's; any 16 bytes do, these from
+	// its size and a checksum
+	uint32_t sum = 0;
+	for (uint8_t b : png)
+		sum = sum * 31 + b;
+	for (int i = 0; i < 4; i++)
+		Add32(blip, sum ^ uint32_t(png.size()) * uint32_t(i + 1));
+	blip.push_back(0xff);
+	blip.insert(blip.end(), png.begin(), png.end());
+
+	std::vector<uint8_t> bse;
+	RecordHeader(bse, 2, 6, 0xf007, uint32_t(36 + blip.size()));
+	bse.push_back(6);		// btWin32: PNG
+	bse.push_back(6);		// btMacOS
+	bse.insert(bse.end(), blip.begin() + 8, blip.begin() + 24);	// rgbUid
+	Add16(bse, 0xff);		// tag
+	Add32(bse, uint32_t(blip.size()));	// size
+	Add32(bse, 1);			// cRef
+	Add32(bse, 0);			// foDelay
+	bse.push_back(0);		// unused1
+	bse.push_back(0);		// cbName
+	bse.push_back(0);		// unused2
+	bse.push_back(0);		// unused3
+	bse.insert(bse.end(), blip.begin(), blip.end());
+
+	std::vector<uint8_t> fsp, fopt, sp;
+	RecordHeader(fsp, 2, 75, 0xf00a, 8);
+	Add32(fsp, 0x400);		// spid
+	Add32(fsp, 0xa00);		// fHaveAnchor, fHaveSpt
+	RecordHeader(fopt, 3, 1, 0xf00b, 6);
+	Add16(fopt, 0x4104);	// pib, fBid
+	Add32(fopt, 1);
+	RecordHeader(sp, 0xf, 0, 0xf004, uint32_t(fsp.size() + fopt.size()));
+	sp.insert(sp.end(), fsp.begin(), fsp.end());
+	sp.insert(sp.end(), fopt.begin(), fopt.end());
+
+	std::vector<uint8_t> picf(0x44, 0);
+	Put32(picf, 0, uint32_t(0x44 + sp.size() + bse.size()));	// lcb
+	Put16(picf, 4, 0x44);			// cbHeader
+	Put16(picf, 6, 0x64);			// mfpf.mm: MM_SHAPE
+	Put16(picf, 0x1c, Twips(r.pictureWidth));	// dxaGoal
+	Put16(picf, 0x1e, Twips(r.pictureHeight));	// dyaGoal
+	Put16(picf, 0x20, 1000);		// mx
+	Put16(picf, 0x22, 1000);		// my
+	data.insert(data.end(), picf.begin(), picf.end());
+	data.insert(data.end(), sp.begin(), sp.end());
+	data.insert(data.end(), bse.begin(), bse.end());
+}
+
 } // namespace
 
 
@@ -420,13 +536,92 @@ TableText(const Document& doc, const uint32_t pointer[3])
 }
 
 
-std::vector<WordParagraph>
-WordParagraphsOf(const Document& doc, size_t part)
+namespace {
+
+void ParagraphsOf(const Document& doc, size_t part, bool tables, std::vector<WordParagraph>& out);
+
+
+// a picture frame (an image part's) as a picture run: the PNG of what the
+// frame shows, its size the frame's; false for another frame
+bool
+PictureRun(const Document& doc, const uint32_t pointer[3], WordRun& run)
 {
-	std::vector<WordParagraph> out;
+	const Frame* frame = FrameAt(doc, pointer);
+	const IMPart* image = frame != nullptr ? doc.ImagePart(frame->part) : nullptr;
+	if (image == nullptr)
+		return false;
+	std::vector<uint8_t> png = BitmapPNG(image->image, frame->sheetRect);
+	if (png.empty())
+		return false;
+	run.text.clear();
+	run.picture = png;
+	run.pictureWidth = frame->extent[0];
+	run.pictureHeight = frame->extent[1];
+	return true;
+}
+
+
+// a table frame as Word table paragraphs: each cell's paragraphs (its
+// text part's that its frame shows; the last ending the cell), each row's
+// end mark with the cells' widths and the table's pen as their borders;
+// false for another frame
+bool
+TableParagraphs(const Document& doc, const uint32_t pointer[3], std::vector<WordParagraph>& out)
+{
+	const Frame* frame = FrameAt(doc, pointer);
+	const TablePart* table = frame != nullptr ? doc.Table(frame->part) : nullptr;
+	const WPPart* text = table != nullptr ? doc.WordPart(table->textPart) : nullptr;
+	if (text == nullptr || table->rows.empty())
+		return false;
+	std::vector<WordParagraph> all;
+	ParagraphsOf(doc, table->textPart, false, all);
+	std::vector<uint32_t> starts;
+	uint32_t at = 0;
+	for (const WPParagraph& p : text->paragraphs) {
+		starts.push_back(at);
+		at += uint32_t(p.text.size());
+	}
+	ShapeStyle shape = ResolveShapeStyle(doc.styles, frame->style);
+	float border = shape.penOpacity > 0 ? std::max(0.5f, shape.penSize) : 0;
+	for (const TableRow& row : table->rows) {
+		WordParagraph end;
+		end.inTable = true;
+		end.rowEnd = true;
+		end.border = border;
+		for (const TableCell& cell : row.cells) {
+			end.cellWidths.push_back(cell.size[0]);
+			const Frame* cellFrame = FrameAt(doc, cell.frame);
+			size_t first = out.size();
+			for (size_t k = 0; cellFrame != nullptr && k < all.size() && k < starts.size(); k++)
+				if (starts[k] >= cellFrame->textStart
+						&& starts[k] < cellFrame->textStart + std::max(1u, cellFrame->textLength))
+					out.push_back(all[k]);
+			if (out.size() == first) {
+				out.emplace_back();
+				out.back().runs.emplace_back();
+			}
+			for (size_t k = first; k < out.size(); k++) {
+				out[k].inTable = true;
+				out[k].pageBreak = false;
+			}
+			out.back().cellEnd = true;
+		}
+		// the end mark: an empty run in the last cell's style
+		end.runs.push_back(out.back().runs.empty() ? WordRun() : out.back().runs.back());
+		end.runs.back().text.clear();
+		end.runs.back().picture.clear();
+		out.push_back(end);
+	}
+	return true;
+}
+
+
+void
+ParagraphsOf(const Document& doc, size_t part, bool tables, std::vector<WordParagraph>& out)
+{
 	const WPPart* wp = doc.WordPart(part);
 	if (wp == nullptr)
-		return out;
+		return;
 	const StyleMgr& styles = doc.styles;
 	SSBook book(doc);
 	const uint32_t kNoStyle = 0xffffffff;
@@ -471,10 +666,12 @@ WordParagraphsOf(const Document& doc, size_t part)
 			text.pop_back();
 		}
 		size_t run = 0;
+		bool tableLast = false;		// a table and nothing after it yet
 		auto add = [&](const WordRun& props, const std::string& s) {
 			if (s.empty())
 				return;
-			if (w.runs.empty() || !same(w.runs.back(), props)) {
+			tableLast = false;
+			if (w.runs.empty() || !w.runs.back().picture.empty() || !same(w.runs.back(), props)) {
 				w.runs.push_back(props);
 				w.runs.back().text.clear();
 			}
@@ -489,14 +686,31 @@ WordParagraphsOf(const Document& doc, size_t part)
 				if (m.position == at)
 					special = &m;
 			if (special != nullptr) {
-				// fields as their text; a table as its cells' text (a line
-				// each row, a tab between cells: the port's, the original
-				// writes Word tables); other frames and separator lines
-				// aren't written
-				if (special->kind == Sig("FRAM"))
+				// fields as their text; a picture a run of its own; a
+				// table its paragraphs, the text before it a paragraph of
+				// its own (in a cell: its text, Word 97 has no tables in
+				// tables); other frames and separator lines aren't written
+				WordRun picture = props;
+				std::vector<WordParagraph> table;
+				if (special->kind == Sig("FRAM") && PictureRun(doc, special->frame, picture))
+					w.runs.push_back(picture);
+				else if (special->kind == Sig("FRAM") && tables
+						&& TableParagraphs(doc, special->frame, table)) {
+					if (!w.runs.empty()) {
+						WordParagraph before = w;
+						before.after = 0;
+						out.push_back(before);
+					}
+					out.insert(out.end(), table.begin(), table.end());
+					w.runs.clear();
+					w.before = 0;
+					tableLast = true;
+				} else if (special->kind == Sig("FRAM"))
 					add(props, TableText(doc, special->frame));
 				else if (special->kind != Sig("LINE"))
 					add(props, FieldText(book, part, *special, -1));
+				if (!w.runs.empty())
+					tableLast = false;
 				at++;
 				continue;
 			}
@@ -509,6 +723,8 @@ WordParagraphsOf(const Document& doc, size_t part)
 			add(props, text.substr(at, stop - at));
 			at = stop;
 		}
+		if (tableLast)
+			continue;		// (a table on a line of its own: the paragraph is the table)
 		if (w.runs.empty()) {
 			// an empty paragraph: its mark in the first run's style
 			w.runs.push_back(runOf(p.runs.empty() ? kNoStyle : p.runs[0].style, ps));
@@ -516,6 +732,16 @@ WordParagraphsOf(const Document& doc, size_t part)
 		}
 		out.push_back(w);
 	}
+}
+
+} // namespace
+
+
+std::vector<WordParagraph>
+WordParagraphsOf(const Document& doc, size_t part)
+{
+	std::vector<WordParagraph> out;
+	ParagraphsOf(doc, part, true, out);
 	return out;
 }
 
@@ -529,18 +755,30 @@ WordFileBytes(const std::vector<WordParagraph>& paragraphs)
 	std::vector<uint32_t> chars;
 	std::vector<Range> runs, paras;
 	std::vector<std::vector<uint8_t>> charProps;
+	std::vector<uint8_t> data;		// the Data stream: the pictures
 	for (const WordParagraph& p : paragraphs) {
 		size_t paraStart = chars.size();
 		std::vector<uint8_t> last;
 		for (const WordRun& r : p.runs) {
 			std::vector<uint8_t> props = Chpx(r, fonts);
+			if (!r.picture.empty()) {
+				// the 0x01 character: sprmCPicLocation (the PICF's offset
+				// in the Data stream), sprmCFSpec
+				std::vector<uint8_t> picture = props;
+				Sprm(picture, 0x6a03, uint32_t(data.size()));
+				Sprm(picture, 0x0855, 1);
+				AppendPicture(data, r);
+				chars.push_back(0x01);
+				charProps.push_back(picture);
+				continue;
+			}
 			for (uint32_t c : CodePoints(r.text)) {
 				chars.push_back(c == 0x01 ? 0x0b : c);
 				charProps.push_back(props);
 			}
 			last = props;
 		}
-		chars.push_back(p.pageBreak ? 0x0c : 0x0d);
+		chars.push_back(p.cellEnd || p.rowEnd ? 0x07 : p.pageBreak ? 0x0c : 0x0d);
 		charProps.push_back(last);
 		paras.push_back({uint32_t(paraStart), uint32_t(chars.size()), Papx(p)});
 	}
@@ -652,7 +890,10 @@ WordFileBytes(const std::vector<WordParagraph>& paragraphs)
 	pair(31, dopAt, uint32_t(dop.size()));	// fcDop
 	pair(33, clxAt, clxSize);		// fcClx
 	Put16(word, 0x9a + 93 * 8, 0);	// cswNew
-	return MakeCompoundFile({{"WordDocument", word}, {"1Table", table}});
+	if (data.empty())
+		return MakeCompoundFile({{"WordDocument", word}, {"1Table", table}});
+	data.resize(std::max<size_t>(data.size(), 4096), 0);
+	return MakeCompoundFile({{"WordDocument", word}, {"1Table", table}, {"Data", data}});
 }
 
 

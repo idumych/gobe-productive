@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-56-59-3.svg" alt="Port progress: 56 of 59 features done, 3 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-57-59-2.svg" alt="Port progress: 57 of 59 features done, 2 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -209,7 +209,7 @@ Opened with File > Open, saved with Save As's File Format menu.
 | Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | next |
 | Microsoft Word: Word 97 and later documents opened (their style sheet applied: faces, sizes, fonts, colours, alignment, indents, spacing; line breaks, fields as their results) | next |
 | Microsoft Word: text documents saved as Word 97 (text, faces, sizes, fonts, colours, alignment, indents, spacing, line and page breaks, fields as their text; not frames, tables or styles) | next |
-| Microsoft Word: tables saved as Word tables and pictures saved in Word documents | in progress |
+| Microsoft Word: tables saved as Word tables and pictures saved in Word documents | next |
 
 Ranges are written A1..B2, as Gobe Productive writes them (A1:B2 is still
 understood).

@@ -5,15 +5,19 @@
 // field whose code is dropped and result kept, a line break, a paragraph
 // mark, a table cell mark.
 // Arguments: none (sample paths, if given, are ignored).
+#include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <fstream>
 #include <string>
 #include <vector>
 
 #include "Document.h"
 #include "Excel.h"
 #include "HTMLImport.h"
+#include "PNG.h"
 #include "Styles.h"
+#include "TablePart.h"
 #include "WPPart.h"
 #include "Word.h"
 
@@ -211,26 +215,95 @@ main()
 	}
 	remove(path.c_str());
 
-	// Save As Word of a document with a table: its cells' text a line a
-	// row, tabs between the cells (WordBytes; the table itself isn't
-	// written)
-	Document tabled;
-	std::string importError;
-	Check(ImportHTMLText("<HTML><BODY><P>Before</P><TABLE><TR><TD>Name<TD>Count"
-		"<TR><TD>Apples<TD>12</TABLE><P>After</P></BODY></HTML>", tabled, importError),
-		"a table opened " + importError);
-	std::vector<WordParagraph> written;
-	std::string readError;
-	Check(ReadWord(WordBytes(tabled), written, readError), "the table written " + readError);
-	std::string all;
-	for (const WordParagraph& p : written) {
-		for (const WordRun& r : p.runs)
-			all += r.text;
-		all += '\n';
+	// Save As Word of a document with a table and a picture (opened from
+	// HTML): a Word table (each cell's paragraph ending in its mark, in
+	// the table, each row's end mark with its cells' widths) and an inline
+	// PNG picture of the frame's size; read back as such; antiword shows
+	// the rows; opened again, a table part and an image part
+	{
+		std::vector<uint8_t> rgba;
+		for (int y = 0; y < 5; y++)
+			for (int x = 0; x < 8; x++) {
+				rgba.push_back(uint8_t(x * 30));
+				rgba.push_back(uint8_t(y * 50));
+				rgba.push_back(200);
+				rgba.push_back(255);
+			}
+		std::vector<uint8_t> png = EncodePNG(8, 5, rgba);
+		std::string folder = "/tmp";
+		std::ofstream("/tmp/doc_word_dot.png", std::ios::binary)
+			.write(reinterpret_cast<const char*>(png.data()), std::streamsize(png.size()));
+		Document tabled;
+		std::string importError;
+		Check(ImportHTMLText("<HTML><BODY><P>Before <IMG SRC=\"doc_word_dot.png\"> after</P>"
+			"<TABLE BORDER=1><TR><TD WIDTH=100>Name<TD WIDTH=60>Count"
+			"<TR><TD>Apples<TD>12</TABLE><P>After</P></BODY></HTML>", tabled, importError, folder),
+			"a table and a picture opened " + importError);
+		Check(tabled.tableParts.size() == 1 && tabled.imageParts.size() == 1,
+			"the HTML's table and picture");
+		std::vector<uint8_t> bytes = WordBytes(tabled);
+		std::vector<WordParagraph> written;
+		std::string readError;
+		Check(ReadWord(bytes, written, readError), "the Word file read " + readError);
+		std::vector<std::string> cells;
+		std::vector<std::vector<float>> widths;
+		const WordRun* picture = nullptr;
+		std::string after;
+		for (const WordParagraph& p : written) {
+			std::string text;
+			for (const WordRun& r : p.runs) {
+				text += r.text;
+				if (!r.picture.empty())
+					picture = &r;
+			}
+			if (p.cellEnd && p.inTable)
+				cells.push_back(text);
+			if (p.rowEnd && p.inTable)
+				widths.push_back(p.cellWidths);
+			if (!p.inTable)
+				after += text + "|";
+		}
+		Check(cells == std::vector<std::string>{"Name", "Count", "Apples", "12"},
+			"four cells, each ending in its mark: " + std::to_string(cells.size()));
+		Check(widths.size() == 2 && widths[0].size() == 2 && widths[0][0] > 50
+			&& widths[0][1] > 20 && widths[0][0] > widths[0][1], "two rows' end marks, their widths");
+		Check(picture != nullptr && picture->picture == png && !picture->jpeg
+			&& std::fabs(picture->pictureWidth - 8) < 0.1f
+			&& std::fabs(picture->pictureHeight - 5) < 0.1f, "the picture, its PNG and size");
+		Check(after.find("Before  after|") != std::string::npos
+			&& after.find("After|") != std::string::npos, "the text around them: " + after);
+		std::string path = "/tmp/doc_word_table.doc";
+		std::ofstream(path, std::ios::binary)
+			.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
+		// antiword: the rows on lines of their own, their cells between bars
+		if (FILE* pipe = popen(("antiword " + path + " 2>&1").c_str(), "r")) {
+			std::string out;
+			char line[512];
+			while (fgets(line, sizeof line, pipe) != nullptr)
+				out += line;
+			pclose(pipe);
+			size_t name = out.find("Name"), apples = out.find("Apples");
+			Check(name != std::string::npos && apples != std::string::npos
+				&& out.find("Count", name) < out.find('\n', name)
+				&& out.find("12", apples) < out.find('\n', apples)
+				&& out.find('|', name) < out.find("Count", name), "antiword's rows:\n" + out);
+		}
+		Document back;
+		std::string openError;
+		Check(ImportWord(path, back, openError) && back.tableParts.size() == 1
+			&& back.imageParts.size() == 1, "opened again: a table and a picture " + openError);
+		if (back.tableParts.size() == 1) {
+			const TablePart& t = back.tableParts[0].second;
+			Check(t.rows.size() == 2 && t.rows[0].cells.size() == 2
+				&& std::fabs(t.rows[0].cells[0].size[0] - widths[0][0]) < 0.5f,
+				"its rows, cells and widths");
+		}
+		if (back.imageParts.size() == 1)
+			Check(back.imageParts[0].second.image.Width() == 8
+				&& back.imageParts[0].second.image.Height() == 5, "its picture's size");
+		remove(path.c_str());
+		remove("/tmp/doc_word_dot.png");
 	}
-	Check(all.find("Name\tCount") != std::string::npos
-		&& all.find("Apples\t12") != std::string::npos && all.find("After") != std::string::npos,
-		"the table's cells written: " + all);
 	printf("doc_word: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed != 0 || sOk == 0;
 }

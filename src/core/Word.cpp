@@ -10,6 +10,8 @@
 #include "Document.h"
 #include "Editing.h"
 #include "Excel.h"
+#include "InlineParts.h"
+#include "PNG.h"
 #include "Styles.h"
 #include "WPPart.h"
 
@@ -82,6 +84,9 @@ struct ParaProps {
 	int alignment = 0;
 	int16_t left = 0, first = 0, right = 0;		// twips (first: relative to left)
 	uint16_t before = 0, after = 0;
+	bool inTable = false, rowEnd = false;		// sprmPFInTable, sprmPFTtp
+	std::vector<int16_t> edges;					// sprmTDefTable's rgdxaCenter
+	uint8_t border = 0;							// its first cell's top Brc80 width (1/8 pt)
 };
 
 
@@ -170,6 +175,9 @@ ApplyPara(const std::vector<uint8_t>& d, size_t at, size_t end, ParaProps& p)
 		int size = OperandSize(sprm);
 		if (sprm == 0xc615) {		// sprmPChgTabs: its own size rules
 			size = at < d.size() ? d[at++] : 0;
+		} else if (sprm == 0xd608) {	// sprmTDefTable: a 2-byte cb, one more than its size
+			size = std::max(0, int(U16(d, at)) - 1);
+			at += 2;
 		} else if (size < 0)
 			size = at < d.size() ? d[at++] : 0;
 		if (at + size_t(size) > end)
@@ -197,11 +205,80 @@ ApplyPara(const std::vector<uint8_t>& d, size_t at, size_t end, ParaProps& p)
 			case 0xa414:
 				p.after = U16(d, at);
 				break;
+			case 0x2416:
+				p.inTable = d[at] != 0;
+				break;
+			case 0x2417:
+				p.rowEnd = d[at] != 0;
+				break;
+			case 0xd608:
+			{
+				// TDefTableOperand: the cell count, its edges, a TC80 each
+				size_t cells = size > 0 ? d[at] : 0;
+				p.edges.clear();
+				for (size_t c = 0; c <= cells && at + 1 + c * 2 + 2 <= at + size_t(size); c++)
+					p.edges.push_back(int16_t(U16(d, at + 1 + c * 2)));
+				size_t tc = at + 1 + (cells + 1) * 2;
+				if (cells > 0 && tc + 8 <= at + size_t(size))
+					p.border = (U32(d, tc + 4) >> 8 & 0xff) != 0 ? d[tc + 4] : 0;
+				break;
+			}
 			default:
 				break;
 		}
 		at += size_t(size);
 	}
+}
+
+
+// a picture's PICF in the Data stream ([MS-DOC] PICFAndOfficeArtData):
+// its goal size scaled (points), then the OfficeArt records after the
+// header, searched for a BLIP: in a BSE (0xF007: 36 bytes before it) or
+// a container; a PNG (0xF01E) or a JPEG (0xF01D, 0xF02A), one UID or two
+// (the instance's low bit), the tag, the image
+bool
+ReadPicture(const std::vector<uint8_t>& data, uint32_t fc, WordRun& run)
+{
+	uint32_t lcb = U32(data, fc);
+	uint16_t header = U16(data, fc + 4);
+	if (lcb < header || header < 0x44 || size_t(fc) + lcb > data.size())
+		return false;
+	uint16_t mm = U16(data, fc + 6);
+	run.pictureWidth = U16(data, fc + 0x1c) / 20.0f * U16(data, fc + 0x20) / 1000.0f;
+	run.pictureHeight = U16(data, fc + 0x1e) / 20.0f * U16(data, fc + 0x22) / 1000.0f;
+	size_t at = size_t(fc) + header;
+	if (mm == 0x66 && at < data.size())
+		at += 1 + data[at];		// (MM_SHAPEFILE: the picture's name)
+	size_t end = size_t(fc) + lcb;
+	std::vector<std::pair<size_t, size_t>> ranges{{at, end}};
+	while (!ranges.empty()) {
+		auto [from, to] = ranges.back();
+		ranges.pop_back();
+		for (size_t q = from; q + 8 <= to;) {
+			uint16_t verInstance = U16(data, q);
+			uint16_t type = U16(data, q + 2);
+			size_t length = U32(data, q + 4);
+			size_t body = q + 8;
+			if (body + length > to)
+				break;
+			uint16_t instance = verInstance >> 4;
+			if ((verInstance & 0xf) == 0xf)
+				ranges.push_back({body, body + length});
+			else if (type == 0xf007 && length > 36)
+				ranges.push_back({body + 36, body + length});
+			else if (type == 0xf01e || type == 0xf01d || type == 0xf02a) {
+				size_t skip = 16 + ((instance & 1) ? 16 : 0) + 1;
+				if (length > skip) {
+					run.picture.assign(data.begin() + long(body + skip),
+						data.begin() + long(body + length));
+					run.jpeg = type != 0xf01e;
+					return true;
+				}
+			}
+			q = body + length;
+		}
+	}
+	return false;
 }
 
 // the style sheet (STSH): each style's kind, base and properties (its
@@ -322,6 +399,8 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 		error = "no table stream";
 		return false;
 	}
+	std::vector<uint8_t> data;		// the pictures (none: no Data stream)
+	ole.Stream("Data", data);
 	uint32_t ccpText = U32(word, 0x4c);
 	uint32_t fcClx = U32(word, 0x1a2), lcbClx = U32(word, 0x1a6);
 	uint32_t fcChpx = U32(word, 0xfa), lcbChpx = U32(word, 0xfe);
@@ -461,6 +540,25 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 			}
 		return c;
 	};
+	// a character's CHPX sprm `wanted`: its operand's offset in `word`, 0
+	// if it hasn't one
+	auto chpxSprm = [&](uint32_t fc, uint16_t wanted) -> size_t {
+		for (const auto& e : chpx)
+			if (fc >= e.first.first && fc < e.first.second) {
+				if (e.second == 0 || e.second >= word.size())
+					return 0;
+				size_t to = std::min(word.size(), e.second + 1 + word[e.second]);
+				for (size_t q = e.second + 1; q + 2 <= to;) {
+					uint16_t sprm = U16(word, q);
+					if (sprm == wanted)
+						return q + 2;
+					int size = OperandSize(sprm);
+					q += 2 + size_t(size < 0 ? (q + 2 < word.size() ? word[q + 2] + 1 : 1) : size);
+				}
+				return 0;
+			}
+		return 0;
+	};
 	auto paraProps = [&](uint32_t fc) {
 		size_t from, to;
 		if (!papxOf(fc, from, to))
@@ -547,11 +645,26 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 			p.right = props.right / 20.0f;
 			p.before = props.before / 20.0f;
 			p.after = props.after / 20.0f;
+			if (c == 0x07 && props.inTable) {
+				// a cell's end, or the row's end mark (its cells' widths
+				// and borders)
+				p.inTable = true;
+				p.rowEnd = props.rowEnd;
+				p.cellEnd = !props.rowEnd;
+				for (size_t e = 1; props.rowEnd && e < props.edges.size(); e++)
+					p.cellWidths.push_back((props.edges[e] - props.edges[e - 1]) / 20.0f);
+				p.border = props.border / 8.0f;
+				paragraphs.emplace_back();
+				haveCurrent = false;
+				continue;
+			}
 			if (c == 0x07) {
-				// a table cell mark: cells side by side, a tab between
+				// a cell mark outside a table: cells side by side, a tab
+				// between
 				addChar('\t', fcs[i]);
 				continue;
 			}
+			p.inTable = props.inTable;
 			p.pageBreak = c == 0x0c;
 			paragraphs.emplace_back();
 			haveCurrent = false;
@@ -565,8 +678,29 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 			addChar('-', fcs[i]);		// a non-breaking hyphen
 			continue;
 		}
+		if (c == 0x01 && chpxSprm(fcs[i], 0x0855) != 0) {
+			// a picture (sprmCFSpec): its PICF at sprmCPicLocation's offset
+			size_t location = chpxSprm(fcs[i], 0x6a03);
+			WordRun picture;
+			if (location != 0 && ReadPicture(data, U32(word, location), picture)) {
+				addChar(' ', fcs[i]);	// (the run's properties)
+				WordRun& run = paragraphs.back().runs.back();
+				run.text.pop_back();
+				if (!run.text.empty()) {
+					paragraphs.back().runs.push_back(run);
+					paragraphs.back().runs.back().text.clear();
+				}
+				WordRun& made = paragraphs.back().runs.back();
+				made.picture = picture.picture;
+				made.jpeg = picture.jpeg;
+				made.pictureWidth = picture.pictureWidth;
+				made.pictureHeight = picture.pictureHeight;
+				haveCurrent = false;
+			}
+			continue;
+		}
 		if (c < 0x20 && c != '\t')
-			continue;					// pictures (1), footnote marks (2), optional hyphens
+			continue;					// footnote marks (2), optional hyphens
 		addChar(c, fcs[i]);
 	}
 	if (paragraphs.back().runs.empty())
@@ -584,9 +718,72 @@ ImportWord(const std::string& path, Document& doc, std::string& error)
 		return false;
 	}
 	std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-	std::vector<WordParagraph> paragraphs;
-	if (!ReadWord(file, paragraphs, error))
+	std::vector<WordParagraph> read;
+	if (!ReadWord(file, read, error))
 		return false;
+	// a table's paragraphs as one empty paragraph that will hold it (its
+	// cells' text, a line each paragraph; its columns' widths those of its
+	// first row's end mark)
+	std::vector<WordParagraph> paragraphs;
+	std::vector<std::pair<size_t, NewTable>> tables;	// the paragraph, the table
+	for (size_t k = 0; k < read.size();) {
+		if (!read[k].inTable) {
+			paragraphs.push_back(read[k++]);
+			continue;
+		}
+		NewTable table;
+		std::vector<std::string> row;
+		std::string cell;
+		bool cellOpen = false;
+		for (; k < read.size() && read[k].inTable; k++) {
+			const WordParagraph& p = read[k];
+			if (p.rowEnd) {
+				if (cellOpen)
+					row.push_back(cell);
+				if (table.columns.empty()) {
+					table.columns = p.cellWidths;
+					table.border = p.border;
+				}
+				table.cells.push_back(row);
+				size_t lines = 1;
+				for (const std::string& c : row)
+					lines = std::max(lines, size_t(std::count(c.begin(), c.end(), '\n')) + 1);
+				table.rows.push_back(17.0f * float(lines));
+				row.clear();
+				cell.clear();
+				cellOpen = false;
+				continue;
+			}
+			if (cellOpen)
+				cell += '\n';
+			for (const WordRun& r : p.runs)
+				cell += r.text;
+			cellOpen = true;
+			if (p.cellEnd) {
+				row.push_back(cell);
+				cell.clear();
+				cellOpen = false;
+			}
+		}
+		if (!row.empty() || cellOpen) {
+			if (cellOpen)
+				row.push_back(cell);
+			table.cells.push_back(row);
+			table.rows.push_back(17);
+		}
+		size_t columns = 0;
+		for (const auto& r : table.cells)
+			columns = std::max(columns, r.size());
+		while (table.columns.size() < columns)
+			table.columns.push_back(table.columns.empty() ? 100 : table.columns.back());
+		table.columns.resize(columns);
+		for (auto& r : table.cells)
+			r.resize(columns);
+		if (columns == 0)
+			continue;
+		tables.push_back({paragraphs.size(), table});
+		paragraphs.emplace_back();
+	}
 	if (!CreateBlankDocument(doc, error))
 		return false;
 	size_t part = doc.wordParts.empty() ? 0 : doc.wordParts[0].first;
@@ -637,6 +834,33 @@ ImportWord(const std::string& path, Document& doc, std::string& error)
 			ApplyParagraphProperty(doc, part, k, k, SpacingProperty(Sig("SpaB"), p.before, false));
 		if (p.after != 0)
 			ApplyParagraphProperty(doc, part, k, k, SpacingProperty(Sig("SpaA"), p.after, false));
+	}
+	// the pictures (PNGs; JPEGs aren't read) and tables, each in an inline
+	// frame where it was; the last first, so the places before stay
+	for (size_t k = paragraphs.size(); k-- > 0;) {
+		size_t offset = 0;
+		std::vector<std::pair<size_t, const WordRun*>> pictures;
+		for (const WordRun& r : paragraphs[k].runs) {
+			if (!r.picture.empty() && !r.jpeg)
+				pictures.push_back({offset, &r});
+			offset += r.text.size();
+		}
+		for (size_t i = pictures.size(); i-- > 0;) {
+			ArchiveBitmap bitmap;
+			std::string partError;
+			if (!DecodePNG(pictures[i].second->picture, bitmap))
+				continue;
+			int made = AddImagePart(doc, part, bitmap, partError);
+			if (made >= 0)
+				InsertInlineFrame(doc, part, {k, pictures[i].first}, size_t(made));
+		}
+	}
+	for (size_t t = tables.size(); t-- > 0;) {
+		size_t textPart = 0;
+		std::string partError;
+		int made = AddTablePart(doc, part, tables[t].second, textPart, partError);
+		if (made >= 0)
+			InsertInlineFrame(doc, part, {tables[t].first, 0}, size_t(made));
 	}
 	return true;
 }
