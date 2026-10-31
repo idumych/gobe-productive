@@ -17,6 +17,7 @@
 #include "Editing.h"
 #include "HTMLExport.h"
 #include "PNG.h"
+#include "RTF.h"
 
 using namespace gobe;
 
@@ -158,6 +159,29 @@ main(int argc, char** argv)
 		}
 		Check(html.find("<P><IMG SRC=\"page.images/image.0.png\"") != std::string::npos,
 			"the picture in its paragraph");
+
+		// RTF (TExportRTF::writeBitmap): {\pict\pngblip\picwW\pichH hex}
+		FontCatalog fonts;
+		fonts.fonts = {{"Dutch801 Rm BT", "Roman", 0}};
+		fonts.plainFamily = "Dutch801 Rm BT";
+		fonts.plainStyle = "Roman";
+		std::string rtf = ExportedRTF(doc, main, fonts);
+		size_t at = 0;
+		for (size_t k = 0; k < images.size() && k < 2; k++) {
+			std::string head = "{\\pict\\pngblip\\picw" + std::to_string(sizes[k][0]) + "\\pich"
+				+ std::to_string(sizes[k][1]) + " ";
+			at = rtf.find(head, at);
+			Check(at != std::string::npos, "RTF picture " + std::to_string(k) + ": " + head);
+			if (at == std::string::npos)
+				break;
+			at += head.size();
+			size_t end = rtf.find('}', at);
+			std::vector<uint8_t> bytes;
+			for (size_t i = at; end != std::string::npos && i + 1 < end; i += 2)
+				bytes.push_back(uint8_t(std::stoi(rtf.substr(i, 2), nullptr, 16)));
+			Check(bytes == images[k].bytes, "RTF picture " + std::to_string(k) + ": the PNG");
+			at = end;
+		}
 	}
 	// a cropped B_RGB32 bitmap: 2 x 1 of a 3 x 2 one, opaque
 	ArchiveBitmap bitmap;

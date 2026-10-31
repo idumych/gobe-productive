@@ -3,6 +3,7 @@
 
 #include "Document.h"
 #include "Editing.h"
+#include "PNG.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1427,7 +1428,9 @@ public:
 	std::string Write();
 
 private:
-	static std::vector<size_t> FramesOf(const WPPart& part);
+	// the embedded frames: their offsets in the text, their frame pointers
+	static std::vector<std::pair<size_t, const WPMiscInfo*>> FramesOf(const WPPart& part);
+	void Picture(const WPMiscInfo& frame);
 	void Header();
 	void ParProps(uint32_t style);
 	void CharProps(uint32_t style);
@@ -1437,24 +1440,53 @@ private:
 	const Document& fDoc;
 	ExportPart fPart;
 	const FontCatalog& fFonts;
-	std::vector<size_t> fFrames;	// offsets of embedded frames
+	std::vector<std::pair<size_t, const WPMiscInfo*>> fFrames;
 	std::string fOut;
 	int fFont;						// the font of the last \f (TExportRTF +0x88)
 };
 
 
-std::vector<size_t>
+std::vector<std::pair<size_t, const WPMiscInfo*>>
 RTFWriter::FramesOf(const WPPart& part)
 {
-	std::vector<size_t> frames;
+	std::vector<std::pair<size_t, const WPMiscInfo*>> frames;
 	size_t start = 0;
 	for (const WPParagraph& p : part.paragraphs) {
 		for (const WPMiscInfo& m : p.misc)
 			if (m.kind == Sig("FRAM"))
-				frames.push_back(start + m.position);
+				frames.push_back({start + m.position, &m});
 		start += p.text.size();
 	}
 	return frames;
+}
+
+
+// TExportRTF::writeBitmap: the frame as a picture, "{\pict\jpegblip
+// \picwW\pichH " and the JPEG in hex (lowercase); the original draws
+// the frame and has the system's JPEG translator write it. The port
+// writes an image part's pixels (the rectangle the frame shows) as PNG
+// (\pngblip), and nothing for other frames.
+void
+RTFWriter::Picture(const WPMiscInfo& frame)
+{
+	const Frame* f = fDoc.FrameOf(frame.frame[0], frame.frame[1]);
+	const IMPart* image = f != nullptr ? fDoc.ImagePart(f->part) : nullptr;
+	if (image == nullptr)
+		return;
+	std::vector<uint8_t> png = BitmapPNG(image->image, f->sheetRect);
+	if (png.size() < 24)
+		return;
+	int width = png[16] << 24 | png[17] << 16 | png[18] << 8 | png[19];
+	int height = png[20] << 24 | png[21] << 16 | png[22] << 8 | png[23];
+	char buffer[64];
+	snprintf(buffer, sizeof buffer, "{\\pict\\pngblip\\picw%d\\pich%d ", width, height);
+	fOut += buffer;
+	static const char kHex[] = "0123456789abcdef";
+	for (uint8_t b : png) {
+		fOut += kHex[b >> 4];
+		fOut += kHex[b & 0xf];
+	}
+	fOut += "}";
 }
 
 
@@ -1727,10 +1759,12 @@ RTFWriter::Write()
 		if (!run.empty() && run.back() == '\n')
 			run.pop_back();
 		if (special != nullptr && special->offset == runStart) {
-			bool frame = std::find(fFrames.begin(), fFrames.end(), runStart) != fFrames.end();
-			if (frame) {
-				// the frame as a JPEG picture: not ported, nothing written
+			auto frame = std::find_if(fFrames.begin(), fFrames.end(),
+				[&](const std::pair<size_t, const WPMiscInfo*>& f) { return f.first == runStart; });
+			if (frame != fFrames.end()) {
+				// the frame as a picture (writeBitmap)
 				run.clear();
+				Picture(*frame->second);
 			} else if (special->hasText) {
 				run = special->text;
 			}
