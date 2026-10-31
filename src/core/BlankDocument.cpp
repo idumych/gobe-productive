@@ -1011,6 +1011,140 @@ DrawingWindowSection()
 	return w.Data();
 }
 
+// #pragma mark - presentations
+
+// File > New for presentations (TPartPRFactory::NewPart): a drawing the
+// screen's size with a "Background" layer (STR# 11002, 6) and one slide,
+// "untitled slide 1" (11002, 0), showing it and its own layer "untitled
+// layer 1" (11002, 5), the presentation shown in a browse root, as
+// SlideShow has it
+enum { kPresentationPart = 0, kPresentationRootPart = 1 };
+
+
+std::vector<uint8_t>
+PresentationPart(float width, float height)
+{
+	DocWriter w;
+	WritePartHeader(w, Sig("PRES"), 2, 1, 0);
+	GRPart gr;
+	gr.gridSpacing = 9;
+	gr.size[0] = width;
+	gr.size[1] = height;
+	gr.layers.push_back({"Background", {}});
+	gr.layers.push_back({"untitled layer 1", {}});
+	GRView slide;
+	slide.name = "untitled slide 1";
+	// TGRLayerInfo flags as SlideShow's first slide has them: the
+	// background shown, the slide's layer shown and current
+	slide.layers.push_back({0, {true, false, false, true, true}});
+	slide.layers.push_back({1, {true, true, false, true, true}});
+	gr.views.push_back(slide);
+	w.Bytes(WriteGRData(gr, 0x1e, 2));
+	// TPartPR::Write: three values, AutoStart, the cursor shown, the
+	// slides (TSlide: its view, 2, the transition (none), 0, a bool)
+	w.Sig(Sig("prp+"));
+	w.UInt32(0);
+	w.UInt32(0xffffffff);
+	w.UInt32(0);
+	w.Bool(false);
+	w.Bool(false);
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt32(2);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.Bool(false);
+	w.Sig(Sig("prp-"));
+	PortalStart(w, kPresentationRootPart, 12);
+	const float origin[2] = {0, 0};
+	WriteFrame(w, origin, kViewWidth, kViewHeight, kFrameStyle, kPresentationPart,
+		kPresentationRootPart);
+	float shown[4] = {0, 0, kViewWidth, kViewHeight};
+	w.Rect(shown);			// TFrameGR
+	w.Sig(Sig("FraM"));
+	w.UInt32(0);			// TGRPortal: view 0, the slide
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+PresentationRootPart()
+{
+	DocWriter w;
+	WritePartHeader(w, Sig("BROT"), 0, 2, 0xffffffff);
+	w.UInt32(0);			// TRootPart: the sheet
+	PortalStart(w, 0xffffffff, 0);
+	const float origin[2] = {0, 0};
+	WriteFrame(w, origin, kViewWidth, kViewHeight, kFrameStyle, kPresentationRootPart,
+		0xffffffff);
+	// TBrowseRootFrame: no sheet frame or graphics frame of its own (the
+	// presentation's frame is in its portal)
+	FramePtr(w, 0xffffffff, 0xffffffff, 0xffffffff);
+	FramePtr(w, 0xffffffff, 0xffffffff, 0xffffffff);
+	w.Sig(Sig("FraM"));
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+PresentationSheetSection()
+{
+	SheetMgr sheets;
+	sheets.sheetCount = 1;
+	LeafSheet sheet;
+	sheet.name = "Sheet 1";
+	sheet.mainPart = kPresentationPart;
+	sheet.graphicsPart = kPresentationPart;
+	sheet.pageView = false;
+	std::copy(kPaper, kPaper + 4, sheet.paper);
+	std::copy(kPrintable, kPrintable + 4, sheet.printable);
+	sheet.flags[0] = sheet.flags[1] = sheet.flags[2] = true;
+	sheet.divisions = 8;
+	sheets.sheets.push_back(sheet);
+	return WriteSheetMgr(sheets);
+}
+
+
+std::vector<uint8_t>
+PresentationSelectionSection()
+{
+	DocWriter w;
+	w.Sig(Sig("SELM"));
+	w.UInt32(1);
+	w.UInt32(16);
+	w.Sig(Sig("GRFX"));
+	w.UInt32(kPresentationPart);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.Sig(Sig("SelM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+PresentationWindowSection()
+{
+	DocWriter w;
+	w.UInt32(0);
+	FramePtr(w, kPresentationRootPart, 0, 0);
+	w.Float(1);
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.UInt32(1);
+	w.UInt32(kPresentationPart);
+	w.UInt32(0);
+	const float frame[4] = {9, 28, 665, 584};
+	w.Rect(frame);
+	w.Bytes(Hex("0000000a00000003000000000001000000010100""00000a01000000080100000006010000"
+		"000901574f52a80100000004000000000500"));
+	return w.Data();
+}
+
 } // namespace
 
 
@@ -1088,6 +1222,32 @@ CreateBlankDrawing(Document& doc, std::string& error)
 		{"CommandMgr", Hex("434d444d00000000436d644d")},
 		{"HistoryMgr", Hex("000000000000000000000014")},
 		{"WindowMgr", DrawingWindowSection()}});
+}
+
+
+
+bool
+CreateBlankPresentation(Document& doc, std::string& error, float width, float height)
+{
+	PartMgr parts;
+	parts.parts.push_back({Sig("PRES"), 0, PresentationPart(width, height)});
+	parts.parts.push_back({Sig("BROT"), 0, PresentationRootPart()});
+	return LoadSections(doc, error, {
+		{"VersionMgr", Hex("5645524d0000000100020000001e000300000000000000005665724d")},
+		{"PartFactory Table", WriteFactoryTable({
+			{Sig("PRES"), 1, "Presentation"},
+			{Sig("BROT"), 1, "BrowseRootPart"}})},
+		{"Document Misc", Hex("00000001000000000000000000000000000000000000000000000000")},
+		{"SetMgr", Hex("5345544d0000000000000000000000005365744d")},
+		{"PenMgr", Hex("50454e4d0000000601000000000050656e4d")},
+		{"StyleMgr", StyleSection()},
+		{"SheetMgr", PresentationSheetSection()},
+		{"SelectionMgr", PresentationSelectionSection()},
+		{"LinksMgr", Hex("4c494e4b00000000004c696e4b")},
+		{"PartMgr", WritePartMgrFromRecords(parts)},
+		{"CommandMgr", Hex("434d444d00000000436d644d")},
+		{"HistoryMgr", Hex("000000000000000000000014")},
+		{"WindowMgr", PresentationWindowSection()}});
 }
 
 } // namespace gobe

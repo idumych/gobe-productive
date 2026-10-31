@@ -248,6 +248,11 @@ bool CreateBlankSpreadsheet(Document& doc, std::string& error);
 // "Layer 1" and "View 1", framed on the page of a paged root, as the
 // original's drawing documents have it), named the same way.
 bool CreateBlankDrawing(Document& doc, std::string& error);
+// File > New for presentations (TPartPRFactory::NewPart): a presentation
+// the screen's size (`width` x `height`) with a "Background" layer and
+// one slide, "untitled slide 1", with its own layer, in a browse root.
+bool CreateBlankPresentation(Document& doc, std::string& error, float width = 800,
+	float height = 600);
 
 } // namespace gobe
 

@@ -9,6 +9,7 @@
 #include <Alert.h>
 #include <Looper.h>
 #include <Roster.h>
+#include <Screen.h>
 #include <exception>
 #include <Application.h>
 #include <Entry.h>
@@ -52,6 +53,15 @@ NewSheetPreferences(Document& document)
 }
 
 
+// TPartPRFactory::NewPart: a presentation the screen's size
+static bool
+NewPresentation(Document& document, std::string& error)
+{
+	BRect screen = BScreen().Frame();
+	return CreateBlankPresentation(document, error, screen.Width() + 1, screen.Height() + 1);
+}
+
+
 static const char* kSignature = "application/x-vnd.gobe-port.productive";
 
 
@@ -67,6 +77,7 @@ public:
 		fNewDocument(false),
 		fNewSpreadsheet(false),
 		fNewDrawing(false),
+		fNewPresentation(false),
 		fOpenPanel(NULL),
 		fWindowCount(0),
 		fSlide(-1)
@@ -83,7 +94,7 @@ public:
 	{
 		fprintf(stderr,
 		    "usage: %s [--menu <n>] [--dialog <id>] [--render <png>]\n"
-		    "        [--slide <n>] [--do <script>] [--new] [--new-spreadsheet] [--new-drawing] <document> ...\n",
+		    "        [--slide <n>] [--do <script>] [--new] [--new-spreadsheet] [--new-drawing] [--new-presentation] <document> ...\n",
 		    prog);
 	}
 
@@ -136,10 +147,12 @@ public:
 				fSlide = atoi(argv[++i]) - 1;
 			} else if (strcmp(argv[i], "--new") == 0
 					|| strcmp(argv[i], "--new-spreadsheet") == 0
-					|| strcmp(argv[i], "--new-drawing") == 0) {
+					|| strcmp(argv[i], "--new-drawing") == 0
+					|| strcmp(argv[i], "--new-presentation") == 0) {
 				fNewDocument = true;
 				fNewSpreadsheet = strcmp(argv[i], "--new-spreadsheet") == 0;
 				fNewDrawing = strcmp(argv[i], "--new-drawing") == 0;
+				fNewPresentation = strcmp(argv[i], "--new-presentation") == 0;
 			} else if (strncmp(argv[i], "--", 2) == 0) {
 				fprintf(stderr, "unknown option: %s\n", argv[i]);
 				PrintUsage(prog);
@@ -233,12 +246,13 @@ public:
 				(new TDialogNewDoc(CountDocuments()))->RunDialog();
 				return;
 			}
-			if (kind != 'WORD' && kind != 'SPRD' && kind != 'GRFX')
+			if (kind != 'WORD' && kind != 'SPRD' && kind != 'GRFX' && kind != 'PRES')
 				return;
 			Document* document = new Document;
 			std::string error;
 			if (!(kind == 'SPRD' ? CreateBlankSpreadsheet(*document, error)
 					: kind == 'GRFX' ? CreateBlankDrawing(*document, error)
+					: kind == 'PRES' ? NewPresentation(*document, error)
 					: CreateBlankDocument(*document, error))) {
 				delete document;
 				return;
@@ -475,6 +489,7 @@ public:
 			std::string error;
 			if (fNewSpreadsheet ? CreateBlankSpreadsheet(*document, error)
 					: fNewDrawing ? CreateBlankDrawing(*document, error)
+					: fNewPresentation ? NewPresentation(*document, error)
 					: CreateBlankDocument(*document, error)) {
 				NewSheetPreferences(*document);
 				if (!fRenderPath.empty()) {
@@ -526,6 +541,7 @@ private:
 	bool fNewDocument;
 	bool fNewSpreadsheet;
 	bool fNewDrawing;
+	bool fNewPresentation;
 	BFilePanel* fOpenPanel;
 	int32 fWindowCount;
 	int fSlide;					// --slide
