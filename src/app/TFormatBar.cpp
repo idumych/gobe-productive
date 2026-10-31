@@ -197,11 +197,13 @@ public:
 			BMenu* palette = NULL;
 			if (i == 0) {
 				// TInkSetMenu: the active color set (COLR 0) as a matrix
-				palette = ColorSetMenu(BMessage(fColorCommand));
+				palette = ColorSetMenu(BMessage(fColorCommand),
+					&static_cast<TFormatBar*>(ribbon)->Pages()->Doc().inkSets);
 			} else if (i < 3) {
 				// the pattern set (BPAT 0) and the gradient set (GRAD 0)
 				palette = InkSetMenu(i == 1 ? 'BPAT' : 'GRAD',
-					BMessage(i == 1 ? fPatternCommand : fGradientCommand));
+					BMessage(i == 1 ? fPatternCommand : fGradientCommand),
+					&static_cast<TFormatBar*>(ribbon)->Pages()->Doc().inkSets);
 			} else
 				palette = TransparencyMenu();
 			if (palette == NULL) {
@@ -218,6 +220,10 @@ public:
 				TFormatBar::PenMenu(static_cast<TFormatBar*>(ribbon)->Pages()));
 			menu->AddItem(pens);
 		}
+		// (TMICNMenuBarElement::AddMenu: each icon clicked opens the Inks
+		// window, 'sW00', on its kind: colours, patterns, gradients; the
+		// transparencies on the colours; the pens)
+		int32 major = fColorCommand == 'sf03' ? 0 : fColorCommand == 'sf06' ? 1 : 2;
 		ribbon->DrawElement(this, true);
 		ribbon->Sync();
 		BPoint at = ribbon->ConvertToScreen(BPoint(rect.left - 1, rect.top - 2));
@@ -225,11 +231,13 @@ public:
 		ribbon->DrawElement(this, false);
 		if (chosen != NULL && chosen->Message() != NULL)
 			ribbon->Send(chosen->Message());
-		else if (chosen == NULL && pens != NULL && pens->ReleasedOver()) {
-			// (TMICNMenuBarElement::AddMenu: the pen menu's icon clicked
-			// opens the Inks window on the pens, 'sW00' MajorType 1,
-			// MinorType 3)
-			TPensWindow::Open();
+		else if (chosen == NULL && pens != NULL && pens->ReleasedOver())
+			TPensWindow::Open(major, 3);
+		else if (chosen == NULL) {
+			for (int32 i = 0; i < 4; i++)
+				if (TIconMenuItem* icon = dynamic_cast<TIconMenuItem*>(menu->ItemAt(i)))
+					if (icon->ReleasedOver())
+						TPensWindow::Open(major, i == 3 ? 0 : i);
 		}
 		delete menu;
 		return true;
@@ -628,7 +636,7 @@ TFormatBar::ChooseInk(int32 set, int32 index, bool fill)
 		message.AddInt32(kValueString, index);
 	} else {
 		uint32 command = set == 1 ? (fill ? 'sf04' : 'sf0M') : (fill ? 'sf05' : 'sf0N');
-		BMenu* menu = InkSetMenu(set == 1 ? 'BPAT' : 'GRAD', BMessage(command));
+		BMenu* menu = InkSetMenu(set == 1 ? 'BPAT' : 'GRAD', BMessage(command), &fPages->Doc().inkSets);
 		BMenuItem* item = menu != NULL ? menu->ItemAt(index) : NULL;
 		if (item == NULL || item->Message() == NULL) {
 			delete menu;

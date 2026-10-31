@@ -9,9 +9,11 @@
 #include <MenuItem.h>
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "Drawing.h"
+#include "InkSets.h"
 #include "Styles.h"
 
 namespace gobe {
@@ -26,15 +28,44 @@ struct ColorSet {
 };
 ColorSet LoadColorSet(int32 id);
 
-// TInkSetMenu: the active color set (COLR 0) as a matrix; each cell sends a
+// The ink sets to choose from (TInkSetManager): of a kind (kColorSet,
+// kPatternSet, kGradientSet), the application's and the files' in the
+// original's "Ink Sets" folder and the port's settings folder "Gobe
+// Productive port/Ink Sets" (AvailableInkSets; `path` a file's), then the
+// document's own (`document`: its SetMgr)
+struct InkSetRef {
+	InkSet set;
+	std::string path;
+	bool document = false;
+};
+std::vector<std::string> InkSetFolders();
+std::vector<InkSetRef> InkSetsOfKind(int kind, const SetMgr* doc);
+bool FindInkSet(int kind, const std::string& name, const SetMgr* doc, InkSetRef& ref);
+// the active set of a kind (TInkSetManager::ActiveInkSetName,
+// MakeInkSetActive: "Standard" until another is chosen)
+std::string ActiveInkSetName(int kind, const SetMgr* doc);
+void SetActiveInkSet(int kind, const std::string& name);
+bool ActiveInkSet(int kind, const SetMgr* doc, InkSetRef& ref);
+// an application's or file's set changed (a file's saved to its file; the
+// application's kept until quitting); the files read again
+bool ChangeInkSet(const InkSetRef& ref, std::string& error);
+void ReloadInkSets();
+// a copy of `model` for ink `index` of `set`: "ink name", "ink index",
+// and "color" (B_RGB_COLOR_TYPE) for a colour or "ink" (B_RAW_TYPE,
+// InkBytes) for a pattern or gradient
+BMessage* InkSetMessage(const BMessage& model, const InkSet& set, size_t index);
+// an ink in a cell (TInkMenuItem, TInkView), its frame grey
+void DrawInkCell(BView* view, const Ink& ink, BRect cell, bool selected = false);
+
+// TInkSetMenu: the active color set as a matrix; each cell sends a
 // copy of `model` with "ink name", "color" (B_RGB_COLOR_TYPE) and "ink index"
-BMenu* ColorSetMenu(const BMessage& model);
+BMenu* ColorSetMenu(const BMessage& model, const SetMgr* doc = NULL);
 
 // TInkSetMenu of the pattern set (BPAT 0, 'BPAT') or the gradient set
 // (GRAD 0, 'GRAD'): each cell sends a copy of `model` with "ink name" (the
 // set's), "ink index" and "ink" (B_RAW_TYPE: the ink's bytes, InkBytes).
 // NULL if the set can't be read.
-BMenu* InkSetMenu(uint32 type, const BMessage& model);
+BMenu* InkSetMenu(uint32 type, const BMessage& model, const SetMgr* doc = NULL);
 
 // TInkMenuItem: a cell of an ink set's matrix menu (a color, a pattern
 // in its two colors, a gradient)
