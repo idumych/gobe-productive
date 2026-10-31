@@ -472,6 +472,34 @@ Document::DeleteSheet(size_t sheet, std::string& error)
 }
 
 
+bool
+Document::MoveSheet(size_t from, size_t to)
+{
+	size_t count = SheetCount();
+	if (from >= count || to >= count)
+		return false;
+	if (from == to)
+		return true;
+	int shown = CurrentSheet();
+	LeafSheet moved = sheets.sheets[from];
+	sheets.sheets.erase(sheets.sheets.begin() + long(from));
+	sheets.sheets.insert(sheets.sheets.begin() + long(to), moved);
+	sheetsChanged = true;
+	// TSheetMgr::FixIndex: the shown sheet's new index
+	int now = shown == int(from) ? int(to)
+		: shown > int(from) && shown <= int(to) ? shown - 1
+		: shown < int(from) && shown >= int(to) ? shown + 1 : shown;
+	int root = RootPart();
+	if (now != shown && root >= 0) {
+		std::vector<uint8_t>& record = parts.parts[size_t(root)].data;
+		for (int i = 0; i < 4; i++)
+			record[32 + i] = uint8_t(uint32_t(now) >> (24 - 8 * i));
+		dirtyTails.insert(size_t(root));
+	}
+	return true;
+}
+
+
 int
 Document::CurrentSheet() const
 {

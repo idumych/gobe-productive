@@ -100,6 +100,16 @@ TSheetBar::Draw(BRect updateRect)
 		FillRect(tab);
 		SetHighColor(200, 200, 200);
 		StrokeRect(tab);
+		if (i == fDropAt && fPressed >= 0 && fPressed != i) {
+			// where a dragged tab would go
+			SetHighColor(0, 0, 0);
+			BRect mark = tab;
+			if (fPressed > i)
+				mark.right = mark.left + 1;
+			else
+				mark.left = mark.right - 1;
+			FillRect(mark);
+		}
 		SetHighColor(0, 0, 0);
 		SetLowColor(i == shown ? (rgb_color){238, 238, 238, 255} : (rgb_color){216, 216, 216, 255});
 		DrawString(fDocument.sheets.sheets[size_t(i)].name.c_str(),
@@ -129,13 +139,54 @@ TSheetBar::MouseDown(BPoint where)
 	int32 clicks = 1;
 	if (BMessage* current = Window()->CurrentMessage())
 		current->FindInt32("clicks", &clicks);
+	int32 tab = TabAt(where);
+	if (tab < 0)
+		return;
+	BMessage message(clicks == 2 ? kMsgSheetRename : kMsgSheetSwitch);
+	message.AddInt32("ActiveTab", tab);
+	Window()->PostMessage(&message);
+	// a tab dragged along moves its sheet
+	fPressed = clicks == 2 ? -1 : tab;
+	fDropAt = -1;
+	SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+}
+
+
+int32
+TSheetBar::TabAt(BPoint where) const
+{
 	for (int32 i = 0; i < int32(fDocument.SheetCount()); i++)
-		if (TabFrame(i).Contains(where)) {
-			BMessage message(clicks == 2 ? kMsgSheetRename : kMsgSheetSwitch);
-			message.AddInt32("ActiveTab", i);
-			Window()->PostMessage(&message);
-			return;
-		}
+		if (TabFrame(i).Contains(where))
+			return i;
+	return -1;
+}
+
+
+void
+TSheetBar::MouseMoved(BPoint where, uint32 transit, const BMessage* dragged)
+{
+	if (fPressed < 0)
+		return;
+	int32 at = TabAt(where);
+	if (at != fDropAt) {
+		fDropAt = at;
+		Invalidate();
+	}
+}
+
+
+void
+TSheetBar::MouseUp(BPoint where)
+{
+	int32 from = fPressed, to = TabAt(where);
+	fPressed = fDropAt = -1;
+	Invalidate();
+	if (from < 0 || to < 0 || from == to)
+		return;
+	BMessage message(kMsgSheetReorder);
+	message.AddInt32("OldIndex", from);
+	message.AddInt32("NewIndex", to);
+	Window()->PostMessage(&message);
 }
 
 

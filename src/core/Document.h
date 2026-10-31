@@ -207,6 +207,10 @@ struct Document {
 	// stay, as the original keeps them for Undo); the one before it (or
 	// after it, for the first) is shown if it was. False if it can't be.
 	bool DeleteSheet(size_t sheet, std::string& error);
+	// TSheetMgr::MoveSheet (the SheetBar's tab dragged, 's00N'): sheet
+	// `from` taken out and put back at `to`, among those in use; the shown
+	// sheet stays shown. False if either isn't a sheet in use.
+	bool MoveSheet(size_t from, size_t to);
 	// TDocWindow::SetSheetPtr for a browse root (TDocWindow::NewRootFrame
 	// makes a new root for the sheet): the shown sheet's main and graphics
 	// parts lose their frames in the root, sheet `sheet`'s get frames of the

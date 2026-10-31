@@ -163,6 +163,15 @@ main(int argc, char** argv)
 			&& third.sheets.sheets[count - 2].name == "Budget", name + ": deleted after reloading");
 		Check(third.AddSpreadsheetSheet("Later", error) == int(count - 1)
 			&& third.sheets.sheets[count - 1].name == "Later", name + ": a new sheet before the deleted");
+		// moved: the shown sheet stays shown
+		{
+			int shownMain = int(third.sheets.sheets[size_t(third.CurrentSheet())].mainPart);
+			std::string firstName = third.sheets.sheets[0].name;
+			Check(third.MoveSheet(0, third.SheetCount() - 1)
+				&& third.sheets.sheets[third.SheetCount() - 1].name == firstName
+				&& third.MainPart() == shownMain, name + ": the first sheet moved last");
+			Check(!third.MoveSheet(0, third.sheets.sheets.size() + 3), name + ": not past the sheets");
+		}
 		// the last one left can't go
 		Document one;
 		if (CreateBlankSpreadsheet(one, error))

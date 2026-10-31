@@ -533,6 +533,20 @@ TDocWindow::MessageReceived(BMessage* message)
 			InstallPartMenus();
 			return;
 		}
+		case kMsgSheetReorder: {
+			// TDocSheetReorderCommand ("Reorder Sheet")
+			int32 from = message->GetInt32("OldIndex", -1), to = message->GetInt32("NewIndex", -1);
+			if (fPages == NULL || from < 0 || to < 0 || from == to
+					|| size_t(std::max(from, to)) >= fDocument->SheetCount())
+				return;
+			fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 20).String(),
+				fPages->CurrentViewState());
+			fDocument->MoveSheet(size_t(from), size_t(to));
+			if (fSheetBar != NULL)
+				fSheetBar->Update();
+			PostMessage(kMsgDocumentChanged);
+			return;
+		}
 		case kMsgSheetRename: {
 			// TSheetMgr::HandleMessage 's00D': the dialog, or with "name"
 			// TDocSheetRenameCommand ("Rename Sheet")

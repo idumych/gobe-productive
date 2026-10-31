@@ -20,6 +20,8 @@ static const uint32 kMsgSheetRename = 's00D';
 static const uint32 kMsgSheetNew = 's00B';
 // Delete Sheet ('s00C'): the shown sheet, when another is left
 static const uint32 kMsgSheetDelete = 's00C';
+// a tab dragged to another place ('s00N' with "OldIndex", "NewIndex")
+static const uint32 kMsgSheetReorder = 's00N';
 
 class TSheetBar : public BView {
 public:
@@ -27,6 +29,8 @@ public:
 
 	virtual void Draw(BRect updateRect);
 	virtual void MouseDown(BPoint where);
+	virtual void MouseMoved(BPoint where, uint32 transit, const BMessage* dragged);
+	virtual void MouseUp(BPoint where);
 	virtual BSize MinSize();
 	virtual BSize MaxSize();
 	virtual BSize PreferredSize();
@@ -36,8 +40,11 @@ public:
 
 private:
 	BRect TabFrame(int32 index) const;
+	int32 TabAt(BPoint where) const;
 
 	const Document& fDocument;
+	int32 fPressed = -1;		// the tab the mouse went down on
+	int32 fDropAt = -1;			// where it would go, dragged
 };
 
 } // namespace gobe
