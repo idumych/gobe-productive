@@ -155,6 +155,8 @@ not released yet: build it to try it.
   paragraphs, bold, italic, underline, strikeout, super- and subscript,
   sizes, fonts, colors, alignment, indents and spacing, line breaks,
   fields as their results.
+- **Show Clipboard** (Window menu) opens a window with what was copied
+  last: text with its styles, or cells with their values.
 - **Ranges** are written A1..B2, as Gobe Productive writes them (A1:B2 is
   still understood).
 
@@ -213,7 +215,7 @@ documents.
 **Not yet**
 
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
-FormatBar; Import and Export Styles; New Window; Show Clipboard; creating
+FormatBar; Import and Export Styles; New Window; creating
 and linking frames; drawing tools; in spreadsheets charts made from cells;
 new documents of other kinds than word processing and spreadsheets; the
 Word export; the thesaurus and dictionary (they need data

@@ -688,6 +688,28 @@ TPageView::HasCopiedCells()
 
 
 bool
+TPageView::MakeClipboardDocument(Document& doc)
+{
+	std::string error;
+	if (sCopiedCells.rows > 0) {
+		if (!CreateBlankSpreadsheet(doc, error))
+			return false;
+		// (their values: formulas moved to A1 would refer to cells the
+		// clipboard doesn't have)
+		PasteCells(doc, size_t(doc.MainPart()), CellID{0, 0}, sCopiedCells, true, false, true);
+		UpdateDependencies(doc, size_t(doc.MainPart()));
+	} else {
+		if (!CreateBlankDocument(doc, error))
+			return false;
+		if (!sCopiedText.text.empty())
+			PasteFragment(doc, size_t(doc.MainPart()), {0, 0}, sCopiedText);
+	}
+	doc.name = "Clipboard";		// (TClipboard::TClipboard's name)
+	return true;
+}
+
+
+bool
 TPageView::HasCopiedFormat()
 {
 	return !sCopiedFormat.empty();

@@ -63,6 +63,9 @@
 
 namespace gobe {
 
+// the Clipboard window (TClipboard's), while it's open
+static BMessenger sClipboardWindow;
+
 // Message codes for the Font and Paragraph dialogs
 static const uint32 kMsgFontOK = 'gFON';
 static const uint32 kMsgParagraphOK = 'gPAR';
@@ -463,6 +466,26 @@ TDocWindow::MessageReceived(BMessage* message)
 			return;
 		// Window > Hide/Show PartBar: the part bar and the active part's
 		// ribbon (the ruler)
+		case 'sMFD': {	// Show/Hide Clipboard (TClipboard::ShowHide)
+			if (sClipboardWindow.IsValid()) {
+				sClipboardWindow.SendMessage(B_QUIT_REQUESTED);
+				sClipboardWindow = BMessenger();
+				return;
+			}
+			Document* clipboard = new Document;
+			if (!TPageView::MakeClipboardDocument(*clipboard)) {
+				delete clipboard;
+				beep();
+				return;
+			}
+			BRect frame = Frame().OffsetByCopy(40, 40);
+			frame.right = frame.left + 480;
+			frame.bottom = frame.top + 320;
+			TDocWindow* window = new TDocWindow(frame, clipboard->name.c_str(), clipboard);
+			window->Show();
+			sClipboardWindow = BMessenger(window);
+			return;
+		}
 		case 'sMF3':	// Show/Hide SheetBar
 			if (fSheetBar != NULL) {
 				if (fSheetBar->IsHidden())
@@ -1418,8 +1441,10 @@ TDocWindow::MenusBeginning()
 			: ribbon.command == 'sMF4' ? (BView*)fFormatBar
 			: ribbon.command == 'sMF3' ? (BView*)fSheetBar : NULL;
 		bool shown = bar != NULL && !bar->IsHidden();
+		if (ribbon.command == 'sMFD')
+			shown = sClipboardWindow.IsValid();
 		item->SetLabel(GobeResources::IndexString(1, ribbon.string + (shown ? 0 : 1)).String());
-		item->SetEnabled(bar != NULL);
+		item->SetEnabled(bar != NULL || ribbon.command == 'sMFD');
 	}
 	if (BMenuItem* item = KeyMenuBar()->FindItem('sMFE')) {
 		int32 windows = 0;

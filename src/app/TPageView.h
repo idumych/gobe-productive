@@ -160,6 +160,10 @@ public:
 	static bool HasCopiedFormat();
 	// cells copied as cells (Paste Special has something to paste)
 	static bool HasCopiedCells();
+	// Show Clipboard (TClipboard, a document of its own): a new document
+	// holding what was copied last (the cells, else the text); false if
+	// nothing was
+	static bool MakeClipboardDocument(Document& doc);
 	// TWPPart::SetUpContextMenu: the menu for a context click at `where`
 	// (document coordinates) in text (NULL elsewhere); the caret moves
 	// there unless it's in the selection
