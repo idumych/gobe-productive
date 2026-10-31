@@ -410,7 +410,7 @@ public:
 			}
 			if (warning.Length() > 0) {
 				if (fRenderPath.empty())
-					(new BAlert("Bad RTF Alert", warning.String(), "OK"))->Go(NULL);
+					(new BAlert("Import", warning.String(), "OK"))->Go(NULL);
 				else
 					fprintf(stderr, "%s: %s\n", path.c_str(), warning.String());
 			}
