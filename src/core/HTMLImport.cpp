@@ -834,12 +834,23 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error,
 			if (name == "TR" || t.rows.empty())
 				t.rows.emplace_back();
 			if (name != "TR") {
+				// COLSPAN: the cell in its first column, the others it
+				// spans left empty (the port's tables don't merge cells),
+				// so the cells after it stay in their columns; its WIDTH
+				// then not one column's
+				int span = 1;
+				if (const std::string* colspan = attribute("COLSPAN"))
+					span = std::max(1, std::min(64, atoi(colspan->c_str())));
 				t.rows.back().emplace_back();
+				CellBuild& cell = t.rows.back().back();
 				if (const std::string* width = attribute("WIDTH"))
-					t.rows.back().back().width = *width;
+					if (span == 1)
+						cell.width = *width;
 				if (const std::string* height = attribute("HEIGHT"))
-					t.rows.back().back().height = *height;
-				cur = t.rows.back().back().text.get();
+					cell.height = *height;
+				cur = cell.text.get();
+				for (int extra = 1; extra < span; extra++)
+					t.rows.back().emplace_back();
 				t.cellOpen = true;
 				if (name == "TH")
 					state.faces = (state.faces | 2) & ~1u;
