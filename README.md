@@ -120,8 +120,9 @@ not released yet: build it to try it.
   Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
   formatting a style directly).
 - Plain text and RTF: opened as documents, saved with Save As's File Format;
-  HTML too, written as the HTML translator did (paragraphs, alignment,
-  sizes, colors, faces, entities; pictures and tables not yet).
+  HTML too, written and read as the HTML translator did (paragraphs,
+  headings, alignment, sizes, colors, faces, lists, rules, entities;
+  pictures and tables not yet).
   Text tables (tab, comma or semicolon separated) open as spreadsheets,
   and spreadsheets save as them (each cell as shown, or its formula with
   Show Formulas on).
@@ -197,7 +198,7 @@ The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; Import and Export Styles; New Window; Show Clipboard; creating
 and linking frames; drawing tools; in spreadsheets charts made from cells;
 new documents of other kinds than word processing and spreadsheets; the
-Word and Excel translators, and HTML import; the thesaurus and dictionary (they need data
+Word and Excel translators; the thesaurus and dictionary (they need data
 files that weren't part of Gobe Productive). Documents saved by the port
 open in the port; they haven't been tried in the original on BeOS.
 

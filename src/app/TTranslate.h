@@ -30,6 +30,7 @@ enum FileKind {
 	kTextFile,		// TextTranslator Identify: a text/* file that is text
 	kTableFile,		// ... that looks like a table (a spreadsheet import)
 	kSylkFile,		// SYLKTranslator: text/sylk, or text starting with an ID record
+	kHTMLFile,		// HTMLTranslator: text/html, or text with an <HTML> tag
 	kUnknownFile
 };
 FileKind IdentifyFile(const char* path);

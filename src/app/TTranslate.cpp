@@ -29,6 +29,7 @@
 #include "RTF.h"
 #include "SSSylk.h"
 #include "HTMLExport.h"
+#include "HTMLImport.h"
 
 namespace gobe {
 
@@ -205,6 +206,14 @@ IdentifyFile(const char* path)
 	if ((strcmp(type, "text/sylk") == 0 || strcmp(type, "text/x-sylk") == 0
 			|| head.compare(0, 3, "ID;") == 0) && LooksLikeText(head))
 		return kSylkFile;
+	// the HTML translator's: text/html, or an <HTML> tag near the start
+	if (LooksLikeText(head)) {
+		std::string lower;
+		for (size_t i = 0; i < head.size() && i < 1024; i++)
+			lower += char(tolower((unsigned char)head[i]));
+		if (strcmp(type, "text/html") == 0 || lower.find("<html") != std::string::npos)
+			return kHTMLFile;
+	}
 	if (strncmp(type, "text/", 5) != 0 || !LooksLikeText(head))
 		return kUnknownFile;
 	return TableLikeness(head) >= 0.5f ? kTableFile : kTextFile;
@@ -218,6 +227,8 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	bool ok = false;
 	if (kind == kRTFFile) {
 		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice);
+	} else if (kind == kHTMLFile) {
+		ok = ImportHTML(path, doc, message);
 	} else if (kind == kSylkFile) {
 		ok = ImportSylk(path, doc, message, &notice);
 	} else if (kind == kTableFile) {
