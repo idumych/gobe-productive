@@ -3,7 +3,10 @@
 #ifndef GOBE_HTML_IMPORT_H
 #define GOBE_HTML_IMPORT_H
 
+#include <functional>
 #include <string>
+
+#include "IMPart.h"
 
 namespace gobe {
 
@@ -22,10 +25,20 @@ struct Document;
 // new line, BR breaks the line (0x01); UL and OL indent, LI a bullet or
 // number and a tab; HR a separator line; TD and TH a tab, TR a new line.
 // Entities: ISOlat1table's names, &amp; &lt; &gt; &quot;, numeric and hex.
-// HEAD, TITLE, SCRIPT and STYLE aren't text. Tables, pictures and forms
-// aren't made (their text comes through).
-bool ImportHTMLText(const std::string& html, Document& doc, std::string& error);
-bool ImportHTML(const std::string& path, Document& doc, std::string& error);
+// HEAD, TITLE, SCRIPT and STYLE aren't text. TABLE makes a table (HTMLTree::
+// BeginTable, TableAddRow, TableAddCell; TTableImport): a table part in an
+// inline frame on a line of its own, a cell per TD or TH with its text
+// (TH bold), its WIDTH and CELLPADDING (see InlineParts); IMG SRC a
+// picture (an image part in an inline frame) when its file can be read
+// (`readPicture`, else a PNG reader), else its ALT text. A relative SRC
+// is from `folder`. Forms aren't made (their text comes through).
+//
+// reads a picture file into a B_RGBA32 bitmap; false if it can't
+using PictureReader = std::function<bool(const std::string& path, ArchiveBitmap& bitmap)>;
+bool ImportHTMLText(const std::string& html, Document& doc, std::string& error,
+	const std::string& folder = "", const PictureReader& readPicture = {});
+bool ImportHTML(const std::string& path, Document& doc, std::string& error,
+	const PictureReader& readPicture = {});
 
 } // namespace gobe
 

@@ -3,15 +3,20 @@
 // text state, with ForceLineBreak and insertBlankLine.
 #include "HTMLImport.h"
 
+#include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <iterator>
+#include <memory>
 #include <vector>
 
 #include "Document.h"
 #include "Editing.h"
+#include "InlineParts.h"
+#include "PNG.h"
 #include "Styles.h"
 #include "WPPart.h"
 
@@ -215,6 +220,20 @@ public:
 		fLastSpace = false;
 	}
 
+	// a table's or a picture's place: U+F0000 + its index (made into an
+	// inline frame when the document is made)
+	void Embed(size_t index, const State& state)
+	{
+		std::string marker;
+		uint32_t code = 0xf0000 + uint32_t(index);
+		marker += char(0xf0 | (code >> 18));
+		marker += char(0x80 | ((code >> 12) & 0x3f));
+		marker += char(0x80 | ((code >> 6) & 0x3f));
+		marker += char(0x80 | (code & 0x3f));
+		Append(marker, state);
+		fLastSpace = false;
+	}
+
 	std::vector<Paragraph>& Paragraphs() { return fParagraphs; }
 
 private:
@@ -296,13 +315,260 @@ SizeStep(float size, int step)
 	return kSizes[at];
 }
 
+// a table being read (HTMLTree::BeginTable, TableAddRow, TableAddCell):
+// its rows of cells, each with its own text
+struct CellBuild {
+	std::unique_ptr<Builder> text{new Builder};
+	std::string width;			// WIDTH: points, or "n%" of the table's
+	std::string height;			// HEIGHT: points (at least)
+};
+
+struct TableBuild {
+	Builder* parent = nullptr;	// where the table goes
+	Builder limbo;				// text between the cells (not kept)
+	std::vector<std::vector<CellBuild>> rows;
+	std::string width;			// WIDTH
+	float padding = 1;			// CELLPADDING (TTable's cell inset)
+	bool cellOpen = false;
+};
+
+// what a marker stands for: a table, or a picture's bitmap
+struct Embedded {
+	std::unique_ptr<TableBuild> table;
+	ArchiveBitmap picture;
+};
+
+
+// a percentage or points
+float
+Length(const std::string& text, float whole)
+{
+	if (text.empty())
+		return 0;
+	float value = float(atof(text.c_str()));
+	return text.back() == '%' ? value * whole / 100 : value;
+}
+
+
+// the paragraphs' text (UTF-8, '\n' between paragraphs)
+std::string
+PlainText(std::vector<Paragraph>& paragraphs)
+{
+	while (paragraphs.size() > 1 && paragraphs.back().runs.empty() && !paragraphs.back().rule)
+		paragraphs.pop_back();
+	std::string all;
+	for (size_t k = 0; k < paragraphs.size(); k++) {
+		for (const Run& r : paragraphs[k].runs)
+			all += r.text;
+		if (k + 1 < paragraphs.size())
+			all += '\n';
+	}
+	return all;
+}
+
+
+// each run's and paragraph's properties, paragraph `first` on of `part`
+// taking the builder's paragraphs
+void
+ApplyParagraphs(Document& doc, size_t part, size_t first, const std::vector<Paragraph>& paragraphs)
+{
+	State plain;
+	for (size_t i = 0; i < paragraphs.size(); i++) {
+		size_t k = first + i;
+		if (k >= doc.WordPart(part)->paragraphs.size())
+			break;
+		const Paragraph& p = paragraphs[i];
+		size_t offset = 0;
+		for (const Run& r : p.runs) {
+			TextPosition from{k, offset}, to{k, offset + r.text.size()};
+			offset += r.text.size();
+			const State& s = r.state;
+			if (s.family != plain.family || s.face != plain.face)
+				ApplyCharacterProperty(doc, part, from, to, TextFontProperty(s.family, s.face));
+			if (s.size != plain.size)
+				ApplyCharacterProperty(doc, part, from, to, TextSizeProperty(s.size));
+			if (s.faces != plain.faces)
+				ApplyCharacterProperty(doc, part, from, to, TextFaceProperty(s.faces));
+			if (s.color != plain.color)
+				ApplyCharacterProperty(doc, part, from, to, TextColorProperty(s.color));
+		}
+		if (p.alignment != 0)
+			ApplyParagraphProperty(doc, part, k, k, AlignmentProperty(p.alignment));
+		if (p.left != 0)
+			ApplyParagraphProperty(doc, part, k, k, IndentProperty(Sig("PLef"), p.left));
+		if (p.first != 0)
+			ApplyParagraphProperty(doc, part, k, k, IndentProperty(Sig("PInd"), p.first));
+		if (p.rule) {
+			WPMiscInfo line{};
+			line.kind = Sig("LINE");
+			InsertField(*doc.EditableWordPart(part), {k, 0}, line);
+		}
+	}
+}
+
+
+float EmbeddedHeight(const std::vector<Embedded>& objects, size_t index, float width);
+
+
+// a cell's height for its text at `width`: each paragraph's lines (its
+// text at half its size a character, wrapped), at 1.2 times its largest
+// size; an embedded table or picture as its height
+float
+TextHeight(const std::vector<Embedded>& objects, std::vector<Paragraph>& paragraphs, float width)
+{
+	float height = 0;
+	for (const Paragraph& p : paragraphs) {
+		float textWidth = 0, size = 12, objectHeight = 0;
+		for (const Run& r : p.runs) {
+			size = std::max(size, r.state.size);
+			for (size_t i = 0; i < r.text.size(); i++) {
+				unsigned char c = (unsigned char)r.text[i];
+				if (c == 0xf3 && i + 3 < r.text.size()) {
+					size_t index = size_t((r.text[i + 1] & 0x3f) << 12 | (r.text[i + 2] & 0x3f) << 6
+						| (r.text[i + 3] & 0x3f)) & 0xffff;
+					objectHeight = std::max(objectHeight, EmbeddedHeight(objects, index, width));
+					i += 3;
+				} else if ((c & 0xc0) != 0x80)
+					textWidth += r.state.size * 0.5f;
+			}
+		}
+		float lines = std::max(1.0f, std::ceil(textWidth / std::max(10.0f, width)));
+		height += std::max(lines * size * 1.2f, objectHeight);
+	}
+	return height;
+}
+
+
+// TTableImport::HTMLFixLayout, simplified: the columns as wide as their
+// cells' WIDTH (the widest in the column), the others sharing what's
+// left of the table's width (its WIDTH, else `available`), none under 20
+// points; each row as tall as its tallest cell's text, at least 17 points
+NewTable
+TableLayout(const std::vector<Embedded>& objects, TableBuild& t, float available)
+{
+	NewTable table;
+	size_t columns = 0;
+	for (const auto& row : t.rows)
+		columns = std::max(columns, row.size());
+	float width = t.width.empty() ? available : Length(t.width, available);
+	std::vector<float> fixed(columns, 0);
+	for (const auto& row : t.rows)
+		for (size_t c = 0; c < row.size(); c++)
+			fixed[c] = std::max(fixed[c], Length(row[c].width, width));
+	float used = 0;
+	size_t free = 0;
+	for (float f : fixed) {
+		used += f;
+		free += f == 0;
+	}
+	for (size_t c = 0; c < columns; c++)
+		table.columns.push_back(std::max(20.0f, fixed[c] > 0 ? fixed[c]
+			: (width - used) / float(std::max<size_t>(1, free))));
+	table.inset = t.padding;
+	for (auto& row : t.rows) {
+		float height = 17;
+		std::vector<std::string> texts;
+		for (size_t c = 0; c < columns; c++) {
+			if (c < row.size()) {
+				std::vector<Paragraph>& paragraphs = row[c].text->Paragraphs();
+				texts.push_back(PlainText(paragraphs));
+				height = std::max({height, TextHeight(objects, paragraphs, table.columns[c] - 4) + 4,
+					Length(row[c].height, 0)});
+			} else
+				texts.push_back("");
+		}
+		table.rows.push_back(height);
+		table.cells.push_back(texts);
+	}
+	return table;
+}
+
+
+float
+EmbeddedHeight(const std::vector<Embedded>& objects, size_t index, float width)
+{
+	if (index >= objects.size())
+		return 0;
+	const Embedded& e = objects[index];
+	if (!e.table)
+		return float(e.picture.Height());
+	NewTable layout = TableLayout(objects, *e.table, width);
+	float height = 0;
+	for (float h : layout.rows)
+		height += h;
+	return height;
+}
+
+
+// the markers in paragraphs `first` to `last` of `part` made into the
+// tables and pictures they stand for, each in an inline frame (the
+// tables' cells the same way, their text in their own parts)
+void
+MakeEmbedded(Document& doc, size_t part, size_t first, size_t last, std::vector<Embedded>& objects,
+	float width)
+{
+	for (size_t k = first; k <= last && k < doc.WordPart(part)->paragraphs.size(); k++) {
+		size_t at = 0;
+		while (true) {
+			const std::string& text = doc.WordPart(part)->paragraphs[k].text;
+			at = text.find('\xf3', at);
+			if (at == std::string::npos || at + 3 >= text.size())
+				break;
+			size_t index = size_t((text[at + 1] & 0x3f) << 12 | (text[at + 2] & 0x3f) << 6
+				| (text[at + 3] & 0x3f)) & 0xffff;
+			DeleteText(*doc.EditableWordPart(part), {k, at}, at + 4);
+			if (index >= objects.size())
+				continue;
+			Embedded& e = objects[index];
+			std::string error;
+			int made = -1;
+			if (e.table) {
+				NewTable layout = TableLayout(objects, *e.table, width);
+				size_t text = 0;
+				made = AddTablePart(doc, part, layout, text, error);
+				if (made >= 0) {
+					// each cell's first paragraph and paragraph count (before
+					// the tables and pictures in them change their text)
+					size_t columns = layout.columns.size();
+					std::vector<int> firsts;
+					std::vector<size_t> counts;
+					for (size_t r = 0; r < layout.rows.size(); r++)
+						for (size_t c = 0; c < columns; c++) {
+							firsts.push_back(CellParagraph(doc, size_t(made), r, c));
+							counts.push_back(c < e.table->rows[r].size()
+								? std::max<size_t>(1, e.table->rows[r][c].text->Paragraphs().size()) : 1);
+						}
+					for (size_t r = 0; r < e.table->rows.size(); r++)
+						for (size_t c = 0; c < e.table->rows[r].size(); c++) {
+							int p = firsts[r * columns + c];
+							if (p < 0)
+								continue;
+							std::vector<Paragraph>& paragraphs = e.table->rows[r][c].text->Paragraphs();
+							ApplyParagraphs(doc, text, size_t(p), paragraphs);
+							MakeEmbedded(doc, text, size_t(p), size_t(p) + paragraphs.size() - 1,
+								objects, layout.columns[c] - 4);
+						}
+					SetCellRanges(doc, size_t(made), counts);
+				}
+			} else
+				made = AddImagePart(doc, part, e.picture, error);
+			if (made >= 0)
+				at = InsertInlineFrame(doc, part, {k, at}, size_t(made)).offset;
+		}
+	}
+}
+
 } // namespace
 
 
 bool
-ImportHTMLText(const std::string& html, Document& doc, std::string& error)
+ImportHTMLText(const std::string& html, Document& doc, std::string& error,
+	const std::string& folder, const PictureReader& readPicture)
 {
-	Builder out;
+	Builder main;
+	Builder* cur = &main;
+	std::vector<std::unique_ptr<TableBuild>> tables;	// open, innermost last
+	std::vector<Embedded> objects;
 	State state;
 	struct Open {
 		std::string name;
@@ -324,20 +590,39 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 			std::string n = open.back().name;
 			state = open.back().saved;
 			open.pop_back();
+			// a cell's end: back to the text between cells; the table's:
+			// its place in the text it's in (a line of its own)
+			if ((n == "TD" || n == "TH") && !tables.empty() && tables.back()->cellOpen) {
+				tables.back()->cellOpen = false;
+				cur = &tables.back()->limbo;
+				continue;
+			}
+			if (n == "TABLE" && !tables.empty()) {
+				tables.back()->cellOpen = false;
+				cur = tables.back()->parent;
+				cur->LineBreak();
+				if (!tables.back()->rows.empty()) {
+					cur->Embed(objects.size(), state);
+					objects.push_back({std::move(tables.back()), ArchiveBitmap()});
+				}
+				tables.pop_back();
+				cur->LineBreak();
+				continue;
+			}
 			// doElementPostChildren: lists and paragraphs end their line;
 			// headings and blocks too
 			if (n == "P" || n == "UL" || n == "OL" || n == "MENU" || n == "DIR" || n == "DL"
 					|| n == "CENTER" || n == "DIV" || n == "PRE" || n == "LISTING" || n == "XMP"
 					|| n == "BLOCKQUOTE" || n == "ADDRESS" || (n.size() == 2 && n[0] == 'H'
 						&& n[1] >= '1' && n[1] <= '6') || n == "TR" || n == "TABLE")
-				out.LineBreak();
+				cur->LineBreak();
 		}
 	};
 
 	size_t i = 0;
 	std::string text;
 	auto flush = [&]() {
-		out.Text(text, state);
+		cur->Text(text, state);
 		text.clear();
 	};
 	while (i < html.size()) {
@@ -468,7 +753,7 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 		else if (name == "TT" || name == "CODE" || name == "KBD" || name == "SAMP" || name == "PRE"
 				|| name == "LISTING" || name == "XMP") {
 			if (name == "PRE" || name == "LISTING" || name == "XMP") {
-				out.BlankLine();
+				cur->BlankLine();
 				state.pre = true;
 			}
 			state.family = "Courier10 BT";
@@ -478,7 +763,7 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 			state.color = Color();
 		} else if (name.size() == 2 && name[0] == 'H' && name[1] >= '1' && name[1] <= '6') {
 			static const float kHeading[6] = {24, 18, 14, 12, 10, 9};
-			out.BlankLine();
+			cur->BlankLine();
 			state.faces = (state.faces | 2) & ~1u;
 			state.size = kHeading[name[1] - '1'];
 		} else if (name == "BIG")
@@ -486,14 +771,14 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 		else if (name == "SMALL")
 			state.size = SizeStep(state.size, -1);
 		else if (name == "CENTER") {
-			out.LineBreak();
+			cur->LineBreak();
 			state.alignment = 1;
 		} else if (name == "P" || name == "DIV" || name == "BLOCKQUOTE" || name == "DL") {
-			out.LineBreak();
+			cur->LineBreak();
 			if (name == "BLOCKQUOTE")
 				state.left += 36;
 		} else if (name == "UL" || name == "OL" || name == "MENU" || name == "DIR") {
-			out.BlankLine();
+			cur->BlankLine();
 			state.left += 54;
 			state.first += 36;
 			state.listKind = name == "OL" ? 2 : 1;
@@ -501,7 +786,7 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 			const std::string* type = attribute("TYPE");
 			state.listType = type != nullptr && !type->empty() ? (*type)[0] : '1';
 		} else if (name == "LI") {
-			out.LineBreak();
+			cur->LineBreak();
 			// the item's mark: a bullet, or its number in the list's TYPE
 			std::string mark;
 			if (state.listKind == 2) {
@@ -513,26 +798,67 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 				mark += ".\t";
 			} else
 				mark = "\xe2\x80\xa2\t";
-			out.Raw(mark, state);
+			cur->Raw(mark, state);
 		} else if (name == "DD")
 			state.left += 36;
-		else if (name == "TD" || name == "TH") {
-			// (tables aren't made: a tab between cells)
-			out.Raw("\t", state);
+		else if (name == "TABLE") {
+			// HTMLTree::BeginTable
+			std::unique_ptr<TableBuild> t(new TableBuild);
+			t->parent = cur;
+			if (const std::string* width = attribute("WIDTH"))
+				t->width = *width;
+			if (const std::string* padding = attribute("CELLPADDING"))
+				t->padding = float(atof(padding->c_str()));
+			cur = &t->limbo;
+			tables.push_back(std::move(t));
+		} else if ((name == "TD" || name == "TH" || name == "TR") && !tables.empty()) {
+			// TableAddRow, TableAddCell (a cell's text its own; TH bold)
+			TableBuild& t = *tables.back();
+			if (name == "TR" || t.rows.empty())
+				t.rows.emplace_back();
+			if (name != "TR") {
+				t.rows.back().emplace_back();
+				if (const std::string* width = attribute("WIDTH"))
+					t.rows.back().back().width = *width;
+				if (const std::string* height = attribute("HEIGHT"))
+					t.rows.back().back().height = *height;
+				cur = t.rows.back().back().text.get();
+				t.cellOpen = true;
+				if (name == "TH")
+					state.faces = (state.faces | 2) & ~1u;
+			}
+		} else if (name == "TD" || name == "TH") {
+			// (outside a table: a tab between cells)
+			cur->Raw("\t", state);
 			if (name == "TH")
 				state.faces = (state.faces | 2) & ~1u;
 		} else if (name == "TR")
-			out.LineBreak();
+			cur->LineBreak();
 		else if (name == "HEAD" || name == "TITLE" || name == "SCRIPT" || name == "STYLE")
 			state.hidden = true;
 		else if (name == "BR")
-			out.SoftBreak(state);
+			cur->SoftBreak(state);
 		else if (name == "HR")
-			out.Rule();
+			cur->Rule();
 		else if (name == "IMG") {
-			// (pictures aren't made: their ALT text)
-			if (const std::string* alt = attribute("ALT"))
-				out.Text(*alt, state);
+			// the picture from its file (SRC, from the HTML file's folder),
+			// else its ALT text
+			ArchiveBitmap picture;
+			const std::string* src = attribute("SRC");
+			if (src != nullptr && !src->empty() && !state.hidden) {
+				std::string path = *src;
+				if (path.compare(0, 7, "file://") == 0)
+					path = path.substr(7);
+				if (!path.empty() && path[0] != '/' && !folder.empty())
+					path = folder + "/" + path;
+				if (!(readPicture && readPicture(path, picture)))
+					ReadPNGFile(path, picture);
+			}
+			if (!picture.Empty()) {
+				cur->Embed(objects.size(), state);
+				objects.push_back({nullptr, std::move(picture)});
+			} else if (const std::string* alt = attribute("ALT"))
+				cur->Text(*alt, state);
 		} else if (name == "BODY") {
 			if (const std::string* link = attribute("LINK"))
 				ParseColor(*link, linkColor);
@@ -572,7 +898,12 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 	}
 	flush();
 
-	// the document: the text, then each run's and paragraph's properties
+	// tables left open at the end
+	while (!tables.empty())
+		close("TABLE");
+
+	// the document: the text, each run's and paragraph's properties, then
+	// the tables and pictures in their places
 	if (!CreateBlankDocument(doc, error))
 		return false;
 	size_t part = doc.wordParts.empty() ? 0 : doc.wordParts[0].first;
@@ -581,7 +912,7 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 		error = "no word processing part";
 		return false;
 	}
-	std::vector<Paragraph>& paragraphs = out.Paragraphs();
+	std::vector<Paragraph>& paragraphs = main.Paragraphs();
 	while (!paragraphs.empty() && paragraphs.back().runs.empty() && !paragraphs.back().rule)
 		paragraphs.pop_back();
 	std::string all;
@@ -592,41 +923,25 @@ ImportHTMLText(const std::string& html, Document& doc, std::string& error)
 			all += '\n';
 	}
 	InsertMultiline(*wp, {0, 0}, all);
-	State plain;
-	for (size_t k = 0; k < paragraphs.size() && k < doc.WordPart(part)->paragraphs.size(); k++) {
-		const Paragraph& p = paragraphs[k];
-		size_t offset = 0;
-		for (const Run& r : p.runs) {
-			TextPosition from{k, offset}, to{k, offset + r.text.size()};
-			offset += r.text.size();
-			const State& s = r.state;
-			if (s.family != plain.family || s.face != plain.face)
-				ApplyCharacterProperty(doc, part, from, to, TextFontProperty(s.family, s.face));
-			if (s.size != plain.size)
-				ApplyCharacterProperty(doc, part, from, to, TextSizeProperty(s.size));
-			if (s.faces != plain.faces)
-				ApplyCharacterProperty(doc, part, from, to, TextFaceProperty(s.faces));
-			if (s.color != plain.color)
-				ApplyCharacterProperty(doc, part, from, to, TextColorProperty(s.color));
-		}
-		if (p.alignment != 0)
-			ApplyParagraphProperty(doc, part, k, k, AlignmentProperty(p.alignment));
-		if (p.left != 0)
-			ApplyParagraphProperty(doc, part, k, k, IndentProperty(Sig("PLef"), p.left));
-		if (p.first != 0)
-			ApplyParagraphProperty(doc, part, k, k, IndentProperty(Sig("PInd"), p.first));
-		if (p.rule) {
-			WPMiscInfo line{};
-			line.kind = Sig("LINE");
-			InsertField(*doc.EditableWordPart(part), {k, 0}, line);
-		}
+	ApplyParagraphs(doc, part, 0, paragraphs);
+	if (!objects.empty()) {
+		// the text's width: its frame's
+		float width = 468;
+		if (part < doc.tails.size())
+			for (const Portal& p : doc.tails[part].portals)
+				for (const Frame& f : p.frames) {
+					width = f.extent[0];
+					break;
+				}
+		MakeEmbedded(doc, part, 0, paragraphs.empty() ? 0 : paragraphs.size() - 1, objects, width);
 	}
 	return true;
 }
 
 
 bool
-ImportHTML(const std::string& path, Document& doc, std::string& error)
+ImportHTML(const std::string& path, Document& doc, std::string& error,
+	const PictureReader& readPicture)
 {
 	std::ifstream file(path, std::ios::binary);
 	if (!file) {
@@ -634,7 +949,9 @@ ImportHTML(const std::string& path, Document& doc, std::string& error)
 		return false;
 	}
 	std::string html((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
-	return ImportHTMLText(html, doc, error);
+	size_t slash = path.rfind('/');
+	return ImportHTMLText(html, doc, error, slash == std::string::npos ? "." : path.substr(0, slash),
+		readPicture);
 }
 
 } // namespace gobe

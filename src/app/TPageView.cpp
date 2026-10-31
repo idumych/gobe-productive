@@ -23,6 +23,7 @@
 #include <Shape.h>
 
 #include "Fields.h"
+#include "InlineParts.h"
 #include "Notes.h"
 #include "TextImport.h"
 #include "ResourceFile.h"
@@ -1704,7 +1705,7 @@ TPageView::DrawTable(const Document::PlacedFrame& f, BRect r)
 			r.left + c.origin[0] + c.size[0], r.top + c.origin[1] + c.size[1]);
 	};
 	auto cellStyle = [&](const TableCell& c) {
-		const gobe::Frame* frame = fDocument.FrameOf(c.frame[0], c.frame[1]);
+		const gobe::Frame* frame = FrameAt(fDocument, c.frame);
 		return ResolveShapeStyle(fDocument.styles, frame != NULL ? frame->style : 0);
 	};
 	PushState();

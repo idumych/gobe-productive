@@ -12,6 +12,7 @@
 #include "DocArchive.h"
 #include "Document.h"
 #include "Fields.h"
+#include "InlineParts.h"
 #include "PNG.h"
 #include "SSEval.h"
 #include "Styles.h"
@@ -319,7 +320,7 @@ WriteTable(const Document& doc, size_t part, Output& o)
 				out += buffer;
 			}
 			out += " COLSPAN=1 ROWSPAN=1";
-			const Frame* frame = doc.FrameOf(cell.frame[0], cell.frame[1]);
+			const Frame* frame = FrameAt(doc, cell.frame);
 			WPPart cellText;
 			if (frame != nullptr && text != nullptr)
 				cellText = TextRange(*text, frame->textStart, frame->textLength);
@@ -408,7 +409,7 @@ WriteWord(const Document& doc, size_t part, const WPPart& wp, Output& o)
 				if (special->kind == Sig("LINE"))
 					out += "\n<HR>\n";
 				else if (special->kind == Sig("FRAM")) {
-					const Frame* frame = doc.FrameOf(special->frame[0], special->frame[1]);
+					const Frame* frame = FrameAt(doc, special->frame);
 					if (frame != nullptr && doc.Table(frame->part) != nullptr)
 						WriteTable(doc, frame->part, o);
 					else {

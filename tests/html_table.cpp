@@ -110,7 +110,8 @@ main()
 	c1.size[0] = 60.4f;
 	c1.size[1] = 20;
 	c1.frame[0] = uint32_t(X);
-	c1.frame[1] = 1;
+	c1.frame[1] = 0;		// the portal (its id)
+	c1.frame[2] = 1;		// the frame (its id, TFrame +0x38)
 	row.cells = {c0, c1};
 	table.rows = {row};
 	doc.tableParts.emplace_back(T, table);
@@ -121,6 +122,7 @@ main()
 	f0.textStart = 0;
 	f0.textLength = 3;
 	f0.style = AddStyle(doc, {Fill(255, 0, 0)});
+	f1.values[1] = 1;
 	f1.textStart = 3;
 	f1.textLength = 3;
 	// HAln 3 right, VAln 3 bottom (TPropHAlign, TPropVAlign)
