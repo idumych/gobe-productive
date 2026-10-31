@@ -1239,8 +1239,35 @@ TPageView::SetInk(const Ink& ink, float opacity, BRect rect, BGradient** gradien
 {
 	*gradient = NULL;
 	fInkPattern = B_SOLID_HIGH;
+	fInkTile = NULL;
 	if (!ink.set || opacity <= 0)
 		return false;
+	if (!ink.otherFill.empty()) {
+		// a bitmap pattern (its bitmap made once)
+		auto found = fInkTiles.find(ink.otherFill);
+		if (found == fInkTiles.end()) {
+			int width, height;
+			std::vector<uint8_t> rgba;
+			BBitmap* tile = NULL;
+			if (FillPatternPixels(ink, width, height, rgba)) {
+				tile = new BBitmap(BRect(0, 0, width - 1, height - 1), B_RGBA32);
+				uint8* bits = (uint8*)tile->Bits();
+				for (int y = 0; y < height; y++)
+					for (int x = 0; x < width; x++) {
+						const uint8_t* from = &rgba[(size_t(y) * width + x) * 4];
+						uint8* to = bits + y * tile->BytesPerRow() + x * 4;
+						to[0] = from[2];
+						to[1] = from[1];
+						to[2] = from[0];
+						to[3] = from[3];
+					}
+			}
+			found = fInkTiles.emplace(ink.otherFill, std::unique_ptr<BBitmap>(tile)).first;
+		}
+		fInkTile = found->second.get();
+		SetHighColor(ToColor(ink.color, opacity));
+		return fInkTile != NULL;
+	}
 	if (ink.gradient) {
 		BGradient* g;
 		if (ink.gradientType == Sig("GDrl")) {
@@ -1325,6 +1352,10 @@ TPageView::DrawFrameBackground(const Document::PlacedFrame& f, BRect r)
 	}
 	if (!SetInk(style.background, style.backgroundOpacity, r, &gradient))
 		return;
+	if (fInkTile != NULL) {
+		FillTile(r, NULL, style.backgroundOpacity);
+		return;
+	}
 	SetDrawingMode(B_OP_ALPHA);
 	if (gradient != NULL) {
 		FillRect(r, *gradient);
@@ -1337,11 +1368,42 @@ TPageView::DrawFrameBackground(const Document::PlacedFrame& f, BRect r)
 
 
 void
+TPageView::FillTile(BRect rect, BShape* clip, float opacity)
+{
+	if (fInkTile == NULL || !rect.IsValid())
+		return;
+	PushState();
+	BRegion region(rect);
+	ConstrainClippingRegion(&region);
+	if (clip != NULL)
+		ClipToShape(clip);
+	if (opacity < 0.999f) {
+		SetDrawingMode(B_OP_ALPHA);
+		SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+		SetHighColor(0, 0, 0, uint8(255 * std::max(0.0f, opacity)));
+	} else {
+		SetDrawingMode(B_OP_ALPHA);
+		SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+	}
+	BRect b = fInkTile->Bounds();
+	float w = b.Width() + 1, h = b.Height() + 1;
+	for (float y = rect.top; y <= rect.bottom; y += h)
+		for (float x = rect.left; x <= rect.right; x += w)
+			DrawBitmap(fInkTile, BPoint(x, y));
+	PopState();
+}
+
+
+void
 TPageView::FillInk(BRect rect, const Ink& ink, float opacity, BRect inkRect)
 {
 	BGradient* gradient;
 	if (!SetInk(ink, opacity, inkRect, &gradient))
 		return;
+	if (fInkTile != NULL) {
+		FillTile(rect, NULL, opacity);
+		return;
+	}
 	SetDrawingMode(opacity >= 0.999f ? B_OP_COPY : B_OP_ALPHA);
 	if (gradient != NULL) {
 		FillRect(rect, *gradient);
@@ -2179,6 +2241,44 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 						draw((BGradient*)NULL);
 				};
 				const pattern p = fInkPattern;
+				if (fInkTile != NULL) {
+					// a bitmap pattern: tiled, clipped to the shape
+					BShape outline;
+					BShape* clip = path;
+					if (clip == NULL && s.kind != Sig("RECT")) {
+						clip = &outline;
+						if (s.kind == Sig("ARC ")) {
+							// the pie: the center, the arc's points
+							BPoint c(r.left + r.Width() / 2, r.top + r.Height() / 2);
+							outline.MoveTo(c);
+							for (int k = 0; k <= 32; k++) {
+								float a = (s.arcAngles[0] + s.arcAngles[1] * k / 32) * M_PI / 180;
+								outline.LineTo(BPoint(c.x + cosf(a) * r.Width() / 2,
+									c.y - sinf(a) * r.Height() / 2));
+							}
+						} else {
+							// an ellipse, or a rectangle with its corners
+							// rounded
+							float rx = s.kind == Sig("ELPS") ? r.Width() / 2 : s.radius[0];
+							float ry = s.kind == Sig("ELPS") ? r.Height() / 2 : s.radius[1];
+							for (int k = 0; k <= 64; k++) {
+								float a = 2 * M_PI * k / 64;
+								int quarter = std::min(3, int(k / 16));
+								float cx = quarter == 0 || quarter == 3 ? r.right - rx : r.left + rx;
+								float cy = quarter < 2 ? r.top + ry : r.bottom - ry;
+								BPoint at(cx + cosf(a) * rx, cy - sinf(a) * ry);
+								if (k == 0)
+									outline.MoveTo(at);
+								else
+									outline.LineTo(at);
+							}
+						}
+						outline.Close();
+					}
+					FillTile(r, clip, style.fillOpacity);
+					delete gradient;
+					gradient = NULL;
+				} else
 				fill([&](BGradient* g) {
 					if (s.kind == Sig("RECT"))
 						g ? FillRect(r, *g) : FillRect(r, p);

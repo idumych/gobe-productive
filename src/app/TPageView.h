@@ -468,6 +468,13 @@ private:
 	bool fInkLowChanged = false;
 	rgb_color fInkOldLow;
 	void RestoreInkLow();
+	// a bitmap pattern ink (TFillPattern: FillPatternPixels): SetInk sets
+	// fInkTile, FillTile tiles it over a rectangle from its corner,
+	// clipped to `clip` (a shape, NULL: the rectangle); kept by the fill's
+	// bytes
+	BBitmap* fInkTile = NULL;
+	std::map<std::vector<uint8_t>, std::unique_ptr<BBitmap>> fInkTiles;
+	void FillTile(BRect rect, BShape* clip, float opacity);
 	// (`from`, `to`: only the paragraphs starting in that text range, a
 	// table cell's frame's)
 	LayoutResult LayoutPart(size_t part, const std::vector<FrameGeometry>& frames,
