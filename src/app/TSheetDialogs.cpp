@@ -488,21 +488,33 @@ TDialogDeleteInsert::ItemHit(int32 index, BMessage* message)
 }
 
 
-TDialogSort::TDialogSort(BHandler* target, const SSRange& range)
+TDialogSort::TDialogSort(BHandler* target, const std::vector<SSRange>& ranges)
 	:
 	TDialog(25, 25, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
 	fTarget(target),
-	fRange(range),
+	fRanges(ranges),
 	fVertical(true)
 {
-	int height = range.to.a - range.from.a + 1, width = range.to.b - range.from.b + 1;
-	if (height < 2)
+	const SSRange& first = ranges.front();
+	fHeight = first.to.a - first.from.a + 1;
+	fWidth = first.to.b - first.from.b + 1;
+	for (size_t i = 1; i < ranges.size(); i++) {
+		if (ranges[i].to.a - ranges[i].from.a + 1 != fHeight) {
+			fVertical = false;
+			fHeight = -1;
+		}
+		if (ranges[i].to.b - ranges[i].from.b + 1 != fWidth) {
+			fWidth = -1;
+			fVertical = true;
+		}
+	}
+	if (fHeight < 2)
 		fVertical = false;
-	else if (width < 2)
+	else if (fWidth < 2)
 		fVertical = true;
-	// the first key: the range's first column (row)
-	fKey = fVertical ? SSRange{range.from, {range.to.a, range.from.b}}
-		: SSRange{range.from, {range.from.a, range.to.b}};
+	// the first key: the first range's first column (row)
+	fKey = fVertical ? SSRange{first.from, {first.to.a, first.from.b}}
+		: SSRange{first.from, {first.from.a, first.to.b}};
 }
 
 
@@ -513,9 +525,9 @@ TDialogSort::Init()
 	SetRadioItem(5, !fVertical);
 	for (int32 key = 0; key < 3; key++)
 		SetRadioItem(8 + key * 4, true);
-	SetItemEnabled(4, fRange.to.a > fRange.from.a);
-	SetItemEnabled(5, fRange.to.b > fRange.from.b);
-	SetTextItem(3, RangeName(fRange).c_str());
+	SetItemEnabled(4, fHeight > 1);
+	SetItemEnabled(5, fWidth > 1);
+	SetTextItem(3, RangeListName(fRanges).c_str());
 	SetTextItem(7, RangeName(fKey).c_str());
 }
 
@@ -538,7 +550,7 @@ TDialogSort::ItemHit(int32 index, BMessage* message)
 	BRadioButton* vertical = dynamic_cast<BRadioButton*>(Item(4));
 	bool down = vertical != NULL && vertical->Value() == B_CONTROL_ON;
 	BMessage sort('sM75');
-	sort.AddString("SortRanges", RangeName(fRange).c_str());
+	sort.AddString("SortRanges", RangeListName(fRanges).c_str());
 	for (int32 key = 0; key < 3; key++) {
 		BString text = TextItem(7 + key * 4);
 		if (text.Length() == 0) {
@@ -549,8 +561,8 @@ TDialogSort::ItemHit(int32 index, BMessage* message)
 		SSRange range;
 		if (!ParseRangeName(text.String(), range))
 			return alert(7, 7 + key * 4);
-		if (down ? uint16(range.to.a - range.from.a + 1) != fRange.to.a - fRange.from.a + 1
-				: uint16(range.to.b - range.from.b + 1) != fRange.to.b - fRange.from.b + 1)
+		if (down ? int(uint16(range.to.a - range.from.a + 1)) != fHeight
+				: int(uint16(range.to.b - range.from.b + 1)) != fWidth)
 			return alert(down ? 8 : 9, 7 + key * 4);
 		BString name;
 		name.SetToFormat("Key %d", int(key + 1));

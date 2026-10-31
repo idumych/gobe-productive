@@ -162,15 +162,27 @@ bool
 SortCells(Document& doc, size_t partIndex, const SSRange& range, bool vertical,
 	const std::vector<SortKey>& keys)
 {
+	return SortCells(doc, partIndex, std::vector<SSRange>{range}, vertical, keys);
+}
+
+
+bool
+SortCells(Document& doc, size_t partIndex, const std::vector<SSRange>& ranges, bool vertical,
+	const std::vector<SortKey>& keys)
+{
 	SSPart* part = doc.EditableSpreadsheetPart(partIndex);
 	if (part == nullptr || keys.empty())
 		return false;
 	// TSSSortTable::SortSize: the first key's length
 	const SSRange& first = keys[0].range;
 	long size = vertical ? first.to.a - first.from.a + 1 : first.to.b - first.from.b + 1;
-	long length = vertical ? range.to.a - range.from.a + 1 : range.to.b - range.from.b + 1;
-	if (length != size)
+	if (ranges.empty())
 		return false;
+	for (const SSRange& range : ranges) {
+		long length = vertical ? range.to.a - range.from.a + 1 : range.to.b - range.from.b + 1;
+		if (length != size)
+			return false;
+	}
 
 	SSBook book(doc);
 	SSEvaluator eval(*part, &book, int(partIndex));
@@ -182,8 +194,11 @@ SortCells(Document& doc, size_t partIndex, const SSRange& range, bool vertical,
 	std::map<uint32_t, SSCell> before;
 	auto key = [](CellID id) { return uint32_t(id.a) << 16 | id.b; };
 	auto inRange = [&](CellID id) {
-		return range.from.a <= id.a && id.a <= range.to.a && range.from.b <= id.b
-			&& id.b <= range.to.b;
+		for (const SSRange& range : ranges)
+			if (range.from.a <= id.a && id.a <= range.to.a && range.from.b <= id.b
+					&& id.b <= range.to.b)
+				return true;
+		return false;
 	};
 	std::vector<SSCell> kept;
 	for (SSCell& cell : part->cells) {
@@ -193,6 +208,7 @@ SortCells(Document& doc, size_t partIndex, const SSRange& range, bool vertical,
 			kept.push_back(std::move(cell));
 	}
 	part->cells = std::move(kept);
+	for (const SSRange& range : ranges)
 	for (long k = 0; k < size; k++) {
 		long from = index[k];
 		long across = vertical ? range.to.b - range.from.b + 1 : range.to.a - range.from.a + 1;
@@ -284,6 +300,36 @@ ParseCellName(const char*& text, CellID& cell)
 }
 
 } // namespace
+
+
+std::string
+RangeListName(const std::vector<SSRange>& ranges)
+{
+	std::string name;
+	for (const SSRange& r : ranges)
+		name += (name.empty() ? "" : ",") + RangeName(r);
+	return name;
+}
+
+
+bool
+ParseRangeList(const std::string& text, std::vector<SSRange>& ranges)
+{
+	ranges.clear();
+	size_t start = 0;
+	while (start <= text.size()) {
+		size_t end = text.find(',', start);
+		if (end == std::string::npos)
+			end = text.size();
+		std::string one = text.substr(start, end - start);
+		SSRange r;
+		if (!ParseRangeName(one, r) && !ParseRangeName(one + ".." + one, r))
+			return false;
+		ranges.push_back(r);
+		start = end + 1;
+	}
+	return !ranges.empty();
+}
 
 
 bool

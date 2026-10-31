@@ -4,10 +4,13 @@
 // circle of references or refers to a formula that is. The samples have no
 // circles: their formulas keep the flags they were saved with.
 #include <cstdio>
+#include <algorithm>
 #include <cstdlib>
 
 #include "Document.h"
 #include "Editing.h"
+#include "SSEval.h"
+#include "SSMove.h"
 
 using namespace gobe;
 
@@ -94,6 +97,37 @@ main(int argc, char** argv)
 		set("B1", "1");
 		UpdateDependencies(scratch, scratchPart);
 		Check(flags(0) == 3 && flags(2) == 3, "no circle after B1 is a number");
+
+		// Select Dependents (TSSDepManager::CellsChanged): the formulas in
+		// the cells and those that depend on them, through others too
+		ss.cells.clear();
+		ss.dependents.clear();
+		set("A1", "1");
+		set("B1", "=A1*2");
+		set("C1", "=B1+1");
+		set("D1", "5");
+		set("E1", "=SUM(A1:A3)");
+		set("F1", "=D1");
+		set("G1", "=F1+C1");
+		UpdateDependencies(scratch, scratchPart);
+		auto names = [&](const char* from, const char* to) {
+			SSRange r{{uint16_t(atoi(from + 1) - 1), uint16_t(from[0] - 'A')},
+				{uint16_t(atoi(to + 1) - 1), uint16_t(to[0] - 'A')}};
+			std::vector<CellID> cells = DependentCells(ss, {r});
+			std::vector<std::string> out;
+			for (CellID id : cells)
+				out.push_back(CellName(id));
+			std::sort(out.begin(), out.end());
+			std::string s;
+			for (const std::string& n : out)
+				s += n + " ";
+			return s;
+		};
+		Check(names("A1", "A1") == "B1 C1 E1 G1 ", "dependents of A1: " + names("A1", "A1"));
+		Check(names("B1", "B1") == "B1 C1 G1 ", "of B1 (itself a formula): " + names("B1", "B1"));
+		Check(names("D1", "D1") == "F1 G1 ", "of D1: " + names("D1", "D1"));
+		Check(names("A3", "A3") == "E1 ", "of A3 (empty, in a range): " + names("A3", "A3"));
+		Check(names("H5", "H9") == "", "of cells nothing refers to");
 	}
 	printf("parts %d, ok %d, failed %d\n", parts, ok, failures);
 	return failures != 0 || parts == 0;

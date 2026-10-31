@@ -172,7 +172,14 @@ public:
 		// TSSSelection's kind: cells, or whole rows or columns (chosen by
 		// their headings; they span the sheet, row and column 0 active)
 		SelectionKind kind = SelectionKind::cells;
+		// more ranges (TSSSelection's TCellsList): Command-click adds the
+		// range so far here and starts another
+		std::vector<SSRange> extra;
 	} fSelectedCell;
+	// the selected ranges: the extra ones, then the one being made
+	std::vector<SSRange> SelectedRanges() const;
+	// TPartSS::IsLocked for every selected range (and its alert)
+	bool SelectionLocked();
 	BTextView* fCellEditor = NULL;
 	BRect fBounds;					// everything, in document coordinates
 	float fMargin;
@@ -308,6 +315,7 @@ private:
 	bool fDraggingCells = false;	// cell range: drag from first click
 	bool fDraggingHeadings = false;	// whole rows or columns: the same
 	bool fScriptShift = false;		// RunScript: shift held
+	bool fScriptCommand = false;	// RunScript: Command held
 	uint32 fScriptModifiers = 0;	// RunScript: Command, Option, Control held
 };
 

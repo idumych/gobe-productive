@@ -566,6 +566,45 @@ MoveCellsCommand(Document& doc, size_t partIndex, const std::vector<SSRange>& bl
 }
 
 
+std::vector<CellID>
+DependentCells(const SSPart& part, const std::vector<SSRange>& list)
+{
+	// the cells of the list (pinned to the sheet) that exist are dirty
+	std::vector<SSRange> pinned = list;
+	for (SSRange& r : pinned)
+		Pin(r, part.used);
+	std::set<uint32_t> dirty;
+	auto key = [](CellID id) { return uint32_t(id.a) << 16 | id.b; };
+	for (const SSCell& c : part.cells)
+		if (CellInList(pinned, c.id))
+			dirty.insert(key(c.id));
+	// a formula referring to the list or to a dirty cell is dirty; in
+	// calculation order, one pass reaches everything that follows
+	auto containsDirty = [&](const std::vector<SSRange>& refers) {
+		for (SSRange r : refers) {
+			Pin(r, part.used);
+			for (const SSCell& c : part.cells)
+				if (InRange(r, c.id) && dirty.count(key(c.id)))
+					return true;
+		}
+		return false;
+	};
+	for (CellID id : part.dependents) {
+		const SSCell* c = part.Cell(id.a, id.b);
+		if (c == nullptr || c->kind != Sig("Fmla") || dirty.count(key(id)))
+			continue;
+		std::vector<SSRange> refers = FormulaCells(c->formula, id);
+		if (ListInList(list, refers) || containsDirty(refers))
+			dirty.insert(key(id));
+	}
+	std::vector<CellID> out;
+	for (CellID id : part.dependents)
+		if (dirty.count(key(id)))
+			out.push_back(id);
+	return out;
+}
+
+
 bool
 AdjustRange(SSRange& r, const SSRange& block, int rows, int columns)
 {

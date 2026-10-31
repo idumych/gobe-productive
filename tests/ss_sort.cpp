@@ -204,6 +204,28 @@ HandCases(int argc, char** argv)
 			"RangeName");
 	}
 
+	// two ranges sorted together (SwapCells: every range of the selection)
+	doc = start;
+	Set(doc, p, "A1", "2");
+	Set(doc, p, "A2", "1");
+	Set(doc, p, "C1", "b");
+	Set(doc, p, "C2", "a");
+	Set(doc, p, "B1", "x");
+	Set(doc, p, "B2", "y");
+	Check(SortCells(doc, p, std::vector<SSRange>{Range("A1", "A2"), Range("C1", "C2")}, true,
+		{{Range("A1", "A2"), true}}), "two ranges");
+	Check(Column(doc, p, 'A', 1, 2) == "1|2" && Column(doc, p, 'C', 1, 2) == "a|b"
+		&& Column(doc, p, 'B', 1, 2) == "x|y", "both ranges in the key's order, B left alone");
+	Check(!SortCells(doc, p, std::vector<SSRange>{Range("A1", "A2"), Range("C1", "C3")}, true,
+		{{Range("A1", "A2"), true}}), "a range longer than the key");
+	{
+		std::vector<SSRange> list;
+		Check(ParseRangeList("A1..A2,C3", list) && list.size() == 2 && list[1].from.a == 2
+			&& list[1].to.b == 2, "ParseRangeList");
+		Check(RangeListName(list) == "A1..A2,C3", "RangeListName");
+		Check(!ParseRangeList("A1..A2,", list), "a list ending in a comma");
+	}
+
 	// a key not as long as the range: nothing happens
 	Check(!sorted("A1", "B3", {{Range("A1", "A2"), true}}), "key shorter than the range");
 

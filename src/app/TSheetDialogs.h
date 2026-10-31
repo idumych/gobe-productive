@@ -130,14 +130,15 @@ private:
 // Options > Sort… (TDialogSort; TSSDialog 25): the range (3), Vertical (4,
 // on a range more than one row high) or Horizontal (5), and three order
 // keys, each a range "A2..A9" (7, 11, 15) with Ascending (8, 12, 16) or
-// Descending (9, 13, 17). The direction begins as the range's shape says
-// and the first key as the range's first column (row). OK checks each key
+// Descending (9, 13, 17). The direction begins as the ranges' shapes say
+// (all as high: Vertical; all as wide: Horizontal) and the first key as
+// the first range's first column (row). OK checks each key
 // (STR# 1503: 6 the first is needed, 7 not a range, 8/9 not as high/wide as
 // the range) and sends `target` 'sM75' with "SortRanges", "vertical",
 // "Key 1".. and "Key 1ascending"...
 class TDialogSort : public TDialog {
 public:
-	TDialogSort(BHandler* target, const SSRange& range);
+	TDialogSort(BHandler* target, const std::vector<SSRange>& ranges);
 
 protected:
 	virtual void Init();
@@ -145,8 +146,9 @@ protected:
 
 private:
 	BHandler* fTarget;
-	SSRange fRange;
+	std::vector<SSRange> fRanges;
 	bool fVertical;
+	int fHeight, fWidth;	// the ranges' (-1: they differ)
 	SSRange fKey;
 };
 

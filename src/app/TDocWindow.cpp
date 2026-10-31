@@ -1193,8 +1193,6 @@ TDocWindow::MenusBeginning()
 		enable('sM71', width > 1);
 		enable('sM7C', width > 1);
 		enable('sM75', height > 1 || width > 1);
-		for (uint32 command : {'sM7A'})
-			enable(command, false);
 		// Auto Calculate marked when on (TPartSS::FixMenus)
 		if (BMenuItem* item = KeyMenuBar()->FindItem('sM79')) {
 			const SSPart* ss = fDocument->SpreadsheetPart(cell.part);

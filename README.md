@@ -145,7 +145,10 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
   the original's order (numbers, text, true/false, errors, empty cells).
 - **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
 - **Selecting:** whole rows and columns by their headings (shift-click or
-  drag for more), the corner for every cell in use; the cell context menu.
+  drag for more), the corner for every cell in use; several ranges at once
+  with Command-click (Alt on Haiku), which formats, locks, fills, clears,
+  moves and sorts act on together; Select Dependents (the formulas that
+  depend on the selection); the cell context menu.
 - The edits can be undone (display options and Auto Calculate are
   settings, not edits, as in the original), and the sheet's locks, sizes,
   headings and options are saved with the document.
@@ -158,12 +161,11 @@ documents.
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; named selections; Import and Export Styles; New Window; Show
 Clipboard; creating and linking frames; drawing tools; in spreadsheets
-selections of several ranges and Select Dependents, resizing rows and
-columns by dragging their headings, charts made from cells; new documents
-of other kinds; the Word, Excel, HTML and SYLK translators; the thesaurus
-and dictionary (they need data files that weren't part of Gobe
-Productive). Documents saved by the port open in the port; they haven't
-been tried in the original on BeOS.
+resizing rows and columns by dragging their headings, charts made from
+cells; new documents of other kinds; the Word, Excel, HTML and SYLK
+translators; the thesaurus and dictionary (they need data files that
+weren't part of Gobe Productive). Documents saved by the port open in the
+port; they haven't been tried in the original on BeOS.
 
 ## Building
 

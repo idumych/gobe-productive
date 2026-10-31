@@ -67,6 +67,13 @@ enum class MoveResult { moved, locked, failed };
 MoveResult MoveCellsCommand(Document& doc, size_t part, const std::vector<SSRange>& block,
 	int rows, int columns);
 
+// TSSDepManager::CellsChanged: the formula cells to compute again when the
+// cells of `list` change, in calculation order (part.dependents, which
+// UpdateDependencies keeps): the formulas in the list themselves, then
+// every formula referring to the list or to one of those, and so on.
+// (Formulas of other parts through links aren't followed.)
+std::vector<CellID> DependentCells(const SSPart& part, const std::vector<SSRange>& list);
+
 // TRange::Adjust: range `r` (a locked range) after `block` moved by rows,
 // columns: inside the block it moves with it; one that the move doesn't
 // leave alone along the other axis stretches by the move when the block's

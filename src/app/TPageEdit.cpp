@@ -468,12 +468,13 @@ TPageView::CellContextMenu(size_t part, int row, int column)
 	uint16 cell[2] = {uint16(row), uint16(column)};
 	message->AddData("cellID", B_RAW_TYPE, cell, sizeof(cell));
 	menu->AddItem(new BMenuItem(IndexString(resources, 1505, 0).c_str(), message));
-	int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
-	int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
-	int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
-	int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
-	if (fSelectedCell.active && fSelectedCell.part == part && row >= r0 && row <= r1
-			&& column >= c0 && column <= c1) {
+	// (TSSSelection::CellInList: the clicked cell in any selected range)
+	bool inSelection = false;
+	if (fSelectedCell.active && fSelectedCell.part == part)
+		for (const SSRange& r : SelectedRanges())
+			inSelection |= row >= r.from.a && row <= r.to.a && column >= r.from.b
+				&& column <= r.to.b;
+	if (inSelection) {
 		menu->AddSeparatorItem();
 		menu->AddItem(new BMenuItem(IndexString(resources, 1501, 8).c_str(),
 			new BMessage('sM62')));
@@ -1191,6 +1192,7 @@ TPageView::SelectLines(size_t part, SelectionKind kind, int index, bool extend)
 	fSelectedCell.active = true;
 	fSelectedCell.part = part;
 	fSelectedCell.kind = kind;
+	fSelectedCell.extra.clear();
 	// the lines span the sheet, the active cell (the moving corner) in row
 	// (column) 0
 	if (columns) {
@@ -1235,6 +1237,7 @@ TPageView::BeginCellEdit(size_t part, int row, int column, BRect rect)
 	fSelectedCell.active = true;
 	fSelectedCell.part = part;
 	fSelectedCell.kind = SelectionKind::cells;
+	fSelectedCell.extra.clear();
 	fSelectedCell.row = row;
 	fSelectedCell.column = column;
 	rect.right = std::max(rect.right, rect.left + 120);	// room for formulas
@@ -1300,6 +1303,7 @@ TPageView::EndCellEdit(bool commit, int moveRows, int moveColumns)
 	fSelectedCell.anchorRow = fSelectedCell.row;
 	fSelectedCell.anchorColumn = fSelectedCell.column;
 	fSelectedCell.kind = SelectionKind::cells;
+	fSelectedCell.extra.clear();
 	Invalidate();
 }
 
@@ -1349,6 +1353,7 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 			fSelectedCell.active = true;
 			fSelectedCell.part = part;
 			fSelectedCell.kind = SelectionKind::cells;
+			fSelectedCell.extra.clear();
 			fSelectedCell.anchorRow = fSelectedCell.anchorColumn = 0;
 			fSelectedCell.row = maxRow;
 			fSelectedCell.column = maxColumn;
@@ -1379,6 +1384,19 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 			&& fSelectedCell.row == row && fSelectedCell.column == column;
 		fCaret.active = false;
 		fAnchor.active = false;
+		// Command-click (TSSDisplayManager::HandleClick): the ranges so far
+		// stay and a new one begins at the cell
+		bool command = (modifiers() & B_COMMAND_KEY) != 0 || fScriptCommand;
+		bool more = command && !shift && fSelectedCell.active && fSelectedCell.part == part
+			&& fSelectedCell.kind == SelectionKind::cells;
+		if (more) {
+			SSRange current{{uint16_t(std::min(fSelectedCell.row, fSelectedCell.anchorRow)),
+				uint16_t(std::min(fSelectedCell.column, fSelectedCell.anchorColumn))},
+				{uint16_t(std::max(fSelectedCell.row, fSelectedCell.anchorRow)),
+				uint16_t(std::max(fSelectedCell.column, fSelectedCell.anchorColumn))}};
+			fSelectedCell.extra.push_back(current);
+		} else if (!shift)
+			fSelectedCell.extra.clear();
 		fSelectedCell.active = true;
 		fSelectedCell.part = part;
 		fSelectedCell.kind = SelectionKind::cells;
@@ -1392,7 +1410,7 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 			fSelectedCell.anchorRow = row;
 			fSelectedCell.anchorColumn = column;
 		}
-		if ((same || clicks > 1) && !shift)
+		if ((same || clicks > 1) && !shift && !more)
 			BeginCellEdit(part, row, column, rect);
 		else {
 			fDraggingCells = true;
@@ -1537,6 +1555,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 		switch (bytes[0]) {
 			case B_UP_ARROW:
 				fSelectedCell.kind = SelectionKind::cells;
+				fSelectedCell.extra.clear();
 				if (shift) {
 					fSelectedCell.row = std::max(0, fSelectedCell.row - 1);
 				} else {
@@ -1546,6 +1565,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				break;
 			case B_DOWN_ARROW:
 				fSelectedCell.kind = SelectionKind::cells;
+				fSelectedCell.extra.clear();
 				if (shift) {
 					fSelectedCell.row++;
 				} else {
@@ -1555,6 +1575,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				break;
 			case B_LEFT_ARROW:
 				fSelectedCell.kind = SelectionKind::cells;
+				fSelectedCell.extra.clear();
 				if (shift) {
 					fSelectedCell.column = std::max(0, fSelectedCell.column - 1);
 				} else {
@@ -1565,6 +1586,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 			case B_RIGHT_ARROW:
 			case B_TAB:
 				fSelectedCell.kind = SelectionKind::cells;
+				fSelectedCell.extra.clear();
 				if (shift) {
 					fSelectedCell.column++;
 				} else {
@@ -1577,24 +1599,17 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				return;
 			case B_BACKSPACE:
 			case B_DELETE: {
-				int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
-				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
-				int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
-				int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
 				// TSSClearCommand::IsLocked
-				if (const SSPart* sheet = fDocument.SpreadsheetPart(fSelectedCell.part)) {
-					if (CellsLocked(*sheet, uint16_t(r0), uint16_t(c0), uint16_t(r1),
-							uint16_t(c1))) {
-						SSAlert(0);
-						break;
-					}
-				}
+				if (SelectionLocked())
+					break;
 				fUndo.Begin(fDocument, fSelectedCell.part, "Delete",
 					CurrentViewState());
 				SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
-				std::string error;
-				if (ss != NULL && ClearRange(*ss, uint16_t(r0), uint16_t(c0),
-						uint16_t(r1), uint16_t(c1))) {
+				bool cleared = false;
+				for (const SSRange& sr : SelectedRanges())
+					cleared |= ss != NULL && ClearRange(*ss, sr.from.a, sr.from.b, sr.to.a,
+						sr.to.b);
+				if (cleared) {
 					fBook->Reset();
 					if (Window() != NULL)
 						Window()->PostMessage(kMsgDocumentChanged);
@@ -2457,6 +2472,10 @@ TPageView::MessageReceived(BMessage* message)
 				int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
 				switch (message->what) {
 					case B_COPY: {
+						if (!fSelectedCell.extra.empty()) {
+							SSAlert(10);	// a discontiguous selection
+							return;
+						}
 						SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
 						if (ss != NULL) {
 							std::string text = RangeInput(*ss, uint16_t(r0), uint16_t(c0),
@@ -2471,6 +2490,10 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case B_CUT: {
+						if (!fSelectedCell.extra.empty()) {
+							SSAlert(10);	// a discontiguous selection
+							return;
+						}
 						if (RangeLocked(r0, c0, r1, c1))
 							return;
 						fUndo.Begin(fDocument, fSelectedCell.part, "Cut",
@@ -2496,6 +2519,10 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case B_PASTE: {
+						if (!fSelectedCell.extra.empty()) {
+							SSAlert(10);	// a discontiguous selection
+							return;
+						}
 						fUndo.Begin(fDocument, fSelectedCell.part, "Paste",
 							CurrentViewState());
 						if (!be_clipboard->Lock())
@@ -2523,6 +2550,7 @@ TPageView::MessageReceived(BMessage* message)
 									// select the pasted block
 									fSelectedCell.anchorRow = fSelectedCell.row = r0;
 									fSelectedCell.kind = SelectionKind::cells;
+									fSelectedCell.extra.clear();
 									fSelectedCell.anchorColumn = fSelectedCell.column = c0;
 									fSelectedCell.row = r0 + int(rows) - 1;
 									fSelectedCell.column = c0 + int(columns) - 1;
@@ -2542,14 +2570,16 @@ TPageView::MessageReceived(BMessage* message)
 					}
 					case kCmdClear:
 						{
-							if (RangeLocked(r0, c0, r1, c1))
+							if (SelectionLocked())
 								return;
 							fUndo.Begin(fDocument, fSelectedCell.part, "Clear",
 								CurrentViewState());
 							SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
-							std::string error;
-							if (ss != NULL && ClearRange(*ss, uint16_t(r0), uint16_t(c0),
-									uint16_t(r1), uint16_t(c1))) {
+							bool cleared = false;
+							for (const SSRange& sr : SelectedRanges())
+								cleared |= ss != NULL && ClearRange(*ss, sr.from.a, sr.from.b,
+									sr.to.a, sr.to.b);
+							if (cleared) {
 								fBook->Reset();
 								if (Window() != NULL)
 									Window()->PostMessage(kMsgDocumentChanged);
@@ -2567,6 +2597,7 @@ TPageView::MessageReceived(BMessage* message)
 							fSelectedCell.anchorRow = 0;
 							fSelectedCell.anchorColumn = 0;
 							fSelectedCell.kind = SelectionKind::cells;
+							fSelectedCell.extra.clear();
 							fSelectedCell.row = maxRow;
 							fSelectedCell.column = maxCol;
 							Invalidate();
@@ -2578,6 +2609,11 @@ TPageView::MessageReceived(BMessage* message)
 					case 'sM73':
 					case 'sM74': {
 						bool remove = message->what == 'sM74';
+						// (TPartSS::HandleMessage: one range only)
+						if (!fSelectedCell.extra.empty()) {
+							SSAlert(10);
+							return;
+						}
 						if (remove && RangeLocked(r0, c0, r1, c1))
 							return;
 						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
@@ -2654,26 +2690,28 @@ TPageView::MessageReceived(BMessage* message)
 					}
 					// Fill Down / Fill Right
 					case 'sM70': {	// Fill Down
-						if (FillLocked(FillKind::down, r0, c0, r1, c1))
-							return;
+						for (const SSRange& sr : SelectedRanges())
+							if (FillLocked(FillKind::down, sr.from.a, sr.from.b, sr.to.a, sr.to.b))
+								return;
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
-						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							false);
+						for (const SSRange& sr : SelectedRanges())
+							FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, false);
 						fBook->Reset();
 						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
 					case 'sM71': {	// Fill Right
-						if (FillLocked(FillKind::right, r0, c0, r1, c1))
-							return;
+						for (const SSRange& sr : SelectedRanges())
+							if (FillLocked(FillKind::right, sr.from.a, sr.from.b, sr.to.a, sr.to.b))
+								return;
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
-						FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							true);
+						for (const SSRange& sr : SelectedRanges())
+							FillRange(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, true);
 						fBook->Reset();
 						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
@@ -2682,13 +2720,16 @@ TPageView::MessageReceived(BMessage* message)
 					case 'sM7B':	// Fill Up
 					case 'sM7C': {	// Fill Left
 						bool up = message->what == 'sM7B';
-						if (FillLocked(up ? FillKind::up : FillKind::left, r0, c0, r1, c1))
-							return;
+						for (const SSRange& sr : SelectedRanges())
+							if (FillLocked(up ? FillKind::up : FillKind::left, sr.from.a, sr.from.b,
+									sr.to.a, sr.to.b))
+								return;
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(3).c_str(),
 							CurrentViewState());
-						FillCells(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							up ? FillKind::up : FillKind::left);
+						for (const SSRange& sr : SelectedRanges())
+							FillCells(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b,
+								up ? FillKind::up : FillKind::left);
 						fBook->Reset();
 						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
@@ -2717,7 +2758,7 @@ TPageView::MessageReceived(BMessage* message)
 							(new TDialogNumFormat(this, resolved.format, sample))->RunDialog();
 							return;
 						}
-						if (RangeLocked(r0, c0, r1, c1))
+						if (SelectionLocked())
 							return;
 						// TFormatCommand::CommandName: "Set " and the property's
 						// name (STR# 5, 5 and STR# 11, 35)
@@ -2725,9 +2766,9 @@ TPageView::MessageReceived(BMessage* message)
 						name << GobeResources::IndexString(11, 35);
 						fUndo.Begin(fDocument, fSelectedCell.part, name.String(),
 							CurrentViewState());
-						ApplyCellProperty(fDocument, fSelectedCell.part,
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							NumberFormatProperty(format));
+						for (const SSRange& sr : SelectedRanges())
+							ApplyCellProperty(fDocument, fSelectedCell.part,
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, NumberFormatProperty(format));
 						fBook->Reset();
 						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
@@ -2778,9 +2819,10 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(columns ? 1 : 2),
 							CurrentViewState());
-						SetLineSize(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
-							columns, uint16_t(columns ? c0 : r0), uint16_t(columns ? c1 : r1),
-							size);
+						for (const SSRange& sr : SelectedRanges())
+							SetLineSize(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+								columns, columns ? sr.from.b : sr.from.a,
+								columns ? sr.to.b : sr.to.a, size);
 						fBook->Reset();
 						Rebuild();
 						Invalidate();
@@ -2808,6 +2850,7 @@ TPageView::MessageReceived(BMessage* message)
 						fSelectedCell.row = fSelectedCell.anchorRow = cell[0];
 						fSelectedCell.column = fSelectedCell.anchorColumn = cell[1];
 						fSelectedCell.kind = SelectionKind::cells;
+						fSelectedCell.extra.clear();
 						// ScrollActiveOntoScreen
 						BRect rect = CellViewRect(fSelectedCell.part, cell[0], cell[1]);
 						if (rect.IsValid() && !Bounds().Contains(rect))
@@ -2816,7 +2859,7 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case 'sM76': {	// Move Cells… and Move Cells Here (TSSMoveCommand)
-						if (RangeLocked(r0, c0, r1, c1))
+						if (SelectionLocked())
 							return;
 						const void* data = NULL;
 						ssize_t size = 0;
@@ -2831,23 +2874,36 @@ TPageView::MessageReceived(BMessage* message)
 								uint16_t(fSelectedCell.column)}), parse))->RunDialog();
 							return;
 						}
-						// the block's top left cell goes to the cell given
+						// the selection's top left cell (TCellsList::Span) goes to
+						// the cell given
+						std::vector<SSRange> block = SelectedRanges();
+						int top = r0, left = c0;
+						for (const SSRange& r : block) {
+							top = std::min(top, int(r.from.a));
+							left = std::min(left, int(r.from.b));
+						}
 						const uint16* cell = (const uint16*)data;
-						int rows = int(cell[0]) - r0, columns = int(cell[1]) - c0;
+						int rows = int(cell[0]) - top, columns = int(cell[1]) - left;
 						if (rows == 0 && columns == 0)
 							return;
-						if (RangeLocked(r0 + rows, c0 + columns, r1 + rows, c1 + columns))
-							return;
+						for (const SSRange& r : block)
+							if (RangeLocked(r.from.a + rows, r.from.b + columns, r.to.a + rows,
+									r.to.b + columns))
+								return;
 						// named ranges follow the cells, so the step keeps the document
 						fUndo.BeginDocument(fDocument, SSCommandName(6), CurrentViewState());
-						std::vector<SSRange> block{{{uint16_t(r0), uint16_t(c0)},
-							{uint16_t(r1), uint16_t(c1)}}};
 						if (MoveCellsCommand(fDocument, fSelectedCell.part, block, rows, columns)
 								!= MoveResult::moved) {
 							beep();
 							return;
 						}
-						// the moved block selected, the active cell moved with it
+						// the moved ranges selected, the active cell moved with them
+						for (SSRange& r : fSelectedCell.extra) {
+							r.from.a = uint16_t(r.from.a + rows);
+							r.to.a = uint16_t(r.to.a + rows);
+							r.from.b = uint16_t(r.from.b + columns);
+							r.to.b = uint16_t(r.to.b + columns);
+						}
 						fSelectedCell.row += rows;
 						fSelectedCell.anchorRow += rows;
 						fSelectedCell.column += columns;
@@ -2863,27 +2919,39 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case 'sM75': {	// Sort… (TPartSS::HandleMessage, TSSSortCommand)
-						if (RangeLocked(r0, c0, r1, c1))
+						if (SelectionLocked())
 							return;
 						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
 						if (ss == NULL)
 							return;
 						// (TCellsList::Pin: the selection inside the sheet)
-						SSRange range{{uint16_t(std::max<int>(r0, ss->used.from.a)),
-							uint16_t(std::max<int>(c0, ss->used.from.b))},
-							{uint16_t(std::min<int>(r1, ss->used.to.a)),
-							uint16_t(std::min<int>(c1, ss->used.to.b))}};
-						const char* ranges = NULL;
-						if (message->FindString("SortRanges", &ranges) != B_OK) {
-							(new TDialogSort(this, range))->RunDialog();
+						std::vector<SSRange> ranges = SelectedRanges();
+						for (SSRange& r : ranges) {
+							r.from.a = std::max(r.from.a, ss->used.from.a);
+							r.from.b = std::max(r.from.b, ss->used.from.b);
+							r.to.a = std::min(r.to.a, ss->used.to.a);
+							r.to.b = std::min(r.to.b, ss->used.to.b);
+						}
+						const char* names = NULL;
+						if (message->FindString("SortRanges", &names) != B_OK) {
+							// ranges neither all as high nor all as wide (alert 3)
+							bool high = true, wide = true;
+							for (const SSRange& r : ranges) {
+								high &= r.to.a - r.from.a == ranges[0].to.a - ranges[0].from.a;
+								wide &= r.to.b - r.from.b == ranges[0].to.b - ranges[0].from.b;
+							}
+							if (!high && !wide) {
+								SSAlert(3);
+								return;
+							}
+							(new TDialogSort(this, ranges))->RunDialog();
 							return;
 						}
-						// (TCellsList::Set: one cell is named alone)
-						if (!ParseRangeName(ranges, range)
-								&& !ParseRangeName(std::string(ranges) + ".." + ranges, range))
+						if (!ParseRangeList(names, ranges))
 							return;
-						if (RangeLocked(range.from.a, range.from.b, range.to.a, range.to.b))
-							return;
+						for (const SSRange& r : ranges)
+							if (RangeLocked(r.from.a, r.from.b, r.to.a, r.to.b))
+								return;
 						// TSSSortTable(BMessage*): "Key 1", "Key 2"... until one is missing
 						std::vector<SortKey> keys;
 						for (int k = 1; ; k++) {
@@ -2905,11 +2973,39 @@ TPageView::MessageReceived(BMessage* message)
 							vertical = true;
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(4),
 							CurrentViewState());
-						if (!SortCells(fDocument, fSelectedCell.part, range, vertical, keys))
+						if (!SortCells(fDocument, fSelectedCell.part, ranges, vertical, keys))
 							return;
 						fBook->Reset();
 						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 'sM7A': {	// Select Dependents (TPartSS::HandleMessage)
+						if (fDocument.SpreadsheetPart(fSelectedCell.part) == NULL)
+							return;
+						// TSSDepManager::CellsChanged (FixFormulaCells first)
+						UpdateDependencies(fDocument, fSelectedCell.part);
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						std::vector<SSRange> ranges = SelectedRanges();
+						std::vector<CellID> dependents = DependentCells(*ss, ranges);
+						if (dependents.empty()) {
+							SSAlert(2);	// no cells depend on the selection
+							return;
+						}
+						// the selection, the dependent cells added to it, the
+						// active cell kept
+						for (CellID id : dependents) {
+							bool inside = false;
+							for (const SSRange& r : ranges)
+								inside |= id.a >= r.from.a && id.a <= r.to.a && id.b >= r.from.b
+									&& id.b <= r.to.b;
+							if (!inside) {
+								fSelectedCell.extra.push_back({id, id});
+								ranges.push_back({id, id});
+							}
+						}
+						fSelectedCell.kind = SelectionKind::cells;
+						Invalidate();
 						return;
 					}
 					case 'sM79': {	// Auto Calculate (TPartSS +0x80)
@@ -2936,8 +3032,9 @@ TPageView::MessageReceived(BMessage* message)
 						bool lock = message->what == 'sM62';
 						fUndo.Begin(fDocument, fSelectedCell.part, SSCommandName(lock ? 8 : 9),
 							CurrentViewState());
-						LockCells(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1), lock);
+						for (const SSRange& sr : SelectedRanges())
+							LockCells(*fDocument.EditableSpreadsheetPart(fSelectedCell.part),
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, lock);
 						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -2950,9 +3047,9 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Align",
 							CurrentViewState());
-						ApplyCellProperty(fDocument, fSelectedCell.part,
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							CellHAlignProperty(align));
+						for (const SSRange& sr : SelectedRanges())
+							ApplyCellProperty(fDocument, fSelectedCell.part,
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, CellHAlignProperty(align));
 						fBook->Reset();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -2965,9 +3062,9 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Align",
 							CurrentViewState());
-						ApplyCellProperty(fDocument, fSelectedCell.part,
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							CellVAlignProperty(align));
+						for (const SSRange& sr : SelectedRanges())
+							ApplyCellProperty(fDocument, fSelectedCell.part,
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, CellVAlignProperty(align));
 						fBook->Reset();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -2985,9 +3082,9 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Wrap",
 							CurrentViewState());
-						ApplyCellProperty(fDocument, fSelectedCell.part,
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							CellWrapProperty(wrap));
+						for (const SSRange& sr : SelectedRanges())
+							ApplyCellProperty(fDocument, fSelectedCell.part,
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, CellWrapProperty(wrap));
 						fBook->Reset();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -3001,9 +3098,9 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Format",
 							CurrentViewState());
-						ApplyCellProperty(fDocument, fSelectedCell.part,
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							NumberFormatProperty(format));
+						for (const SSRange& sr : SelectedRanges())
+							ApplyCellProperty(fDocument, fSelectedCell.part,
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, NumberFormatProperty(format));
 						fBook->Reset();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -3019,9 +3116,9 @@ TPageView::MessageReceived(BMessage* message)
 						Color col{uint8_t(r), uint8_t(g), uint8_t(b), 255};
 						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Fill",
 							CurrentViewState());
-						ApplyCellProperty(fDocument, fSelectedCell.part,
-							uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-							CellFillProperty(col));
+						for (const SSRange& sr : SelectedRanges())
+							ApplyCellProperty(fDocument, fSelectedCell.part,
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, CellFillProperty(col));
 						fBook->Reset();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -3238,6 +3335,14 @@ TPageView::RunScript(const std::string& script, Document& document)
 				Click(BPoint(x, y), 1, B_PRIMARY_MOUSE_BUTTON);
 				fScriptShift = false;
 			}
+		} else if (command.compare(0, 7, "cclick ") == 0) {
+			// "cclick x y": a click with Command held
+			float x, y;
+			if (sscanf(command.c_str() + 7, "%f %f", &x, &y) == 2) {
+				fScriptCommand = true;
+				Click(BPoint(x, y), 1, B_PRIMARY_MOUSE_BUTTON);
+				fScriptCommand = false;
+			}
 		} else if (command.compare(0, 7, "tclick ") == 0) {
 			float x, y;
 			if (sscanf(command.c_str() + 7, "%f %f", &x, &y) == 2)
@@ -3309,9 +3414,12 @@ TPageView::RunScript(const std::string& script, Document& document)
 				int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
 				int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
 				int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
-				fprintf(stderr, "cells part %zu rows %d-%d columns %d-%d active %d,%d\n",
+				fprintf(stderr, "cells part %zu rows %d-%d columns %d-%d active %d,%d",
 					fSelectedCell.part, r0, r1, c0, c1,
 					fSelectedCell.row, fSelectedCell.column);
+				for (const SSRange& r : fSelectedCell.extra)
+					fprintf(stderr, " +%s", RangeName(r).c_str());
+				fprintf(stderr, "\n");
 			}
 		} else if (command.compare(0, 4, "key ") == 0) {
 			std::string keys = command.substr(4);
@@ -3963,6 +4071,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 			}
 			fSelectedCell.active = true;
 			fSelectedCell.kind = SelectionKind::cells;
+			fSelectedCell.extra.clear();
 			fSelectedCell.row = row;
 			fSelectedCell.column = column;
 			fSelectedCell.anchorRow = row;
@@ -4354,6 +4463,7 @@ TPageView::RestoreViewState(const UndoStack::ViewState& v)
 		fSelectedCell.anchorRow = int(v[4]);
 		fSelectedCell.anchorColumn = int(v[5]);
 		fSelectedCell.kind = v.size() > 6 ? SelectionKind(v[6]) : SelectionKind::cells;
+		fSelectedCell.extra.clear();
 		fCaret.active = false;
 		fAnchor.active = false;
 	} else {
@@ -4594,6 +4704,33 @@ TPageView::ParseCellReference(size_t part, const std::string& text, uint16& row,
 }
 
 
+std::vector<SSRange>
+TPageView::SelectedRanges() const
+{
+	std::vector<SSRange> ranges = fSelectedCell.extra;
+	ranges.push_back({{uint16_t(std::min(fSelectedCell.row, fSelectedCell.anchorRow)),
+		uint16_t(std::min(fSelectedCell.column, fSelectedCell.anchorColumn))},
+		{uint16_t(std::max(fSelectedCell.row, fSelectedCell.anchorRow)),
+		uint16_t(std::max(fSelectedCell.column, fSelectedCell.anchorColumn))}});
+	return ranges;
+}
+
+
+bool
+TPageView::SelectionLocked()
+{
+	const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+	if (ss == NULL)
+		return false;
+	for (const SSRange& r : SelectedRanges())
+		if (CellsLocked(*ss, r.from.a, r.from.b, r.to.a, r.to.b)) {
+			SSAlert(0);
+			return true;
+		}
+	return false;
+}
+
+
 // TPartSS::IsLocked for a block of the selected part (and its alert)
 bool
 TPageView::RangeLocked(int r0, int c0, int r1, int c1)
@@ -4624,7 +4761,7 @@ TPageView::HandlesCommand(uint32 what)
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
-		case 'sM65': case 'sM75': case 'sM76': case 'sM77': case 'sM79':
+		case 'sM65': case 'sM75': case 'sM76': case 'sM77': case 'sM79': case 'sM7A':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

@@ -1421,6 +1421,17 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 			for (int c = c0; c <= c1; c++)
 				if (r != fSelectedCell.row || c != fSelectedCell.column)
 					FillRect(cellRect(r, c));
+		// the other ranges of a selection of several
+		for (const SSRange& range : fSelectedCell.extra) {
+			int a0 = std::max<int>(firstRow, range.from.a);
+			int a1 = std::min<int>(firstRow + rows - 1, range.to.a);
+			int b0 = std::max<int>(firstColumn, range.from.b);
+			int b1 = std::min<int>(firstColumn + columns - 1, range.to.b);
+			for (int r = a0; r <= a1; r++)
+				for (int c = b0; c <= b1; c++)
+					if (r != fSelectedCell.row || c != fSelectedCell.column)
+						FillRect(cellRect(r, c));
+		}
 	}
 
 	// borders (TSSDisplayManager::DrawCellBorders): left/top edges are
