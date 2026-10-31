@@ -4,6 +4,8 @@
 #include <stdlib.h>
 
 #include <Alert.h>
+#include <cstring>
+#include <OutlineListView.h>
 #include <RadioButton.h>
 #include <ListItem.h>
 #include <ListView.h>
@@ -13,6 +15,7 @@
 
 #include "GobeResources.h"
 #include "SSSort.h"
+#include "TEntryBar.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 
@@ -483,6 +486,199 @@ TDialogDeleteInsert::ItemHit(int32 index, BMessage* message)
 			fTarget->Looper()->PostMessage(&apply, fTarget);
 	} else if (index != 1)
 		return false;
+	PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
+
+namespace {
+
+// the functions of a FUNC resource (TFunctionData: min and max arguments,
+// then the name, the help title — the signature — and the help body)
+struct FunctionInfo {
+	std::string name, signature, help;
+};
+
+bool
+LoadFunction(int32 id, FunctionInfo& info)
+{
+	const ResourceFile::Resource* r = GobeResources::File().Find('FUNC', id);
+	if (r == NULL || r->data.size() < 8)
+		return false;
+	const std::vector<uint8_t>& d = r->data;
+	size_t at = 8;
+	auto text = [&]() {
+		std::string s;
+		while (at < d.size() && d[at] != 0)
+			s += char(d[at++]);
+		at++;
+		return s;
+	};
+	info.name = text();
+	info.signature = text();
+	info.help = text();
+	return !info.name.empty();
+}
+
+
+// TFunctionMgr: the factories (FCAT 0-6) and the functions each adds, in
+// its order (TTrigFunctions ... TFinancialFunctions)
+const std::vector<std::vector<int32>>&
+FactoryFunctions()
+{
+	static const std::vector<std::vector<int32>> kFactories = {
+		{0, 1, 2, 3, 4, 5, 15, 6, 7, 8, 9, 10, 11, 13, 14, 12},
+		{100, 101, 103, 104, 105, 117, 106, 118, 116, 120, 107, 108, 109, 114, 121, 115,
+			124, 102, 111, 110, 112, 125, 113, 119, 122, 123},
+		{201, 202, 203, 200, 204, 211, 206, 205, 207, 208, 209, 210},
+		{305, 306, 307, 308, 309, 310, 300, 301, 302, 303, 304},
+		{700, 701, 702, 703, 720, 704, 705, 706, 707, 708, 709, 710, 713, 714, 715, 716,
+			717, 718, 719},
+		{400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415,
+			416, 417, 418, 419, 420, 421, 422},
+		{608, 609, 606, 600, 603, 605},
+	};
+	return kFactories;
+}
+
+
+// TFunctionItem: a row of the list, a function (`function` >= 0) or a
+// category (`category` >= 0, -2 for All Functions)
+class TFunctionItem : public BStringItem {
+public:
+	TFunctionItem(const char* text, uint32 level, bool expanded, int32 function,
+			int32 category)
+		:
+		BStringItem(text, level, expanded),
+		function(function),
+		category(category)
+	{
+	}
+
+	int32 function;
+	int32 category;
+};
+
+
+// TDialogPasteFunction::CompareProc: by the text
+int
+CompareItems(const BListItem* a, const BListItem* b)
+{
+	return strcmp(static_cast<const BStringItem*>(a)->Text(),
+		static_cast<const BStringItem*>(b)->Text());
+}
+
+} // namespace
+
+
+TDialogPasteFunction::TDialogPasteFunction(TEntryBar* bar)
+	:
+	TDialog(83, 83, 'APPL', NULL),
+	fBar(bar)
+{
+}
+
+
+void
+TDialogPasteFunction::Init()
+{
+	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(3));
+	BOutlineListView* list = scroll != NULL
+		? dynamic_cast<BOutlineListView*>(scroll->Target()) : NULL;
+	if (list == NULL)
+		return;
+	// (a selection is "Select", a double click "Invoke")
+	if (list->InvocationMessage() != NULL) {
+		BMessage* select = new BMessage(*list->InvocationMessage());
+		select->AddBool("Select", true);
+		list->SetSelectionMessage(select);
+		list->InvocationMessage()->AddBool("Invoke", true);
+	}
+	// All Functions: every function, sorted; then each category's, in its
+	// factory's order (each item after its category, a level in)
+	TFunctionItem* all = new TFunctionItem(GobeResources::IndexString(2, 34).String(), 0,
+		false, -1, -2);
+	list->AddItem(all);
+	const auto& factories = FactoryFunctions();
+	for (const auto& functions : factories) {
+		for (int32 id : functions) {
+			FunctionInfo info;
+			if (LoadFunction(id, info))
+				list->AddItem(new TFunctionItem(info.name.c_str(), 1, true, id, -1));
+		}
+	}
+	list->SortItemsUnder(all, true, CompareItems);
+	for (size_t c = 0; c < factories.size(); c++) {
+		std::string name;
+		if (const ResourceFile::Resource* r = GobeResources::File().Find('FCAT', int32(c))) {
+			for (uint8_t b : r->data) {
+				if (b == 0)
+					break;
+				name += char(b);
+			}
+		}
+		TFunctionItem* category = new TFunctionItem(name.c_str(), 0, false, -1, int32(c));
+		list->AddItem(category);
+		for (int32 id : factories[c]) {
+			FunctionInfo info;
+			if (LoadFunction(id, info))
+				list->AddItem(new TFunctionItem(info.name.c_str(), 1, true, id, -1));
+		}
+	}
+	list->Select(0);
+	list->MakeFocus(true);
+	SetItemEnabled(0, false);
+}
+
+
+bool
+TDialogPasteFunction::ItemHit(int32 index, BMessage* message)
+{
+	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(3));
+	BOutlineListView* list = scroll != NULL
+		? dynamic_cast<BOutlineListView*>(scroll->Target()) : NULL;
+	if (index == 1 || list == NULL) {
+		PostMessage(B_QUIT_REQUESTED);
+		return false;
+	}
+	TFunctionItem* item = dynamic_cast<TFunctionItem*>(
+		list->FullListItemAt(list->FullListCurrentSelection()));
+	if (index == 3 && message != NULL && message->GetBool("Select", false)) {
+		// the help: the function's signature and help, the category's name
+		// and description, or All Functions and STR# 2, 35
+		std::string help;
+		if (item != NULL && item->function >= 0) {
+			FunctionInfo info;
+			if (LoadFunction(item->function, info))
+				help = info.signature + "\n\n" + info.help;
+		} else if (item != NULL && item->category >= 0) {
+			if (const ResourceFile::Resource* r
+					= GobeResources::File().Find('FCAT', item->category)) {
+				std::string name, description;
+				size_t at = 0;
+				for (; at < r->data.size() && r->data[at] != 0; at++)
+					name += char(r->data[at]);
+				for (at++; at < r->data.size() && r->data[at] != 0; at++)
+					description += char(r->data[at]);
+				help = name + "\n\n" + description;
+			}
+		} else if (item != NULL) {
+			help = std::string(GobeResources::IndexString(2, 34).String()) + "\n\n"
+				+ GobeResources::IndexString(2, 35).String();
+		}
+		if (BScrollView* text = dynamic_cast<BScrollView*>(Item(5)))
+			if (BTextView* view = dynamic_cast<BTextView*>(text->Target()))
+				view->SetText(help.c_str());
+		SetItemEnabled(0, item != NULL && item->function >= 0);
+		return false;
+	}
+	if (index != 0 && !(index == 3 && message != NULL && message->GetBool("Invoke", false)))
+		return false;
+	if (item == NULL || item->function < 0)
+		return false;
+	FunctionInfo info;
+	if (LoadFunction(item->function, info) && fBar != NULL)
+		fBar->PasteFunction(info.signature);
 	PostMessage(B_QUIT_REQUESTED);
 	return false;
 }

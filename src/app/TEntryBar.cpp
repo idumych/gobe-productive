@@ -8,6 +8,7 @@
 #include "Editing.h"
 #include "GobeResources.h"
 #include "TPageView.h"
+#include "TSheetDialogs.h"
 
 namespace gobe {
 
@@ -74,7 +75,8 @@ private:
 };
 
 
-// TAcceptButton / TCancelButton: Accept is Enter, Cancel is Escape
+// TAcceptButton / TCancelButton / TFunctionButton: Accept is Enter, Cancel
+// is Escape, the function button opens Paste Function
 class TEntryButton : public TMICNButtonElement {
 public:
 	TEntryButton(uint32 id, BPoint where, int32 micn, TEntryBar* bar)
@@ -88,8 +90,10 @@ public:
 	{
 		if (id == 'ACPT')
 			fBar->Accept(B_ENTER, 0);
-		else
+		else if (id == 'CANC')
 			fBar->Cancel();
+		else
+			(new TDialogPasteFunction(fBar))->RunDialog();
 	}
 
 private:
@@ -115,11 +119,9 @@ TEntryBar::TEntryBar(TPageView* pages)
 	cancel->enabled = false;
 	AddElement(cancel);
 	at.x = cancel->rect.right + 3;
-	// (the Paste Function dialog isn't ported: off)
-	TMICNButtonElement* function = new TMICNButtonElement('PFNC', at, 0x2a,
-		new BMessage('s005'));
+	// TFunctionButton: the Paste Function dialog ('s005')
+	TEntryButton* function = new TEntryButton('PFNC', at, 0x2a, this);
 	function->tip = GobeResources::IndexString(4, 26).String();
-	function->enabled = false;
 	AddElement(function);
 	float left = function->rect.right + 3 + 10;
 	fEdit = new TEntryEdit(BRect(left, 3, left + 300, 21), this);
@@ -173,6 +175,40 @@ TEntryBar::EndEdit()
 	if (fPages != NULL) {
 		fPages->MakeFocus(true);
 		Update();
+	}
+}
+
+
+void
+TEntryBar::PasteFunction(const std::string& signature)
+{
+	if (LockLooper()) {
+		size_t open = signature.find('(');
+		size_t from = open == std::string::npos ? signature.size() : open + 1;
+		size_t to = signature.find(',');
+		if (to == std::string::npos)
+			to = signature.find(')');
+		if (to == std::string::npos)
+			to = signature.size();
+		int32 start = 0, end = 0;
+		if (fEditing) {
+			fEdit->GetSelection(&start, &end);
+			fEdit->Delete(start, end);
+			fEdit->Insert(start, signature.c_str(), signature.size());
+		} else {
+			BeginEdit();
+			fEdit->SetText(signature.c_str());
+		}
+		from += start;
+		to += start;
+		if (fEdit->TextLength() == 0 || fEdit->Text()[0] != '=') {
+			fEdit->Insert(0, "=", 1);
+			from++;
+			to++;
+		}
+		fEdit->Select(int32(from), int32(to));
+		fEdit->MakeFocus(true);
+		UnlockLooper();
 	}
 }
 

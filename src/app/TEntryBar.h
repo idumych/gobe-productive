@@ -1,11 +1,13 @@
 // TEntryBar: the spreadsheet's ribbon (TPartSS::ActivePartRibbon) under the
 // PartBar while cells are selected: Accept (MICN 40) and Cancel (41),
-// on while editing; the Paste Function button (42; its dialog isn't
-// ported: off); and the active cell's contents to edit (TEntryEdit).
+// on while editing; the Paste Function button (42); and the active cell's
+// contents to edit (TEntryEdit).
 // Enter or Tab there send 's007' with "key", "modifiers" and "text" to the
 // window, Escape 's008'; typing on a selected cell begins editing here.
 #ifndef GOBE_TENTRYBAR_H
 #define GOBE_TENTRYBAR_H
+
+#include <string>
 
 #include "TRibbon.h"
 
@@ -33,6 +35,12 @@ public:
 	// a key for the edit (the page view passes on keys it gets while
 	// editing goes on here, as a test hook's do)
 	void Key(const char* bytes, int32 count);
+
+	// TDialogPasteFunction::PasteFunction: a function's signature
+	// ("PMT( rate, nper, pv )") into the edit, at the selection while
+	// editing, else in place of its text; a "=" before it if the text
+	// doesn't start with one; its first argument selected
+	void PasteFunction(const std::string& signature);
 
 	// Accept and Cancel (TAcceptButton, TCancelButton)
 	void Accept(int32 key, int32 modifiers);

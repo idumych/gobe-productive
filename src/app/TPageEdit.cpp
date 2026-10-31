@@ -1407,6 +1407,10 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 {
 	if (fCellEditor != NULL)
 		EndCellEdit(true);
+	// TPartSS::Click: what the EntryBar holds goes in first
+	if (fEntryBar != NULL && fEntryBar->InEdit() && fSelectedCell.active
+			&& !FlushEntryBar(fEntryBar->Text()))
+		return;
 	if (Window() != NULL)
 		MakeFocus(true);
 
@@ -3263,32 +3267,11 @@ TPageView::MessageReceived(BMessage* message)
 						return;
 					}
 					case 's007': {	// the EntryBar's Enter or Tab (FlushEntryBar)
-						const char* text = message->GetString("text", "");
-						if (RangeLocked(fSelectedCell.row, fSelectedCell.column,
-								fSelectedCell.row, fSelectedCell.column))
+						// (one that comes after a click already put the text in)
+						if (fEntryBar == NULL || !fEntryBar->InEdit())
 							return;
-						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Entry",
-							CurrentViewState());
-						SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
-						std::string error;
-						auto isName = [&](const std::string& n) {
-							return fDocument.NamedSelection(n, int(fSelectedCell.part)) != nullptr;
-						};
-						if (ss == NULL || !SetCellInput(*ss, uint16_t(fSelectedCell.row),
-								uint16_t(fSelectedCell.column), text, isName, error)) {
-							BString alert;
-							alert << "The formula has an error: " << error.c_str();
-							(new BAlert("Formula", alert.String(), "OK"))->Go(NULL);
-							if (fEntryBar != NULL)
-								fEntryBar->BeginEdit();
+						if (!FlushEntryBar(message->GetString("text", "")))
 							return;
-						}
-						UpdateDependencies(fDocument, fSelectedCell.part);
-						fBook->Reset();
-						if (!fDocument.wordParts.empty())
-							LayoutText();
-						if (fEntryBar != NULL)
-							fEntryBar->EndEdit();
 						// then the key, as TPartSS::KeyDown takes it
 						int32 key = message->GetInt32("key", B_ENTER);
 						int32 modifiers = message->GetInt32("modifiers", 0);
@@ -3488,6 +3471,11 @@ TPageView::MessageReceived(BMessage* message)
 				SelectAllText();
 				return;
 			}
+			// a command of the view's it can't act on now (cells with the
+			// cell editor open, ...) stops here: the window would hand it
+			// back (TDocWindow::MessageReceived), round and round
+			if (HandlesCommand(message->what))
+				return;
 			BView::MessageReceived(message);
 			return;
 		}
@@ -3643,6 +3631,22 @@ TPageView::RunScript(const std::string& script, Document& document)
 						printf("partbar %s: not clickable\n", c);
 						fflush(stdout);
 					}
+				}
+			}
+		} else if (command.compare(0, 9, "entrybar ") == 0 && fEntryBar != NULL) {
+			// "entrybar ABCD": the EntryBar's element 'ABCD' clicked;
+			// "entrybar text": what it shows printed
+			fEntryBar->Update();
+			if (command == "entrybar text") {
+				printf("entrybar %s%s\n", fEntryBar->Text(), fEntryBar->InEdit() ? " (editing)" : "");
+				fflush(stdout);
+			} else if (command.size() == 13) {
+				const char* c = command.c_str() + 9;
+				uint32 id = uint32(uint8(c[0])) << 24 | uint32(uint8(c[1])) << 16
+					| uint32(uint8(c[2])) << 8 | uint8(c[3]);
+				if (!fEntryBar->Click(id)) {
+					printf("entrybar %s: not clickable\n", c);
+					fflush(stdout);
 				}
 			}
 		} else if (command.compare(0, 6, "ruler ") == 0) {
@@ -5071,6 +5075,42 @@ TPageView::ParseCellReference(size_t part, const std::string& text, uint16& row,
 		return false;
 	row = uint16(r0);
 	column = uint16(c0);
+	return true;
+}
+
+
+// TPartSS::FlushEntryBar: the EntryBar's text put in the active cell (a
+// formula that doesn't parse: an alert, and editing goes on)
+bool
+TPageView::FlushEntryBar(const char* text)
+{
+	if (RangeLocked(fSelectedCell.row, fSelectedCell.column, fSelectedCell.row,
+			fSelectedCell.column))
+		return false;
+	fUndo.Begin(fDocument, fSelectedCell.part, "Cell Entry", CurrentViewState());
+	SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+	std::string error;
+	auto isName = [&](const std::string& n) {
+		return fDocument.NamedSelection(n, int(fSelectedCell.part)) != nullptr;
+	};
+	if (ss == NULL || !SetCellInput(*ss, uint16_t(fSelectedCell.row),
+			uint16_t(fSelectedCell.column), text, isName, error)) {
+		BString alert;
+		alert << "The formula has an error: " << error.c_str();
+		(new BAlert("Formula", alert.String(), "OK"))->Go(NULL);
+		if (fEntryBar != NULL)
+			fEntryBar->BeginEdit();
+		return false;
+	}
+	UpdateDependencies(fDocument, fSelectedCell.part);
+	fBook->Reset();
+	if (!fDocument.wordParts.empty())
+		LayoutText();
+	if (fEntryBar != NULL)
+		fEntryBar->EndEdit();
+	Invalidate();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
 	return true;
 }
 

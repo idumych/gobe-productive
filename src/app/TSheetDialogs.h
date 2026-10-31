@@ -127,6 +127,23 @@ private:
 	bool fVertical;
 };
 
+// the EntryBar's Paste Function (TDialogPasteFunction; the application's
+// DIAL 83): an outline list (3) of All Functions (STR# 2, 34) and each
+// category (FCAT, the TFunctionFactorys' functions), the selected one's
+// help (5: its signature and FUNC help, or the category's description);
+// Paste (0, on with a function) puts its signature in the EntryBar
+class TDialogPasteFunction : public TDialog {
+public:
+	TDialogPasteFunction(class TEntryBar* bar);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	class TEntryBar* fBar;
+};
+
 // Edit > Paste Special… with cells (TDialogSSPasteSpecial; TSSDialog 24):
 // Paste Data (2) as Values and Formulas (4) or Values Only (5), Paste
 // Formatting (6); OK, on with either box, sends `target` B_PASTE ('PSTE')

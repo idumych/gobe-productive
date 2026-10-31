@@ -185,6 +185,8 @@ public:
 	std::vector<SSRange> SelectedRanges() const;
 	// TPartSS::IsLocked for every selected range (and its alert)
 	bool SelectionLocked();
+	// TPartSS::FlushEntryBar: the EntryBar's text in the active cell
+	bool FlushEntryBar(const char* text);
 	// the copied cells pasted at the active cell (TSSPasteCommand)
 	void PasteCopiedCells(bool data, bool formulas, bool formatting);
 	// the selection's name for the PartBar's address: the active cell, or

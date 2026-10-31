@@ -150,8 +150,9 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
 - **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
 - **The EntryBar:** the active cell's contents under the PartBar; typing
   on a cell edits there, Enter (or Accept) puts it in and moves down, Tab
-  moves right, Escape (or Cancel) leaves the cell as it was. A double click
-  still edits in the cell.
+  moves right, Escape (or Cancel) leaves the cell as it was; its function
+  button opens Paste Function (the original's functions by category, with
+  their help) to put a function in. A double click still edits in the cell.
 - **The PartBar for cells:** the selection's address (a double click goes
   to a cell), the horizontal and vertical alignment menus with Wrap Text,
   cell borders (the outline or one side, a color and a transparency),
