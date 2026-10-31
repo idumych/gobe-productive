@@ -9,18 +9,21 @@
 // \par, \tab, quotes, \bullet, \page, \sect, the font and color tables,
 // \', \u, \bin, the character sets (\ansi, \mac, \pc, \pca) and PAGE
 // fields; everything else is skipped. Not ported yet (stand-ins): headers
-// and footers (read but dropped), pictures (dropped, as when no translator
-// can read them) and page numbers (dropped instead of a page number field).
+// and footers (read but dropped), pictures other than PNG and JPEG
+// (dropped, as when no translator can read them) and page numbers
+// (dropped instead of a page number field). Tables and pictures are the
+// port's (the original read neither).
 //
 // Export writes the original's fixed header, its font table (every
 // installed font), its 16-color table, and per text run the paragraph's
 // own alignment and indents and the run style's own font, size, face and
-// color.
+// color; pictures as PNG and tables as RTF tables (the port's).
 #ifndef GOBE_RTF_H
 #define GOBE_RTF_H
 
 #include <string>
 
+#include "HTMLImport.h"
 #include "TextImport.h"
 
 namespace gobe {
@@ -29,9 +32,12 @@ struct Document;
 
 // Imports an RTF file into `doc` (made with CreateBlankDocument). `fonts`
 // resolves the font table's names. Unmatched braces don't stop the import;
-// `warning` (may be null) then receives the original's alert text.
+// `warning` (may be null) then receives the original's alert text. Tables
+// (\trowd ... \cell ... \row) become table parts, PNG pictures image
+// parts; JPEG pictures too when `readPicture` reads them (from a file).
 bool ImportRTF(const std::string& path, Document& doc, std::string& error,
-	const FontCatalog& fonts, std::string* warning = nullptr);
+	const FontCatalog& fonts, std::string* warning = nullptr,
+	const PictureReader& readPicture = {});
 
 // Word processing part `part` as the original writes it.
 std::string ExportedRTF(const Document& doc, size_t part, const FontCatalog& fonts);
