@@ -416,6 +416,18 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 	// (in a text document the click goes to the text)
 	int main = fDocument.MainPart();
 	if (inDrawing && main >= 0 && size_t(main) == part) {
+		// (in a frame the drawing shows, the click is the frame's part's)
+		float vx = fMargin - fBounds.left, vy = fMargin - fBounds.top;
+		for (const Document::PlacedFrame& f : fFrames)
+			if (f.frame != NULL && f.frame->container == part
+					&& BRect(f.x + vx, f.y + vy, f.x + vx + f.width, f.y + vy + f.height)
+						.Contains(where)) {
+				if (!fShapes.empty()) {
+					fShapes.clear();
+					Invalidate();
+				}
+				return false;
+			}
 		if (!shift)
 			fShapes.clear();
 		startDrag(6);
