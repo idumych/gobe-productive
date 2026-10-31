@@ -504,7 +504,8 @@ TDocWindow::MessageReceived(BMessage* message)
 					: BPath(fDocument->path.c_str()).Leaf());
 				int main = fDocument->MainPart();
 				fFormatField = AddFormatField(fSavePanel,
-					main >= 0 && fDocument->WordPart(size_t(main)) != NULL);
+					main >= 0 && fDocument->WordPart(size_t(main)) != NULL,
+					main >= 0 && fDocument->SpreadsheetPart(size_t(main)) != NULL);
 			}
 			fSavePanel->Show();
 			return;

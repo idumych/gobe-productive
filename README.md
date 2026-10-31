@@ -120,6 +120,9 @@ not released yet: build it to try it.
   Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
   formatting a style directly).
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
+- SYLK: a spreadsheet saved as SYLK with Save As's File Format (values as
+  calculated, formulas in R1C1, column widths). Opening SYLK files waits
+  for File > New for spreadsheets.
 - Spreadsheets: shown, cells edited (values and formulas, evaluated), cut,
   copy and paste, Fill Down and Fill Right, the selected rows inserted and
   deleted.

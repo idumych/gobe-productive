@@ -27,6 +27,7 @@
 #include "Document.h"
 #include "GobeResources.h"
 #include "RTF.h"
+#include "SSSylk.h"
 
 namespace gobe {
 
@@ -246,6 +247,8 @@ FormatType(SaveFormat format)
 			return "text/plain";
 		case kSaveRTF:
 			return "text/rtf";
+		case kSaveSYLK:
+			return "text/sylk";
 		default:
 			return NULL;
 	}
@@ -361,7 +364,7 @@ FixSuffix(BFilePanel* panel, SaveFormat format)
 
 
 BMenuField*
-AddFormatField(BFilePanel* panel, bool textFormats)
+AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats)
 {
 	BWindow* window = panel->Window();
 	if (!window->Lock())
@@ -418,6 +421,12 @@ AddFormatField(BFilePanel* panel, bool textFormats)
 			BMessage* rtf = new BMessage(kMsgFormat);
 			rtf->AddInt32("format", kSaveRTF);
 			menu->AddItem(new BMenuItem("RTF", rtf));
+		} else if (sheetFormats) {
+			// the SYLK translator's output format ("SYLK")
+			menu->AddSeparatorItem();
+			BMessage* sylk = new BMessage(kMsgFormat);
+			sylk->AddInt32("format", kSaveSYLK);
+			menu->AddItem(new BMenuItem("SYLK", sylk));
 		}
 		menu->SetTargetForItems(handler);
 	}
@@ -453,6 +462,8 @@ ExportFile(const Document& doc, const char* path, SaveFormat format, BString& er
 			WriteTextAttributes(path, attributes);
 	} else if (format == kSaveRTF) {
 		ok = ExportRTF(doc, part, path, message, InstalledFonts());
+	} else if (format == kSaveSYLK) {
+		ok = ExportSylk(doc, part, path, message);
 	}
 	if (!ok) {
 		// "Error writing file!"

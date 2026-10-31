@@ -32,6 +32,28 @@ bool ReadSylk(const std::string& data, SylkSheet& sheet, std::string& error);
 // cell, E. Lines end in "\r\n" as SYLK files do.
 std::string WriteSylk(const SylkSheet& sheet);
 
+// TExportSYLK::convertToSYLKformula: a Gobe formula of the cell at `row`,
+// `column` (from 0) as SYLK's E field: the leading '=' dropped, ".." as
+// ':', each cell reference in R1C1 form. A reference is a whole word (no
+// letter, digit, '_' or '.' just before or after it): an optional '$', one
+// or two capital letters (A = column 0 ... Z = 25, AA = 26, AB = 27 ...),
+// an optional '$', then digits (the row, from 1). An absolute part
+// (with '$') is written with its number from 1 ("R5", "C2"), a relative
+// one as the offset from the formula's cell in brackets ("R[-1]",
+// "C[2]"), or as "R" / "C" alone when the offset is 0. Text in double
+// quotes is left as it is.
+//   "=A1+$B$2" at row 1, column 1 -> "R[-1]C[-1]+R2C2"
+//   "=SUM(B1..B3)" at row 3, column 1 -> "SUM(R[-3]C:R[-1]C)"
+std::string FormulaToSylk(const std::string& formula, uint16_t row, uint16_t column);
+
+// TImportSYLK::rtd_C_field_E: the reverse: '=' put first, ':' as "..",
+// each R1C1 reference (a whole word: 'R', digits or a bracketed signed
+// offset or nothing, 'C', the same) as an A1 one, '$' before its
+// absolute parts. Text in double quotes is left as it is, and so is a
+// reference that would land before row 1 or column A.
+//   "R[-1]C[-1]+R2C2" at row 1, column 1 -> "=A1+$B$2"
+std::string FormulaFromSylk(const std::string& formula, uint16_t row, uint16_t column);
+
 } // namespace gobe
 
 #endif

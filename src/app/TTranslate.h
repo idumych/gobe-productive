@@ -45,13 +45,15 @@ bool ImportFile(const char* path, FileKind kind, Document& doc, BString& error,
 enum SaveFormat {
 	kSaveGobe,
 	kSavePlainText,		// TextTranslator 'TEXT', text/plain
-	kSaveRTF			// RTFTranslator 'RTF ', text/rtf
+	kSaveRTF,			// RTFTranslator 'RTF ', text/rtf
+	kSaveSYLK			// SYLKTranslator, text/sylk (spreadsheets)
 };
 
 // Adds the "File Format" popup to a save panel (SavePanel::SavePanel);
 // returns the menu field. `textFormats`: whether the document's main part
-// is word processing (the Plain Text and RTF formats are offered).
-BMenuField* AddFormatField(BFilePanel* panel, bool textFormats);
+// is word processing (the Plain Text and RTF formats are offered);
+// `sheetFormats`: a spreadsheet (SYLK).
+BMenuField* AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats = false);
 // The format chosen in the field (kSaveGobe if none).
 SaveFormat ChosenFormat(BMenuField* field);
 // SavePanel::FixSuffix: the file name's suffix for that format.

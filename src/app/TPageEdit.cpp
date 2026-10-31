@@ -4930,6 +4930,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 				fDocument.SetPageGeometry(paper, printable);
 				GeometryChanged();
 			}
+		} else if (command.compare(0, 11, "exportsylk ") == 0) {
+			// "exportsylk <path>": Save As in the SYLK format
+			BString error;
+			if (!ExportFile(fDocument, command.c_str() + 11, kSaveSYLK, error))
+				fprintf(stderr, "exportsylk: %s\n", error.String());
 		} else if (command.compare(0, 11, "exporttext ") == 0
 				|| command.compare(0, 10, "exportrtf ") == 0) {
 			// "exporttext <path>", "exportrtf <path>": Save As in the
