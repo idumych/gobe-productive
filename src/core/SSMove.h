@@ -73,17 +73,24 @@ MoveResult MoveCellsCommand(Document& doc, size_t part, const std::vector<SSRang
 // first row (column) lies in its rows (columns). True if it changed.
 bool AdjustRange(SSRange& r, const SSRange& block, int rows, int columns);
 
-// TSSInsertCommand and TSSDeleteCommand::PerformCmd for a selection of
-// cells (kind 'CELL'), `range` of part `part`: Insert Cells shifts the
-// cells from the range to the sheet's last row (column) down (right) by the
-// range's height (width), refused (false, nothing changed) if cells that
-// aren't empty would go past it; Delete Cells shifts the cells below (right
-// of) the range up (left) over it. The locks in the way are offset
-// (TSSMoveCommand::OffsetLocks), formulas and named ranges follow
-// (MoveCells, TSSMoveCommand::MoveReferences); references to deleted cells
-// become #REF!. `vertical` is the dialog's "shiftVertical".
-bool InsertCells(Document& doc, size_t part, const SSRange& range, bool vertical);
-bool DeleteCells(Document& doc, size_t part, const SSRange& range, bool vertical);
+// TSSInsertCommand and TSSDeleteCommand::PerformCmd, `range` of part
+// `part`, a selection of cells, whole rows or whole columns (TSSSelection
+// 'CELL', 'ROWS', 'COLS'). For cells, Insert Cells shifts the cells from
+// the range to the sheet's last row (column) down (right) by the range's
+// height (width), refused (false, nothing changed) if cells that aren't
+// empty would go past it; Delete Cells shifts the cells below (right of)
+// the range up (left) over it. Rows go down (up) and columns right (left);
+// the sheet grows (TSSSetDocSizeCommand: refused past row 0x3ffe or column
+// 0x2bd) or shrinks by them, and their sizes move with them (Offset/
+// KillRowHeaders). The locks in the way are offset (TSSMoveCommand::
+// OffsetLocks), formulas and named ranges follow (MoveCells,
+// TSSMoveCommand::MoveReferences); references to deleted cells become
+// #REF!. `vertical` is the dialog's "shiftVertical" (cells only).
+enum class SelectionKind { cells, rows, columns };
+bool InsertCells(Document& doc, size_t part, const SSRange& range, bool vertical,
+	SelectionKind kind = SelectionKind::cells);
+bool DeleteCells(Document& doc, size_t part, const SSRange& range, bool vertical,
+	SelectionKind kind = SelectionKind::cells);
 
 } // namespace gobe
 

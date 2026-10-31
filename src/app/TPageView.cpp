@@ -1261,6 +1261,25 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 		for (int k = 0; rowHeaders && k < rows; k++)
 			drawHeader(BRect(r.left, ys[k], r.left + headerWidth, ys[k + 1]),
 				std::to_string(firstRow + k + 1));
+		// the selected columns' (rows') headings darkened (DarkGrayInk,
+		// B_OP_MIN)
+		if (fSelectedCell.active && fSelectedCell.part == f.part
+				&& fSelectedCell.kind != SelectionKind::cells) {
+			bool byColumn = fSelectedCell.kind == SelectionKind::columns;
+			int from = byColumn ? std::min(fSelectedCell.column, fSelectedCell.anchorColumn)
+				: std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+			int to = byColumn ? std::max(fSelectedCell.column, fSelectedCell.anchorColumn)
+				: std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+			SetDrawingMode(B_OP_MIN);
+			SetHighColor(112, 112, 112);
+			for (int c = 0; byColumn && columnHeaders && c < columns; c++)
+				if (firstColumn + c >= from && firstColumn + c <= to)
+					FillRect(BRect(xs[c], r.top, xs[c + 1], r.top + headerHeight));
+			for (int k = 0; !byColumn && rowHeaders && k < rows; k++)
+				if (firstRow + k >= from && firstRow + k <= to)
+					FillRect(BRect(r.left, ys[k], r.left + headerWidth, ys[k + 1]));
+			SetDrawingMode(B_OP_COPY);
+		}
 	}
 
 	// cell text; text spills into empty neighbours (TOverlapManager): laid

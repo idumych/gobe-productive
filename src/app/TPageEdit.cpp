@@ -1130,6 +1130,80 @@ TPageView::HitCell(BPoint where, size_t& part, int& row, int& column, BRect& rec
 }
 
 
+bool
+TPageView::HitHeading(BPoint where, size_t& part, SelectionKind& kind, int& index) const
+{
+	float dx = fMargin - fBounds.left;
+	float dy = fMargin - fBounds.top;
+	const Document::PlacedFrame* hit = NULL;
+	for (const auto& f : fFrames) {
+		if (fDocument.parts.parts[f.part].kind != Sig("SPRD")
+			|| fDocument.SpreadsheetPart(f.part) == NULL || f.frame->angle != 0)
+			continue;
+		BRect r(f.x + dx, f.y + dy, f.x + dx + f.width, f.y + dy + f.height);
+		if (r.Contains(where) && (hit == NULL || f.depth >= hit->depth))
+			hit = &f;
+	}
+	if (hit == NULL)
+		return false;
+	BRect r(hit->x + dx, hit->y + dy, hit->x + dx + hit->width, hit->y + dy + hit->height);
+	SheetGeometry g = SheetLayout(*hit, r);
+	bool inColumns = g.headerHeight > 0 && where.y < r.top + g.headerHeight;
+	bool inRows = g.headerWidth > 0 && where.x < r.left + g.headerWidth;
+	if (!inColumns && !inRows)
+		return false;
+	part = hit->part;
+	if (inColumns && inRows) {
+		kind = SelectionKind::cells;
+		index = -1;
+		return true;
+	}
+	const std::vector<float>& edges = inColumns ? g.xs : g.ys;
+	float at = inColumns ? where.x : where.y;
+	for (size_t k = 0; k + 1 < edges.size(); k++) {
+		if (at >= edges[k] && at < edges[k + 1]) {
+			kind = inColumns ? SelectionKind::columns : SelectionKind::rows;
+			index = (inColumns ? g.firstColumn : g.firstRow) + int(k);
+			return true;
+		}
+	}
+	return false;
+}
+
+
+void
+TPageView::SelectLines(size_t part, SelectionKind kind, int index, bool extend)
+{
+	const SSPart* ss = fDocument.SpreadsheetPart(part);
+	if (ss == NULL)
+		return;
+	bool columns = kind == SelectionKind::columns;
+	// (shift extends a selection of the same kind, from its active line)
+	if (!extend || !fSelectedCell.active || fSelectedCell.part != part
+			|| fSelectedCell.kind != kind) {
+		fSelectedCell.anchorRow = index;
+		fSelectedCell.anchorColumn = index;
+	}
+	fCaret.active = false;
+	fAnchor.active = false;
+	fSelectedCell.active = true;
+	fSelectedCell.part = part;
+	fSelectedCell.kind = kind;
+	// the lines span the sheet, the active cell (the moving corner) in row
+	// (column) 0
+	if (columns) {
+		fSelectedCell.anchorRow = ss->used.to.a;
+		fSelectedCell.row = 0;
+		fSelectedCell.column = index;
+	} else {
+		fSelectedCell.anchorColumn = ss->used.to.b;
+		fSelectedCell.column = 0;
+		fSelectedCell.row = index;
+	}
+	Invalidate();
+}
+
+
 BRect
 TPageView::CellViewRect(size_t part, int row, int column) const
 {
@@ -1158,6 +1232,7 @@ TPageView::BeginCellEdit(size_t part, int row, int column, BRect rect)
 		return;
 	fSelectedCell.active = true;
 	fSelectedCell.part = part;
+	fSelectedCell.kind = SelectionKind::cells;
 	fSelectedCell.row = row;
 	fSelectedCell.column = column;
 	rect.right = std::max(rect.right, rect.left + 120);	// room for formulas
@@ -1219,6 +1294,7 @@ TPageView::EndCellEdit(bool commit, int moveRows, int moveColumns)
 	fSelectedCell.column = std::max(0, fSelectedCell.column + moveColumns);
 	fSelectedCell.anchorRow = fSelectedCell.row;
 	fSelectedCell.anchorColumn = fSelectedCell.column;
+	fSelectedCell.kind = SelectionKind::cells;
 	Invalidate();
 }
 
@@ -1250,6 +1326,36 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	size_t part;
 	int row, column;
 	BRect rect;
+	SelectionKind headingKind;
+	int heading;
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0
+			&& HitHeading(where, part, headingKind, heading)) {
+		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
+		if (heading < 0) {
+			// the corner: TPartSS::PrintRange, the cells that hold anything
+			const SSPart* ss = fDocument.SpreadsheetPart(part);
+			int maxRow = 0, maxColumn = 0;
+			for (const SSCell& cell : ss->cells) {
+				maxRow = std::max(maxRow, int(cell.id.a));
+				maxColumn = std::max(maxColumn, int(cell.id.b));
+			}
+			fCaret.active = false;
+			fAnchor.active = false;
+			fSelectedCell.active = true;
+			fSelectedCell.part = part;
+			fSelectedCell.kind = SelectionKind::cells;
+			fSelectedCell.anchorRow = fSelectedCell.anchorColumn = 0;
+			fSelectedCell.row = maxRow;
+			fSelectedCell.column = maxColumn;
+			Invalidate();
+			return;
+		}
+		SelectLines(part, headingKind, heading, shift);
+		fDraggingHeadings = true;
+		if (Window() != NULL)
+			SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+		return;
+	}
 	if (HitCell(where, part, row, column, rect)
 			&& (buttons & B_SECONDARY_MOUSE_BUTTON) != 0) {
 		// TPartSS::SetUpContextMenu: the selection stays
@@ -1270,6 +1376,7 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		fAnchor.active = false;
 		fSelectedCell.active = true;
 		fSelectedCell.part = part;
+		fSelectedCell.kind = SelectionKind::cells;
 		if (shift && fSelectedCell.active && fSelectedCell.part == part) {
 			// extend range: keep anchor, move row/column
 			fSelectedCell.row = row;
@@ -1367,6 +1474,24 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 			Invalidate();
 		}
 	}
+	if (fDraggingHeadings) {
+		// TSSDisplayManager::ColumnClick's tracking: over the headings or
+		// the cells, the column (row) under the pointer
+		size_t part;
+		int row, column, index = -1;
+		BRect rect;
+		SelectionKind kind;
+		bool columns = fSelectedCell.kind == SelectionKind::columns;
+		if (HitHeading(where, part, kind, index) && part == fSelectedCell.part
+				&& kind == fSelectedCell.kind)
+			;
+		else if (HitCell(where, part, row, column, rect) && part == fSelectedCell.part)
+			index = columns ? column : row;
+		else
+			index = -1;
+		if (index >= 0)
+			SelectLines(fSelectedCell.part, fSelectedCell.kind, index, true);
+	}
 	if (fDraggingCells) {
 		size_t part;
 		int row, column;
@@ -1386,6 +1511,7 @@ TPageView::MouseUp(BPoint where)
 {
 	fDragging = false;
 	fDraggingCells = false;
+	fDraggingHeadings = false;
 	BView::MouseUp(where);
 }
 
@@ -1405,6 +1531,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 			fSelectedCell.column);
 		switch (bytes[0]) {
 			case B_UP_ARROW:
+				fSelectedCell.kind = SelectionKind::cells;
 				if (shift) {
 					fSelectedCell.row = std::max(0, fSelectedCell.row - 1);
 				} else {
@@ -1413,6 +1540,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				}
 				break;
 			case B_DOWN_ARROW:
+				fSelectedCell.kind = SelectionKind::cells;
 				if (shift) {
 					fSelectedCell.row++;
 				} else {
@@ -1421,6 +1549,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				}
 				break;
 			case B_LEFT_ARROW:
+				fSelectedCell.kind = SelectionKind::cells;
 				if (shift) {
 					fSelectedCell.column = std::max(0, fSelectedCell.column - 1);
 				} else {
@@ -1430,6 +1559,7 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				break;
 			case B_RIGHT_ARROW:
 			case B_TAB:
+				fSelectedCell.kind = SelectionKind::cells;
 				if (shift) {
 					fSelectedCell.column++;
 				} else {
@@ -2387,6 +2517,7 @@ TPageView::MessageReceived(BMessage* message)
 										Window()->PostMessage(kMsgDocumentChanged);
 									// select the pasted block
 									fSelectedCell.anchorRow = fSelectedCell.row = r0;
+									fSelectedCell.kind = SelectionKind::cells;
 									fSelectedCell.anchorColumn = fSelectedCell.column = c0;
 									fSelectedCell.row = r0 + int(rows) - 1;
 									fSelectedCell.column = c0 + int(columns) - 1;
@@ -2430,6 +2561,7 @@ TPageView::MessageReceived(BMessage* message)
 							}
 							fSelectedCell.anchorRow = 0;
 							fSelectedCell.anchorColumn = 0;
+							fSelectedCell.kind = SelectionKind::cells;
 							fSelectedCell.row = maxRow;
 							fSelectedCell.column = maxCol;
 							Invalidate();
@@ -2451,8 +2583,11 @@ TPageView::MessageReceived(BMessage* message)
 							SSAlert(4);
 							return;
 						}
-						bool vertical;
-						if (message->FindBool("shiftVertical", &vertical) != B_OK) {
+						// whole rows and columns go straight in (or out)
+						SelectionKind kind = fSelectedCell.kind;
+						bool vertical = kind == SelectionKind::rows;
+						if (kind == SelectionKind::cells
+								&& message->FindBool("shiftVertical", &vertical) != B_OK) {
 							(new TDialogDeleteInsert(this, remove, r1 - r0 <= c1 - c0))
 								->RunDialog();
 							return;
@@ -2460,10 +2595,22 @@ TPageView::MessageReceived(BMessage* message)
 						fUndo.BeginDocument(fDocument, SSCommandName(remove ? 10 : 11),
 							CurrentViewState());
 						SSRange range{{uint16_t(r0), uint16_t(c0)}, {uint16_t(r1), uint16_t(c1)}};
-						if (!(remove ? DeleteCells(fDocument, fSelectedCell.part, range, vertical)
-								: InsertCells(fDocument, fSelectedCell.part, range, vertical))) {
+						if (!(remove
+								? DeleteCells(fDocument, fSelectedCell.part, range, vertical, kind)
+								: InsertCells(fDocument, fSelectedCell.part, range, vertical, kind))) {
 							beep();
 							return;
+						}
+						if (remove && kind != SelectionKind::cells) {
+							// the selection pinned to the smaller sheet
+							const SSRange& size = fDocument.SpreadsheetPart(
+								fSelectedCell.part)->used;
+							fSelectedCell.row = std::min(fSelectedCell.row, int(size.to.a));
+							fSelectedCell.anchorRow = std::min(fSelectedCell.anchorRow,
+								int(size.to.a));
+							fSelectedCell.column = std::min(fSelectedCell.column, int(size.to.b));
+							fSelectedCell.anchorColumn = std::min(fSelectedCell.anchorColumn,
+								int(size.to.b));
 						}
 						fBook->Reset();
 						Rebuild();
@@ -2655,6 +2802,7 @@ TPageView::MessageReceived(BMessage* message)
 						const uint16* cell = (const uint16*)data;
 						fSelectedCell.row = fSelectedCell.anchorRow = cell[0];
 						fSelectedCell.column = fSelectedCell.anchorColumn = cell[1];
+						fSelectedCell.kind = SelectionKind::cells;
 						// ScrollActiveOntoScreen
 						BRect rect = CellViewRect(fSelectedCell.part, cell[0], cell[1]);
 						if (rect.IsValid() && !Bounds().Contains(rect))
@@ -3714,6 +3862,7 @@ TPageView::RunScript(const std::string& script, Document& document)
 				continue;
 			}
 			fSelectedCell.active = true;
+			fSelectedCell.kind = SelectionKind::cells;
 			fSelectedCell.row = row;
 			fSelectedCell.column = column;
 			fSelectedCell.anchorRow = row;
@@ -4076,7 +4225,7 @@ TPageView::CurrentViewState() const
 	if (fSelectedCell.active)
 		return {2, int64_t(fSelectedCell.part), int64_t(fSelectedCell.row),
 			int64_t(fSelectedCell.column), int64_t(fSelectedCell.anchorRow),
-			int64_t(fSelectedCell.anchorColumn)};
+			int64_t(fSelectedCell.anchorColumn), int64_t(fSelectedCell.kind)};
 	return {0};
 }
 
@@ -4104,6 +4253,7 @@ TPageView::RestoreViewState(const UndoStack::ViewState& v)
 		fSelectedCell.column = int(v[3]);
 		fSelectedCell.anchorRow = int(v[4]);
 		fSelectedCell.anchorColumn = int(v[5]);
+		fSelectedCell.kind = v.size() > 6 ? SelectionKind(v[6]) : SelectionKind::cells;
 		fCaret.active = false;
 		fAnchor.active = false;
 	} else {

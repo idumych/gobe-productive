@@ -625,24 +625,56 @@ ShiftCells(Document& doc, size_t partIndex, SSPart& part, const SSRange& block, 
 	return true;
 }
 
+
+// TSSMoveCommand::OffsetRowHeaders / OffsetColumnHeaders: the sizes of
+// rows (columns) from..to move by `by`, those where they land lost;
+// TSSDataCommand::KillRowHeaders / KillColumnHeaders: from..to lost (by 0)
+void
+OffsetHeaders(std::vector<SSHeader>& headers, int from, int to, int by)
+{
+	std::vector<SSHeader> kept;
+	for (SSHeader& h : headers) {
+		int i = int(h.index);
+		bool moves = i >= from && i <= to;
+		if (by == 0 ? moves : (!moves && i >= from + by && i <= to + by))
+			continue;
+		if (moves)
+			h.index = uint32_t(i + by);
+		kept.push_back(h);
+	}
+	std::sort(kept.begin(), kept.end(),
+		[](const SSHeader& x, const SSHeader& y) { return x.index < y.index; });
+	headers = std::move(kept);
+}
+
 } // namespace
 
 
 bool
-InsertCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical)
+InsertCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical,
+	SelectionKind kind)
 {
 	SSPart* part = doc.EditableSpreadsheetPart(partIndex);
 	if (part == nullptr)
 		return false;
+	if (kind != SelectionKind::cells)
+		vertical = kind == SelectionKind::rows;
 	const SSRange size = part->used;
 	int rows = vertical ? r.to.a - r.from.a + 1 : 0;
 	int columns = vertical ? 0 : r.to.b - r.from.b + 1;
-	// the cells pushed past the sheet's edge must be empty
-	SSRange edge = vertical
-		? SSRange{{uint16_t(size.to.a - rows + 1), r.from.b}, {size.to.a, r.to.b}}
-		: SSRange{{r.from.a, uint16_t(size.to.b - columns + 1)}, {r.to.a, size.to.b}};
-	if (!RangeEmpty(*part, edge))
-		return false;
+	if (kind == SelectionKind::cells) {
+		// the cells pushed past the sheet's edge must be empty
+		SSRange edge = vertical
+			? SSRange{{uint16_t(size.to.a - rows + 1), r.from.b}, {size.to.a, r.to.b}}
+			: SSRange{{r.from.a, uint16_t(size.to.b - columns + 1)}, {r.to.a, size.to.b}};
+		if (!RangeEmpty(*part, edge))
+			return false;
+	} else {
+		// rows and columns make the sheet bigger
+		if (size.to.a + rows > 0x3ffe || size.to.b + columns > 0x2bd)
+			return false;
+		part->used = {{0, 0}, {uint16_t(size.to.a + rows), uint16_t(size.to.b + columns)}};
+	}
 	// the cells from the range to the edge, less what goes past it
 	SSRange block{r.from, r.from};
 	if (vertical) {
@@ -650,22 +682,33 @@ InsertCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical)
 		if (rows <= size.to.a)
 			block.to.a = uint16_t(size.to.a - rows);
 		block.to.a = std::max(block.to.a, r.from.a);
+		if (kind == SelectionKind::rows) {
+			block.to.a = size.to.a;
+			OffsetHeaders(part->rows, r.from.a, size.to.a, rows);
+		}
 	} else {
 		block.to.a = std::min(r.to.a, size.to.a);
 		if (columns <= size.to.b)
 			block.to.b = uint16_t(size.to.b - columns);
 		block.to.b = std::max(block.to.b, r.from.b);
+		if (kind == SelectionKind::columns) {
+			block.to.b = size.to.b;
+			OffsetHeaders(part->columns, r.from.b, size.to.b, columns);
+		}
 	}
 	return ShiftCells(doc, partIndex, *part, block, rows, columns);
 }
 
 
 bool
-DeleteCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical)
+DeleteCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical,
+	SelectionKind kind)
 {
 	SSPart* part = doc.EditableSpreadsheetPart(partIndex);
 	if (part == nullptr)
 		return false;
+	if (kind != SelectionKind::cells)
+		vertical = kind == SelectionKind::rows;
 	const SSRange size = part->used;
 	int height = r.to.a - r.from.a + 1, width = r.to.b - r.from.b + 1;
 	// the cells past the range to the edge, at least as many as it has
@@ -676,15 +719,28 @@ DeleteCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical)
 		if (size.to.a < block.from.a + height)
 			block.to.a = uint16_t(block.from.a + height);
 		block.to.a = std::max(block.to.a, block.from.a);
+		if (kind == SelectionKind::rows) {
+			OffsetHeaders(part->rows, r.from.a, r.to.a, 0);
+			OffsetHeaders(part->rows, block.from.a, block.to.a, -height);
+		}
 	} else {
 		block.from = {r.from.a, uint16_t(r.to.b + 1)};
 		block.to = {std::min(r.to.a, size.to.a), size.to.b};
 		if (size.to.b < block.from.b + width)
 			block.to.b = uint16_t(block.from.b + width);
 		block.to.b = std::max(block.to.b, block.from.b);
+		if (kind == SelectionKind::columns) {
+			OffsetHeaders(part->columns, r.from.b, r.to.b, 0);
+			OffsetHeaders(part->columns, block.from.b, block.to.b, -width);
+		}
 	}
-	return ShiftCells(doc, partIndex, *part, block, vertical ? -height : 0,
-		vertical ? 0 : -width);
+	int rows = vertical ? -height : 0, columns = vertical ? 0 : -width;
+	if (!ShiftCells(doc, partIndex, *part, block, rows, columns))
+		return false;
+	// rows and columns make the sheet smaller
+	if (kind != SelectionKind::cells)
+		part->used = {{0, 0}, {uint16_t(size.to.a + rows), uint16_t(size.to.b + columns)}};
+	return true;
 }
 
 } // namespace gobe

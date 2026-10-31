@@ -7,7 +7,8 @@
 //   cells as they were (but the empty cells pushed past the sheet's edge,
 //   and formulas referring to them, now invalid; a range only meeting the
 //   shifted cells doesn't follow them, so formulas with ranges are left out
-//   of the values);
+//   of the values); whole rows and columns inserted and deleted again
+//   give everything as it was;
 // - small cases worked out by hand from the decomp's rules.
 #include <cmath>
 #include <cstdio>
@@ -261,6 +262,36 @@ HandCases(int argc, char** argv)
 	InsertCells(doc, p, Range("A2", "A3"), true);
 	Check(part().locked[0].from.a == 0 && part().locked[0].to.a == 5,
 		"lock A1:B4 stretched to A1:B6");
+
+	// whole rows: the row sizes move with them, deleted rows' sizes go, the
+	// sheet grows and shrinks; a formula below follows
+	doc = start;
+	{
+		SSPart& ss = *doc.EditableSpreadsheetPart(p);
+		SSHeader h3{2, SSCell()}, h6{5, SSCell()};
+		h3.cell.number = 30;
+		h6.cell.number = 60;
+		ss.rows = {h3, h6};
+	}
+	Set(doc, p, "A6", "6");
+	Set(doc, p, "B1", "=A6");
+	SSRange rows2{{1, 0}, {2, lastColumn}};	// rows 2 and 3
+	Check(InsertCells(doc, p, rows2, false, SelectionKind::rows), "insert rows 2:3");
+	Check(part().used.to.a == lastRow + 2, "the sheet 2 rows longer");
+	Check(part().rows.size() == 2 && part().rows[0].index == 4 && part().rows[1].index == 7,
+		"row sizes of rows 3 and 6 now of rows 5 and 8");
+	Check(Formula(part(), 0, 1) == "A8", "=A6 after inserting rows: " + Formula(part(), 0, 1));
+	Check(DeleteCells(doc, p, SSRange{{3, 0}, {4, lastColumn}}, false, SelectionKind::rows),
+		"delete rows 4:5");
+	Check(part().used.to.a == lastRow, "the sheet as long as before");
+	Check(part().rows.size() == 1 && part().rows[0].index == 5,
+		"row 5's size gone, row 8's back to row 6");
+	Check(Formula(part(), 0, 1) == "A6", "=A8 after deleting rows: " + Formula(part(), 0, 1));
+	// a column past the last one the sheet can have: refused
+	doc = start;
+	doc.EditableSpreadsheetPart(p)->used.to.b = 0x2bd;
+	Check(!InsertCells(doc, p, SSRange{{0, 1}, {lastRow, 1}}, false, SelectionKind::columns),
+		"insert a column refused at column 0x2bd");
 }
 
 
@@ -391,6 +422,76 @@ main(int argc, char** argv)
 							where + ": deleted again, cell " + CellName(c.id) + " differs");
 					}
 				}
+			}
+		}
+	}
+	// whole rows and columns: the sheet grows, nothing is lost, and
+	// deleted again everything is as it was (cells, sizes, the sheet)
+	for (int i = 1; i < argc; i++) {
+		Document original;
+		if (!LoadDocument(argv[i], original, error))
+			continue;
+		for (const auto& entry : original.spreadsheetParts) {
+			size_t p = entry.first;
+			const SSPart& ss = *original.SpreadsheetPart(p);
+			if (ss.cells.empty())
+				continue;
+			const SSCell& middle = ss.cells[ss.cells.size() / 2];
+			for (SelectionKind kind : {SelectionKind::rows, SelectionKind::columns}) {
+				bool rows = kind == SelectionKind::rows;
+				SSRange r = rows
+					? SSRange{{middle.id.a, 0}, {uint16_t(middle.id.a + 1), ss.used.to.b}}
+					: SSRange{{0, middle.id.b}, {ss.used.to.a, uint16_t(middle.id.b + 1)}};
+				std::string where = std::string(argv[i]) + " part " + std::to_string(p)
+					+ (rows ? " rows at " : " columns at ") + CellName(middle.id);
+				Document doc = original;
+				if (!InsertCells(doc, p, r, false, kind)) {
+					Check(ss.used.to.a + 2 > 0x3ffe || ss.used.to.b + 2 > 0x2bd,
+						where + ": insert refused");
+					continue;
+				}
+				// (cells past the sheet's size are cleared if the shifted ones
+				// land on them, so they aren't counted)
+				auto inside = [&](const SSPart& part) {
+					size_t n = 0;
+					for (const SSCell& c : part.cells)
+						n += c.id.a <= ss.used.to.a && c.id.b <= ss.used.to.b;
+					return n;
+				};
+				const SSPart& grown = *doc.SpreadsheetPart(p);
+				Check(grown.cells.size() >= inside(ss), where + ": cells lost");
+				Check(rows ? grown.used.to.a == ss.used.to.a + 2 : grown.used.to.b == ss.used.to.b + 2,
+					where + ": the sheet grew");
+				const SSCell* moved = grown.Cell(uint16_t(middle.id.a + (rows ? 2 : 0)),
+					uint16_t(middle.id.b + (rows ? 0 : 2)));
+				// (its formula's references can differ: relative ones to cells
+				// that stayed)
+				Check(moved != nullptr && moved->kind == middle.kind
+						&& moved->number == middle.number && moved->text == middle.text
+						&& moved->style == middle.style,
+					where + ": the cell moved by 2");
+				Check(DeleteCells(doc, p, r, false, kind), where + ": delete");
+				const SSPart& back = *doc.SpreadsheetPart(p);
+				Check(back.used.from.a == ss.used.from.a && back.used.to.a == ss.used.to.a
+						&& back.used.to.b == ss.used.to.b, where + ": the sheet's size");
+				Check(inside(back) == inside(ss), where + ": cells after delete");
+				for (const SSCell& c : ss.cells) {
+					if (c.id.a > ss.used.to.a || c.id.b > ss.used.to.b)
+						continue;
+					bool ranges;
+					if (Meets(Refers(c, ranges), r))
+						continue;
+					const SSCell* now = back.Cell(c.id.a, c.id.b);
+					Check(now != nullptr && Contents(*now) == Contents(c),
+						where + ": deleted again, cell " + CellName(c.id) + " differs");
+				}
+				const std::vector<SSHeader>& h0 = rows ? ss.rows : ss.columns;
+				const std::vector<SSHeader>& h1 = rows ? back.rows : back.columns;
+				bool same = h0.size() == h1.size();
+				for (size_t k = 0; same && k < h0.size(); k++)
+					same = h0[k].index == h1[k].index && h0[k].cell.number == h1[k].cell.number;
+				Check(same, where + ": sizes after delete");
+				parts++;
 			}
 		}
 	}

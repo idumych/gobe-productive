@@ -23,6 +23,7 @@
 #include "Document.h"
 #include "Editing.h"
 #include "SSEval.h"
+#include "SSMove.h"
 #include "SSStyle.h"
 #include "Styles.h"
 #include "Undo.h"
@@ -168,6 +169,9 @@ public:
 		size_t part = 0;
 		int row = 0, column = 0;
 		int anchorRow = 0, anchorColumn = 0;
+		// TSSSelection's kind: cells, or whole rows or columns (chosen by
+		// their headings; they span the sheet, row and column 0 active)
+		SelectionKind kind = SelectionKind::cells;
 	} fSelectedCell;
 	BTextView* fCellEditor = NULL;
 	BRect fBounds;					// everything, in document coordinates
@@ -261,6 +265,13 @@ private:
 	void DrawSelection();
 	// spreadsheet editing
 	bool HitCell(BPoint where, size_t& part, int& row, int& column, BRect& rect) const;
+	// a spreadsheet's headings at `where` (TSSDisplayManager::HandleClick):
+	// the corner both meet in (index -1), a column heading (kind columns,
+	// its column) or a row heading (rows, its row)
+	bool HitHeading(BPoint where, size_t& part, SelectionKind& kind, int& index) const;
+	// TSSDisplayManager::ColumnClick / RowClick: the whole column (row)
+	// `index` selected, or the selection of columns (rows) extended to it
+	void SelectLines(size_t part, SelectionKind kind, int index, bool extend);
 	void BeginCellEdit(size_t part, int row, int column, BRect rect);
 	void EndCellEdit(bool commit, int moveRows = 0, int moveColumns = 0);
 	BRect CellViewRect(size_t part, int row, int column) const;
@@ -295,6 +306,7 @@ private:
 	std::map<size_t, std::unique_ptr<BBitmap>> fImages;
 	bool fDragging = false;
 	bool fDraggingCells = false;	// cell range: drag from first click
+	bool fDraggingHeadings = false;	// whole rows or columns: the same
 	bool fScriptShift = false;		// RunScript: shift held
 	uint32 fScriptModifiers = 0;	// RunScript: Command, Option, Control held
 };
