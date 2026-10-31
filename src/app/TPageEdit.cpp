@@ -3834,6 +3834,7 @@ TPageView::MessageReceived(BMessage* message)
 // "formatbar show|color N|fill N|pen N|pentype N|penmenu|style NAME|names|name LABEL|ink text|fill
 // pattern|gradient|transparency N" — the format
 // bar (TFormatBar); "names" prints the Names menu, "name" picks its item.
+// "exportrtf path" — Save As RTF.
 // "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
 // dictionaries" — the SpellBar (Spell Check's commands 'sMC0'..'sMC6',
 // "check" the PartBar's button; "show" prints it and the selection).
@@ -4658,6 +4659,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 				} else
 					fprintf(stderr, "cellfill_check %d %d (no sheet)\n", row, column);
 			}
+		} else if (command.compare(0, 10, "exportrtf ") == 0) {
+			// "exportrtf path": Save As with the RTF format (ExportFile)
+			BString error;
+			if (!ExportFile(document, command.substr(10).c_str(), kSaveRTF, error))
+				fprintf(stderr, "exportrtf: %s\n", error.String());
 		} else if (command.compare(0, 5, "save ") == 0) {
 			std::string error;
 			if (!document.Save(command.substr(5), error))

@@ -453,16 +453,17 @@ main(int argc, char** argv)
 	TestSamples(argc, argv);
 	TestSpecialChars();
 	{
-		// Save As RTF of a document with a table: its cells' text, \par
-		// before each row, \tab between the cells
+		// Save As RTF of a document with a table: an RTF table (rtf_tables
+		// tests it reading back)
 		Document tabled;
 		std::string error;
 		Check(ImportHTMLText("<HTML><BODY><P>Before</P><TABLE><TR><TD>Name<TD>Count"
 			"<TR><TD>Apples<TD>12</TABLE><P>After</P></BODY></HTML>", tabled, error),
 			"a table opened " + error);
 		std::string rtf = ExportedRTF(tabled, size_t(tabled.MainPart()), TestFonts());
-		Check(rtf.find("\\par Name\\tab Count\\par Apples\\tab 12") != std::string::npos,
-			"RTF: the table's cells written");
+		Check(rtf.find("\\trowd") != std::string::npos && rtf.find("Name") != std::string::npos
+			&& rtf.find("\\cell") != std::string::npos && rtf.find("\\row") != std::string::npos,
+			"RTF: the table written as a table");
 	}
 	printf("textio checks ok %d, failed %d\n", sOk, sFailed);
 	return sFailed > 0 ? 1 : 0;

@@ -252,7 +252,7 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	std::string message, notice;
 	bool ok = false;
 	if (kind == kRTFFile) {
-		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice);
+		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice, ReadPicture);
 	} else if (kind == kWordFile) {
 		ok = ImportWord(path, doc, message);
 	} else if (kind == kExcelFile) {

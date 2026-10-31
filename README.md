@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-56-59-3.svg" alt="Port progress: 56 of 59 features done, 3 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-57-59-2.svg" alt="Port progress: 57 of 59 features done, 2 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -199,7 +199,7 @@ Opened with File > Open, saved with Save As's File Format menu.
 | Plain text: opened and saved | 0.1.1 |
 | RTF: opened and saved | 0.1.1 |
 | RTF: pictures in the text saved (image parts, as PNG; the original wrote JPEG) | next |
-| RTF: tables saved as RTF tables, and tables and pictures read back when an RTF file is opened | in progress |
+| RTF: tables saved as RTF tables, and tables and pictures read back when an RTF file is opened | next |
 | HTML: text documents opened and saved (paragraphs, headings, alignment, sizes, colours, faces, lists, rules, entities) | next |
 | HTML: tables saved as tables (a table in the text, a table sheet), as the original wrote them | next |
 | HTML: pictures in the text saved as PNG files in a "<name>.images" folder (image parts; the original drew any frame and wrote GIF or JPEG) | next |

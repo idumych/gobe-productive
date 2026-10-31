@@ -1,6 +1,8 @@
 // RTF in and out of word processing documents (Gobe RTF translator).
 #include "RTF.h"
 
+#include <unistd.h>
+
 #include "Document.h"
 #include "Editing.h"
 #include "InlineParts.h"
@@ -12,6 +14,7 @@
 #include <cstdio>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <iterator>
 #include <memory>
 
@@ -295,6 +298,15 @@ struct ReadPart {
 	std::vector<CharRun> charRuns;
 	struct Special { size_t offset; uint32_t kind; };	// "pgbk", "page"
 	std::vector<Special> specials;
+	// tables (\trowd ... \cell ... \row, the port's): where they start
+	// and end in the text, per row its cells' right edges (\cellx,
+	// twips) and where each cell's text ends (after its paragraph break)
+	struct TableRow { std::vector<int32_t> cellx; std::vector<size_t> cellEnds; };
+	struct Table { size_t start = 0, end = 0; bool border = false; std::vector<TableRow> rows; };
+	std::vector<Table> tables;
+	// pictures (\pngblip, \jpegblip): where they go, their data
+	struct Picture { size_t offset; int kind; std::string data; };
+	std::vector<Picture> pictures;
 };
 
 // TRTFFont (TFontTableRTF): a font table entry and the installed font it
@@ -370,6 +382,13 @@ private:
 	bool fHeaderDone = false, fFooterDone = false, fPageField = false;
 	bool fHeaderCreated = false, fFooterCreated = false;
 	bool fInShape = false, fShapePicture = false;
+	// the picture being read (its blip kind, -1 none) and the table (open:
+	// the last of main.tables; its row ended with \row)
+	int fPictKind = -1;
+	std::string fPictData;
+	bool fTableOpen = false, fRowEnded = false;
+	bool TableKeyword(const std::string& keyword, int32_t param);
+	void CloseTable();
 	std::vector<SavedState> fStack;
 	std::string fBuffer, fMime;
 	ReadPart* fPart;
@@ -450,6 +469,7 @@ RTFReader::Read()
 	if (fDepth != 0)
 		unmatched = true;
 	FlushMimeBuffer();
+	CloseTable();
 	return 0;
 }
 
@@ -576,6 +596,8 @@ RTFReader::ParseKeyword()
 int
 RTFReader::TranslateKeyword(const std::string& keyword, bool hasParam, int32_t param)
 {
+	if (TableKeyword(keyword, param))
+		return 0;
 	const size_t count = sizeof(kSymbols) / sizeof(kSymbols[0]);
 	size_t i = 0;
 	while (i < count && keyword != kSymbols[i].name)
@@ -622,7 +644,10 @@ RTFReader::TranslateKeyword(const std::string& keyword, bool hasParam, int32_t p
 		case kSpecial:
 			return ParseSpecialKeyword(int32_t(i), hasParam, param);
 		case kPict:
-			// picture properties: pictures aren't imported (see RTF.h)
+			// the blip's kind (\pngblip 6, \jpegblip 2, ...); \picw and
+			// \pich aren't needed
+			if (s.index == 0 && fRds == 0xb)
+				fPictKind = param;
 			return 0;
 		case kTab:
 			ApplyTabData(s.index, param);
@@ -720,6 +745,9 @@ RTFReader::ParseBuffer()
 		if (fFieldState == 10 && fPageField)
 			return 0;
 	}
+	// text after a table's last row: the table ends
+	if (fRds == 0 && fPart == &main && fTableOpen && fRowEnded && fBuffer[0] != '\0')
+		CloseTable();
 	switch (fRds) {
 		case 0:
 		case 4:
@@ -738,7 +766,8 @@ RTFReader::ParseBuffer()
 			ApplyColorTableChange(3, 0);
 			break;
 		case 0xb:
-			// a picture: dropped (see RTF.h)
+			// a picture's data
+			fPictData += fBuffer;
 			break;
 	}
 	return 0;
@@ -782,6 +811,8 @@ RTFReader::ChangeDest(int32_t dest)
 			fFieldState = dest;
 			return 0;
 		case 0xb:
+			fPictKind = -1;
+			fPictData.clear();
 			break;
 		case 0xc:
 			fInShape = true;
@@ -883,7 +914,102 @@ RTFReader::EndGroupAction(int oldRds)
 			AddSpecialCharacter(Sig("pgbk"));
 	} else if (oldRds == 0xc) {
 		fInShape = false;
+	} else if (oldRds == 0xb) {
+		// a PNG or JPEG picture in the main text: where it goes (other
+		// kinds are dropped, as when no translator can read them)
+		if ((fPictKind == 6 || fPictKind == 2) && fPart == &main && !fPictData.empty()) {
+			FlushMimeBuffer();
+			main.pictures.push_back({CurrentLength(), fPictKind, fPictData});
+		}
+		fPictKind = -1;
+		fPictData.clear();
 	}
+}
+
+
+// the table keywords (not in the original's symbol table): \trowd a
+// row's definition (a table opened, its paragraph started), \cellx a
+// cell's right edge, \clbrdr* borders, \cell a cell's end (a paragraph
+// break), \row the row's; \intbl and the rest of the row's keywords
+// ignored. True if the keyword was one of them.
+bool
+RTFReader::TableKeyword(const std::string& keyword, int32_t param)
+{
+	if (keyword != "trowd" && keyword != "cellx" && keyword != "cell" && keyword != "row"
+			&& keyword.compare(0, 6, "clbrdr") != 0)
+		return false;
+	if (fRds != 0 || fPart != &main)
+		return keyword != "cell" && keyword != "row";	// (as before)
+	FlushMimeBuffer();
+	if (keyword == "trowd") {
+		if (!fTableOpen) {
+			if (!main.text.empty() && main.text.back() != '\n')
+				main.text += '\n';
+			ReadPart::Table table;
+			table.start = main.text.size();
+			main.tables.push_back(table);
+			fTableOpen = true;
+			fRowEnded = true;
+		}
+		// (a row defined again before its \row: its edges anew)
+		ReadPart::Table& table = main.tables.back();
+		if (fRowEnded || table.rows.empty()) {
+			table.rows.emplace_back();
+			fRowEnded = false;
+		} else
+			table.rows.back().cellx.clear();
+		return true;
+	}
+	if (!fTableOpen) {
+		// (a cell without a row: as before, a tab or a paragraph's end)
+		return keyword == "cellx" || keyword.compare(0, 6, "clbrdr") == 0;
+	}
+	ReadPart::Table& table = main.tables.back();
+	if (keyword == "cellx") {
+		if (!fRowEnded && !table.rows.empty())
+			table.rows.back().cellx.push_back(param);
+	} else if (keyword.compare(0, 6, "clbrdr") == 0)
+		table.border = true;
+	else if (keyword == "cell") {
+		if (fRowEnded) {
+			table.rows.emplace_back();
+			fRowEnded = false;
+		}
+		LoadAndHandleBuffer('\n', true);
+		FlushMimeBuffer();
+		table.rows.back().cellEnds.push_back(main.text.size());
+		// (the cell's text keeps the properties in effect: the runs so far
+		// end here, as the original ends them only at a change)
+		size_t length = main.text.size();
+		size_t from = main.charRuns.empty() ? 0 : main.charRuns.back().end;
+		if (from < length)
+			main.charRuns.push_back({from, length, fLastChp});
+		from = main.paraRuns.empty() ? 0 : main.paraRuns.back().end;
+		if (from < length)
+			main.paraRuns.push_back({from, length, fLastPap, fLastTabs});
+	} else if (keyword == "row") {
+		fRowEnded = true;
+		table.end = main.text.size();
+	}
+	return true;
+}
+
+
+// the open table ends (text after its last row, or the end)
+void
+RTFReader::CloseTable()
+{
+	if (!fTableOpen)
+		return;
+	fTableOpen = false;
+	ReadPart::Table& table = main.tables.back();
+	// rows without cells (a \trowd at the end) dropped
+	while (!table.rows.empty() && table.rows.back().cellEnds.empty())
+		table.rows.pop_back();
+	if (table.rows.empty())
+		main.tables.pop_back();
+	else
+		table.end = table.rows.back().cellEnds.back();
 }
 
 
@@ -1160,7 +1286,7 @@ RTFReader::ConvertBufferToUTF8()
 
 bool
 ImportRTF(const std::string& path, Document& doc, std::string& error,
-	const FontCatalog& fonts, std::string* warning)
+	const FontCatalog& fonts, std::string* warning, const PictureReader& readPicture)
 {
 	std::ifstream file(path, std::ios::binary);
 	if (!file) {
@@ -1192,67 +1318,76 @@ ImportRTF(const std::string& path, Document& doc, std::string& error,
 	SetPartText(*wp, in.text);
 	size_t length = in.text.size();
 
-	// TWPImport::HandleStyleRuns, paragraph styles (NewParagraphStyle):
-	// indents in points, first line (left - first) / 20, line spacing a
-	// multiple (at least 1), spacing before and after in lines
-	for (const ReadPart::ParaRun& run : in.paraRuns) {
-		size_t end = std::min(run.end, length);
-		if (run.start >= end)
-			continue;
-		size_t first = PositionAt(*wp, run.start).paragraph;
-		size_t last = PositionAt(*wp, end - 1).paragraph;
-		const ParaProps& p = run.props;
-		float spacing = p.sl == 1000 ? 1.0f : std::fabs(float(p.sl) / 240.0f);
-		if (spacing < 1.0f)
-			spacing = 1.0f;
-		const Property properties[] = {
-			IndentProperty(Sig("PLef"), float(p.li / 20)),
-			IndentProperty(Sig("PRig"), float(p.ri / 20)),
-			IndentProperty(Sig("PInd"), float((p.li - p.fi) / 20)),
-			AlignmentProperty(p.align),
-			LineSpacingProperty(spacing, true),
-			SpacingProperty(Sig("SpaB"), float(p.sb / 240)),
-			SpacingProperty(Sig("SpaA"), float(p.sa / 240)),
-		};
-		for (const Property& property : properties)
-			ApplyParagraphProperty(doc, part, first, last, property);
-		if (run.tabs != nullptr) {
-			for (const RTFTab& t : *run.tabs) {
-				TabStop tab;
-				tab.position = t.position;
-				tab.type = t.type;
-				tab.fill = t.fill;
-				if (t.alignChar != 0)
-					tab.alignChar = t.alignChar;
-				if (t.fillChar != 0)
-					tab.fillChar = t.fillChar;
-				ApplyParagraphProperty(doc, part, first, last, TabsProperty({tab}));
+	// the style runs from `from` to `to` of the text read applied to part
+	// `target`, `at` giving where an offset of the text read is there
+	auto styleRange = [&](size_t target, const std::function<TextPosition(size_t)>& at,
+		size_t from, size_t to) {
+		// TWPImport::HandleStyleRuns, paragraph styles (NewParagraphStyle):
+		// indents in points, first line (left - first) / 20, line spacing a
+		// multiple (at least 1), spacing before and after in lines
+		for (const ReadPart::ParaRun& run : in.paraRuns) {
+			size_t begin = std::max(run.start, from);
+			size_t end = std::min(run.end, to);
+			if (begin >= end)
+				continue;
+			size_t first = at(begin).paragraph;
+			size_t last = at(end - 1).paragraph;
+			const ParaProps& p = run.props;
+			float spacing = p.sl == 1000 ? 1.0f : std::fabs(float(p.sl) / 240.0f);
+			if (spacing < 1.0f)
+				spacing = 1.0f;
+			const Property properties[] = {
+				IndentProperty(Sig("PLef"), float(p.li / 20)),
+				IndentProperty(Sig("PRig"), float(p.ri / 20)),
+				IndentProperty(Sig("PInd"), float((p.li - p.fi) / 20)),
+				AlignmentProperty(p.align),
+				LineSpacingProperty(spacing, true),
+				SpacingProperty(Sig("SpaB"), float(p.sb / 240)),
+				SpacingProperty(Sig("SpaA"), float(p.sa / 240)),
+			};
+			for (const Property& property : properties)
+				ApplyParagraphProperty(doc, target, first, last, property);
+			if (run.tabs != nullptr) {
+				for (const RTFTab& t : *run.tabs) {
+					TabStop tab;
+					tab.position = t.position;
+					tab.type = t.type;
+					tab.fill = t.fill;
+					if (t.alignChar != 0)
+						tab.alignChar = t.alignChar;
+					if (t.fillChar != 0)
+						tab.fillChar = t.fillChar;
+					ApplyParagraphProperty(doc, target, first, last, TabsProperty({tab}));
+				}
 			}
 		}
-	}
 
-	// character styles (NewCharacterStyle): font, size, face, color
-	for (const ReadPart::CharRun& run : in.charRuns) {
-		size_t end = std::min(run.end, length);
-		if (run.start >= end)
-			continue;
-		TextPosition from = PositionAt(*wp, run.start), to = PositionAt(*wp, end);
-		const CharProps& c = run.props;
-		FontRef font = reader.FontFor(c.font);
-		std::string family = fonts.plainFamily, style = fonts.plainStyle;
-		if (font.index >= 0) {
-			family = fonts.fonts[font.index].family;
-			style = fonts.fonts[font.index].style;
+		// character styles (NewCharacterStyle): font, size, face, color
+		for (const ReadPart::CharRun& run : in.charRuns) {
+			size_t begin = std::max(run.start, from);
+			size_t end = std::min(run.end, to);
+			if (begin >= end)
+				continue;
+			TextPosition runFrom = at(begin), runTo = at(end);
+			const CharProps& c = run.props;
+			FontRef font = reader.FontFor(c.font);
+			std::string family = fonts.plainFamily, style = fonts.plainStyle;
+			if (font.index >= 0) {
+				family = fonts.fonts[font.index].family;
+				style = fonts.fonts[font.index].style;
+			}
+			// TColorTable::GetColor: an index past the table is the color
+			// being defined
+			Color color = c.color >= 0 && size_t(c.color) < reader.colorTable.size()
+				? reader.colorTable[c.color] : reader.currentColor;
+			ApplyCharacterProperty(doc, target, runFrom, runTo, TextFontProperty(family, style));
+			ApplyCharacterProperty(doc, target, runFrom, runTo, TextSizeProperty(float(c.size) * 0.5f));
+			ApplyCharacterProperty(doc, target, runFrom, runTo, TextFaceProperty(uint32_t(c.face)));
+			ApplyCharacterProperty(doc, target, runFrom, runTo, TextColorProperty(color));
 		}
-		// TColorTable::GetColor: an index past the table is the color
-		// being defined
-		Color color = c.color >= 0 && size_t(c.color) < reader.colorTable.size()
-			? reader.colorTable[c.color] : reader.currentColor;
-		ApplyCharacterProperty(doc, part, from, to, TextFontProperty(family, style));
-		ApplyCharacterProperty(doc, part, from, to, TextSizeProperty(float(c.size) * 0.5f));
-		ApplyCharacterProperty(doc, part, from, to, TextFaceProperty(uint32_t(c.face)));
-		ApplyCharacterProperty(doc, part, from, to, TextColorProperty(color));
-	}
+	};
+	styleRange(part, [&](size_t offset) { return PositionAt(*doc.WordPart(part), offset); }, 0,
+		length);
 
 	// TWPImport::HandleSpecialCharacter: a page break replaces its '?';
 	// a page number would too (not ported: the '?' goes)
@@ -1265,6 +1400,134 @@ ImportRTF(const std::string& path, Document& doc, std::string& error,
 			continue;
 		if (s.kind == Sig("pgbk"))
 			InsertSpecialChar(*wp, at, 0x0c);
+	}
+
+	// the tables and pictures (the port's), last first: a table's cells'
+	// text and styles into a table part's cells, the table's text in the
+	// main text into its frame; a picture into an image part's frame. The
+	// offsets read less the page numbers' '?'s gone before them.
+	auto shifted = [&](size_t offset) {
+		size_t gone = 0;
+		for (const ReadPart::Special& s : in.specials)
+			gone += s.offset < offset && s.offset < length && s.kind != Sig("pgbk");
+		return offset - gone;
+	};
+	struct Object { size_t offset; const ReadPart::Table* table; const ReadPart::Picture* picture; };
+	std::vector<Object> objects;
+	for (const ReadPart::Table& t : in.tables)
+		objects.push_back({t.start, &t, nullptr});
+	for (const ReadPart::Picture& picture : in.pictures) {
+		bool inTable = false;
+		for (const ReadPart::Table& t : in.tables)
+			inTable |= picture.offset >= t.start && picture.offset < t.end;
+		if (!inTable)		// (a picture in a cell: dropped)
+			objects.push_back({picture.offset, nullptr, &picture});
+	}
+	std::stable_sort(objects.begin(), objects.end(),
+		[](const Object& a, const Object& b) { return a.offset > b.offset; });
+	for (const Object& o : objects) {
+		int made = -1;
+		size_t start = shifted(o.offset), end = start;
+		if (o.table != nullptr) {
+			const ReadPart::Table& t = *o.table;
+			NewTable layout;
+			size_t columns = 0;
+			const ReadPart::TableRow* widest = &t.rows[0];
+			for (const ReadPart::TableRow& row : t.rows)
+				if (row.cellEnds.size() > columns) {
+					columns = row.cellEnds.size();
+					widest = &row;
+				}
+			// the columns from the widest row's \cellx (twips from the
+			// left), else 6.5 inches shared
+			for (size_t c = 0; c < columns; c++) {
+				float width = 0;
+				if (widest->cellx.size() >= columns)
+					width = float(widest->cellx[c] - (c > 0 ? widest->cellx[c - 1] : 0)) / 20;
+				layout.columns.push_back(width >= 4 ? width : 468.0f / float(columns));
+			}
+			layout.border = t.border ? 1 : 0;
+			// each cell's text range read (its paragraph break left out)
+			std::vector<std::vector<std::pair<size_t, size_t>>> ranges;
+			size_t from = t.start;
+			for (const ReadPart::TableRow& row : t.rows) {
+				ranges.emplace_back();
+				std::vector<std::string> texts;
+				size_t lines = 1;
+				for (size_t c = 0; c < columns; c++) {
+					size_t to = c < row.cellEnds.size() ? row.cellEnds[c] : from;
+					size_t last = to > from ? to - 1 : from;
+					ranges.back().push_back({from, last});
+					std::string text = in.text.substr(from, last - from);
+					texts.push_back(text);
+					lines = std::max<size_t>(lines, 1 + std::count(text.begin(), text.end(), '\n'));
+					from = to;
+				}
+				layout.cells.push_back(texts);
+				layout.rows.push_back(std::max(17.0f, float(lines) * 14 + 4));
+			}
+			size_t text = 0;
+			std::string error;
+			made = AddTablePart(doc, part, layout, text, error);
+			if (made < 0)
+				continue;
+			for (size_t r = 0; r < ranges.size(); r++)
+				for (size_t c = 0; c < columns; c++) {
+					int first = CellParagraph(doc, size_t(made), r, c);
+					auto [cellFrom, cellTo] = ranges[r][c];
+					if (first < 0 || cellFrom >= cellTo)
+						continue;
+					styleRange(text, [&](size_t offset) {
+						TextPosition at{size_t(first), 0};
+						for (size_t k = cellFrom; k < offset; k++) {
+							if (in.text[k] == '\n') {
+								at.paragraph++;
+								at.offset = 0;
+							} else
+								at.offset++;
+						}
+						return at;
+					}, cellFrom, cellTo);
+				}
+			end = shifted(t.end);
+		} else {
+			ArchiveBitmap bitmap;
+			std::vector<uint8_t> bytes(o.picture->data.begin(), o.picture->data.end());
+			bool decoded = o.picture->kind == 6 ? DecodePNG(bytes, bitmap) : false;
+			if (!decoded && o.picture->kind == 2 && readPicture) {
+				// JPEG: through the translators, from a file
+				char path[] = "/tmp/gobe-rtf-pictureXXXXXX";
+				int fd = mkstemp(path);
+				if (fd >= 0) {
+					bool written = write(fd, bytes.data(), bytes.size()) == ssize_t(bytes.size());
+					close(fd);
+					decoded = written && readPicture(path, bitmap);
+					unlink(path);
+				}
+			}
+			std::string error;
+			if (decoded)
+				made = AddImagePart(doc, part, bitmap, error);
+			if (made < 0)
+				continue;
+		}
+		WPPart* main = doc.EditableWordPart(part);
+		TextPosition at = PositionAt(*main, start);
+		if (end > start) {
+			TextPosition result;
+			if (!DeleteRange(*main, at, PositionAt(*main, end), result))
+				continue;
+			at = result;
+		}
+		TextPosition after = InsertInlineFrame(doc, part, at, size_t(made));
+		// a table: a paragraph of its own
+		main = doc.EditableWordPart(part);
+		if (o.table != nullptr && after.paragraph < main->paragraphs.size()) {
+			const std::string& rest = main->paragraphs[after.paragraph].text;
+			if (rest.size() > after.offset + 1 || (rest.size() == after.offset + 1
+					&& rest.back() != '\n'))
+				InsertMultiline(*main, after, "\n");
+		}
 	}
 	return true;
 }
@@ -1430,6 +1693,10 @@ public:
 	std::string Write();
 
 private:
+	// the text from `from` to `to` (a table cell's: \intbl paragraphs,
+	// the last ending with \cell)
+	void Body(size_t from, size_t to, bool cell);
+	void Table(const uint32_t pointer[3]);
 	// the embedded frames: their offsets in the text, their frame pointers
 	static std::vector<std::pair<size_t, const WPMiscInfo*>> FramesOf(const WPPart& part);
 	void Picture(const WPMiscInfo& frame);
@@ -1445,6 +1712,7 @@ private:
 	std::vector<std::pair<size_t, const WPMiscInfo*>> fFrames;
 	std::string fOut;
 	int fFont;						// the font of the last \f (TExportRTF +0x88)
+	bool fCell = false;				// writing a table cell's paragraphs
 };
 
 
@@ -1474,19 +1742,7 @@ RTFWriter::Picture(const WPMiscInfo& frame)
 	const Frame* f = FrameAt(fDoc, frame.frame);
 	const IMPart* image = f != nullptr ? fDoc.ImagePart(f->part) : nullptr;
 	if (image == nullptr) {
-		// a table: its cells' text, each row a paragraph (\par before it;
-		// the original's reader has no \line), \tab between the cells
-		// (the port's)
-		std::string table = TableText(fDoc, frame.frame), segment;
-		for (char c : table) {
-			if (c == '\x01' || c == '\t') {
-				Text(segment);
-				segment.clear();
-				fOut += c == '\t' ? "\\tab " : "\\par ";
-			} else
-				segment += c;
-		}
-		Text(segment);
+		Table(frame.frame);
 		return;
 	}
 	std::vector<uint8_t> png = BitmapPNG(image->image, f->sheetRect);
@@ -1565,7 +1821,7 @@ RTFWriter::ParProps(uint32_t style)
 {
 	// TExportRTF::WriteParProps: the paragraph style's own properties
 	const StyleMgr& styles = fDoc.styles;
-	fOut += "\\pard";
+	fOut += fCell ? "\\pard\\intbl" : "\\pard";
 	TextStyle t;
 	int alignment = 0;
 	if (const Property* p = Own(styles, style, Sig("PAlg"))) {
@@ -1723,18 +1979,34 @@ std::string
 RTFWriter::Write()
 {
 	Header();
+	Body(0, fPart.text.size(), false);
+	fOut += "}";
+	return fOut;
+}
+
+
+void
+RTFWriter::Body(size_t from, size_t to, bool cell)
+{
+	fCell = cell;
 	// TExportRTF::WriteWord with TTextIterator_WP::NextTextRun: runs of at
 	// most 0x400 bytes, ending after a LF, at a character style change and
 	// around special characters
 	const std::string& text = fPart.text;
 	const size_t kMax = 0x400;
-	size_t pos = 0;
+	to = std::min(to, text.size());
+	size_t pos = from;
 	size_t paraIndex = 0, charIndex = 0, specialIndex = 0;
 	bool parStart = true, parEnd = true;
-	while (pos < text.size()) {
+	if (cell && from >= to) {
+		// an empty cell
+		fOut += "\\pard\\intbl\\cell\n";
+		return;
+	}
+	while (pos < to) {
 		size_t runStart = pos;
 		parStart = parEnd;
-		if (paraIndex + 1 < fPart.paraRuns.size() && fPart.paraRuns[paraIndex + 1].first <= pos)
+		while (paraIndex + 1 < fPart.paraRuns.size() && fPart.paraRuns[paraIndex + 1].first <= pos)
 			paraIndex++;
 		while (charIndex + 1 < fPart.charRuns.size() && fPart.charRuns[charIndex + 1].first <= pos)
 			charIndex++;
@@ -1745,7 +2017,7 @@ RTFWriter::Write()
 		const ExportPart::Special* special = specialIndex < fPart.specials.size()
 			? &fPart.specials[specialIndex] : nullptr;
 		std::string run;
-		while (pos < text.size() && run.size() < kMax) {
+		while (pos < to && run.size() < kMax) {
 			unsigned char c = (unsigned char)text[pos];
 			bool atSpecial = special != nullptr && special->offset == pos;
 			// a UTF-8 lead byte that might not fit
@@ -1758,7 +2030,7 @@ RTFWriter::Write()
 					|| (special != nullptr && special->offset == pos))
 				break;
 		}
-		if (pos >= text.size())
+		if (pos >= to)
 			parEnd = true;
 
 		if (parStart) {
@@ -1787,10 +2059,59 @@ RTFWriter::Write()
 		}
 		if (!run.empty())
 			Text(run);
-		fOut += parEnd ? "\\par}\n" : "}";
+		fOut += !parEnd ? "}" : cell && pos >= to ? "\\cell}\n" : "\\par}\n";
 	}
-	fOut += "}";
-	return fOut;
+}
+
+
+// a table (the port's; the original wrote every frame as a picture): per
+// row \trowd, the cell inset (\trgaph), each cell's borders (the
+// table's pen, when it shows) and right edge (\cellx, twips from the
+// table's left), then each cell's paragraphs as the text is written
+// (\intbl, the last ending with \cell), \row; \pard after it
+void
+RTFWriter::Table(const uint32_t pointer[3])
+{
+	const Frame* frame = FrameAt(fDoc, pointer);
+	const TablePart* table = frame != nullptr ? fDoc.Table(frame->part) : nullptr;
+	const WPPart* text = table != nullptr ? fDoc.WordPart(table->textPart) : nullptr;
+	if (text == nullptr)
+		return;
+	ShapeStyle style = ResolveShapeStyle(fDoc.styles, frame->style);
+	bool border = style.pen.set && style.penOpacity > 0;
+	char buffer[96];
+	std::string borders;
+	if (border) {
+		snprintf(buffer, sizeof buffer, "\\brdrs\\brdrw%d",
+			std::max(1, int(std::nearbyint(std::max(style.penSize, 0.05f) * 20))));
+		for (const char* side : {"\\clbrdrt", "\\clbrdrl", "\\clbrdrb", "\\clbrdrr"})
+			borders += std::string(side) + buffer;
+	}
+	RTFWriter cells(fDoc, *text, fFonts);
+	for (const TableRow& row : table->rows) {
+		snprintf(buffer, sizeof buffer, "\\trowd\\trgaph%d",
+			int(std::nearbyint(table->value20 * 20)));
+		fOut += buffer;
+		for (const TableCell& c : row.cells) {
+			fOut += borders;
+			snprintf(buffer, sizeof buffer, "\\cellx%d",
+				int(std::nearbyint((c.origin[0] + c.size[0]) * 20)));
+			fOut += buffer;
+		}
+		fOut += "\n";
+		for (const TableCell& c : row.cells) {
+			const Frame* f = FrameAt(fDoc, c.frame);
+			size_t from = f != nullptr ? f->textStart : 0;
+			size_t to = f != nullptr ? f->textStart + f->textLength : 0;
+			cells.fOut.clear();
+			cells.fFont = fFont;
+			cells.Body(from, to, true);
+			fOut += cells.fOut;
+			fFont = cells.fFont;
+		}
+		fOut += "\\row\n";
+	}
+	fOut += "\\pard ";
 }
 
 } // namespace
