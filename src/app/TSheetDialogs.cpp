@@ -899,6 +899,53 @@ TDialogEditNames::ItemHit(int32 index, BMessage* message)
 }
 
 
+TDialogSheetRename::TDialogSheetRename(BHandler* target, const std::vector<std::string>& sheets,
+		int32 sheet)
+	:
+	TDialog(31, 31, 'APPL', NULL),
+	fTarget(target),
+	fSheets(sheets),
+	fSheet(sheet)
+{
+}
+
+
+void
+TDialogSheetRename::Init()
+{
+	SetTitle(GobeResources::IndexString(3, 18).String());
+	SetLabelItem(2, GobeResources::IndexString(2, 3).String());
+	if (fSheet >= 0 && size_t(fSheet) < fSheets.size())
+		SetTextItem(2, fSheets[size_t(fSheet)].c_str());
+	MakeFocusItem(2);
+}
+
+
+// TDialogSheetRename::ValidateAndSendMsg
+bool
+TDialogSheetRename::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		std::string name = TextItem(2).String();
+		int32 alert = !ValidName(name) ? 19 : -1;
+		for (size_t i = 0; alert < 0 && i < fSheets.size(); i++)
+			if (fSheets[i] == name && int32(i) != fSheet)
+				alert = 16;
+		if (alert >= 0) {
+			(new BAlert("", GobeResources::IndexString(6, alert).String(), "OK"))->Go(NULL);
+			MakeFocusItem(2);
+			return true;
+		}
+		BMessage rename('s00D');
+		rename.AddString("name", name.c_str());
+		rename.AddInt32("ActiveTab", fSheet);
+		if (fTarget != NULL && fTarget->Looper() != NULL)
+			fTarget->Looper()->PostMessage(&rename, fTarget);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+
 TDialogFillSpecial::TDialogFillSpecial()
 	:
 	TDialog(26, 26, 'SPRD', NULL, &GobeResources::Part("Spreadsheet"))

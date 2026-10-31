@@ -207,6 +207,25 @@ private:
 	std::string fSelected;
 };
 
+// Rename Sheet… (TDialogSheetRename, a TDialogGenericGetString: DIAL 31,
+// title STR# 3, 18, label STR# 2, 3): OK with a valid name (TString::
+// ValidName, else STR# 6, 19) no other sheet has (TSheetMgr::
+// IsValidSheetName, else STR# 6, 16) sends `target` 's00D' with "name"
+// and "ActiveTab"
+class TDialogSheetRename : public TDialog {
+public:
+	TDialogSheetRename(BHandler* target, const std::vector<std::string>& sheets, int32 sheet);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+	std::vector<std::string> fSheets;
+	int32 fSheet;
+};
+
 // Options > Fill Special… (TDialogFillSpecial; TSSDialog 26): Apply To
 // rows or columns, the type, date units, Step By, Stop At, Trend. In Gobe
 // Productive 2.0.1 OK and Cancel both just close it (ItemHit), so here too.

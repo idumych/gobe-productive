@@ -1,12 +1,17 @@
 /*
  * The SheetBar: TSheetBar::LoadAllElements' TTabControl (colors 0xeeeeee
  * for the shown sheet's tab, 0xd8d8d8 for the others, 0xc8c8c8 lines), one
- * tab per sheet in the SheetMgr's order. The options menu (MENU 110: New,
- * Delete, Rename, ...) isn't ported.
+ * tab per sheet in the SheetMgr's order, after the options menu (MENU 110:
+ * New Sheet…, Delete Sheet, Rename Sheet…; only Rename is ported). A
+ * double click on a tab renames it ('s00D').
  */
 #include "TSheetBar.h"
 
+#include <MenuItem.h>
+#include <PopUpMenu.h>
 #include <Window.h>
+
+#include "TMenu.h"
 
 #include "Document.h"
 
@@ -47,10 +52,18 @@ TSheetBar::PreferredSize()
 }
 
 
+// the options menu's button
+static BRect
+OptionsFrame()
+{
+	return BRect(3, 3, 3 + 14, kHeight - 3);
+}
+
+
 BRect
 TSheetBar::TabFrame(int32 index) const
 {
-	float x = 4;
+	float x = OptionsFrame().right + 6;
 	for (int32 i = 0; i < int32(fDocument.sheets.sheets.size()); i++) {
 		float width = StringWidth(fDocument.sheets.sheets[size_t(i)].name.c_str()) + 2 * kPad;
 		if (i == index)
@@ -70,6 +83,11 @@ TSheetBar::Draw(BRect updateRect)
 	SetHighColor(200, 200, 200);
 	StrokeLine(bounds.LeftTop(), bounds.RightTop());
 	StrokeLine(bounds.LeftBottom(), bounds.RightBottom());
+	// the options menu (MICN 0x24 in the original): a pop-up triangle
+	BRect options = OptionsFrame();
+	SetHighColor(120, 120, 120);
+	FillTriangle(BPoint(options.left + 3, options.top + 5), BPoint(options.right - 3,
+		options.top + 5), BPoint((options.left + options.right) / 2, options.bottom - 4));
 	font_height fh;
 	GetFontHeight(&fh);
 	int32 shown = fDocument.CurrentSheet();
@@ -93,9 +111,27 @@ TSheetBar::Draw(BRect updateRect)
 void
 TSheetBar::MouseDown(BPoint where)
 {
+	if (OptionsFrame().InsetByCopy(-2, -2).Contains(where)) {
+		// TSheetBar::FixOptionsMenu: Delete with more than one sheet; New
+		// and Delete aren't ported
+		TMenu items(110, true);
+		BPopUpMenu menu("options", false, false);
+		while (BMenuItem* item = items.RemoveItem(int32(0))) {
+			uint32 what = item->Message() != NULL ? item->Message()->what : 0;
+			item->SetEnabled(what == kMsgSheetRename);
+			menu.AddItem(item);
+		}
+		BMenuItem* chosen = menu.Go(ConvertToScreen(OptionsFrame().LeftBottom()), false, true);
+		if (chosen != NULL && chosen->Message() != NULL)
+			Window()->PostMessage(chosen->Message());
+		return;
+	}
+	int32 clicks = 1;
+	if (BMessage* current = Window()->CurrentMessage())
+		current->FindInt32("clicks", &clicks);
 	for (int32 i = 0; i < int32(fDocument.sheets.sheets.size()); i++)
 		if (TabFrame(i).Contains(where)) {
-			BMessage message(kMsgSheetSwitch);
+			BMessage message(clicks == 2 ? kMsgSheetRename : kMsgSheetSwitch);
 			message.AddInt32("ActiveTab", i);
 			Window()->PostMessage(&message);
 			return;

@@ -48,6 +48,7 @@
 #include "TPartBar.h"
 #include "TSpellBar.h"
 #include "TSheetBar.h"
+#include "TSheetDialogs.h"
 #include "TSpellDialogs.h"
 #include "TFindDialog.h"
 #include "TPreferences.h"
@@ -417,6 +418,9 @@ TDocWindow::MessageReceived(BMessage* message)
 				fModified = true;
 				UpdateTitle();
 			}
+			// (an undone sheet switch or rename)
+			if (fSheetBar != NULL)
+				fSheetBar->Update();
 			TDialogHistory::Refresh();
 			TDialogStylesEdit::Refresh();
 			return;
@@ -467,6 +471,31 @@ TDocWindow::MessageReceived(BMessage* message)
 					fSheetBar->Hide();
 			}
 			return;
+		case kMsgSheetRename: {
+			// TSheetMgr::HandleMessage 's00D': the dialog, or with "name"
+			// TDocSheetRenameCommand ("Rename Sheet")
+			int32 index = message->GetInt32("ActiveTab", fDocument->CurrentSheet());
+			const char* name = NULL;
+			if (fPages == NULL || index < 0 || size_t(index) >= fDocument->sheets.sheets.size())
+				return;
+			if (message->FindString("name", &name) != B_OK || name == NULL) {
+				std::vector<std::string> names;
+				for (const LeafSheet& sheet : fDocument->sheets.sheets)
+					names.push_back(sheet.name);
+				(new TDialogSheetRename(this, names, index))->RunDialog();
+				return;
+			}
+			if (fDocument->sheets.sheets[size_t(index)].name == name)
+				return;
+			fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 18).String(),
+				fPages->CurrentViewState());
+			fDocument->sheets.sheets[size_t(index)].name = name;
+			fDocument->sheetsChanged = true;
+			if (fSheetBar != NULL)
+				fSheetBar->Update();
+			PostMessage(kMsgDocumentChanged);
+			return;
+		}
 		case kMsgSheetSwitch: {
 			// TDocWinSheetSwitchCommand (by index, or by "name")
 			int32 index = message->GetInt32("ActiveTab", -1);

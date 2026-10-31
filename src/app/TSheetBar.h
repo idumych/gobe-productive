@@ -14,6 +14,8 @@ struct Document;
 // TSheetBar's TTabControl: a click on a tab sends 's00E' with "ActiveTab"
 // (TSheetMgr::HandleMessage switches the sheet)
 static const uint32 kMsgSheetSwitch = 's00E';
+// Rename Sheet… ('s00D'): the dialog, or with "name" the sheet renamed
+static const uint32 kMsgSheetRename = 's00D';
 
 class TSheetBar : public BView {
 public:
