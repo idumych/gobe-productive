@@ -14,9 +14,10 @@ struct Document;
 // word processing sheet's main text (WriteWord): a <P> per paragraph with
 // its style's own alignment, the runs' own size, color and faces as <FONT>,
 // <B>, <I>, <U>, <STRIKE>, <SUP>, <SUB>; separator lines as <HR>, fields as
-// their text, line breaks as <BR>, an empty paragraph as &nbsp;. Latin-1
+// their text, line breaks as <BR>, an empty paragraph as &nbsp;; tables
+// (in the text, and table sheets) as <TABLE> (WriteTable). Latin-1
 // letters as their entities, other characters as numeric ones. Pictures
-// (TExportHTML::writeBitmap) and tables aren't written.
+// (TExportHTML::writeBitmap) aren't written.
 std::string HTMLText(const Document& doc, const std::string& title);
 bool ExportHTML(const Document& doc, const std::string& path, const std::string& title,
 	std::string& error);

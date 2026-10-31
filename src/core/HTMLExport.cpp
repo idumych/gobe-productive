@@ -2,6 +2,7 @@
 // NextRun, PreCheckCharStyles, PostCheckCharStyles, convertToHTMLBuffer).
 #include "HTMLExport.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <fstream>
@@ -157,7 +158,173 @@ Translated(unsigned char c)
 }
 
 
-// WriteWord for one part
+void WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book,
+	std::string& out);
+
+
+// the part of a word processing part's text from `start`, `length`
+// characters (a table cell's frame): its paragraphs cut to it, their runs
+// and specials moved with them
+WPPart
+TextRange(const WPPart& wp, uint32_t start, uint32_t length)
+{
+	WPPart out;
+	uint32_t end = start + length, at = 0;
+	for (const WPParagraph& p : wp.paragraphs) {
+		uint32_t from = std::max(at, start), to = std::min(at + uint32_t(p.text.size()), end);
+		if (from < to) {
+			WPParagraph cut;
+			cut.parStyle = p.parStyle;
+			cut.text = p.text.substr(from - at, to - from);
+			uint32_t offset = from - at;
+			for (size_t r = 0; r < p.runs.size(); r++) {
+				uint32_t next = r + 1 < p.runs.size() ? p.runs[r + 1].position
+					: uint32_t(p.text.size());
+				if (next <= offset || p.runs[r].position >= to - at)
+					continue;
+				cut.runs.push_back({p.runs[r].position > offset ? p.runs[r].position - offset : 0,
+					p.runs[r].style});
+			}
+			for (const WPMiscInfo& m : p.misc)
+				if (m.position >= offset && m.position < to - at) {
+					cut.misc.push_back(m);
+					cut.misc.back().position -= offset;
+				}
+			out.paragraphs.push_back(cut);
+		}
+		at += uint32_t(p.text.size());
+	}
+	return out;
+}
+
+
+// the first frame that shows `part` (TPart's first frame: TTableExport
+// takes the table's size and style from it)
+const Frame*
+FirstFrameOf(const Document& doc, size_t part)
+{
+	for (size_t i = 0; i < doc.parts.parts.size(); i++)
+		for (uint32_t k = 0;; k++) {
+			const Frame* f = doc.FrameOf(uint32_t(i), k);
+			if (f == nullptr)
+				break;
+			if (f->part == part)
+				return f;
+		}
+	return nullptr;
+}
+
+
+// a style's own fill color (TTranslatorStyle::GetFillColor), as BGCOLOR
+std::string
+FillAttribute(const StyleMgr& styles, uint32_t style)
+{
+	const Property* fill = Own(styles, style, Sig("FCol"));
+	if (fill == nullptr || fill->data.size() < 4 || fill->data[0] == 0)
+		return "";
+	Color c;
+	c.r = fill->data[1];
+	c.g = fill->data[2];
+	c.b = fill->data[3];
+	return ColorAttribute("BGCOLOR", c);
+}
+
+
+// TExportHTML::WriteTable, WriteTableRow, WriteTableCell, with what
+// TTableExport::DoExport gives the translator: the first frame's width
+// and height (WIDTH only when it isn't 0), a BORDER of its pen's size
+// (none if the pen is transparent), the table's cell inset as
+// CELLPADDING, CELLSPACING 2, the frame style's fill. Each cell: its
+// width and height, COLSPAN and ROWSPAN 1, its text frame's fill, ALIGN
+// from its first paragraph's own alignment or else the frame style's
+// horizontal alignment, VALIGN from its vertical one; its text.
+void
+WriteTable(const Document& doc, size_t part, SSBook& book, std::string& out)
+{
+	const TablePart* table = doc.Table(part);
+	if (table == nullptr)
+		return;
+	const StyleMgr& styles = doc.styles;
+	char buffer[64];
+	int width = 0, height = 0, border = 0;
+	std::string fill;
+	if (const Frame* frame = FirstFrameOf(doc, part)) {
+		width = int(std::lround(frame->extent[0]));
+		height = int(std::lround(frame->extent[1]));
+		ShapeStyle shape = ResolveShapeStyle(styles, frame->style);
+		if (shape.penOpacity > 0)
+			border = shape.penSize != 1 ? int(std::lround(shape.penSize)) : 1;
+		fill = FillAttribute(styles, frame->style);
+	}
+	out += "<TABLE";
+	if (width != 0) {
+		snprintf(buffer, sizeof buffer, " WIDTH=%d", width);
+		out += buffer;
+	}
+	snprintf(buffer, sizeof buffer, " HEIGHT=%d BORDER=%d CELLPADDING=%d CELLSPACING=2", height,
+		border, int(std::lround(table->value20)));
+	out += buffer + fill + ">";
+	const WPPart* text = doc.WordPart(table->textPart);
+	for (const TableRow& row : table->rows) {
+		out += "<TR>";
+		for (const TableCell& cell : row.cells) {
+			out += "<TD";
+			int w = int(std::lround(cell.size[0])), h = int(std::lround(cell.size[1]));
+			if (w != 0) {
+				snprintf(buffer, sizeof buffer, " WIDTH=%d", w);
+				out += buffer;
+			}
+			if (h != 0) {
+				snprintf(buffer, sizeof buffer, " HEIGHT=%d", h);
+				out += buffer;
+			}
+			out += " COLSPAN=1 ROWSPAN=1";
+			const Frame* frame = doc.FrameOf(cell.frame[0], cell.frame[1]);
+			WPPart cellText;
+			if (frame != nullptr && text != nullptr)
+				cellText = TextRange(*text, frame->textStart, frame->textLength);
+			if (frame != nullptr) {
+				out += FillAttribute(styles, frame->style);
+				// 1 left, 2 center, 3 right (TTableCell's alignment)
+				int align = 0, valign = 0;
+				if (!cellText.paragraphs.empty())
+					if (const Property* a = Own(styles, cellText.paragraphs[0].parStyle,
+							Sig("PAlg"))) {
+						TextStyle t;
+						ApplyProperty(*a, t);
+						align = t.alignment == 1 ? 2 : t.alignment == 2 ? 3 : 1;
+					}
+				auto alignment = [&](uint32_t type) {
+					const Property* p = Own(styles, frame->style, type);
+					if (p == nullptr || p->data.size() < 2)
+						return 0;
+					int v = int16_t(p->data[0] << 8 | p->data[1]);
+					return v == 2 ? 2 : v == 3 ? 3 : 1;
+				};
+				if (align == 0)
+					align = alignment(Sig("HAln"));
+				valign = alignment(Sig("VAln"));
+				if (align != 0)
+					out += align == 2 ? " ALIGN=CENTER" : align == 3 ? " ALIGN=RIGHT" : " ALIGN=LEFT";
+				if (valign != 0)
+					out += valign == 2 ? " VALIGN=MIDDLE" : valign == 3 ? " VALIGN=BOTTOM"
+						: " VALIGN=TOP";
+			}
+			out += ">";
+			WriteWord(doc, table->textPart, cellText, book, out);
+			out += "</TD>";
+		}
+		out += "</TR>";
+	}
+	out += "</TABLE>";
+}
+
+
+// WriteWord for one part (or a cell's text): NextRun's runs, cut at
+// style changes and specials; a paragraph begins (<P>, BeginParagraph)
+// with its first text, so a table at its start comes before it; a frame
+// showing a table is written by WriteTable, other frames (pictures) not;
+// a separator line as <HR>; a paragraph with nothing written as &nbsp;
 void
 WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book, std::string& out)
 {
@@ -172,24 +339,21 @@ WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book, std:
 			if (t.alignment >= 0 && t.alignment < 4)
 				begin = std::string("<P ALIGN=\"") + kAlign[t.alignment] + "\">";
 		}
+		bool begun = false;
+		auto beginParagraph = [&]() {
+			if (!begun)
+				out += begin;
+			begun = true;
+		};
 		std::string text = p.text;
 		// the paragraph's own end (its LF) isn't part of the runs
 		size_t end = text.size();
 		while (end > 0 && (text[end - 1] == '\n' || text[end - 1] == 0x0c || text[end - 1] == 0x02
 				|| text[end - 1] == 0x03 || text[end - 1] == 0x0b))
 			end--;
-		uint32_t firstStyle = p.runs.empty() ? kNoPart : p.runs[0].style;
 		std::string open, close;
-		if (end == 0 && p.misc.empty()) {
-			// an empty paragraph: "&nbsp;" in its first run's style
-			RunTags(styles, firstStyle, open, close);
-			out += begin + open + "&nbsp;" + close + "</P>\n";
-			continue;
-		}
-		out += begin;
-		// NextRun: runs end where the character style changes or at a
-		// special character (a paragraph info)
 		size_t at = 0, run = 0;
+		uint32_t style = p.runs.empty() ? kNoPart : p.runs[0].style;
 		while (at < end) {
 			while (run + 1 < p.runs.size() && p.runs[run + 1].position <= at)
 				run++;
@@ -197,15 +361,21 @@ WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book, std:
 			for (const WPMiscInfo& m : p.misc)
 				if (m.position == at)
 					special = &m;
-			uint32_t style = run < p.runs.size() ? p.runs[run].style : kNoPart;
+			style = run < p.runs.size() ? p.runs[run].style : kNoPart;
 			RunTags(styles, style, open, close);
 			if (special != nullptr) {
-				// a separator line as a rule; fields as their text; frames
-				// (pictures, tables) aren't written
 				if (special->kind == Sig("LINE"))
 					out += "\n<HR>\n";
-				else if (special->kind != Sig("FRAM"))
+				else if (special->kind == Sig("FRAM")) {
+					const Frame* frame = doc.FrameOf(special->frame[0], special->frame[1]);
+					if (frame != nullptr && doc.Table(frame->part) != nullptr)
+						WriteTable(doc, frame->part, book, out);
+					else
+						beginParagraph();	// (the picture isn't written)
+				} else {
+					beginParagraph();
 					out += open + Escaped(FieldText(book, part, *special, -1)) + close;
+				}
 				at++;
 				continue;
 			}
@@ -218,10 +388,17 @@ WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book, std:
 			std::string segment;
 			for (size_t i = at; i < stop; i++)
 				segment += Translated((unsigned char)text[i]);
+			beginParagraph();
 			out += open + Escaped(segment) + close;
 			at = stop;
 		}
-		out += "</P>\n";
+		if (begun)
+			out += "</P>\n";
+		else {
+			// an empty paragraph: "&nbsp;" in its last run's style
+			RunTags(styles, style, open, close);
+			out += begin + open + "&nbsp;" + close + "</P>\n";
+		}
 	}
 }
 
@@ -251,6 +428,8 @@ HTMLText(const Document& doc, const std::string& title)
 		uint32_t main = doc.sheets.sheets[s].mainPart;
 		if (const WPPart* wp = doc.WordPart(main))
 			WriteWord(doc, main, *wp, book, out);
+		else if (doc.Table(main) != nullptr)
+			WriteTable(doc, main, book, out);
 	}
 	out += "</BODY>\n</HTML>\n";
 	return out;
