@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-52-53-0.svg" alt="Port progress: 52 of 53 features done, 1 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-52-53-1.svg" alt="Port progress: 52 of 53 features done, 1 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -184,7 +184,7 @@ sizes, headings and options are saved with the document.
 | Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | next |
 | Fill and pen inks for frames in the FormatBar: a selected frame's fill (its background in a drawing), its pen (its border) and their transparency; the pen's size (Hairline to 8 pt, Other…) in the pen ink's menu, for shapes and frames | next |
 | The drawing's PartBar: the vertical and horizontal align buttons (undoable), Text Wrap (its dialog), the arrows menu (none, at the start, at the end, both), arrowheads drawn at lines' and open paths' ends; the pen ink's pen types (Default, Non-Printing, small, medium and large dashes, hollow and filled dots, hash marks) applied, drawn and saved | next |
-| Pens edited and made (the pen dialog, a document's own pens); the arrows and pen type menus marking the selection's; very short dashes drawn as the original does | not yet |
+| Pens edited and made (the pen dialog, a document's own pens); the arrows and pen type menus marking the selection's; very short dashes drawn as the original does | in progress |
 
 ### Other formats (translators)
 
