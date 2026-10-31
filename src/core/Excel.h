@@ -19,6 +19,7 @@ public:
 	bool Open(const std::vector<uint8_t>& data, std::string& error);
 	// the stream's bytes; false if there's none of that name
 	bool Stream(const std::string& name, std::vector<uint8_t>& out) const;
+	bool HasStream(const std::string& name) const;
 
 private:
 	std::vector<uint8_t> Chain(uint32_t first, uint64_t size, bool mini) const;

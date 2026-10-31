@@ -2120,7 +2120,7 @@ TPageView::MessageReceived(BMessage* message)
 			// (a table goes in as its text)
 			if (kind == kTableFile)
 				kind = kTextFile;
-			if ((kind != kTextFile && kind != kRTFFile && kind != kHTMLFile)
+			if ((kind != kTextFile && kind != kRTFFile && kind != kHTMLFile && kind != kWordFile)
 					|| !ImportFile(path, kind, inserted, error, warning)) {
 				// (a Gobe document goes in as a frame: not ported)
 				beep();

@@ -7,7 +7,7 @@ documents and works the way the original did, down to its menus and dialogs.
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, work has moved to spreadsheets and documents with several sheets:
 most of the original's spreadsheet editing, the SheetBar, new
-spreadsheets, and the Excel, HTML, SYLK and text table translators now work in
+spreadsheets, Word import, and the Excel, HTML, SYLK and text table translators now work in
 the sources here and will be in the next release. See [Status](#status).
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
@@ -151,6 +151,10 @@ not released yet: build it to try it.
   number formats, dates, column widths, defined names (as named
   selections), and formulas turned into Gobe's (those reaching into other
   sheets or data tables keep their values).
+- **Word:** Word 97 and later documents (.doc) open as text documents:
+  paragraphs, bold, italic, underline, strikeout, super- and subscript,
+  sizes, fonts, colors, alignment, indents and spacing, line breaks,
+  fields as their results.
 - **Ranges** are written A1..B2, as Gobe Productive writes them (A1:B2 is
   still understood).
 
@@ -212,7 +216,7 @@ The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; Import and Export Styles; New Window; Show Clipboard; creating
 and linking frames; drawing tools; in spreadsheets charts made from cells;
 new documents of other kinds than word processing and spreadsheets; the
-Word translator; the thesaurus and dictionary (they need data
+Word export; the thesaurus and dictionary (they need data
 files that weren't part of Gobe Productive). Documents saved by the port
 open in the port; they haven't been tried in the original on BeOS.
 

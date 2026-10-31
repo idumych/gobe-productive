@@ -150,6 +150,16 @@ CompoundFile::Chain(uint32_t first, uint64_t size, bool mini) const
 
 
 bool
+CompoundFile::HasStream(const std::string& name) const
+{
+	for (const Entry& e : fEntries)
+		if (e.type == 2 && e.name == name)
+			return true;
+	return false;
+}
+
+
+bool
 CompoundFile::Stream(const std::string& name, std::vector<uint8_t>& out) const
 {
 	for (const Entry& e : fEntries)

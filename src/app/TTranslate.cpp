@@ -31,6 +31,7 @@
 #include "HTMLExport.h"
 #include "HTMLImport.h"
 #include "Excel.h"
+#include "Word.h"
 
 namespace gobe {
 
@@ -202,11 +203,24 @@ IdentifyFile(const char* path)
 		update_mime_info(path, false, true, B_UPDATE_MIME_INFO_NO_FORCE);
 		info.GetType(type);
 	}
-	// the Excel translator's: an OLE compound file (its "Workbook" or "Book"
-	// stream is looked for when it's read)
+	// the Excel and Word translators': an OLE compound file with their
+	// streams
 	static const unsigned char kOLE[8] = {0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1};
-	if (head.size() >= 8 && memcmp(head.data(), kOLE, 8) == 0)
-		return kExcelFile;
+	if (head.size() >= 8 && memcmp(head.data(), kOLE, 8) == 0) {
+		off_t size = 0;
+		file.GetSize(&size);
+		std::vector<uint8_t> all(size_t(std::max<off_t>(0, std::min<off_t>(size, 256 << 20))));
+		file.ReadAt(0, all.data(), all.size());
+		CompoundFile ole;
+		std::string ignored;
+		if (ole.Open(all, ignored)) {
+			if (ole.HasStream("WordDocument"))
+				return kWordFile;
+			if (ole.HasStream("Workbook") || ole.HasStream("Book"))
+				return kExcelFile;
+		}
+		return kUnknownFile;
+	}
 	// the SYLK translator's Identify: its types, or text starting with an ID
 	// record (whatever type the registrar gave it)
 	if ((strcmp(type, "text/sylk") == 0 || strcmp(type, "text/x-sylk") == 0
@@ -233,6 +247,8 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	bool ok = false;
 	if (kind == kRTFFile) {
 		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice);
+	} else if (kind == kWordFile) {
+		ok = ImportWord(path, doc, message);
 	} else if (kind == kExcelFile) {
 		ok = ImportExcel(path, doc, message, &notice);
 	} else if (kind == kHTMLFile) {

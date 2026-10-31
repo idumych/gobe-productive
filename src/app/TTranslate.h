@@ -31,7 +31,8 @@ enum FileKind {
 	kTableFile,		// ... that looks like a table (a spreadsheet import)
 	kSylkFile,		// SYLKTranslator: text/sylk, or text starting with an ID record
 	kHTMLFile,		// HTMLTranslator: text/html, or text with an <HTML> tag
-	kExcelFile,		// ExcelTranslator: an OLE compound file (Excel 5 and later)
+	kExcelFile,		// ExcelTranslator: an OLE compound file with a Workbook or Book
+	kWordFile,		// WORDTranslator: an OLE compound file with a WordDocument stream
 	kUnknownFile
 };
 FileKind IdentifyFile(const char* path);
