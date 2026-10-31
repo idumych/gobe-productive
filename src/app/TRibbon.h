@@ -7,6 +7,7 @@
 
 #include <Bitmap.h>
 #include <Message.h>
+#include <PopUpMenu.h>
 #include <View.h>
 
 #include <memory>
@@ -15,6 +16,7 @@
 
 namespace gobe {
 
+class ResourceFile;
 class TRibbon;
 
 class TRibbonElement {
@@ -47,7 +49,8 @@ public:
 	virtual void Draw(BView* view, bool down);
 	void SetIcon(BBitmap* icon);
 
-	static BBitmap* LoadIcon(int32 micn);
+	// from the application's resources, or `resources` (a part's)
+	static BBitmap* LoadIcon(int32 micn, const ResourceFile* resources = NULL);
 
 protected:
 	std::unique_ptr<BBitmap> fIcon;
@@ -58,6 +61,7 @@ protected:
 class TMICNButtonElement : public TMICNElement {
 public:
 	TMICNButtonElement(uint32 id, BPoint where, int32 micn, BMessage* message);
+	TMICNButtonElement(uint32 id, BPoint where, BBitmap* icon, BMessage* message);
 
 	virtual void Draw(BView* view, bool down);
 	virtual void Invoke(TRibbon* ribbon);
@@ -65,6 +69,24 @@ public:
 
 private:
 	std::unique_ptr<BMessage> fMessage;
+};
+
+// TMenuElement and TMICNMenuElement: a button with a label or an icon and
+// the pop-up indicator; pressing it pops up its menu below it, filled by
+// FillMenu (TMenuElement::FixMenu: its items, marked as the selection has
+// them), and what is chosen is sent to the window
+class TMenuElement : public TRibbonElement {
+public:
+	TMenuElement(uint32 id, BRect rect, const char* label, BBitmap* icon = NULL);
+
+	virtual void Draw(BView* view, bool down);
+	virtual bool MouseDown(TRibbon* ribbon, BPoint where);
+	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon) = 0;
+
+	std::string label;
+
+protected:
+	std::unique_ptr<BBitmap> fIcon;
 };
 
 class TRibbon : public BView {
@@ -100,6 +122,8 @@ public:
 	// the outlines (DrawElementRect, DrawElementOutlineUp, ...Down)
 	static void DrawOutlineUp(BView* view, BRect rect, bool selected);
 	static void DrawOutlineDown(BView* view, BRect rect);
+	// DrawPopUpIndicator: a small red triangle in the bottom right corner
+	static void DrawPopUpIndicator(BView* view, BRect rect);
 
 private:
 	TRibbonElement* FindElement(BPoint where) const;

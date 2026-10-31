@@ -180,6 +180,13 @@ public:
 	std::vector<SSRange> SelectedRanges() const;
 	// TPartSS::IsLocked for every selected range (and its alert)
 	bool SelectionLocked();
+	// the selection's name for the PartBar's address: the active cell, or
+	// the ranges ("A1..B3,D4")
+	std::string SelectionName() const;
+	// TStyleManager::CountProperty for the alignment menus: the selected
+	// cells' horizontal (0-3) and vertical (1-3) alignment and wrap (0/1)
+	// if they all have the same, else -1
+	void SelectedCellsAlignment(int32& h, int32& v, int32& wrap) const;
 	BTextView* fCellEditor = NULL;
 	BRect fBounds;					// everything, in document coordinates
 	float fMargin;

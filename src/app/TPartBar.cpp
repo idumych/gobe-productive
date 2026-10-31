@@ -1,6 +1,8 @@
 #include "TPartBar.h"
 
 #include <Alert.h>
+#include <Region.h>
+#include <MenuItem.h>
 #include <TextView.h>
 #include <Window.h>
 
@@ -11,6 +13,7 @@
 #include "GobeResources.h"
 #include "Measure.h"
 #include "Styles.h"
+#include "TMenu.h"
 #include "TPageView.h"
 
 namespace gobe {
@@ -30,23 +33,152 @@ UnitNames()
 }
 
 
-// the part factory's small icon (TPartFactory: PART's MICN id at 24)
+// the part factory's small icon (TPartFactory: PART's MICN id at 24), from
+// the application or the add-on the part comes from
 BBitmap*
 PartIcon(uint32 kind)
 {
-	for (const ResourceFile::Resource* r : GobeResources::File().All('PART')) {
-		const std::vector<uint8_t>& d = r->data;
-		if (d.size() < 28)
-			continue;
-		auto u32 = [&](size_t at) {
-			return uint32(d[at + 3]) << 24 | uint32(d[at + 2]) << 16 | uint32(d[at + 1]) << 8
-				| d[at];
-		};
-		if (u32(0) == kind)
-			return TMICNElement::LoadIcon(int32(u32(24)));
+	static const char* const kAddOns[] = {NULL, "Spreadsheet", "Chart", "Table",
+		"Presentation", "Clock", "ImageProcessing"};
+	for (const char* addOn : kAddOns) {
+		const ResourceFile& file = addOn == NULL ? GobeResources::File()
+			: GobeResources::Part(addOn);
+		for (const ResourceFile::Resource* r : file.All('PART')) {
+			const std::vector<uint8_t>& d = r->data;
+			if (d.size() < 28)
+				continue;
+			auto u32 = [&](size_t at) {
+				return uint32(d[at + 3]) << 24 | uint32(d[at + 2]) << 16
+					| uint32(d[at + 1]) << 8 | d[at];
+			};
+			if (u32(0) == kind)
+				return TMICNElement::LoadIcon(int32(u32(24)), &file);
+		}
 	}
 	return NULL;
 }
+
+
+const ResourceFile&
+SheetResources()
+{
+	return GobeResources::Part("Spreadsheet");
+}
+
+
+// TNameIndicator (a TTextIndicatorElement): the selection's name in a
+// sunken frame; a double click is Go To Cell… ('sM77')
+class TCellAddressElement : public TRibbonElement {
+public:
+	TCellAddressElement(BRect rect)
+		:
+		TRibbonElement('ADDR', rect)
+	{
+		tip = IndexString(SheetResources(), 1507, 0);
+	}
+
+	virtual void Draw(BView* view, bool down)
+	{
+		BRect r = rect;
+		view->SetHighColor(0xd8, 0xd8, 0xd8);
+		view->FillRect(r);
+		// TIndicatorElement::DrawFrame
+		view->SetHighColor(255, 255, 255);
+		view->StrokeLine(BPoint(r.left, r.bottom), BPoint(r.right, r.bottom));
+		view->StrokeLine(BPoint(r.right, r.top), BPoint(r.right, r.bottom));
+		view->SetHighColor(0, 0, 0);
+		view->StrokeLine(BPoint(r.left, r.top), BPoint(r.right - 1, r.top));
+		view->StrokeLine(BPoint(r.left, r.top), BPoint(r.left, r.bottom - 1));
+		// TTextIndicatorElement::Draw: black on the panel, at most 10
+		// points, inside the frame
+		BFont font(be_plain_font);
+		font.SetSize(std::min(font.Size(), 10.0f));
+		view->PushState();
+		view->SetFont(&font);
+		view->SetLowColor(0xd8, 0xd8, 0xd8);
+		BRegion clip(r.InsetByCopy(2, 2));
+		view->ConstrainClippingRegion(&clip);
+		view->DrawString(text.c_str(), BPoint(r.left + 5, r.bottom - 4));
+		view->PopState();
+	}
+
+	virtual bool Clickable() const { return true; }
+
+	virtual bool MouseDown(TRibbon* ribbon, BPoint where)
+	{
+		int32 clicks = 1;
+		if (ribbon->Window() != NULL && ribbon->Window()->CurrentMessage() != NULL)
+			ribbon->Window()->CurrentMessage()->FindInt32("clicks", &clicks);
+		if (clicks == 2) {
+			BMessage go('sM77');
+			ribbon->Send(&go);
+		}
+		return true;
+	}
+
+	std::string text;
+};
+
+
+// TCellHAlignMenuElement / TCellVAlignMenuElement (TMICNMenuElement): MENU
+// 302 or 303 of the Spreadsheet add-on, sending 'sM67' with the value
+// (0-3 horizontal, 4-6 vertical, 7 Wrap Text); FixMenu marks what the
+// selected cells all have
+class TCellAlignElement : public TMenuElement {
+public:
+	TCellAlignElement(uint32 id, BRect rect, int32 menu, int32 micn, int32 tipIndex,
+			TPageView* pages)
+		:
+		TMenuElement(id, rect, NULL, TMICNElement::LoadIcon(micn, &SheetResources())),
+		fMenu(menu),
+		fPages(pages)
+	{
+		tip = IndexString(SheetResources(), 1507, tipIndex);
+	}
+
+	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon)
+	{
+		TMenu source(fMenu, SheetResources());
+		int32 h = -2, v = -2, wrap = -2;	// -2 none seen, -1 mixed
+		fPages->SelectedCellsAlignment(h, v, wrap);
+		while (source.CountItems() > 0) {
+			BMenuItem* item = source.RemoveItem((int32)0);
+			if (item->Message() != NULL) {
+				int32 value = item->Message()->GetInt32(kValueString, -1);
+				if (value >= 0 && value <= 3)
+					item->SetMarked(h == value);
+				else if (value >= 4 && value <= 6)
+					item->SetMarked(v == value - 3);
+				else if (value == 7) {
+					item->SetMarked(wrap == 1);
+					item->Message()->AddBool("marked", wrap == 1);
+				}
+			}
+			menu->AddItem(item);
+		}
+	}
+
+private:
+	int32 fMenu;
+	TPageView* fPages;
+};
+
+
+// TSSBorderMenuElement: the borders' menus (cell borders aren't ported:
+// shown, off)
+class TCellBorderElement : public TMenuElement {
+public:
+	TCellBorderElement(uint32 id, BPoint where, int32 micn, int32 tipIndex)
+		:
+		TMenuElement(id, BRect(where, where), NULL,
+			TMICNElement::LoadIcon(micn, &SheetResources()))
+	{
+		tip = IndexString(SheetResources(), 1507, tipIndex);
+		enabled = false;
+	}
+
+	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon) {}
+};
 
 } // namespace
 
@@ -184,6 +316,7 @@ TPartBar::Build(bool text, uint16 kind)
 		fSpacing = NULL;
 	}
 	fText = text;
+	fSheet = false;
 	fKind = kind;
 	fAlignment = -2;
 	fLineSpacing = -1;
@@ -251,6 +384,64 @@ TPartBar::Build(bool text, uint16 kind)
 }
 
 
+// TPartSS::AddPartBarElements: the address from 29 to 180, the alignment
+// menus, the five border menus, Number Formatting and Make Chart, each
+// group 15 after the last
+void
+TPartBar::BuildSheet()
+{
+	RemoveAllElements();
+	if (fSpacing != NULL) {
+		fSpacing->RemoveSelf();
+		delete fSpacing;
+		fSpacing = NULL;
+	}
+	fText = false;
+	fSheet = true;
+	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4), PartIcon('SPRD'));
+	part->tip = GobeResources::IndexString(4, 23).String();
+	AddElement(part);
+	AddElement(new TCellAddressElement(BRect(29, 2, 180, 21)));
+	BRect r(195, 2, 214, 21);
+	AddElement(new TCellAlignElement('HAln', r, 302, 0x423, 1, fPages));
+	r.OffsetBy(22, 0);
+	AddElement(new TCellAlignElement('VAln', r, 303, 0x424, 2, fPages));
+	BPoint at(r.right + 1 + 15, 2);
+	static const int32 kBorders[5] = {0x41b, 0x425, 0x426, 0x427, 0x428};
+	for (int32 i = 0; i < 5; i++) {
+		AddElement(new TCellBorderElement('Bor0' + i, at, kBorders[i], 3 + i));
+		at.x += 20 + 3;
+	}
+	at.x += 15 - 3;
+	TMICNButtonElement* number = new TMICNButtonElement('NUMF', at,
+		TMICNElement::LoadIcon(0x429, &SheetResources()), new BMessage('sM60'));
+	number->tip = IndexString(SheetResources(), 1507, 8);
+	AddElement(number);
+	at.x += 20 + 15;
+	// (making a chart from cells isn't ported: off)
+	BMessage* chart = new BMessage('s00T');
+	chart->AddInt32("Kind", 'chrt');
+	TMICNButtonElement* make = new TMICNButtonElement('chrt', at, PartIcon('chrt'), chart);
+	make->tip = IndexString(SheetResources(), 1507, 9);
+	make->enabled = false;
+	AddElement(make);
+}
+
+
+// TPartSS::PartBarUpdateContents: the selection's name in the address
+void
+TPartBar::UpdateSheet()
+{
+	if (TCellAddressElement* address = static_cast<TCellAddressElement*>(GetElement('ADDR'))) {
+		std::string name = fPages->SelectionName();
+		if (name != address->text) {
+			address->text = name;
+			DrawElement(address);
+		}
+	}
+}
+
+
 // TPartBar::UpdateContents, TWPPart::PartBarUpdateContents: the
 // paragraphs' alignment if they share one; their line spacing (less down
 // to a line or a point, more up to 10 lines or 160 points); a column less
@@ -259,10 +450,16 @@ void
 TPartBar::Update()
 {
 	const Document& doc = fPages->Doc();
+	if (fPages->fSelectedCell.active && doc.SpreadsheetPart(fPages->fSelectedCell.part) != NULL) {
+		if (!fSheet)
+			BuildSheet();
+		UpdateSheet();
+		return;
+	}
 	const WPPart* wp = fPages->fCaret.active ? doc.WordPart(fPages->fCaret.part) : NULL;
 	bool text = wp != NULL && fPages->fCaret.paragraph < wp->paragraphs.size();
 	uint16 kind = text ? wp->version98 : 0;
-	if (text != fText || kind != fKind)
+	if (text != fText || kind != fKind || fSheet)
 		Build(text, kind);
 	if (!text)
 		return;

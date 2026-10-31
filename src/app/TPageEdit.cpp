@@ -3174,6 +3174,28 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 'sM67': {	// the PartBar's alignments (TSSFormatCommand)
+						int32 value = message->GetInt32(kValueString, -1);
+						if (value < 0 || value > 7 || SelectionLocked())
+							return;
+						Property property;
+						if (value == 7) {
+							// Wrap Text: turned round from what it shows marked
+							property = CellWrapProperty(!message->GetBool("marked", false));
+						} else if (value < 4)
+							property = CellHAlignProperty(value);
+						else
+							property = CellVAlignProperty(value - 3);
+						fUndo.Begin(fDocument, fSelectedCell.part,
+							value == 7 ? "Cell Wrap" : "Cell Align", CurrentViewState());
+						for (const SSRange& sr : SelectedRanges())
+							ApplyCellProperty(fDocument, fSelectedCell.part,
+								sr.from.a, sr.from.b, sr.to.a, sr.to.b, property);
+						fBook->Reset();
+						Invalidate();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
 					case kCmdCellHAlign: {	// Cell horizontal alignment
 						int32 align = 0;
 						if (message->FindInt32(kValueString, &align) != B_OK) {
@@ -3734,10 +3756,13 @@ TPageView::RunScript(const std::string& script, Document& document)
 				walk(Window()->KeyMenuBar(), 0);
 				fflush(stdout);
 			}
-		} else if (command.compare(0, 8, "special ") == 0 && command.size() == 12) {
-			// "special sM52": a Format > Insert command
+		} else if (command.compare(0, 8, "special ") == 0 && command.size() >= 12) {
+			// "special sM52": a Format > Insert command; "special sM67 2":
+			// with a value (kValueString)
 			const char* c = command.c_str() + 8;
 			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
+			if (command.size() > 13)
+				msg.AddInt32(kValueString, atoi(command.c_str() + 13));
 			MessageReceived(&msg);
 		} else if (command == "headerfooter 0" || command == "headerfooter 1") {
 			// Document > Insert/Remove Header (0), Footer (1)
@@ -4860,6 +4885,54 @@ TPageView::SelectedRanges() const
 }
 
 
+std::string
+TPageView::SelectionName() const
+{
+	if (!fSelectedCell.active)
+		return "";
+	std::vector<SSRange> ranges = SelectedRanges();
+	if (ranges.size() == 1 && ranges[0].from.a == ranges[0].to.a
+			&& ranges[0].from.b == ranges[0].to.b)
+		return CellName(ranges[0].from);
+	return RangeListName(ranges);
+}
+
+
+void
+TPageView::SelectedCellsAlignment(int32& h, int32& v, int32& wrap) const
+{
+	h = v = wrap = -2;
+	const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+	if (ss == NULL || !fSelectedCell.active)
+		return;
+	auto merge = [](int32& into, int32 value) {
+		into = into == -2 || into == value ? value : -1;
+	};
+	// (the cells of the selection inside the sheet, at most a few thousand)
+	int counted = 0;
+	for (const SSRange& r : SelectedRanges()) {
+		for (int row = r.from.a; row <= std::min<int>(r.to.a, ss->used.to.a); row++) {
+			for (int column = r.from.b; column <= std::min<int>(r.to.b, ss->used.to.b);
+					column++) {
+				if (++counted > 4096)
+					return;
+				std::vector<uint32_t> stack = {ss->style};
+				if (const SSHeader* hd = ss->Column(uint16_t(column)))
+					stack.push_back(hd->cell.style);
+				if (const SSHeader* hd = ss->Row(uint16_t(row)))
+					stack.push_back(hd->cell.style);
+				if (const SSCell* cell = ss->Cell(uint16_t(row), uint16_t(column)))
+					stack.push_back(cell->style);
+				CellStyle style = ResolveCellStyle(fDocument.styles, stack);
+				merge(h, style.hAlign);
+				merge(v, style.vAlign);
+				merge(wrap, style.wrap ? 1 : 0);
+			}
+		}
+	}
+}
+
+
 bool
 TPageView::SelectionLocked()
 {
@@ -4905,7 +4978,8 @@ TPageView::HandlesCommand(uint32 what)
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
-		case 'sM65': case 'sM75': case 'sM76': case 'sM77': case 'sM79': case 'sM7A':
+		case 'sM65': case 'sM67': case 'sM75': case 'sM76': case 'sM77': case 'sM79':
+		case 'sM7A':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

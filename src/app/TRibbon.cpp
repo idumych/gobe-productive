@@ -2,8 +2,10 @@
 
 #include "TPreferences.h"
 
+#include <MenuItem.h>
 #include <Window.h>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 
@@ -47,9 +49,10 @@ TMICNElement::TMICNElement(uint32 id, BPoint where, BBitmap* icon)
 
 
 BBitmap*
-TMICNElement::LoadIcon(int32 micn)
+TMICNElement::LoadIcon(int32 micn, const ResourceFile* resources)
 {
-	const ResourceFile::Resource* r = GobeResources::File().Find('MICN', micn);
+	const ResourceFile::Resource* r = (resources != NULL ? *resources
+		: GobeResources::File()).Find('MICN', micn);
 	if (r == NULL || r->data.size() < 256)
 		return NULL;
 	BBitmap* icon = new BBitmap(BRect(0, 0, 15, 15), B_CMAP8);
@@ -376,6 +379,103 @@ TRibbon::MouseUp(BPoint where)
 			SelectElement(element->id, element->family);
 		element->Invoke(this);
 	}
+}
+
+TMICNButtonElement::TMICNButtonElement(uint32 id, BPoint where, BBitmap* icon, BMessage* message)
+	:
+	TMICNElement(id, where, icon),
+	fMessage(message)
+{
+	rect.Set(where.x, where.y, where.x + 19, where.y + 19);
+}
+
+
+TMenuElement::TMenuElement(uint32 id, BRect rect, const char* label, BBitmap* icon)
+	:
+	TRibbonElement(id, rect),
+	label(label != NULL ? label : ""),
+	fIcon(icon)
+{
+	if (icon != NULL)
+		this->rect.Set(rect.left, rect.top, rect.left + 19, rect.top + 19);
+}
+
+
+void
+TMenuElement::Draw(BView* view, bool down)
+{
+	view->SetHighColor(kPanel);
+	view->FillRect(rect);
+	if (fIcon != NULL) {
+		// TMICNMenuElement::Draw: the icon in the middle
+		BPoint at(roundf(rect.left + (rect.Width() + 1) * 0.5f - 8),
+			roundf(rect.top + (rect.Height() + 1) * 0.5f - 8));
+		if (down)
+			at += BPoint(1, 1);
+		view->SetDrawingMode(B_OP_OVER);
+		view->DrawBitmap(fIcon.get(), at);
+		view->SetDrawingMode(B_OP_COPY);
+		TRibbon::DrawPopUpIndicator(view, down ? rect.OffsetByCopy(1, 1) : rect);
+		if (down)
+			TRibbon::DrawOutlineDown(view, rect);
+		else
+			TRibbon::DrawOutlineUp(view, rect, false);
+		return;
+	}
+	// TMenuElement::Draw: the label in the plain font (at most 10 points),
+	// truncated to the button
+	if (down) {
+		view->SetHighColor(kBlack);
+		view->StrokeRect(rect);
+	} else
+		TRibbon::DrawOutlineUp(view, rect, false);
+	TRibbon::DrawPopUpIndicator(view, down ? rect.OffsetByCopy(1, 1) : rect);
+	BFont font(be_plain_font);
+	font.SetSize(std::min(font.Size(), 10.0f));
+	// (with the descent and leading of BeOS's Bitstream fonts)
+	float baseline = rect.bottom - font.Size() * 0.25f - 3;
+	BString text(label.c_str());
+	font.TruncateString(&text, B_TRUNCATE_END, rect.right - (rect.left + 5) - 3);
+	view->PushState();
+	view->SetFont(&font);
+	view->SetHighColor(kBlack);
+	view->SetLowColor(kPanel);
+	view->DrawString(text.String(), BPoint(rect.left + 5, baseline));
+	view->PopState();
+	if (down) {
+		view->SetDrawingMode(B_OP_MIN);
+		view->SetHighColor(kWash);
+		view->FillRect(rect);
+		view->SetDrawingMode(B_OP_COPY);
+	}
+}
+
+
+bool
+TMenuElement::MouseDown(TRibbon* ribbon, BPoint where)
+{
+	BPopUpMenu* menu = new BPopUpMenu("element", false, false);
+	FillMenu(menu, ribbon);
+	ribbon->DrawElement(this, true);
+	ribbon->Sync();
+	BPoint at = ribbon->ConvertToScreen(BPoint(rect.left + 1, rect.bottom + 1));
+	BMenuItem* chosen = menu->Go(at, false, true, false);
+	ribbon->DrawElement(this, false);
+	if (chosen != NULL && chosen->Message() != NULL)
+		ribbon->Send(chosen->Message());
+	delete menu;
+	return true;
+}
+
+
+void
+TRibbon::DrawPopUpIndicator(BView* view, BRect r)
+{
+	view->SetHighColor(255, 0, 0);
+	for (int i = 0; i < 3; i++)
+		view->StrokeLine(BPoint(r.right - 5 + i, r.bottom - 3 - i),
+			BPoint(r.right - 5 + i, r.bottom - 3));
+	view->SetHighColor(kBlack);
 }
 
 } // namespace gobe
