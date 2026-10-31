@@ -118,9 +118,9 @@ Clipboard.
 | File > New presentations: one blank slide on a "Background" layer, the screen's size, as the original makes it | next |
 | Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | next |
 | Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | next |
-| New Window | not yet |
+| New Window | in progress |
 | The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | next |
-| The ToolBar's part frames, Bezier and toolbar shapes tools | not yet |
+| The ToolBar's part frames, Bezier and toolbar shapes tools | in progress |
 
 ### Word processor
 
@@ -160,10 +160,10 @@ sizes, headings and options are saved with the document.
 | Feature | State |
 |---|---|
 | Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
-| Creating and linking frames | not yet |
+| Creating and linking frames | in progress |
 | Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | next |
 | Drawing tools: several shapes selected (Shift-click, a rubber band in a drawing), moved and deleted together; Arrange's Bring to Front, Send to Back, Move Forward and Move Backward; Rotate (a corner handle turns the shape) and Reshape (a path's points, a line's ends) | next |
-| Drawing tools: Group and Ungroup, Align Objects, Align to Grid, Lock, the grid, Create Outlines, Text Wrap, curves' control points | not yet |
+| Drawing tools: Group and Ungroup, Align Objects, Align to Grid, Lock, the grid, Create Outlines, Text Wrap, curves' control points | in progress |
 | Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
 | Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | next |
 | Fill and pen inks for frames in the FormatBar (frames can't be selected yet); the pen's size (the drawing's PartBar) | not yet |
