@@ -22,6 +22,21 @@ SylkSheet SpreadsheetToSylk(const Document& doc, size_t part);
 // Writes part `part` (a spreadsheet) to `path` as SYLK text.
 bool ExportSylk(const Document& doc, size_t part, const std::string& path, std::string& error);
 
+// TImportSYLK::DoTranslate into part `part` (a spreadsheet): each cell's
+// formula (FormulaFromSylk) or else its value as the cell's (text stays
+// text, errors stay errors), the column widths (characters * 7, as
+// rtd_F has it), the
+// cells in use grown to the B record's bounds; the dependencies updated.
+// A formula the parser doesn't take leaves the cell its value; their
+// number goes in `badFormulas`.
+bool SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFormulas);
+
+// Opens a SYLK file as a new spreadsheet document (CreateBlankSpreadsheet,
+// then SylkToSpreadsheet). `notice` (if given) receives a message when
+// some formulas couldn't be read.
+bool ImportSylk(const std::string& path, Document& doc, std::string& error,
+	std::string* notice = nullptr);
+
 } // namespace gobe
 
 #endif

@@ -65,6 +65,7 @@ public:
 		fReady(false),
 		fHasDocument(false),
 		fNewDocument(false),
+		fNewSpreadsheet(false),
 		fOpenPanel(NULL),
 		fWindowCount(0),
 		fSlide(-1)
@@ -81,7 +82,7 @@ public:
 	{
 		fprintf(stderr,
 		    "usage: %s [--menu <n>] [--dialog <id>] [--render <png>]\n"
-		    "        [--slide <n>] [--do <script>] [--new] <document> ...\n",
+		    "        [--slide <n>] [--do <script>] [--new] [--new-spreadsheet] <document> ...\n",
 		    prog);
 	}
 
@@ -132,8 +133,10 @@ public:
 					continue;
 				}
 				fSlide = atoi(argv[++i]) - 1;
-			} else if (strcmp(argv[i], "--new") == 0) {
+			} else if (strcmp(argv[i], "--new") == 0
+					|| strcmp(argv[i], "--new-spreadsheet") == 0) {
 				fNewDocument = true;
+				fNewSpreadsheet = argv[i][5] == '-';
 			} else if (strncmp(argv[i], "--", 2) == 0) {
 				fprintf(stderr, "unknown option: %s\n", argv[i]);
 				PrintUsage(prog);
@@ -227,11 +230,12 @@ public:
 				(new TDialogNewDoc(CountDocuments()))->RunDialog();
 				return;
 			}
-			if (kind != 'WORD')
+			if (kind != 'WORD' && kind != 'SPRD')
 				return;
 			Document* document = new Document;
 			std::string error;
-			if (!CreateBlankDocument(*document, error)) {
+			if (!(kind == 'SPRD' ? CreateBlankSpreadsheet(*document, error)
+					: CreateBlankDocument(*document, error))) {
 				delete document;
 				return;
 			}
@@ -465,7 +469,8 @@ public:
 		if (fNewDocument) {
 			Document* document = new Document;
 			std::string error;
-			if (CreateBlankDocument(*document, error)) {
+			if (fNewSpreadsheet ? CreateBlankSpreadsheet(*document, error)
+					: CreateBlankDocument(*document, error)) {
 				NewSheetPreferences(*document);
 				if (!fRenderPath.empty()) {
 					Render(*document, fRenderPath);
@@ -514,6 +519,7 @@ private:
 	bool fReady;
 	bool fHasDocument;
 	bool fNewDocument;
+	bool fNewSpreadsheet;
 	BFilePanel* fOpenPanel;
 	int32 fWindowCount;
 	int fSlide;					// --slide

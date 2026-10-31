@@ -104,7 +104,7 @@ not released yet: build it to try it.
 
 - Opening and saving Gobe Productive documents. Only what was edited is
   rewritten; everything else is kept byte for byte. File > New (word
-  processing documents), Open Recent, Revert, Insert… (text and RTF), Page
+  processing documents and spreadsheets), Open Recent, Revert, Insert… (text and RTF), Page
   Setup, Print, Help (the original's User's Guide), About.
 - Text: typing, selection (double, triple and quadruple clicks; the arrow
   keys with Command, Option and Control; Home/End, Page Up/Down), cut, copy
@@ -121,8 +121,9 @@ not released yet: build it to try it.
   formatting a style directly).
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
 - SYLK: a spreadsheet saved as SYLK with Save As's File Format (values as
-  calculated, formulas in R1C1, column widths). Opening SYLK files waits
-  for File > New for spreadsheets.
+  calculated, formulas in R1C1, column widths); SYLK files opened as new
+  spreadsheets. Number formats and fonts (SYLK's P records) aren't carried
+  yet, so dates arrive as numbers.
 - Spreadsheets: shown, cells edited (values and formulas, evaluated), cut,
   copy and paste, Fill Down and Fill Right, the selected rows inserted and
   deleted.

@@ -303,7 +303,8 @@ Unparse(const std::vector<FormulaToken>& t, size_t& i, CellID at)
 		case 0x19:
 			return RefText(k.refs[0], at);
 		case 0x1a:
-			return RefText(k.refs[0], at) + ":" + RefText(k.refs[1], at);
+			// TRangeRef::Name: the two cells with STR# 22, 4 ("..") between
+			return RefText(k.refs[0], at) + ".." + RefText(k.refs[1], at);
 		case 0x1b:
 			return (k.strings[0].empty() ? "" : k.strings[0] + ":") + k.strings[1];
 		case 0x1c: {

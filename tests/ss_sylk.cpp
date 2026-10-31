@@ -2,7 +2,8 @@
 // WriteSylk) and read back (ReadSylk): the same cells with their values as
 // calculated, each formula back as typed through R1C1 (FormulaToSylk,
 // FormulaFromSylk), the bounds, the widths of the columns that aren't the
-// default.
+// default; imported into a new spreadsheet (SylkToSpreadsheet), the same
+// formulas and values.
 // Arguments: the sample documents.
 #include <cmath>
 #include <cstdio>
@@ -111,21 +112,81 @@ main(int argc, char** argv)
 					formulas++;
 					std::string input = CellInput(ss, cell.id.a, cell.id.b);
 					Check(!c.formula.empty() && c.formula[0] != '=', name + ": an E field");
-					// (rtd_C_field_E writes a range as "..", UnParse as ':';
-					// the parser reads both)
 					std::string again = FormulaFromSylk(c.formula, cell.id.a, cell.id.b);
-					bool quoted = false;
-					for (size_t k = 0; k + 1 < again.size(); k++) {
-						quoted ^= again[k] == '"';
-						if (!quoted && again[k] == '.' && again[k + 1] == '.')
-							again.replace(k, 2, ":");
-					}
 					Check(again == input, name + ": formula " + input + " -> " + c.formula + " -> "
 						+ again);
 				} else
 					Check(c.formula.empty(), name + ": no formula");
 			}
 			Check(volatileCells < 20, where + ": few cells change between calculations");
+			// imported into a new spreadsheet: every formula as typed, the
+			// other cells' values (times come back as numbers)
+			{
+				Document imported;
+				int bad = 0;
+				Check(CreateBlankSpreadsheet(imported, error)
+					&& SylkToSpreadsheet(imported, 0, back, bad), where + ": imported " + error);
+				// formulas naming a selection (or another part's) can't be
+				// read without the names, which SYLK doesn't carry here
+				int named = 0;
+				for (const SSCell& cell : ss.cells)
+					for (const FormulaToken& t : cell.formula)
+						if (t.kind == 0x1b || t.kind == 0x1e || t.kind == 0x1f) {
+							named++;
+							break;
+						}
+				Check(bad <= named, where + ": every formula without names read back: "
+					+ std::to_string(bad) + " not, " + std::to_string(named) + " with names");
+				const SSPart& is = *imported.SpreadsheetPart(0);
+				SSBook ib(imported);
+				SSEvaluator ie(is, &ib, 0);
+				for (const SSCell& cell : ss.cells) {
+					if (cell.id.b == 0xffff)
+						continue;
+					std::string name = where + " " + CellName(cell.id) + " imported";
+					bool formula = cell.kind == Sig("Fmla") || cell.kind == Sig("FmEr");
+					bool usesNames = false;
+					for (const FormulaToken& t : cell.formula)
+						usesNames |= t.kind == 0x1b || t.kind == 0x1e || t.kind == 0x1f;
+					if (usesNames)
+						continue;
+					if (formula) {
+						// (a formula naming another part or a name isn't in the
+						// new document: it stays a formula, its value differs)
+						Check(CellInput(is, cell.id.a, cell.id.b) == CellInput(ss, cell.id.a,
+							cell.id.b), name + ": formula " + CellInput(is, cell.id.a, cell.id.b) + " for "
+							+ CellInput(ss, cell.id.a, cell.id.b));
+						continue;
+					}
+					SSValue v = eval.Value(cell.id.a, cell.id.b);
+					SSValue w = ie.Value(cell.id.a, cell.id.b);
+					switch (v.type) {
+						case SSValue::kNumber:
+						case SSValue::kBool:
+							Check(w.type == v.type && w.number == v.number, name + ": number");
+							break;
+						case SSValue::kTime:
+							Check(w.type == SSValue::kNumber
+								&& std::fabs(w.number - (v.time / 86400.0 + 24106)) < 1e-9,
+								name + ": time as a number");
+							break;
+						case SSValue::kString:
+							Check(w.type == SSValue::kString && w.text == v.text, name + ": text");
+							break;
+						case SSValue::kError:
+							Check(w.type == SSValue::kError, name + ": error");
+							break;
+						default:
+							break;
+					}
+				}
+				for (const SSHeader& column : ss.columns)
+					if (column.index < 0xffff && column.cell.number != ss.defaultWidth
+							&& std::lround(column.cell.number / 7.45) > 0)
+						Check(std::fabs(is.ColumnWidth(uint16_t(column.index))
+							- std::lround(column.cell.number / 7.45) * 7) < 0.01,
+							where + ": imported column " + std::to_string(column.index) + " width");
+			}
 			if (!sheet.cells.empty())
 				Check(back.rows == ss.used.to.a + 1 && back.columns == ss.used.to.b + 1,
 					where + ": bounds");

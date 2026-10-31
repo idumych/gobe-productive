@@ -166,13 +166,13 @@ HandCases(int argc, char** argv)
 	Check(Number(part(), 3, 0) == 2 && Number(part(), 6, 0) == 5, "A2 to A4, A5 to A7");
 	Check(Number(part(), 1, 1) == 20, "B2 stays");
 	Check(Formula(part(), 0, 2) == "A7", "=A5: " + Formula(part(), 0, 2));
-	Check(Formula(part(), 0, 3) == "SUM(A1:A8)", "=SUM(A1:A6): " + Formula(part(), 0, 3));
+	Check(Formula(part(), 0, 3) == "SUM(A1..A8)", "=SUM(A1:A6): " + Formula(part(), 0, 3));
 
 	// and deleted again: as it was
 	Check(DeleteCells(doc, p, Range("A2", "A3"), true), "delete up at A2:A3");
 	Check(Number(part(), 1, 0) == 2 && Number(part(), 4, 0) == 5, "back in A2 and A5");
 	Check(Formula(part(), 0, 2) == "A5", "=A5 again: " + Formula(part(), 0, 2));
-	Check(Formula(part(), 0, 3) == "SUM(A1:A6)", "SUM again: " + Formula(part(), 0, 3));
+	Check(Formula(part(), 0, 3) == "SUM(A1..A6)", "SUM again: " + Formula(part(), 0, 3));
 
 	// a cell that isn't empty would go past the last row: refused, nothing changes
 	doc = start;

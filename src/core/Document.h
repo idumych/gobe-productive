@@ -206,6 +206,10 @@ bool LoadDocumentBytes(std::vector<uint8_t> data, Document& doc, std::string& er
 // original makes for a new WORD sheet, laid out like its saved documents.
 // `path` is empty and `name` is "untitled N".
 bool CreateBlankDocument(Document& doc, std::string& error);
+// File > New for spreadsheets: a SPRD sheet's document (an empty
+// spreadsheet, rows 1-500 and columns A-T, its graphics part, a browse
+// root), named the same way.
+bool CreateBlankSpreadsheet(Document& doc, std::string& error);
 
 } // namespace gobe
 

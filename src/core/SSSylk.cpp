@@ -96,6 +96,117 @@ SpreadsheetToSylk(const Document& doc, size_t part)
 
 
 bool
+SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFormulas)
+{
+	badFormulas = 0;
+	SSPart* ss = doc.EditableSpreadsheetPart(part);
+	if (ss == nullptr)
+		return false;
+	auto isName = [&](const std::string& name) {
+		return doc.NamedSelection(name, int(part)) != nullptr;
+	};
+	std::string error;
+	// a cell typed as something, then given the kind and contents SetCellInput
+	// wouldn't make from text (text that reads as a number, an error)
+	auto set = [&](uint16_t row, uint16_t column, uint32_t kind, const std::string& text,
+			uint32_t value) {
+		SetCellInput(*ss, row, column, "x", nullptr, error);
+		for (SSCell& c : ss->cells)
+			if (c.id.a == row && c.id.b == column) {
+				c.kind = kind;
+				c.text = text;
+				c.value = value;
+			}
+	};
+	for (const SylkCell& cell : sheet.cells) {
+		uint16_t row = cell.row, column = cell.column;
+		if (!cell.formula.empty()) {
+			std::string formula = FormulaFromSylk(cell.formula, row, column);
+			if (SetCellInput(*ss, row, column, formula, isName, error))
+				continue;
+			badFormulas++;
+		}
+		switch (cell.kind) {
+			case SylkCell::kNumber: {
+				char text[32];
+				snprintf(text, sizeof text, "%.17g", cell.number);
+				SetCellInput(*ss, row, column, text, nullptr, error);
+				break;
+			}
+			case SylkCell::kBool:
+				SetCellInput(*ss, row, column, cell.number != 0 ? "TRUE" : "FALSE", nullptr, error);
+				break;
+			case SylkCell::kString:
+				if (cell.text.empty())
+					break;
+				set(row, column, Sig("Strn"), cell.text, 0);
+				break;
+			case SylkCell::kError: {
+				int code = 0;
+				for (int e = 1; e < 64; e++)
+					if (ErrorText(e) == cell.text) {
+						code = e;
+						break;
+					}
+				if (code != 0)
+					set(row, column, Sig("Err#"), "", uint32_t(code));
+				break;
+			}
+			case SylkCell::kEmpty:
+				break;
+		}
+	}
+	// TImportSYLK::rtd_F: characters * 7 (the export divides by 7.45); a
+	// width of 0 leaves the default (SetLineSize's 0)
+	for (const auto& width : sheet.columnWidths)
+		if (width.second > 0)
+			SetLineSize(*ss, true, width.first, width.first, float(width.second * 7));
+	if (sheet.rows > ss->used.to.a + 1)
+		ss->used.to.a = uint16_t(sheet.rows - 1);
+	if (sheet.columns > ss->used.to.b + 1)
+		ss->used.to.b = uint16_t(sheet.columns - 1);
+	for (const SylkCell& cell : sheet.cells) {
+		if (cell.row > ss->used.to.a)
+			ss->used.to.a = cell.row;
+		if (cell.column > ss->used.to.b)
+			ss->used.to.b = cell.column;
+	}
+	UpdateDependencies(doc, part);
+	return true;
+}
+
+
+bool
+ImportSylk(const std::string& path, Document& doc, std::string& error, std::string* notice)
+{
+	FILE* file = fopen(path.c_str(), "rb");
+	if (file == nullptr) {
+		error = strerror(errno);
+		return false;
+	}
+	std::string data;
+	char buffer[65536];
+	size_t length;
+	while ((length = fread(buffer, 1, sizeof buffer, file)) > 0)
+		data.append(buffer, length);
+	fclose(file);
+	SylkSheet sheet;
+	if (!ReadSylk(data, sheet, error))
+		return false;
+	if (!CreateBlankSpreadsheet(doc, error))
+		return false;
+	int bad = 0;
+	if (!SylkToSpreadsheet(doc, size_t(doc.MainPart()), sheet, bad)) {
+		error = "no spreadsheet";
+		return false;
+	}
+	if (bad > 0 && notice != nullptr)
+		*notice = std::to_string(bad) + " formulas couldn't be read; their cells have their values.";
+	return true;
+}
+
+
+bool
 ExportSylk(const Document& doc, size_t part, const std::string& path, std::string& error)
 {
 	if (doc.SpreadsheetPart(part) == nullptr) {

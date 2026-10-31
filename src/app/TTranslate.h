@@ -29,12 +29,13 @@ enum FileKind {
 	kRTFFile,		// RTFTranslator Identify: starts with "{\rtf"
 	kTextFile,		// TextTranslator Identify: a text/* file that is text
 	kTableFile,		// ... that looks like a table (a spreadsheet import)
+	kSylkFile,		// SYLKTranslator: text/sylk, or text starting with an ID record
 	kUnknownFile
 };
 FileKind IdentifyFile(const char* path);
 
 // Opens a file the translators read as a new untitled word processing
-// document named "<file name> (converted)" (TImportTranslation::
+// document (a spreadsheet for SYLK) named "<file name> (converted)" (TImportTranslation::
 // PrepareDocument). `warning` receives a message to show, if any.
 bool ImportFile(const char* path, FileKind kind, Document& doc, BString& error,
 	BString& warning);

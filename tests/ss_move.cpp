@@ -194,7 +194,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A4", "4");
 	Set(doc, p, "C1", "=SUM(A2:A4)");
 	MoveCellsCommand(doc, p, Block("A2", "A2"), -1, 0);
-	Check(Formula(part(), 0, 2) == "SUM(A1:A4)", "SUM(A2:A4), A2 moved up: "
+	Check(Formula(part(), 0, 2) == "SUM(A1..A4)", "SUM(A2:A4), A2 moved up: "
 		+ Formula(part(), 0, 2));
 
 	// its last row moves down: the second corner only: A2:A4 -> A2:A6
@@ -204,7 +204,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A4", "4");
 	Set(doc, p, "C1", "=SUM(A2:A4)");
 	MoveCellsCommand(doc, p, Block("A4", "A4"), 2, 0);
-	Check(Formula(part(), 0, 2) == "SUM(A2:A6)", "SUM(A2:A4), A4 moved down: "
+	Check(Formula(part(), 0, 2) == "SUM(A2..A6)", "SUM(A2:A4), A4 moved down: "
 		+ Formula(part(), 0, 2));
 
 	// a middle cell moves sideways: the range meets the block but neither
@@ -215,7 +215,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A4", "4");
 	Set(doc, p, "C1", "=SUM(A2:A4)");
 	MoveCellsCommand(doc, p, Block("A3", "A3"), 0, 5);
-	Check(Formula(part(), 0, 2) == "SUM(A2:A4)", "SUM(A2:A4), A3 moved right: "
+	Check(Formula(part(), 0, 2) == "SUM(A2..A4)", "SUM(A2:A4), A3 moved right: "
 		+ Formula(part(), 0, 2));
 
 	// a diagonal move of its last cell: rows and columns both non-zero, so
@@ -225,7 +225,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A3", "3");
 	Set(doc, p, "C1", "=SUM(A2:A3)");
 	MoveCellsCommand(doc, p, Block("A3", "A3"), 5, 5);
-	Check(Formula(part(), 0, 2) == "SUM(A2:A3)", "SUM(A2:A3), A3 moved diagonally: "
+	Check(Formula(part(), 0, 2) == "SUM(A2..A3)", "SUM(A2:A3), A3 moved diagonally: "
 		+ Formula(part(), 0, 2));
 
 	// the whole range inside the block: both corners follow
@@ -234,7 +234,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A3", "3");
 	Set(doc, p, "C1", "=SUM(A2:A3)");
 	MoveCellsCommand(doc, p, Block("A1", "A5"), 5, 5);
-	Check(Formula(part(), 0, 2) == "SUM(F7:F8)", "SUM(A2:A3), A1:A5 moved by 5,5: "
+	Check(Formula(part(), 0, 2) == "SUM(F7..F8)", "SUM(A2:A3), A1:A5 moved by 5,5: "
 		+ Formula(part(), 0, 2));
 
 	// the formula moves, the range doesn't meet the block: OffsetRelative by
@@ -244,7 +244,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A3", "3");
 	Set(doc, p, "C1", "=SUM(A2:A3)");
 	MoveCellsCommand(doc, p, Block("C1", "C1"), 4, 3);
-	Check(Formula(part(), 4, 5) == "SUM(A2:A3)", "SUM(A2:A3) moved to F5: "
+	Check(Formula(part(), 4, 5) == "SUM(A2..A3)", "SUM(A2:A3) moved to F5: "
 		+ Formula(part(), 4, 5));
 
 	// formula and range in the block together: OffsetAbsolute only
@@ -253,7 +253,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A3", "3");
 	Set(doc, p, "B1", "=SUM(A2:A3)+SUM($A$2:$A$3)");
 	MoveCellsCommand(doc, p, Block("A1", "B3"), 0, 3);
-	Check(Formula(part(), 0, 4) == "SUM(D2:D3)+SUM($D$2:$D$3)", "A1:B3 moved right by 3: "
+	Check(Formula(part(), 0, 4) == "SUM(D2..D3)+SUM($D$2..$D$3)", "A1:B3 moved right by 3: "
 		+ Formula(part(), 0, 4));
 
 	// the formula moves with the range's top edge (moving down): the corner
@@ -264,7 +264,7 @@ HandCases(int argc, char** argv)
 	Set(doc, p, "A4", "4");
 	Set(doc, p, "B2", "=SUM(A2:A4)");
 	MoveCellsCommand(doc, p, Block("A2", "B2"), -1, 0);
-	Check(Formula(part(), 0, 1) == "SUM(A1:A4)", "A2:B2 moved up, SUM(A2:A4) in B2: "
+	Check(Formula(part(), 0, 1) == "SUM(A1..A4)", "A2:B2 moved up, SUM(A2:A4) in B2: "
 		+ Formula(part(), 0, 1));
 
 	// above the first row or left of the first column: refused, nothing changes

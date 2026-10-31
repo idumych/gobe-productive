@@ -1930,9 +1930,11 @@ private:
 			size_t q = p;
 			while (q < fText.size() && isspace((unsigned char)fText[q]))
 				q++;
+			// TParser::ScanRange: "A1..B2"; "A1:B2" taken too
 			CellRef to;
-			if (q < fText.size() && fText[q] == ':') {
-				q++;
+			bool dots = fText.compare(q, 2, "..") == 0;
+			if (dots || (q < fText.size() && fText[q] == ':')) {
+				q += dots ? 2 : 1;
 				while (q < fText.size() && isspace((unsigned char)fText[q]))
 					q++;
 				if (CellRefAt(q, to)) {

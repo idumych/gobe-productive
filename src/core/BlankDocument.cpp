@@ -447,39 +447,306 @@ WindowSection()
 }
 
 
+// #pragma mark - spreadsheets
+
+// File > New for spreadsheets (TPartSS::TPartSS(TDoc*), TLeafSheet for a
+// SPRD sheet): the sheet's spreadsheet, its graphics part and a browse
+// root (a spreadsheet sheet isn't paged), as StockPrice, the smallest
+// spreadsheet document, has them.
+enum { kSheetPart = 0, kSheetGraphicsPart = 1, kBrowseRootPart = 2 };
+
+// the styles of the spreadsheet document (see SheetStyleSection)
+enum {
+	kSSBaseStyle, kSSFrameStyle, kSSDocumentStyle, kSSGRDefaultStyle, kSSDefaultStyle,
+	kGridStyle, kHeaderStyle, kColumnStyle, kRowStyle, kLockStyle
+};
+
+// the window's view, which the root frame and the sheet's frames fill
+const float kViewWidth = 609;
+const float kViewHeight = 416;
+
+
+std::vector<uint8_t>
+SheetPart()
+{
+	// TPartSS::TPartSS(TDoc*): rows 0-499 and columns A-T in use, the part's
+	// style "SS Default", nothing locked, Auto Calculate on, no cells;
+	// TSSDisplayManager: the preferences' row height and column width,
+	// the grid, header, column, row and lock styles; TSSDisplayOptions:
+	// grid, locked cells, no formulas, column and row headers, circular
+	// references
+	DocWriter w;
+	PartHeader(w, Sig("SPRD"), 2, 1, 1);
+	w.Sig(Sig("ss +"));
+	w.UInt16(0);
+	w.UInt16(0);
+	w.UInt16(499);
+	w.UInt16(19);
+	w.UInt32(kSSDefaultStyle);
+	w.UInt32(0);			// locked cells
+	w.Bool(true);
+	w.Sig(Sig("coli"));
+	w.UInt32(0);
+	w.Sig(Sig("rowi"));
+	w.UInt32(0);
+	w.Sig(Sig("data"));
+	w.UInt16(0xffff);		// the end
+	w.UInt16(0xffff);
+	w.Sig(Sig("depm"));
+	w.UInt32(0);			// no formulas
+	w.UInt32(0);			// no links
+	w.Sig(Sig("disp"));
+	w.Float(16);
+	w.Float(72);
+	for (uint32_t style : {kGridStyle, kHeaderStyle, kColumnStyle, kRowStyle, kLockStyle})
+		w.UInt32(style);
+	w.Sig(Sig("dopt"));
+	for (bool option : {true, true, false, true, true, true})
+		w.Bool(option);
+	w.UInt32(0);			// TSSFillManager: no fills
+	for (int i = 0; i < 3; i++)
+		w.UInt32(0xffffffff);
+	w.Sig(Sig("ss -"));
+	PortalStart(w, kBrowseRootPart, 12);
+	const float origin[2] = {0, 0};
+	Frame(w, origin, kViewWidth, kViewHeight, kSSFrameStyle, kSheetPart, kBrowseRootPart);
+	// TSSFrame: the cells shown (TSSFrame::SetSize sets them again) and the
+	// sheet's rectangle
+	w.UInt16(0);
+	w.UInt16(0);
+	w.UInt16(uint16_t(kViewHeight / 16));
+	w.UInt16(uint16_t(kViewWidth / 72));
+	const float rect[4] = {0, 0, kViewWidth, kViewHeight};
+	w.Rect(rect);
+	w.Sig(Sig("FraM"));
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+SheetGraphicsPart()
+{
+	// as GraphicsPart, its frame inset by a point in the sheet's
+	DocWriter w;
+	PartHeader(w, Sig("GRFX"), 2, 2, 0);
+	w.Sig(Sig("GRAP"));
+	w.Bytes(Hex("00000000" "41100000" "0000" "4974240049742400" "00000000000000000000000000000000" "00"));
+	w.Sig(Sig("lyr+"));
+	w.UInt32(1);
+	w.String("Layer 1");
+	w.UInt32(0);			// no shapes
+	w.Sig(Sig("lyr-"));
+	w.Sig(Sig("vew+"));
+	w.UInt32(1);
+	w.String("View 1");
+	w.UInt32(1);
+	w.UInt32(0);
+	w.Bytes(Hex("0101000100"));
+	w.Sig(Sig("vew-"));
+	w.Sig(Sig("GraP"));
+	PortalStart(w, kBrowseRootPart, 4);
+	const float origin[2] = {1, 1};
+	Frame(w, origin, kViewWidth - 1, kViewHeight - 1, kSSFrameStyle, kSheetGraphicsPart,
+		kBrowseRootPart);
+	float drawing[4] = {0, 0, kViewWidth - 1, kViewHeight - 1};
+	w.Rect(drawing);		// TFrameGR
+	w.Sig(Sig("FraM"));
+	w.UInt32(0);			// TGRPortal: view 0
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+BrowseRootPart()
+{
+	DocWriter w;
+	PartHeader(w, Sig("BROT"), 0, 3, 0xffffffff);
+	w.UInt32(0);			// TRootPart: the sheet
+	PortalStart(w, 0xffffffff, 0);
+	const float origin[2] = {0, 0};
+	Frame(w, origin, kViewWidth, kViewHeight, kSSFrameStyle, kBrowseRootPart, 0xffffffff);
+	// TBrowseRootFrame: the sheet's frame and its graphics frame
+	FramePtr(w, kSheetPart, 0, 0);
+	FramePtr(w, kSheetGraphicsPart, 0, 0);
+	w.Sig(Sig("FraM"));
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+SheetStyleSection()
+{
+	// TDoc::TDoc: "Default", "GR Default" and the document's style based on
+	// it; TPartSSFactory::AddPartStyles: "SS Default" (General, left,
+	// bottom, 10 points, a clear fill); TSSDisplayManager: the grid (a light
+	// gray hairline), header (gray, centered, the plain font at 10), column
+	// and row (based on the header) and lock (red, patterned) styles; the
+	// frames' style. Property values as StockPrice has them.
+	StyleMgr styles;
+	auto add = [&](const char* type, const char* hex) {
+		styles.properties.push_back({Code(type), Hex(hex)});
+		return uint32_t(styles.properties.size() - 1);
+	};
+	const char* white = "01ffffffff77747700ffffffffffffffff";
+	const char* black = "01000000ff77747700ffffffffffffffff";
+	const char* pen = "ffffffff4e4f524d0000000800044e6f6e650001";
+	uint32_t arrows = add("Arrw", "0000");
+	uint32_t fill = add("FCol", white);
+	uint32_t fillOpaque = add("FTra", "3f800000");
+	uint32_t penColor = add("PCol", black);
+	uint32_t penType = add("PEN ", pen);
+	uint32_t penSize = add("PENz", "3f800000");
+	uint32_t penOpaque = add("PTra", "3f800000");
+	uint32_t textColor = add("TCol", black);
+	uint32_t face = add("TFac", "0000000101");
+	uint32_t font = add("TFon", "000e447574636838303120526d20425400000000");	// Dutch801 Rm BT
+	uint32_t size = add("TSiz", "000c");
+	uint32_t fillClear = add("FTra", "00000000");
+	uint32_t penNone = add("PENz", "00000000");
+	uint32_t penClear = add("PTra", "00000000");
+	uint32_t left = add("HAln", "0000");
+	uint32_t bottom = add("VAln", "0003");
+	uint32_t general = add("SSNm", "000747656e6572616c00");
+	uint32_t size10 = add("TSiz", "000a");
+	uint32_t gridColor = add("PCol", "01c8c8c8ff77747700ffffffffffffffff");
+	uint32_t headerFill = add("FCol", "01d8d8d8ff77747700ffffffffffffffff");
+	uint32_t centered = add("HAln", "0002");
+	uint32_t headerFont = add("TFon", "000a5377697337323120425400000000");	// Swis721 BT
+	uint32_t lockFill = add("FCol", "01ff0000ff777477008800220088002200");
+
+	const uint32_t none = 0xffffffff;
+	auto style = [&](const char* type, const char* name, uint32_t flags, uint32_t users,
+			uint32_t parent, std::vector<uint32_t> props) {
+		Style s;
+		s.id = Sig("STYL");
+		s.value4 = users + 1;
+		s.value8 = flags;
+		s.valueC = 0xffff;
+		s.value10 = Code(type);
+		s.name = name;
+		s.links[0] = parent;
+		s.links[1] = none;
+		s.links[2] = none;
+		s.props = std::move(props);
+		styles.styles.push_back(std::move(s));
+	};
+	// (users: child styles, the part, its display manager, frames, TDoc
+	// +0x6c)
+	style("Basi", "Default", 0x912, 3, none, {arrows, fill, fillOpaque, penColor, penType,
+		penSize, penOpaque, textColor, face, font, size});
+	style("Basi", "", 0x20, 3, kSSBaseStyle, {fillClear, penNone, penClear});	// frames
+	style("Basi", "", 0x20, 1, kSSGRDefaultStyle, {});					// TDoc +0x6c
+	style("GRFX", "GR Default", 0x822, 1, kSSBaseStyle, {});
+	style("SPRD", "SS Default", 0x912, 1, kSSBaseStyle, {fillClear, left, general, size10,
+		bottom});
+	style("SPRD", "GridStyle", 0x822, 1, none, {gridColor, penType, penNone, penOpaque});
+	style("SPRD", "HeaderStyle", 0x822, 3, none, {headerFill, centered, penColor, penType,
+		penNone, penOpaque, headerFont, size10});
+	style("SPRD", "ColumnStyle", 0x822, 1, kHeaderStyle, {});
+	style("SPRD", "RowStyle", 0x822, 1, kHeaderStyle, {});
+	style("SPRD", "LockStyle", 0x822, 1, none, {lockFill});
+	for (Style& s : styles.styles)
+		std::stable_sort(s.props.begin(), s.props.end(), [&](uint32_t a, uint32_t b) {
+			return styles.properties[a].type < styles.properties[b].type;
+		});
+	for (int pass = 0; pass < 3; pass++)
+		for (Style& s : styles.styles)
+			s.props2 = StyleUnionSet(styles, s);
+	styles.afterSection = kSSDocumentStyle;
+	return WriteStyleMgr(styles);
+}
+
+
+std::vector<uint8_t>
+SheetSheetSection()
+{
+	SheetMgr sheets;
+	sheets.sheetCount = 1;
+	LeafSheet sheet;
+	sheet.name = "Sheet 1";
+	sheet.mainPart = kSheetPart;
+	sheet.graphicsPart = kSheetGraphicsPart;
+	std::copy(kPaper, kPaper + 4, sheet.paper);
+	std::copy(kPrintable, kPrintable + 4, sheet.printable);
+	sheet.flags[0] = sheet.flags[1] = sheet.flags[2] = true;
+	sheet.divisions = 8;
+	sheets.sheets.push_back(sheet);
+	return WriteSheetMgr(sheets);
+}
+
+
+std::vector<uint8_t>
+SheetSelectionSection()
+{
+	// the drawing's (no shapes) and the sheet's (A1, TSSSelection 'CELL')
+	DocWriter w;
+	w.Sig(Sig("SELM"));
+	w.UInt32(2);
+	w.UInt32(16);
+	w.Sig(Sig("GRFX"));
+	w.UInt32(kSheetGraphicsPart);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.UInt32(33);
+	w.Sig(Sig("SPRD"));
+	w.UInt32(kSheetPart);
+	w.UInt32(1);
+	w.Sig(Sig("CELL"));
+	w.UInt16(0);
+	w.UInt16(0);
+	w.UInt32(1);
+	for (int i = 0; i < 4; i++)
+		w.UInt16(0);
+	w.Bool(true);
+	w.Sig(Sig("SelM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+SheetWindowSection()
+{
+	// TDocWindow::Write as StockPrice has it: the sheet, the root frame, the
+	// zoom, three values, the active part chain, the window's frame, the
+	// spreadsheet's ribbons
+	DocWriter w;
+	w.UInt32(0);
+	FramePtr(w, kBrowseRootPart, 0, 0);
+	w.Float(1);
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.Bytes(Hex("00000000" "00000001" "00000000" "ffffffff"));
+	const float frame[4] = {9, 28, 665, 584};
+	w.Rect(frame);
+	w.Bytes(Hex("0000000a00000003000000000001000000010100""00000a01000000080000000006010000"
+		"000901535052a80100000004000000000500"));
+	return w.Data();
+}
+
+
 // "untitled", "untitled 2", ... (TApp::UntitledDoc); the app counts
 int sUntitled = 0;
 
-} // namespace
 
-
+// the document from its sections, loaded
 bool
-CreateBlankDocument(Document& doc, std::string& error)
+LoadSections(Document& doc, std::string& error,
+	const std::vector<std::pair<const char*, std::vector<uint8_t>>>& sections)
 {
 	DocWriter out;
 	std::vector<TocEntry> toc;
-	auto section = [&](const char* name, const std::vector<uint8_t>& bytes) {
-		toc.push_back({name, uint32_t(out.Position()), 1});
-		out.Bytes(bytes);
-	};
 	out.Bytes(Header());
-	section("VersionMgr", Hex("5645524d0000000100020000001e000300000000000000005665724d"));
-	section("PartFactory Table", WriteFactoryTable({
-		{Sig("WORD"), 1, "Word Processing"},
-		{Sig("GRFX"), 1, "Graphics"},
-		{Sig("PROT"), 1, "PagedRootPart"},
-		{Sig("PAGE"), 1, "PagePart"}}));
-	section("Document Misc", Hex("00000001000000000000000000000000000000000000000000000000"));
-	section("SetMgr", Hex("5345544d0000000000000000000000005365744d"));
-	section("PenMgr", Hex("50454e4d0000000601000000000050656e4d"));
-	section("StyleMgr", StyleSection());
-	section("SheetMgr", SheetSection());
-	section("SelectionMgr", SelectionSection());
-	section("LinksMgr", Hex("4c494e4b00000000004c696e4b"));
-	section("PartMgr", PartSection());
-	section("CommandMgr", Hex("434d444d00000000436d644d"));
-	section("HistoryMgr", Hex("000000000000000000000014"));
-	section("WindowMgr", WindowSection());
+	for (const auto& section : sections) {
+		toc.push_back({section.first, uint32_t(out.Position()), 1});
+		out.Bytes(section.second);
+	}
 	uint32_t tocOffset = uint32_t(out.Position());
 	out.UInt32(uint32_t(toc.size()));
 	for (const TocEntry& e : toc) {
@@ -500,6 +767,59 @@ CreateBlankDocument(Document& doc, std::string& error)
 	sUntitled++;
 	doc.name = sUntitled == 1 ? "untitled" : "untitled " + std::to_string(sUntitled);
 	return true;
+}
+
+} // namespace
+
+
+bool
+CreateBlankDocument(Document& doc, std::string& error)
+{
+	return LoadSections(doc, error, {
+		{"VersionMgr", Hex("5645524d0000000100020000001e000300000000000000005665724d")},
+		{"PartFactory Table", WriteFactoryTable({
+			{Sig("WORD"), 1, "Word Processing"},
+			{Sig("GRFX"), 1, "Graphics"},
+			{Sig("PROT"), 1, "PagedRootPart"},
+			{Sig("PAGE"), 1, "PagePart"}})},
+		{"Document Misc", Hex("00000001000000000000000000000000000000000000000000000000")},
+		{"SetMgr", Hex("5345544d0000000000000000000000005365744d")},
+		{"PenMgr", Hex("50454e4d0000000601000000000050656e4d")},
+		{"StyleMgr", StyleSection()},
+		{"SheetMgr", SheetSection()},
+		{"SelectionMgr", SelectionSection()},
+		{"LinksMgr", Hex("4c494e4b00000000004c696e4b")},
+		{"PartMgr", PartSection()},
+		{"CommandMgr", Hex("434d444d00000000436d644d")},
+		{"HistoryMgr", Hex("000000000000000000000014")},
+		{"WindowMgr", WindowSection()}});
+}
+
+
+bool
+CreateBlankSpreadsheet(Document& doc, std::string& error)
+{
+	PartMgr parts;
+	parts.parts.push_back({Sig("SPRD"), 0, SheetPart()});
+	parts.parts.push_back({Sig("GRFX"), 0, SheetGraphicsPart()});
+	parts.parts.push_back({Sig("BROT"), 0, BrowseRootPart()});
+	return LoadSections(doc, error, {
+		{"VersionMgr", Hex("5645524d0000000100020000001e000300000000000000005665724d")},
+		{"PartFactory Table", WriteFactoryTable({
+			{Sig("SPRD"), 1, "Spreadsheet"},
+			{Sig("GRFX"), 1, "Graphics"},
+			{Sig("BROT"), 1, "BrowseRootPart"}})},
+		{"Document Misc", Hex("00000001000000000000000000000000000000000000000000000000")},
+		{"SetMgr", Hex("5345544d0000000000000000000000005365744d")},
+		{"PenMgr", Hex("50454e4d0000000601000000000050656e4d")},
+		{"StyleMgr", SheetStyleSection()},
+		{"SheetMgr", SheetSheetSection()},
+		{"SelectionMgr", SheetSelectionSection()},
+		{"LinksMgr", Hex("4c494e4b00000000004c696e4b")},
+		{"PartMgr", WritePartMgrFromRecords(parts)},
+		{"CommandMgr", Hex("434d444d00000000436d644d")},
+		{"HistoryMgr", Hex("000000000000000000000014")},
+		{"WindowMgr", SheetWindowSection()}});
 }
 
 } // namespace gobe

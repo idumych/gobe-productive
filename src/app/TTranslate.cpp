@@ -199,6 +199,11 @@ IdentifyFile(const char* path)
 		update_mime_info(path, false, true, B_UPDATE_MIME_INFO_NO_FORCE);
 		info.GetType(type);
 	}
+	// the SYLK translator's Identify: its types, or text starting with an ID
+	// record (whatever type the registrar gave it)
+	if ((strcmp(type, "text/sylk") == 0 || strcmp(type, "text/x-sylk") == 0
+			|| head.compare(0, 3, "ID;") == 0) && LooksLikeText(head))
+		return kSylkFile;
 	if (strncmp(type, "text/", 5) != 0 || !LooksLikeText(head))
 		return kUnknownFile;
 	return TableLikeness(head) >= 0.5f ? kTableFile : kTextFile;
@@ -212,6 +217,8 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	bool ok = false;
 	if (kind == kRTFFile) {
 		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice);
+	} else if (kind == kSylkFile) {
+		ok = ImportSylk(path, doc, message, &notice);
 	} else if (kind == kTextFile || kind == kTableFile) {
 		// a table opens as a spreadsheet in the original (the Text
 		// translator's 'TABT', 'COMA', 'SEMI' formats); not ported yet,
