@@ -162,9 +162,9 @@ sizes, headings and options are saved with the document.
 | Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
 | Creating and linking frames | not yet |
 | Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | next |
-| Drawing tools: rotating, reshaping points, grouping, arranging, several shapes selected | not yet |
+| Drawing tools: rotating, reshaping points, grouping, arranging, several shapes selected | in progress |
 | Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | next |
-| Fill and pen inks for frames and drawings in the FormatBar | not yet |
+| Fill and pen inks for frames and drawings in the FormatBar | in progress |
 
 ### Other formats (translators)
 

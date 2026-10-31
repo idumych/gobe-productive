@@ -58,14 +58,14 @@ text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sa
 <rect class="sources" x="581.5" y="34" width="12.7" height="22" rx="2"/>
 <rect class="doing" x="597.3" y="34" width="12.7" height="22" rx="2"/>
 <rect class="doing" x="613.0" y="34" width="12.7" height="22" rx="2"/>
-<rect class="left" x="628.7" y="34" width="12.7" height="22" rx="2"/>
-<rect class="left" x="644.4" y="34" width="12.7" height="22" rx="2"/>
+<rect class="doing" x="628.7" y="34" width="12.7" height="22" rx="2"/>
+<rect class="doing" x="644.4" y="34" width="12.7" height="22" rx="2"/>
 <rect class="left" x="660.1" y="34" width="12.7" height="22" rx="2"/>
 <rect class="left" x="675.8" y="34" width="12.7" height="22" rx="2"/>
 <rect class="left" x="691.6" y="34" width="12.7" height="22" rx="2"/>
 <rect class="left" x="707.3" y="34" width="12.7" height="22" rx="2"/>
 <rect class="released" x="0" y="70" width="12" height="12" rx="2"/><text class="small" x="18" y="80">13 released in 0.1.1</text>
 <rect class="sources" x="180" y="70" width="12" height="12" rx="2"/><text class="small" x="198" y="80">25 in the sources</text>
-<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">2 in progress</text>
-<rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">6 not started</text>
+<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">4 in progress</text>
+<rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">4 not started</text>
 </svg>
