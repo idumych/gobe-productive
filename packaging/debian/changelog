@@ -1,3 +1,11 @@
+gobeproductive (0.2.0-1) unstable; urgency=medium
+
+  * The whole suite: spreadsheets with charts, drawings, presentations,
+    frames, inks and pens, Word and HTML import and export, the thesaurus
+    and dictionary, and the rest of the original's features.
+
+ -- Ian <idumych@gmail.com>  Sat, 31 Oct 2026 15:07:41 -0700
+
 gobeproductive (0.1.1-1) unstable; urgency=medium
 
   * The Linux AppImage is built with a newer Hokku: disabled buttons, icons

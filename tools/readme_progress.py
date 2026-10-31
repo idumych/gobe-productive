@@ -2,8 +2,8 @@
 """Redraws the progress bar (docs/progress-<counts>.svg) from the README's
 Status tables.
 
-Every table row under "## Status" whose last cell is 0.1.1, next,
-in progress or not yet counts as one feature. The bar has a block per
+Every table row under "## Status" whose last cell is a release (0.1.1, 0.2.0…),
+next, in progress or not yet counts as one feature. The bar has a block per
 feature: released, in the sources, in progress, left. The README's
 <img> points at it and its alt text gets the same counts.
 usage: tools/readme_progress.py (from port/ or anywhere)
@@ -15,7 +15,8 @@ import re
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 README = os.path.join(ROOT, "README.md")
 DOCS = os.path.join(ROOT, "docs")
-STATES = ["0.1.1", "next", "in progress", "not yet"]
+STATES = ["released", "next", "in progress", "not yet"]
+RELEASE = re.compile(r"\d+\.\d+\.\d+")
 
 
 def count(readme):
@@ -23,7 +24,11 @@ def count(readme):
     states = []
     for line in status.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if line.startswith("|") and cells[-1] in STATES:
+        if not line.startswith("|"):
+            continue
+        if RELEASE.fullmatch(cells[-1]):
+            states.append("released")
+        elif cells[-1] in STATES:
             states.append(cells[-1])
     if not states:
         raise SystemExit("no feature rows under ## Status")
@@ -32,18 +37,18 @@ def count(readme):
 
 def svg(states):
     n = len(states)
-    done = states.count("0.1.1") + states.count("next")
+    done = states.count("released") + states.count("next")
     width, gap, top, height = 720, 3, 34, 22
     block = (width - gap * (n - 1)) / n
     order = sorted(states, key=STATES.index)
-    kinds = {"0.1.1": "released", "next": "sources", "in progress": "doing", "not yet": "left"}
+    kinds = {"released": "released", "next": "sources", "in progress": "doing", "not yet": "left"}
     blocks = []
     for i, state in enumerate(order):
         x = i * (block + gap)
         blocks.append(f'<rect class="{kinds[state]}" x="{x:.1f}" y="{top}" '
             f'width="{block:.1f}" height="{height}" rx="2"/>')
     legend, x = [], 0
-    for state, label in [("0.1.1", "released in 0.1.1"), ("next", "in the sources"),
+    for state, label in [("released", "released"), ("next", "in the sources"),
             ("in progress", "in progress"), ("not yet", "not started")]:
         k = states.count(state)
         legend.append(f'<rect class="{kinds[state]}" x="{x}" y="70" width="12" height="12" rx="2"/>'
