@@ -34,6 +34,7 @@ TDialogEditPen* sEditPen = NULL;
 
 const uint32 kMsgRefresh = 'GpnR';
 const uint32 kMsgScript = 'GpnS';
+const uint32 kMsgWiden = 'GpnW';
 const uint32 kMsgApplyPen = 'sfI9';		// TDialogNewColor::DoApplyPen
 
 const uint32 kPenKinds[4] = {'NORM', 'PDOT', 'DASH', 'HASH'};
@@ -218,6 +219,8 @@ TPensWindow::Init()
 	if (BGroupLayout* layout = dynamic_cast<BGroupLayout*>(Item(1)->GetLayout())) {
 		layout->SetOrientation(B_HORIZONTAL);
 		layout->AddView(fWidth = new TPenWidthView());
+		// (the window wider by them, once shown)
+		PostMessage(kMsgWiden);
 	}
 	Update();
 }
@@ -308,6 +311,10 @@ TPensWindow::MessageReceived(BMessage* message)
 	switch (message->what) {
 		case kMsgRefresh:
 			Update();
+			return;
+		case kMsgWiden:
+			if (fWidth != NULL)
+				ResizeBy(fWidth->PreferredSize().width, 0);
 			return;
 		case 'sMA4':
 		case 'sMA3':
