@@ -2145,8 +2145,10 @@ TPageView::Draw(BRect updateRect)
 		PopState();
 	}
 	DrawLines(updateRect, dx, dy);
-	if (!IsPrinting())
+	if (!IsPrinting()) {
 		DrawShapeSelection(dx, dy);
+		DrawFrameSelection(dx, dy);
+	}
 	PopState();
 	if (fRuler != NULL && !IsPrinting())
 		fRuler->Update();

@@ -64,6 +64,38 @@ const Frame* FrameAt(const Document& doc, const uint32_t pointer[3]);
 // at it. Returns the position after it.
 TextPosition InsertInlineFrame(Document& doc, size_t container, TextPosition at, size_t part);
 
+
+// A frame placed in a drawing (a graphics part) is one of its shapes:
+// the frame gets the drawing's next shape id, and a FRAM shape pointing
+// at it goes into `layer` (TPartGR::InsertChildFrame). False if
+// `drawing` isn't a drawing or the frame isn't there.
+bool AddFrameShape(Document& doc, size_t drawing, size_t layer, const uint32_t pointer[3]);
+
+// The ToolBar's part tool and the Frame menu's parts (TPartGR::DragOut
+// with a part kind, TDocWindow::DoInsertFrame): a new part of `kind`
+// ('WORD' text, 'SPRD' a spreadsheet, 'GRFX' a drawing, 'TBLE' a 2 x 2
+// table, 'BITS' a white picture) framed in drawing `drawing` at `rect`
+// (left, top, right, bottom in the drawing), its FRAM shape in `layer`.
+// Returns the part, -1 with `error`.
+int AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind,
+	const float rect[4], std::string& error);
+
+// Frame > Make Linked Frame (TDocWindow::MakeLinkedFrame): a text frame
+// in a drawing gets a next frame in its portal, as big, right of it; the
+// text flows on into it. `made` is its pointer.
+bool AddLinkedFrame(Document& doc, const uint32_t pointer[3], uint32_t made[3],
+	std::string& error);
+
+// Frame > Clone Frame (TDocWindow::DoCloneFrame): the part shown again,
+// in a portal of its own in the same drawing, 18 points down and right.
+bool CloneFrame(Document& doc, const uint32_t pointer[3], uint32_t made[3], std::string& error);
+
+// TFrameCommand: a frame's flags (TFrame +0x40) after Autogrow
+// Vertically ('sM34', 8), Autogrow Horizontally ('sM35', 4) or
+// Scrollbars ('sM36', 0x20): growing turns the scroll bars off, the
+// scroll bars the growing.
+uint32_t FrameCommandFlags(uint32_t flags, uint32_t command);
+
 } // namespace gobe
 
 #endif
