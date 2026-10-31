@@ -4,16 +4,21 @@
 #ifndef GOBE_TSTYLESEDIT_H
 #define GOBE_TSTYLESEDIT_H
 
+#include <Message.h>
+
 #include <map>
 #include <string>
 #include <vector>
 
 #include "DocSections.h"
+#include "StyleArchive.h"
 #include "StyleEdit.h"
 #include "StyleText.h"
 #include "TDialog.h"
 
 class BListView;
+
+class BWindow;
 class BOutlineListView;
 
 namespace gobe {
@@ -143,6 +148,40 @@ private:
 	std::string* fNewNameOut = NULL;
 	sem_id fDone = -1;
 };
+
+// TDialogPickStyles (DIAL/Item 70): Export Styles' and Import Styles'
+// choice of styles: a list of names with check boxes (5), Select All (2)
+// and Select None (3), Replace all styles with the same name (6, import
+// only, on at first). True on OK, with `checked` and `replace` updated.
+class TDialogPickStyles : public TDialog {
+public:
+	static bool Ask(BWindow* window, bool import, const std::vector<std::string>& names,
+		std::vector<bool>& checked, bool& replace);
+
+	virtual ~TDialogPickStyles();
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	TDialogPickStyles(bool import, const std::vector<std::string>& names,
+		const std::vector<bool>& checked);
+
+	bool fImport;
+	std::vector<std::string> fNames;
+	std::vector<bool> fChecked;
+	bool fReplace = true;
+	bool fOK = false;
+	bool* fOKOut = NULL;
+	std::vector<bool>* fCheckedOut = NULL;
+	bool* fReplaceOut = NULL;
+	sem_id fDone = -1;
+};
+
+// The styles file's message as a BMessage and back (StyleArchive's trees)
+BMessage ArchiveToMessage(const ArchiveMessage& archive);
+ArchiveMessage MessageToArchive(const BMessage& message);
 
 } // namespace gobe
 

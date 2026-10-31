@@ -21,6 +21,11 @@
 #include <Beep.h>
 #include <Clipboard.h>
 #include <Cursor.h>
+#include <Directory.h>
+#include <File.h>
+#include <FilePanel.h>
+#include <FindDirectory.h>
+#include <NodeInfo.h>
 #include <MenuItem.h>
 #include <MessageRunner.h>
 #include <Path.h>
@@ -35,7 +40,9 @@
 #include <ctime>
 #include <sstream>
 
+#include "DocWriter.h"
 #include "Editing.h"
+#include "StyleArchive.h"
 #include "StyleEdit.h"
 #include "Fields.h"
 #include "Notes.h"
@@ -2597,41 +2604,14 @@ TPageView::MessageReceived(BMessage* message)
 			return;
 		}
 		case 'sMB4':
-		{
-			std::vector<StyleDefinition> styles = StyleClipboard();
-			if (styles.empty())
-				return;
-			bool replace = message->GetBool("replace", false);
-			std::vector<std::pair<std::string, std::string>> renamed;
-			for (StyleDefinition& style : styles) {
-				if (!(style.flags & kStyleCopied) || replace
-						|| FindNamedStyle(fDocument.styles, style.name) >= fDocument.styles.styles.size())
-					continue;
-				std::string newName;
-				int32 choice = TDialogStyleReplaceRename::Ask(Window(), style.name, newName);
-				if (choice == 1)
-					return;
-				if (choice == 3)
-					style.flags &= ~uint32_t(kStyleCopied);
-				if (choice == 0) {
-					renamed.emplace_back(style.name, newName);
-					style.name = newName;
-				}
-			}
-			// the styles that come from a renamed one follow it -- only
-			// when their base, parent and owner all are it (the original
-			// writes the change back only then)
-			for (const auto& rename : renamed)
-				for (StyleDefinition& style : styles)
-					if (style.base == rename.first && style.parent == rename.first
-							&& style.owner == rename.first)
-						style.base = style.parent = style.owner = rename.second;
-			fUndo.BeginDocument(fDocument, GobeResources::IndexString(3, 11).String(),
-				CurrentViewState());
-			if (PasteStyles(fDocument, styles))
-				TextChanged();
+			PasteStyleDefinitions(StyleClipboard(), message->GetBool("replace", false));
 			return;
-		}
+		case 'sMB1':
+			ExportStyles(message);
+			return;
+		case 'sMB0':
+			ImportStyles(message);
+			return;
 		case 'sMB7':
 		case 'sMB5': {
 			const char* target = NULL;
@@ -5541,6 +5521,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
 		case 'sf02': case 'sf03': case 'sf0L': case 'sf0V': case 'sMB6':	// format bar
+		case 'sMB0': case 'sMB1':	// Edit Styles' Import and Export Styles
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
@@ -5555,6 +5536,190 @@ TPageView::HandlesCommand(uint32 what)
 		default:
 			return false;
 	}
+}
+
+
+void
+TPageView::PasteStyleDefinitions(std::vector<StyleDefinition> styles, bool replace)
+{
+	if (styles.empty())
+		return;
+	std::vector<std::pair<std::string, std::string>> renamed;
+	for (StyleDefinition& style : styles) {
+		if (!(style.flags & kStyleCopied) || replace
+				|| FindNamedStyle(fDocument.styles, style.name) >= fDocument.styles.styles.size())
+			continue;
+		std::string newName;
+		int32 choice = TDialogStyleReplaceRename::Ask(Window(), style.name, newName);
+		if (choice == 1)
+			return;
+		if (choice == 3)
+			style.flags &= ~uint32_t(kStyleCopied);
+		if (choice == 0) {
+			renamed.emplace_back(style.name, newName);
+			style.name = newName;
+		}
+	}
+	// the styles that come from a renamed one follow it -- only
+	// when their base, parent and owner all are it (the original
+	// writes the change back only then)
+	for (const auto& rename : renamed)
+		for (StyleDefinition& style : styles)
+			if (style.base == rename.first && style.parent == rename.first
+					&& style.owner == rename.first)
+				style.base = style.parent = style.owner = rename.second;
+	fUndo.BeginDocument(fDocument, GobeResources::IndexString(3, 11).String(),
+		CurrentViewState());
+	if (PasteStyles(fDocument, styles))
+		TextChanged();
+}
+
+
+namespace {
+
+const char* const kStylesFileType = "application/x-vnd.gobe.productive-styles";
+BFilePanel* sExportPanel = NULL;
+BFilePanel* sImportPanel = NULL;
+
+
+// TStyleManager::GetStylesFolder: the styles folder (STR# 35's first
+// name), made if it isn't there; the port's is in its settings
+entry_ref
+StylesFolder()
+{
+	BPath path;
+	entry_ref ref;
+	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path, true) != B_OK)
+		return ref;
+	BString name = GobeResources::IndexString(35, 0);
+	path.Append("Gobe Productive port");
+	path.Append(name.Length() > 0 ? name.String() : "Styles");
+	create_directory(path.Path(), 0755);
+	get_ref_for_path(path.Path(), &ref);
+	return ref;
+}
+
+} // namespace
+
+
+// TStyleManager::DoExportStyles: the document's named styles to pick
+// (TDialogPickStyles, all on); those picked archived as Copy Style keeps
+// them (ArchiveMarkedStyles); then a save panel in the styles folder
+// (STR# 13, 10 its button) whose message brings them back with
+// "directory" and "name": the file written, its type set
+void
+TPageView::ExportStyles(BMessage* message)
+{
+	BMessage styles;
+	if (message->FindMessage("styles", &styles) != B_OK) {
+		std::vector<std::string> names;
+		for (const Style& style : fDocument.styles.styles)
+			if (!(style.value8 & 0x400) && !style.name.empty())
+				names.push_back(style.name);
+		std::vector<bool> checked(names.size(), true);
+		bool replace = false;
+		if (names.empty() || !TDialogPickStyles::Ask(Window(), false, names, checked, replace))
+			return;
+		std::vector<std::string> chosen;
+		for (size_t i = 0; i < names.size(); i++)
+			if (checked[i])
+				chosen.push_back(names[i]);
+		styles = ArchiveToMessage(ArchiveStyles(CopyStyles(fDocument.styles, chosen)));
+		BMessage save('sMB1');
+		save.AddMessage("styles", &styles);
+		entry_ref folder = StylesFolder();
+		if (sExportPanel == NULL)
+			sExportPanel = new BFilePanel(B_SAVE_PANEL, NULL, &folder, 0, false);
+		else
+			sExportPanel->SetPanelDirectory(&folder);
+		sExportPanel->SetTarget(BMessenger(Window()));
+		sExportPanel->SetMessage(&save);
+		sExportPanel->SetSaveText(GobeResources::IndexString(13, 10).String());
+		sExportPanel->Show();
+		return;
+	}
+	entry_ref directory;
+	const char* name;
+	if (message->FindRef("directory", &directory) != B_OK
+			|| message->FindString("name", &name) != B_OK)
+		return;
+	BPath path(&directory);
+	path.Append(name);
+	std::vector<uint8_t> flattened(size_t(styles.FlattenedSize()));
+	std::string error;
+	if (styles.Flatten(reinterpret_cast<char*>(flattened.data()), flattened.size()) != B_OK
+			|| !WriteFile(path.Path(), StylesFileBytes(fDocument.bytes, flattened), error)) {
+		// "Error writing file!"
+		(new BAlert("", GobeResources::IndexString(6, 7).String(), "OK"))->Go(NULL);
+		return;
+	}
+	BNode node(path.Path());
+	BNodeInfo info(&node);
+	info.SetType(kStylesFileType);
+}
+
+
+// TStyleManager::DoImportStyles: an open panel in the styles folder; the
+// file chosen read (a later version: STR# 6, 39), its styles to pick
+// (TDialogPickStyles: those it had marked on, Replace on), the picked
+// ones marked copied, then pasted as Paste Style does
+void
+TPageView::ImportStyles(BMessage* message)
+{
+	entry_ref ref;
+	if (message->FindRef("refs", &ref) != B_OK) {
+		entry_ref folder = StylesFolder();
+		if (sImportPanel == NULL)
+			sImportPanel = new BFilePanel(B_OPEN_PANEL, NULL, &folder, B_FILE_NODE, false);
+		else
+			sImportPanel->SetPanelDirectory(&folder);
+		BMessage open('sMB0');
+		sImportPanel->SetTarget(BMessenger(Window()));
+		sImportPanel->SetMessage(&open);
+		sImportPanel->Show();
+		return;
+	}
+	BFile file(&ref, B_READ_ONLY);
+	off_t size = 0;
+	if (file.InitCheck() != B_OK || file.GetSize(&size) != B_OK || size <= 0)
+		return;
+	std::vector<uint8_t> bytes(static_cast<size_t>(size));
+	if (file.Read(bytes.data(), bytes.size()) != ssize_t(bytes.size()))
+		return;
+	std::vector<uint8_t> flattened;
+	bool newer = false;
+	std::string error;
+	if (!ReadStylesFile(bytes, flattened, newer, error)) {
+		if (newer)
+			(new BAlert("", GobeResources::IndexString(6, 39).String(), "OK"))->Go(NULL);
+		return;
+	}
+	BMessage archive;
+	if (flattened.empty()
+			|| archive.Unflatten(reinterpret_cast<const char*>(flattened.data())) != B_OK)
+		return;
+	std::vector<StyleDefinition> styles = RestoreStyles(MessageToArchive(archive));
+	std::vector<std::string> names;
+	std::vector<bool> checked;
+	std::vector<size_t> rows;
+	for (size_t i = 0; i < styles.size(); i++)
+		if (!styles[i].name.empty()) {
+			names.push_back(styles[i].name);
+			checked.push_back((styles[i].flags & kStyleCopied) != 0);
+			rows.push_back(i);
+		}
+	if (names.empty())
+		return;
+	bool replace = true;
+	if (!TDialogPickStyles::Ask(Window(), true, names, checked, replace))
+		return;
+	for (size_t k = 0; k < rows.size(); k++) {
+		if (checked[k])
+			styles[rows[k]].flags |= kStyleCopied;
+		else
+			styles[rows[k]].flags &= ~uint32_t(kStyleCopied);
+	}
+	PasteStyleDefinitions(styles, replace);
 }
 
 } // namespace gobe

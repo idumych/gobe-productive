@@ -291,13 +291,18 @@ CopyStyles(const StyleMgr& styles, const std::vector<std::string>& names)
 	std::vector<StyleDefinition> out;
 	std::vector<bool> archived(styles.styles.size(), false);
 	std::vector<bool> copied(styles.styles.size(), false);
+	// all of them marked first (TStyle::SetFlag 0x100), then archived
+	// (ArchiveMarkedStyles): one that another comes from is marked too
+	std::vector<uint32_t> chosen;
 	for (const std::string& name : names) {
 		uint32_t style = FindNamedStyle(styles, name);
 		if (!Valid(styles, style))
 			continue;
 		copied[style] = true;
-		ArchiveStyle(styles, style, archived, copied, out);
+		chosen.push_back(style);
 	}
+	for (uint32_t style : chosen)
+		ArchiveStyle(styles, style, archived, copied, out);
 	return out;
 }
 

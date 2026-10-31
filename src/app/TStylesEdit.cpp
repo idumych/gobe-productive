@@ -9,8 +9,10 @@
 #include <MenuBar.h>
 #include <MenuField.h>
 #include <MenuItem.h>
+#include <MessageFilter.h>
 #include <OutlineListView.h>
 #include <ScrollView.h>
+#include <StringItem.h>
 #include <TextControl.h>
 
 #include <algorithm>
@@ -420,9 +422,8 @@ TDialogStylesEdit::MenusBeginning()
 	enable(fEdit, 'sMB2', chosen && !locked);
 	enable(fEdit, 'sMB3', chosen);
 	enable(fEdit, 'sMB4', !StyleClipboard().empty());
-	// (Import and Export Styles aren't ported yet)
-	enable(fFile, 'sMB0', false);
-	enable(fFile, 'sMB1', false);
+	enable(fFile, 'sMB0', true);
+	enable(fFile, 'sMB1', true);
 	enable(fStyle, 'sMB7', chosen && !locked);
 }
 
@@ -822,6 +823,315 @@ TDialogStyleReplaceRename::ItemHit(int32 index, BMessage* message)
 		SetItemEnabled(0, !name.empty() && name != fName);
 	}
 	return true;
+}
+
+// #pragma mark - TDialogPickStyles
+
+
+namespace {
+
+// TCheckBoxStringItem: a name with a check box before it
+class TCheckBoxStringItem : public BStringItem {
+public:
+	TCheckBoxStringItem(const char* text, bool checked)
+		: BStringItem(text), fChecked(checked) {}
+
+	bool Checked() const { return fChecked; }
+	void SetChecked(bool checked) { fChecked = checked; }
+
+	virtual void DrawItem(BView* owner, BRect frame, bool complete)
+	{
+		rgb_color background = IsSelected()
+			? ui_color(B_LIST_SELECTED_BACKGROUND_COLOR) : owner->ViewColor();
+		owner->SetHighColor(background);
+		owner->FillRect(frame);
+		float size = frame.Height() - 5;
+		BRect box(frame.left + 3, frame.top + 2, frame.left + 3 + size, frame.top + 2 + size);
+		owner->SetHighColor(ui_color(B_DOCUMENT_BACKGROUND_COLOR));
+		owner->FillRect(box);
+		owner->SetHighColor(tint_color(ui_color(B_PANEL_BACKGROUND_COLOR), B_DARKEN_3_TINT));
+		owner->StrokeRect(box);
+		rgb_color text = ui_color(IsSelected() ? B_LIST_SELECTED_ITEM_TEXT_COLOR
+			: B_LIST_ITEM_TEXT_COLOR);
+		if (fChecked) {
+			owner->SetHighColor(text);
+			BRect mark = box.InsetByCopy(3, 3);
+			owner->StrokeLine(mark.LeftTop(), mark.RightBottom());
+			owner->StrokeLine(mark.LeftBottom(), mark.RightTop());
+		}
+		owner->SetHighColor(text);
+		owner->SetLowColor(background);
+		font_height height;
+		owner->GetFontHeight(&height);
+		owner->DrawString(Text(), BPoint(box.right + 5, frame.bottom - 2 - height.descent / 2));
+	}
+
+private:
+	bool fChecked;
+};
+
+
+TCheckBoxStringItem*
+CheckItemAt(BListView* list, int32 index)
+{
+	return list != NULL ? dynamic_cast<TCheckBoxStringItem*>(list->ItemAt(index)) : NULL;
+}
+
+
+// TDialogPickStyles::MouseDownProc and KeyDownProc: a click on an item's
+// box, or Space on the selected item, turns it on or off
+filter_result
+PickStylesFilter(BMessage* message, BHandler** target, BMessageFilter*)
+{
+	BListView* list = dynamic_cast<BListView*>(*target);
+	if (list == NULL)
+		return B_DISPATCH_MESSAGE;
+	if (message->what == B_MOUSE_DOWN) {
+		BPoint where;
+		if (message->FindPoint("be:view_where", &where) != B_OK)
+			return B_DISPATCH_MESSAGE;
+		int32 index = list->IndexOf(where);
+		TCheckBoxStringItem* item = CheckItemAt(list, index);
+		if (item == NULL || where.x < 2 || where.x > item->Height() - 3 + 3)
+			return B_DISPATCH_MESSAGE;
+		item->SetChecked(!item->Checked());
+		list->InvalidateItem(index);
+		list->Select(index);
+		return B_SKIP_MESSAGE;
+	}
+	if (message->what == B_KEY_DOWN) {
+		const char* bytes;
+		if (message->FindString("bytes", &bytes) != B_OK || strcmp(bytes, " ") != 0)
+			return B_DISPATCH_MESSAGE;
+		int32 index = list->CurrentSelection();
+		if (TCheckBoxStringItem* item = CheckItemAt(list, index)) {
+			item->SetChecked(!item->Checked());
+			list->InvalidateItem(index);
+			return B_SKIP_MESSAGE;
+		}
+	}
+	return B_DISPATCH_MESSAGE;
+}
+
+} // namespace
+
+
+bool
+TDialogPickStyles::Ask(BWindow* window, bool import, const std::vector<std::string>& names,
+	std::vector<bool>& checked, bool& replace)
+{
+	bool ok = false;
+	sem_id done = create_sem(0, "pick styles");
+	TDialogPickStyles* dialog = new TDialogPickStyles(import, names, checked);
+	dialog->fOKOut = &ok;
+	dialog->fCheckedOut = &checked;
+	dialog->fReplaceOut = &replace;
+	dialog->fDone = done;
+	dialog->RunDialog();
+	while (acquire_sem_etc(done, 1, B_RELATIVE_TIMEOUT, 50000) == B_TIMED_OUT)
+		if (window != NULL)
+			window->UpdateIfNeeded();
+	delete_sem(done);
+	return ok;
+}
+
+
+TDialogPickStyles::TDialogPickStyles(bool import, const std::vector<std::string>& names,
+	const std::vector<bool>& checked)
+	:
+	TDialog(70, 70, 'APPL', NULL),
+	fImport(import),
+	fNames(names),
+	fChecked(checked)
+{
+	fChecked.resize(fNames.size(), false);
+}
+
+
+TDialogPickStyles::~TDialogPickStyles()
+{
+	if (fOKOut != NULL) {
+		*fOKOut = fOK;
+		if (fOK) {
+			*fCheckedOut = fChecked;
+			*fReplaceOut = fReplace;
+		}
+	}
+	if (fDone >= 0)
+		release_sem(fDone);
+}
+
+
+// TDialogPickStyles::Init: the title (STR# 2, 32 importing, 33
+// exporting), the prompt (STR# 2, 30 or 31), Replace on importing and
+// hidden exporting, a checked item per name, the first selected
+void
+TDialogPickStyles::Init()
+{
+	SetTitle(GobeResources::IndexString(2, fImport ? 32 : 33).String());
+	SetTextItem(4, GobeResources::IndexString(2, fImport ? 30 : 31).String());
+	if (fImport)
+		SetCheckBoxItem(6, true);
+	else if (BView* replace = Item(6))
+		replace->Hide();
+	BListView* list = ListOf(Item(5));
+	if (list == NULL)
+		return;
+	for (size_t i = 0; i < fNames.size(); i++)
+		list->AddItem(new TCheckBoxStringItem(fNames[i].c_str(), fChecked[i]));
+	list->Select(0);
+	list->MakeFocus(true);
+	list->AddFilter(new BMessageFilter(B_ANY_DELIVERY, B_ANY_SOURCE, B_MOUSE_DOWN,
+		PickStylesFilter));
+	list->AddFilter(new BMessageFilter(B_ANY_DELIVERY, B_ANY_SOURCE, B_KEY_DOWN,
+		PickStylesFilter));
+}
+
+
+bool
+TDialogPickStyles::ItemHit(int32 index, BMessage* message)
+{
+	BListView* list = ListOf(Item(5));
+	switch (index) {
+		case 0:
+			for (size_t i = 0; i < fChecked.size(); i++)
+				if (TCheckBoxStringItem* item = CheckItemAt(list, int32(i)))
+					fChecked[i] = item->Checked();
+			fReplace = fImport && CheckBoxItem(6);
+			fOK = true;
+			PostMessage(B_QUIT_REQUESTED);
+			return true;
+		case 1:
+			PostMessage(B_QUIT_REQUESTED);
+			return true;
+		case 2:
+		case 3:
+			// Select All, Select None
+			for (int32 i = 0; list != NULL && i < list->CountItems(); i++)
+				if (TCheckBoxStringItem* item = CheckItemAt(list, i)) {
+					item->SetChecked(index == 2);
+					list->InvalidateItem(i);
+				}
+			return true;
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+
+// #pragma mark - styles files' messages
+
+
+BMessage
+ArchiveToMessage(const ArchiveMessage& archive)
+{
+	BMessage message(archive.what);
+	for (const ArchiveMessage::Field& field : archive.fields)
+		for (const ArchiveMessage::Value& v : field.values) {
+			const char* name = field.name.c_str();
+			switch (field.type) {
+				case kArchiveInt32:
+					message.AddInt32(name, v.integer);
+					break;
+				case kArchiveInt16:
+					message.AddInt16(name, int16(v.integer));
+					break;
+				case kArchiveBool:
+					message.AddBool(name, v.integer != 0);
+					break;
+				case kArchiveFloat:
+					message.AddFloat(name, v.numbers[0]);
+					break;
+				case kArchiveString:
+					message.AddString(name, v.bytes.c_str());
+					break;
+				case kArchivePoint:
+					message.AddPoint(name, BPoint(v.numbers[0], v.numbers[1]));
+					break;
+				case kArchiveRect:
+					message.AddRect(name, BRect(v.numbers[0], v.numbers[1], v.numbers[2],
+						v.numbers[3]));
+					break;
+				case kArchiveMessage:
+					if (!v.message.empty()) {
+						BMessage inner = ArchiveToMessage(v.message[0]);
+						message.AddMessage(name, &inner);
+					}
+					break;
+				default:
+					message.AddData(name, field.type, v.bytes.data(), v.bytes.size(), false);
+					break;
+			}
+		}
+	return message;
+}
+
+
+ArchiveMessage
+MessageToArchive(const BMessage& message)
+{
+	ArchiveMessage archive;
+	archive.what = message.what;
+#ifdef B_BEOS_VERSION_DANO
+	const char* name;
+#else
+	char* name;
+#endif
+	type_code type;
+	int32 count;
+	for (int32 i = 0; message.GetInfo(B_ANY_TYPE, i, &name, &type, &count) == B_OK; i++)
+		for (int32 k = 0; k < count; k++) {
+			switch (type) {
+				case B_INT32_TYPE:
+					archive.AddInt32(name, message.GetInt32(name, k, 0));
+					break;
+				case B_INT16_TYPE: {
+					int16 value = 0;
+					message.FindInt16(name, k, &value);
+					archive.AddInt16(name, value);
+					break;
+				}
+				case B_BOOL_TYPE:
+					archive.AddBool(name, message.GetBool(name, k, false));
+					break;
+				case B_FLOAT_TYPE:
+					archive.AddFloat(name, message.GetFloat(name, k, 0));
+					break;
+				case B_STRING_TYPE: {
+					const char* text = "";
+					message.FindString(name, k, &text);
+					archive.AddString(name, text);
+					break;
+				}
+				case B_POINT_TYPE: {
+					BPoint point;
+					message.FindPoint(name, k, &point);
+					archive.AddPoint(name, point.x, point.y);
+					break;
+				}
+				case B_RECT_TYPE: {
+					BRect rect;
+					message.FindRect(name, k, &rect);
+					float r[4] = {rect.left, rect.top, rect.right, rect.bottom};
+					archive.AddRect(name, r);
+					break;
+				}
+				case B_MESSAGE_TYPE: {
+					BMessage inner;
+					if (message.FindMessage(name, k, &inner) == B_OK)
+						archive.AddMessage(name, MessageToArchive(inner));
+					break;
+				}
+				default: {
+					const void* data;
+					ssize_t size;
+					if (message.FindData(name, type, k, &data, &size) == B_OK)
+						archive.AddData(name, type, std::string(static_cast<const char*>(data),
+							size_t(size)));
+					break;
+				}
+			}
+		}
+	return archive;
 }
 
 } // namespace gobe

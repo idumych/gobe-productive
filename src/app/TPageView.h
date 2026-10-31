@@ -25,6 +25,7 @@
 #include "SSEval.h"
 #include "SSMove.h"
 #include "SSStyle.h"
+#include "StyleEdit.h"
 #include "Styles.h"
 #include "Undo.h"
 
@@ -84,6 +85,14 @@ public:
 
 	// text editing state (public for TDocWindow)
 	void TextChanged();
+	// TStyleManager::DoPasteStyle: copied or imported styles into the
+	// document; a copied one with a style's name replaced, renamed or
+	// skipped (TDialogStyleReplaceRename) unless `replace`
+	void PasteStyleDefinitions(std::vector<StyleDefinition> styles, bool replace);
+	// Edit Styles' File > Export Styles… and Import Styles…
+	// (TStyleManager::DoExportStyles, DoImportStyles)
+	void ExportStyles(BMessage* message);
+	void ImportStyles(BMessage* message);
 	// the page geometry changed (Page Setup, Margins): frames, layout
 	void GeometryChanged();
 	// the menu commands MessageReceived handles (the window passes them on)
