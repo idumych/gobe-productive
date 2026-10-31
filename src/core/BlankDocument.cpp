@@ -135,13 +135,16 @@ WordPart()
 }
 
 
+// `self`, `page`: the parts' indices; a drawing sheet's main part (flags
+// 12) when `main`
 std::vector<uint8_t>
-GraphicsPart()
+GraphicsPart(uint32_t self = kGraphicsPart, uint32_t page = kPagePart, bool main = false,
+	uint32_t id = 2)
 {
 	// TPartGR: the grid, the drawing's size, one empty layer "Layer 1", one
 	// view "View 1" showing it (as in the documents)
 	DocWriter w;
-	WritePartHeader(w, Sig("GRFX"), 2, 2, 0);
+	WritePartHeader(w, Sig("GRFX"), 2, id, 0);
 	w.Sig(Sig("GRAP"));
 	w.Bytes(Hex("00000000" "41100000" "0000" "4974240049742400" "00000000000000000000000000000000" "00"));
 	w.Sig(Sig("lyr+"));
@@ -157,8 +160,8 @@ GraphicsPart()
 	w.Bytes(Hex("0101000100"));	// TGRLayerInfo flags
 	w.Sig(Sig("vew-"));
 	w.Sig(Sig("GraP"));
-	PortalStart(w, kPagePart, 4);
-	WriteFrame(w, kPrintable, kTextWidth, kTextHeight, kFrameStyle, kGraphicsPart, kPagePart);
+	PortalStart(w, page, main ? 12 : 4);
+	WriteFrame(w, kPrintable, kTextWidth, kTextHeight, kFrameStyle, self, page);
 	float drawing[4] = {0, 0, kTextWidth, kTextHeight};
 	w.Rect(drawing);		// TFrameGR
 	w.Sig(Sig("FraM"));
@@ -170,19 +173,19 @@ GraphicsPart()
 
 
 std::vector<uint8_t>
-RootPart()
+RootPart(uint32_t self = kRootPart, uint32_t page = kPagePart, uint32_t id = 3)
 {
 	DocWriter w;
-	WritePartHeader(w, Sig("PROT"), 0, 3, 0xffffffff);
+	WritePartHeader(w, Sig("PROT"), 0, id, 0xffffffff);
 	w.UInt32(0);			// TRootPart: the sheet
-	w.UInt32(kPagePart);	// TPagedRootPart: the page part
+	w.UInt32(page);			// TPagedRootPart: the page part
 	w.UInt32(0);
 	w.UInt32(1);			// one page
 	w.Bool(true);
 	PortalStart(w, 0xffffffff, 0);
 	const float origin[2] = {0, 0};
 	// the window's view (as the documents have it)
-	WriteFrame(w, origin, 609, 416, kFrameStyle, kRootPart, 0xffffffff);
+	WriteFrame(w, origin, 609, 416, kFrameStyle, self, 0xffffffff);
 	w.Float(0);				// TPagedRootFrame: a point
 	w.Float(-0.0f);
 	w.Sig(Sig("FraM"));
@@ -201,22 +204,31 @@ FramePtr(DocWriter& w, uint32_t part, uint32_t portal, uint32_t frame)
 }
 
 
+// a drawing document's page shows the drawing where a text document's
+// shows its text (GobeNewsletter, TheWidget): `drawing` its index, and
+// no separate sheet drawing
 std::vector<uint8_t>
-PagePart()
+PagePart(uint32_t self = kPagePart, uint32_t root = kRootPart, uint32_t drawing = 0xffffffff,
+	uint32_t id = 4)
 {
 	DocWriter w;
-	WritePartHeader(w, Sig("PAGE"), 0, 4, 0xffffffff);
+	WritePartHeader(w, Sig("PAGE"), 0, id, 0xffffffff);
 	w.UInt32(0);			// TPagePart
-	PortalStart(w, kRootPart, 0);
+	PortalStart(w, root, 0);
 	const float origin[2] = {0, 0};
-	WriteFrame(w, origin, kPaper[2], kPaper[3], kFrameStyle, kPagePart, kRootPart);
+	WriteFrame(w, origin, kPaper[2], kPaper[3], kFrameStyle, self, root);
 	// TPageFrame: the frames on the page: header, footer (none), the
-	// sheet's drawing, the text
+	// sheet's drawing, the text (or a drawing sheet's drawing)
 	w.UInt32(4);
 	FramePtr(w, 0xffffffff, 0xffffffff, 0xffffffff);
 	FramePtr(w, 0xffffffff, 0xffffffff, 0xffffffff);
-	FramePtr(w, kGraphicsPart, 0, 0);
-	FramePtr(w, kWordPart, 0, 0);
+	if (drawing != 0xffffffff) {
+		FramePtr(w, 0xffffffff, 0xffffffff, 0xffffffff);
+		FramePtr(w, drawing, 0, 0);
+	} else {
+		FramePtr(w, kGraphicsPart, 0, 0);
+		FramePtr(w, kWordPart, 0, 0);
+	}
 	w.Sig(Sig("FraM"));
 	// TPagePortal: four values, the header and footer frames, two bools
 	w.UInt32(0);
@@ -921,6 +933,84 @@ LoadSections(Document& doc, std::string& error,
 	return true;
 }
 
+// #pragma mark - drawings
+
+// File > New for drawings (TPartGR for a GRFX sheet): the drawing as the
+// sheet's main and graphics part, framed on the page of a paged root, as
+// GobeNewsletter and TheWidget have it
+enum { kDrawingPart = 0, kDrawingRootPart = 1, kDrawingPagePart = 2 };
+
+
+std::vector<uint8_t>
+DrawingPartSection()
+{
+	PartMgr mgr;
+	mgr.parts.push_back({Sig("GRFX"), 0,
+		GraphicsPart(kDrawingPart, kDrawingPagePart, true, 1)});
+	mgr.parts.push_back({Sig("PROT"), 0, RootPart(kDrawingRootPart, kDrawingPagePart, 2)});
+	mgr.parts.push_back({Sig("PAGE"), 0,
+		PagePart(kDrawingPagePart, kDrawingRootPart, kDrawingPart, 3)});
+	return WritePartMgrFromRecords(mgr);
+}
+
+
+std::vector<uint8_t>
+DrawingSheetSection()
+{
+	SheetMgr sheets;
+	sheets.sheetCount = 1;
+	LeafSheet sheet;
+	sheet.name = "Sheet 1";
+	sheet.mainPart = kDrawingPart;
+	sheet.graphicsPart = kDrawingPart;
+	sheet.pageView = true;
+	std::copy(kPaper, kPaper + 4, sheet.paper);
+	std::copy(kPrintable, kPrintable + 4, sheet.printable);
+	sheet.flags[0] = sheet.flags[1] = sheet.flags[2] = true;
+	sheet.divisions = 8;
+	sheets.sheets.push_back(sheet);
+	return WriteSheetMgr(sheets);
+}
+
+
+std::vector<uint8_t>
+DrawingSelectionSection()
+{
+	// TSelectionMgr: the drawing's (no shapes)
+	DocWriter w;
+	w.Sig(Sig("SELM"));
+	w.UInt32(1);
+	w.UInt32(16);
+	w.Sig(Sig("GRFX"));
+	w.UInt32(kDrawingPart);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.Sig(Sig("SelM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+DrawingWindowSection()
+{
+	// as WindowSection, with the paged root and the drawing active
+	DocWriter w;
+	w.UInt32(0);
+	FramePtr(w, kDrawingRootPart, 0, 0);
+	w.Float(1);
+	w.UInt32(1);
+	w.UInt32(0);
+	w.UInt32(0);
+	w.UInt32(1);
+	w.UInt32(kDrawingPart);
+	w.UInt32(0);
+	const float frame[4] = {9, 28, 665, 584};
+	w.Rect(frame);
+	w.Bytes(Hex("0000000a00000003000000000001000000010100""00000a01000000080100000006010000"
+		"000901574f52a80100000004000000000500"));
+	return w.Data();
+}
+
 } // namespace
 
 
@@ -974,6 +1064,30 @@ CreateBlankSpreadsheet(Document& doc, std::string& error)
 		{"CommandMgr", Hex("434d444d00000000436d644d")},
 		{"HistoryMgr", Hex("000000000000000000000014")},
 		{"WindowMgr", SheetWindowSection()}});
+}
+
+
+
+bool
+CreateBlankDrawing(Document& doc, std::string& error)
+{
+	return LoadSections(doc, error, {
+		{"VersionMgr", Hex("5645524d0000000100020000001e000300000000000000005665724d")},
+		{"PartFactory Table", WriteFactoryTable({
+			{Sig("GRFX"), 1, "Graphics"},
+			{Sig("PROT"), 1, "PagedRootPart"},
+			{Sig("PAGE"), 1, "PagePart"}})},
+		{"Document Misc", Hex("00000001000000000000000000000000000000000000000000000000")},
+		{"SetMgr", Hex("5345544d0000000000000000000000005365744d")},
+		{"PenMgr", Hex("50454e4d0000000601000000000050656e4d")},
+		{"StyleMgr", StyleSection()},
+		{"SheetMgr", DrawingSheetSection()},
+		{"SelectionMgr", DrawingSelectionSection()},
+		{"LinksMgr", Hex("4c494e4b00000000004c696e4b")},
+		{"PartMgr", DrawingPartSection()},
+		{"CommandMgr", Hex("434d444d00000000436d644d")},
+		{"HistoryMgr", Hex("000000000000000000000014")},
+		{"WindowMgr", DrawingWindowSection()}});
 }
 
 } // namespace gobe

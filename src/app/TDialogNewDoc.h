@@ -2,8 +2,8 @@
 // Productive" (STR# 5, 19-20) and the kinds of document the parts make,
 // each with its part's small icon, by name; OK sends the application
 // 's001' with the chosen "kind", Cancel quits if no document is open,
-// Open… shows the open panel. (Only word processing documents can be made
-// so far; the other kinds are listed disabled.)
+// Open… shows the open panel. (Word processing, spreadsheet and drawing
+// documents can be made so far; the other kinds are listed disabled.)
 #ifndef GOBE_TDIALOG_NEW_DOC_H
 #define GOBE_TDIALOG_NEW_DOC_H
 

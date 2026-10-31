@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress.svg" alt="Port progress: 33 of 42 features done, 9 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 34 of 43 features done, 9 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, spreadsheets have caught up with the original's editing, documents
@@ -114,7 +114,8 @@ Clipboard.
 | Opening and saving Gobe Productive documents; only what was edited is rewritten, everything else is kept byte for byte | 0.1.1 |
 | File menu: New (word processing), Open Recent, Revert, Insert… (text and RTF), Page Setup, Print, Help (the original's User's Guide), About | 0.1.1 |
 | File > New spreadsheets, laid out as the original's (rows 1-500, columns A-T, its grid and heading styles) | next |
-| File > New documents of the other kinds (drawing, presentation) | not yet |
+| File > New drawings: an empty page as the original makes it (drawing tools aren't ported yet, so it stays empty) | next |
+| File > New presentations | not yet |
 | Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | next |
 | Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | next |
 | New Window | not yet |

@@ -66,6 +66,7 @@ public:
 		fHasDocument(false),
 		fNewDocument(false),
 		fNewSpreadsheet(false),
+		fNewDrawing(false),
 		fOpenPanel(NULL),
 		fWindowCount(0),
 		fSlide(-1)
@@ -82,7 +83,7 @@ public:
 	{
 		fprintf(stderr,
 		    "usage: %s [--menu <n>] [--dialog <id>] [--render <png>]\n"
-		    "        [--slide <n>] [--do <script>] [--new] [--new-spreadsheet] <document> ...\n",
+		    "        [--slide <n>] [--do <script>] [--new] [--new-spreadsheet] [--new-drawing] <document> ...\n",
 		    prog);
 	}
 
@@ -134,9 +135,11 @@ public:
 				}
 				fSlide = atoi(argv[++i]) - 1;
 			} else if (strcmp(argv[i], "--new") == 0
-					|| strcmp(argv[i], "--new-spreadsheet") == 0) {
+					|| strcmp(argv[i], "--new-spreadsheet") == 0
+					|| strcmp(argv[i], "--new-drawing") == 0) {
 				fNewDocument = true;
-				fNewSpreadsheet = argv[i][5] == '-';
+				fNewSpreadsheet = strcmp(argv[i], "--new-spreadsheet") == 0;
+				fNewDrawing = strcmp(argv[i], "--new-drawing") == 0;
 			} else if (strncmp(argv[i], "--", 2) == 0) {
 				fprintf(stderr, "unknown option: %s\n", argv[i]);
 				PrintUsage(prog);
@@ -230,11 +233,12 @@ public:
 				(new TDialogNewDoc(CountDocuments()))->RunDialog();
 				return;
 			}
-			if (kind != 'WORD' && kind != 'SPRD')
+			if (kind != 'WORD' && kind != 'SPRD' && kind != 'GRFX')
 				return;
 			Document* document = new Document;
 			std::string error;
 			if (!(kind == 'SPRD' ? CreateBlankSpreadsheet(*document, error)
+					: kind == 'GRFX' ? CreateBlankDrawing(*document, error)
 					: CreateBlankDocument(*document, error))) {
 				delete document;
 				return;
@@ -470,6 +474,7 @@ public:
 			Document* document = new Document;
 			std::string error;
 			if (fNewSpreadsheet ? CreateBlankSpreadsheet(*document, error)
+					: fNewDrawing ? CreateBlankDrawing(*document, error)
 					: CreateBlankDocument(*document, error)) {
 				NewSheetPreferences(*document);
 				if (!fRenderPath.empty()) {
@@ -520,6 +525,7 @@ private:
 	bool fHasDocument;
 	bool fNewDocument;
 	bool fNewSpreadsheet;
+	bool fNewDrawing;
 	BFilePanel* fOpenPanel;
 	int32 fWindowCount;
 	int fSlide;					// --slide

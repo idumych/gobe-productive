@@ -244,6 +244,10 @@ bool CreateBlankDocument(Document& doc, std::string& error);
 // spreadsheet, rows 1-500 and columns A-T, its graphics part, a browse
 // root), named the same way.
 bool CreateBlankSpreadsheet(Document& doc, std::string& error);
+// File > New for drawings: a GRFX sheet's document (an empty drawing,
+// "Layer 1" and "View 1", framed on the page of a paged root, as the
+// original's drawing documents have it), named the same way.
+bool CreateBlankDrawing(Document& doc, std::string& error);
 
 } // namespace gobe
 
