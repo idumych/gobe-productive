@@ -152,7 +152,7 @@ sizes, headings and options are saved with the document.
 | Calculate Now, Auto Calculate, Go To Cell…; named selections (Name Selection…, Edit Names…, names in formulas) | next |
 | The FormatBar and PartBar for cells: font, size, faces, colours, alignment, Wrap Text, borders (with Transparency > Other…), Number Formatting | next |
 | Selecting rows, columns and every cell by the headings; several ranges at once with Command-click; Select Dependents | next |
-| Charts made from cells (Make Chart is shown but off) | in progress |
+| Charts made from cells (Make Chart is shown but off; charts and drawings can be written back, the first step) | in progress |
 
 ### Frames and drawing
 
