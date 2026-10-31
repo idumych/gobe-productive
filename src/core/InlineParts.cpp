@@ -984,4 +984,48 @@ FrameCommandFlags(uint32_t flags, uint32_t command)
 	return flags;
 }
 
+bool
+MoveFrame(Document& doc, const uint32_t pointer[3], float dx, float dy)
+{
+	gobe::Frame* f = MutableFrame(doc, pointer);
+	if (f == nullptr)
+		return false;
+	f->origin[0] += dx;
+	f->origin[1] += dy;
+	doc.dirtyTails.insert(pointer[0]);
+	return true;
+}
+
+
+bool
+ResizeFrame(Document& doc, const uint32_t pointer[3], const float rect[4])
+{
+	gobe::Frame* f = MutableFrame(doc, pointer);
+	float left = std::min(rect[0], rect[2]), top = std::min(rect[1], rect[3]);
+	float width = std::fabs(rect[2] - rect[0]), height = std::fabs(rect[3] - rect[1]);
+	if (f == nullptr || width < 4 || height < 4)
+		return false;
+	f->origin[0] = left;
+	f->origin[1] = top;
+	f->extent[0] = width;
+	f->extent[1] = height;
+	uint32_t kind = doc.parts.parts[pointer[0]].kind;
+	if (kind == Sig("SPRD")) {
+		f->sheetRect[2] = f->sheetRect[0] + width;
+		f->sheetRect[3] = f->sheetRect[1] + height;
+	} else if (kind == Sig("GRFX") || kind == Sig("PRES") || kind == Sig("chrt")) {
+		f->sheetRect[2] = f->sheetRect[0] + width;
+		f->sheetRect[3] = f->sheetRect[1] + height;
+	} else if (kind == Sig("BITS")) {
+		// (no more than the image)
+		const IMPart* im = doc.ImagePart(pointer[0]);
+		float w = im != nullptr && im->size[0] > 0 ? im->size[0] : width;
+		float h = im != nullptr && im->size[1] > 0 ? im->size[1] : height;
+		f->sheetRect[2] = f->sheetRect[0] + std::min(width, w - f->sheetRect[0]) - 1;
+		f->sheetRect[3] = f->sheetRect[1] + std::min(height, h - f->sheetRect[1]) - 1;
+	}
+	doc.dirtyTails.insert(pointer[0]);
+	return true;
+}
+
 } // namespace gobe

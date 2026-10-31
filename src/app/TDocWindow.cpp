@@ -402,12 +402,12 @@ TDocWindow::InstallPartMenus()
 	if (fBar == NULL)
 		return;
 	bool sheet = fPages != NULL && fPages->fSelectedCell.active;
-	// the drawing part's Arrange (MENU 50): shapes selected, or a drawing
-	// document's drawing active
+	// the drawing part's Arrange (MENU 50): shapes or a frame in a drawing
+	// selected, or a drawing document's drawing active
 	bool drawing = false;
 	if (fPages != NULL && !sheet && fDocument != NULL) {
 		int main = fDocument->MainPart();
-		drawing = fPages->ShapesSelected() || (main >= 0
+		drawing = fPages->ShapesSelected() || fPages->SelectedFrame() != NULL || (main >= 0
 			&& fDocument->parts.parts[size_t(main)].kind == Sig("GRFX"));
 	}
 	if (!fPartMenus.empty() && sheet == fSheetMenus && drawing == fDrawingMenus)
@@ -524,6 +524,25 @@ TDocWindow::MessageReceived(BMessage* message)
 			BRect frame = Frame();
 			frame.OffsetBy(20, 20);
 			TDocWindow* window = new TDocWindow(frame, fDocument->name.c_str(), fDocument);
+			fShared->TitlesChanged();
+			window->Show();
+			return;
+		}
+		// Frame > Open Frame Window (TDocWindow::OpenFrame: a window of
+		// the document on a sheet showing the selected frame, TSheetMgr::
+		// NewFrameSheet)
+		case 'sM30': {
+			const uint32_t* pointer = fPages != NULL ? fPages->SelectedFrame() : NULL;
+			if (fDocument == NULL || pointer == NULL || FrameAt(*fDocument, pointer) == NULL) {
+				beep();
+				return;
+			}
+			uint32_t shown[3] = {pointer[0], pointer[1], pointer[2]};
+			BRect frame = Frame();
+			frame.OffsetBy(20, 20);
+			TDocWindow* window = new TDocWindow(frame, fDocument->name.c_str(), fDocument);
+			if (window->fPages != NULL)
+				window->fPages->ShowFrameOnly(shown);
 			fShared->TitlesChanged();
 			window->Show();
 			return;
@@ -1644,11 +1663,11 @@ TDocWindow::MenusBeginning()
 		// the Frame menu's frame commands (TNormalDocWinHelper::FixMenus)
 		// with a frame selected: Make Linked Frame for text, the autogrow
 		// and scroll bar settings marked as the frame has them; Open
-		// Frame Window isn't ported (a second window on the document)
+		// Frame Window a window on the frame
 		const uint32_t* framePointer = fPages != NULL ? fPages->SelectedFrame() : NULL;
 		const gobe::Frame* frame = framePointer != NULL && fDocument != NULL
 			? FrameAt(*fDocument, framePointer) : NULL;
-		enable('sM30', false);
+		enable('sM30', frame != NULL);
 		enable('sM32', frame != NULL && fDocument->WordPart(framePointer[0]) != NULL);
 		for (uint32 command : {'sM33', 'sM34', 'sM35', 'sM36'})
 			enable(command, frame != NULL);

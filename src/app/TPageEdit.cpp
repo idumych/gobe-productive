@@ -1455,10 +1455,18 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 
 	fUndo.Break();
 
-	// the ToolBar's tools: a shape dragged out, a shape selected
+	// the selected frame's handles and edge, then the ToolBar's tools: a
+	// shape dragged out, a shape selected
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && FrameGrab(where))
+		return;
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && DrawingClick(where, clicks)) {
 		if (!fShapes.empty() && fCaret.active) {
 			fCaret.active = false;
+			Invalidate();
+		}
+		// (a shape selected: not the frame)
+		if (!fShapes.empty() && fFrame.active) {
+			fFrame = FrameRef();
 			Invalidate();
 		}
 		return;
@@ -1661,6 +1669,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 		BView::MouseMoved(where, transit, dragMessage);
 		return;
 	}
+	if (FrameDragMoved(where)) {
+		BView::MouseMoved(where, transit, dragMessage);
+		return;
+	}
 	if (fDragging) {
 		Caret c;
 		if (HitText(where, c) && c.part == fCaret.part) {
@@ -1733,6 +1745,10 @@ void
 TPageView::MouseUp(BPoint where)
 {
 	if (DrawingUp(BPoint(where.x / fZoom, where.y / fZoom))) {
+		BView::MouseUp(where);
+		return;
+	}
+	if (FrameDragUp(BPoint(where.x / fZoom, where.y / fZoom))) {
 		BView::MouseUp(where);
 		return;
 	}
@@ -5716,6 +5732,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf02': case 'sf03': case 'sf0L': case 'sf0V': case 'sMB6':	// format bar
 		case 'sf0M': case 'sf0N': case 'sf04': case 'sf05': case 'sf0R': case 'sf0D':
 		case 'sM4Q': case 'sM32': case 'sM33': case 'sM34': case 'sM35': case 'sM36':	// frames
+		case 'sf0U':	// Text Wrap
 		case 'sMB0': case 'sMB1':	// Edit Styles' Import and Export Styles
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:

@@ -254,8 +254,10 @@ TPageView::FixShapeMenu(BMenu* menu) const
 			|| what == 'sM45' || what == 'sM4T';
 		bool mode = what == 'sM4A' || what == 'sM4B' || what == 'sM4C';
 		bool grid = what == 'sM4D' || what == 'sM4E';
-		// (Group, Ungroup and Text Wrap aren't ported: off)
+		// (Group and Ungroup aren't ported: off; Text Wrap with shapes
+		// or a frame selected)
 		item->SetEnabled((arrange && !fShapes.empty()) || mode || (grid && gr != nullptr)
+			|| (what == 'sf0U' && (!fShapes.empty() || fFrame.active))
 			|| (what == 'sM44' && fShapes.size() >= 2) || (what == 'sM48' && unlocked)
 			|| (what == 'sM49' && locked));
 		if (mode)

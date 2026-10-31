@@ -9,6 +9,7 @@
 #include <Button.h>
 #include <CheckBox.h>
 #include <ColorControl.h>
+#include <Control.h>
 #include <GroupLayout.h>
 #include <GroupView.h>
 #include <LayoutBuilder.h>
@@ -391,9 +392,80 @@ TDialog::MakeControl(const ItemData& item)
 			view = set;
 			break;
 		}
+		case FourCC("IBUT"):
+		{
+			// TIconButton: a 32 x 32 icon (ICON) that stays down when
+			// chosen (the dialog sets which: SetCheckBoxItem)
+			const ResourceFile::Resource* r = item.values.size() >= 2
+					&& uint32(item.values[0]) == FourCC("ICON")
+				? Resources().Find(FourCC("ICON"), item.values[1]) : NULL;
+			if (r == NULL && item.values.size() >= 2)
+				r = GobeResources::File().Find(FourCC("ICON"), item.values[1]);
+			BBitmap* icon = NULL;
+			if (r != NULL && r->data.size() >= 1024) {
+				icon = new BBitmap(BRect(0, 0, 31, 31), B_CMAP8);
+				icon->SetBits(r->data.data(), 1024, 0, B_CMAP8);
+			}
+			class IconButton : public BControl {
+			public:
+				IconButton(BBitmap* icon, BMessage* message)
+					: BControl("iconbutton", NULL, message, B_WILL_DRAW | B_NAVIGABLE),
+					fIcon(icon)
+				{
+					SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+					SetExplicitMinSize(BSize(39, 39));
+					SetExplicitMaxSize(BSize(39, 39));
+				}
+				~IconButton() { delete fIcon; }
+				virtual void Draw(BRect)
+				{
+					BRect r = Bounds();
+					bool on = Value() == B_CONTROL_ON;
+					rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+					SetHighColor(on ? tint_color(panel, B_DARKEN_2_TINT) : panel);
+					FillRect(r);
+					SetHighColor(tint_color(panel, on ? B_DARKEN_4_TINT : B_LIGHTEN_MAX_TINT));
+					StrokeLine(r.LeftBottom(), r.LeftTop());
+					StrokeLine(r.RightTop());
+					SetHighColor(tint_color(panel, on ? B_LIGHTEN_MAX_TINT : B_DARKEN_3_TINT));
+					StrokeLine(r.RightBottom());
+					StrokeLine(r.LeftBottom());
+					if (IsFocus()) {
+						SetHighColor(ui_color(B_KEYBOARD_NAVIGATION_COLOR));
+						StrokeRect(r.InsetByCopy(1, 1));
+					}
+					if (fIcon == NULL)
+						return;
+					SetDrawingMode(B_OP_OVER);
+					DrawBitmap(fIcon, BPoint(4 + (on ? 1 : 0), 4 + (on ? 1 : 0)));
+					SetDrawingMode(B_OP_COPY);
+				}
+				virtual void MouseDown(BPoint)
+				{
+					if (!IsEnabled())
+						return;
+					SetValue(B_CONTROL_ON);
+					Invoke();
+				}
+				virtual void KeyDown(const char* bytes, int32 count)
+				{
+					if (count == 1 && (bytes[0] == B_SPACE || bytes[0] == B_ENTER)) {
+						SetValue(B_CONTROL_ON);
+						Invoke();
+					} else
+						BControl::KeyDown(bytes, count);
+				}
+			private:
+				BBitmap* fIcon;
+			};
+			IconButton* button = new IconButton(icon, ControlMessage(item));
+			button->SetEnabled(item.enabled);
+			view = button;
+			break;
+		}
 		default:
 		{
-			// IBUT, ICON, 256P, PIKR, CUST: Gobe-specific views, not ported
+			// ICON other than MICN, 256P, PIKR, CUST: Gobe-specific views, not ported
 			// yet
 			BString text;
 			text << "[" << FourCCString(item.type).c_str() << "]";
@@ -483,7 +555,8 @@ TDialog::TextItem(int32 index, int32 set) const
 void
 TDialog::SetCheckBoxItem(int32 index, bool on, int32 set)
 {
-	if (BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index, set)))
+	// (a check box, an icon button)
+	if (BControl* box = dynamic_cast<BControl*>(Item(index, set)))
 		box->SetValue(on ? B_CONTROL_ON : B_CONTROL_OFF);
 }
 
@@ -491,7 +564,7 @@ TDialog::SetCheckBoxItem(int32 index, bool on, int32 set)
 bool
 TDialog::CheckBoxItem(int32 index, int32 set) const
 {
-	BCheckBox* box = dynamic_cast<BCheckBox*>(Item(index, set));
+	BControl* box = dynamic_cast<BControl*>(Item(index, set));
 	return box != NULL && box->Value() == B_CONTROL_ON;
 }
 

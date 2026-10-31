@@ -292,6 +292,12 @@ WritePartTail(const PartTail& tail, uint32_t kind)
 				DocWriter rect;
 				rect.Rect(f.sheetRect);
 				std::copy(rect.Data().begin(), rect.Data().end(), raw.begin());
+			} else if (kind == Sig("SPRD") && raw.size() >= 24) {
+				DocWriter shown;
+				for (uint16_t v : f.cells)
+					shown.UInt16(v);
+				shown.Rect(f.sheetRect);
+				std::copy(shown.Data().begin(), shown.Data().end(), raw.begin());
 			}
 			w.Bytes(raw);
 			w.Sig(Sig("FraM"));

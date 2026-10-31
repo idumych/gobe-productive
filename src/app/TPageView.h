@@ -28,6 +28,7 @@
 #include "SSStyle.h"
 #include "StyleEdit.h"
 #include "Styles.h"
+#include "TextWrap.h"
 #include "Undo.h"
 
 namespace gobe {
@@ -156,6 +157,8 @@ public:
 	uint32 Tool() const { return fTool; }
 	// the frame selected (a part frame in a drawing), NULL if none
 	const uint32_t* SelectedFrame() const { return fFrame.active ? fFrame.pointer : NULL; }
+	// the view shows only the frame (Open Frame Window; before it is shown)
+	void ShowFrameOnly(const uint32_t pointer[3]);
 	uint32 PartKind() const { return fPartKind; }
 	void SetTool(uint32 tool);
 	// the toolbar shape the TOOS tool makes (TDocWindow +0x1c0)
@@ -291,11 +294,31 @@ private:
 		uint32_t pointer[3] = {};
 	};
 	FrameRef fFrame;
+	// a selected frame dragged: 1 moved (its edge), 2 resized (a handle,
+	// 0-7 from the top left, clockwise); view coordinates
+	struct FrameDrag {
+		int mode = 0;
+		int handle = 0;
+		BPoint start, now;
+		BRect rect;			// the frame's, when the drag started
+	};
+	FrameDrag fFrameDrag;
+	// TTextWrapMgr: the shapes and frames text goes around (view
+	// coordinates, their margins added) and their own rectangles
+	std::vector<WrapObstacle> fWrapObstacles;
+	std::vector<BRect> fWrapBounds;
+	void CollectWrapObstacles();
+	bool FrameGrab(BPoint where);
+	bool FrameDragMoved(BPoint where);
+	bool FrameDragUp(BPoint where);
+	BRect DraggedFrame() const;
 	uint32 fPartKind = 'WORD';
 	bool FrameClick(BPoint where);
 	bool FinishPartFrame(size_t drawing, const std::vector<std::array<float, 2>>& points);
 	void DrawFrameSelection(float dx, float dy);
 	bool FrameCommand(BMessage* message);
+	void KeepFrameOnly();
+	void TextWrapCommand(BMessage* message);
 	void InsertPartFrame(uint32_t kind);
 	ShapeDrag fShapeDrag;
 	int fShapeMode = 0;			// what a handle does: 0 resize, 1 rotate, 2 reshape
@@ -321,6 +344,9 @@ private:
 	const Document::PlacedFrame* CaretFrame() const;
 	float fZoom = 1;
 	bool fBrowse = false;			// browse view: no pages
+	// a frame window (Open Frame Window, TSheetMgr::NewFrameSheet): only
+	// that frame and what's in it, at the view's corner
+	FrameRef fFrameOnly;
 	gobe::Frame fBrowseFrame;		// its frame for the main text
 	BRect fDrawBounds;				// what Draw shows, in the document's coordinates
 	// the port's room between a frame's edges and its text
