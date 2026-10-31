@@ -1,8 +1,7 @@
 # Gobe Productive, ported
 
 Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
-systems: **Haiku** (and Renku OS), **VitruvianOS** (a BeOS-like OS based on
-Linux) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
+systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
 The released **preview** (0.1.1) is focused on the word processor. Since
@@ -35,7 +34,7 @@ into its settings folder and remembers it, so this happens once:
 
 | System | Unpacked into |
 |---|---|
-| Haiku, Renku OS, VitruvianOS | `~/config/settings/Gobe Productive port/Original` |
+| Haiku, Renku OS | `~/config/settings/Gobe Productive port/Original` |
 | Linux | `~/.config/cosmoe/Gobe Productive port/Original` |
 
 It also looks on its own in the usual places (`~/Gobe Productive 2.0`,
@@ -56,20 +55,17 @@ the pointer leaves the window.
 | System | Download | Install |
 |---|---|---|
 | Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.1.1-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.1.1/gobeproductive-0.1.1-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.1.1-1-x86_64.hpkg` |
-| VitruvianOS 0.6 (amd64) | [gobeproductive_0.1.1-1_amd64.deb](https://github.com/idumych/gobe-productive/releases/download/v0.1.1/gobeproductive_0.1.1-1_amd64.deb) | `sudo apt install ./gobeproductive_0.1.1-1_amd64.deb` |
-| VitruvianOS 0.6 (arm64) | [gobeproductive_0.1.1-1_arm64.deb](https://github.com/idumych/gobe-productive/releases/download/v0.1.1/gobeproductive_0.1.1-1_arm64.deb) | `sudo apt install ./gobeproductive_0.1.1-1_arm64.deb` |
 | Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.1.1-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.1.1/GobeProductive-0.1.1-x86_64.AppImage) | `chmod +x GobeProductive-0.1.1-x86_64.AppImage`, then run it |
 | Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.1.1-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.1.1/GobeProductive-0.1.1-aarch64.AppImage) | `chmod +x GobeProductive-0.1.1-aarch64.AppImage`, then run it |
 
 Checksums and release notes are on the
 [release page](https://github.com/idumych/gobe-productive/releases/tag/v0.1.1).
-On Haiku and VitruvianOS it appears in the Deskbar's Applications menu.
-The Command key is **Alt** on Haiku and **Ctrl** on VitruvianOS and Linux.
+On Haiku it appears in the Deskbar's Applications menu.
+The Command key is **Alt** on Haiku and **Ctrl** on Linux.
 
 Documents lay out best with the Liberation fonts (metrically like the
 Times, Helvetica and Courier designs of BeOS's Bitstream fonts): on Haiku
-`pkgman install liberation_fonts`, on VitruvianOS
-`sudo apt install fonts-liberation`; the AppImage brings them along.
+`pkgman install liberation_fonts`; the AppImage brings them along.
 Without them the port uses Noto, which is wider, so lines break in other
 places than they did in Gobe.
 
@@ -78,11 +74,9 @@ places than they did in Gobe.
 | System | What was tested |
 |---|---|
 | Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed, saved, reopened, Edit Styles |
-| VitruvianOS 0.6.2 (amd64) | The same, with the amd64 package |
 | Linux x86_64, X11 | The same, with the AppImage (Xvfb and Openbox), and a FormatBar tooltip closing when the pointer leaves the window. Choosing a CD image in the file panel was tried during development, not on a release build |
 | Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
 | Linux aarch64, X11 | Started on an arm64 machine: the window appears |
-| VitruvianOS arm64 | Not run (no arm64 test system); the package was only checked |
 | Renku OS | Not tried; the Haiku package should install there |
 
 Also untested so far: real hardware, interactive Wayland desktops, real
@@ -94,10 +88,6 @@ opening documents saved by the port in the original on BeOS.
 On Haiku, with the History floater:
 
 ![Gobe Productive on Haiku: a document and the History floater](docs/screenshots/haiku-history.png)
-
-On VitruvianOS, finding a word:
-
-![Gobe Productive on VitruvianOS: Find/Replace](docs/screenshots/vitruvianos-find.png)
 
 On Linux (X11), with Edit Styles:
 
@@ -177,12 +167,10 @@ been tried in the original on BeOS.
 
 ## Building
 
-The same sources build on all three systems; the Makefile finds out which
+The same sources build on both systems; the Makefile finds out which
 one it's on.
 
 - **Haiku:** `pkgman install gcc make haiku_devel zlib_devel`, then `make`.
-- **VitruvianOS:** with its headers (`/system/develop/headers`) or
-  `pkg-config vos`: `make`.
 - **Linux:** build [Hokku](https://github.com/idumych/hokku) (the Haiku API
   as a library, a fork of Cosmoe), then `make COSMOE_ROOT=<its prefix>`.
 
@@ -190,7 +178,7 @@ Run `./GobeProductive [document…]`. `make test` runs the host-side tests of
 the portable core (`src/core`, no Haiku API) on any system; with the
 original's files at `../original/installed` they also run on its sample
 documents. The packages are built by `packaging/` (`build-hpkg.sh` on
-Haiku; `deb.yml` and `appimage.yml` in GitHub Actions).
+Haiku; `appimage.yml` in GitHub Actions).
 
 | Path | Contents |
 |---|---|
