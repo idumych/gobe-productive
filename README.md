@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-54-56-2.svg" alt="Port progress: 54 of 56 features done, 2 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-55-56-1.svg" alt="Port progress: 55 of 56 features done, 1 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -187,7 +187,7 @@ sizes, headings and options are saved with the document.
 | Pens made, edited and deleted in the Inks window's pens (a click on the pen ink menu's pen icon; Edit > New Pen…, Edit Pen…, Clear; a double click applies one) with the pen dialog (name, kind, printable, gap and dash widths, a sample); a document's own pens saved and reloaded exactly and listed in the pen menu; the pen menu and the arrows menu marking what the selection has; very short dashes drawn as marks across, as the original draws them | next |
 | Ink set files: the original's ink sets (its "Ink Sets" folder, SETF archives) read and written, a document's own sets | next |
 | The Inks window's Kind menu (colours, patterns, gradients, pens) and its Sets and File menus | in progress |
-| Editing inks and pens in the Inks window: Cut, Copy and Paste, the pen view's width buttons and slider, a colour, pattern or gradient edited | in progress |
+| Editing inks and pens in the Inks window: Cut, Copy and Paste, the pen view's width buttons and slider, a colour, pattern or gradient edited | next |
 
 ### Other formats (translators)
 

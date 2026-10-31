@@ -8,6 +8,7 @@
 #include <GradientLinear.h>
 #include <GradientRadial.h>
 #include <GroupLayout.h>
+#include <LayoutItem.h>
 #include <Looper.h>
 #include <MenuField.h>
 #include <MenuItem.h>
@@ -72,13 +73,31 @@ FillUser(BView* user, BView* view)
 }
 
 
+// the group layout holding `view` among `layout`'s (nested groups are
+// layout items, not views)
+BGroupLayout*
+GroupOf(BLayout* layout, BView* view)
+{
+	if (layout == NULL)
+		return NULL;
+	for (int32 i = 0; BLayoutItem* item = layout->ItemAt(i); i++) {
+		if (item->View() == view)
+			return dynamic_cast<BGroupLayout*>(layout);
+		if (BLayout* inner = dynamic_cast<BLayout*>(item))
+			if (BGroupLayout* found = GroupOf(inner, view))
+				return found;
+	}
+	return NULL;
+}
+
+
 // a control TDialog doesn't build (PIKR, 256P, an IBUT of a MICN) put where
 // its placeholder is; the placeholder hidden
 void
 PutInPlace(BView* placeholder, BView* view)
 {
 	BView* parent = placeholder != NULL ? placeholder->Parent() : NULL;
-	BGroupLayout* group = parent != NULL ? dynamic_cast<BGroupLayout*>(parent->GetLayout()) : NULL;
+	BGroupLayout* group = parent != NULL ? GroupOf(parent->GetLayout(), placeholder) : NULL;
 	if (group == NULL)
 		return;
 	group->AddView(group->IndexOfView(placeholder) + 1, view);
@@ -1215,8 +1234,8 @@ TPenWidthView::TPenWidthView()
 	layout->AddItem(row);
 	BGroupLayout* buttons = new BGroupLayout(B_VERTICAL, 2);
 	row->AddItem(buttons);
-	buttons->AddView(fLarger);
 	buttons->AddView(fSmaller);
+	buttons->AddView(fLarger);
 	buttons->AddItem(BSpaceLayoutItem::CreateGlue());
 	row->AddView(fSlider);
 	SetPenWidth(0);
