@@ -188,7 +188,7 @@ TPageView::ShowSlide(int index)
 
 
 bool
-TPageView::ShowSheet(int index)
+TPageView::ShowSheet(int index, bool step)
 {
 	if (index == fDocument.CurrentSheet())
 		return true;
@@ -201,9 +201,12 @@ TPageView::ShowSheet(int index)
 		fprintf(stderr, "ShowSheet: %s\n", error.c_str());
 		return false;
 	}
-	std::swap(before, fDocument);
-	fUndo.BeginDocument(fDocument, GobeResources::IndexString(3, 19).String(), CurrentViewState());
-	std::swap(before, fDocument);
+	if (step) {
+		std::swap(before, fDocument);
+		fUndo.BeginDocument(fDocument, GobeResources::IndexString(3, 19).String(),
+			CurrentViewState());
+		std::swap(before, fDocument);
+	}
 	// nothing selected in the new sheet yet (TDocWindow::SetSheetPtr:
 	// SetActivePart(NULL), then the sheet's main part)
 	fSelectedCell.active = false;

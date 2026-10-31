@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include <Alert.h>
+#include <Beep.h>
 #include <TextControl.h>
 #include <cstring>
 #include <OutlineListView.h>
@@ -15,6 +16,7 @@
 #include <TextView.h>
 
 #include "GobeResources.h"
+#include "TDialogNewDoc.h"
 #include "SSSort.h"
 #include "Names.h"
 #include "Document.h"
@@ -941,6 +943,65 @@ TDialogSheetRename::ItemHit(int32 index, BMessage* message)
 		rename.AddInt32("ActiveTab", fSheet);
 		if (fTarget != NULL && fTarget->Looper() != NULL)
 			fTarget->Looper()->PostMessage(&rename, fTarget);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
+
+TDialogSheetNew::TDialogSheetNew(BHandler* target, const std::vector<std::string>& sheets)
+	:
+	TDialog(38, 38, 'APPL', NULL),
+	fTarget(target),
+	fSheets(sheets)
+{
+}
+
+
+// TDialogSheetNew::Init: the part factories that make documents, the next
+// sheet's name
+void
+TDialogSheetNew::Init()
+{
+	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(2));
+	if (BListView* list = scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL)
+		FillPartKinds(list, 'SPRD', [](uint32 kind) { return kind == 'SPRD'; });
+	BString name;
+	name.SetToFormat(GobeResources::IndexString(5, 24).String(), int(fSheets.size() + 1));
+	SetTextItem(3, name.String());
+	MakeFocusItem(3);
+}
+
+
+bool
+TDialogSheetNew::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 2 && message != NULL && message->GetBool("Invoke", false))
+		index = 0;	// a double click is OK
+	if (index == 0) {
+		BScrollView* scroll = dynamic_cast<BScrollView*>(Item(2));
+		uint32 kind = SelectedPartKind(scroll != NULL
+			? dynamic_cast<BListView*>(scroll->Target()) : NULL);
+		if (kind == 0) {
+			beep();
+			return true;
+		}
+		std::string name = TextItem(3).String();
+		int32 alert = !ValidName(name) ? 19 : -1;
+		for (size_t i = 0; alert < 0 && i < fSheets.size(); i++)
+			if (fSheets[i] == name)
+				alert = 16;
+		if (alert >= 0) {
+			(new BAlert("", GobeResources::IndexString(6, alert).String(), "OK"))->Go(NULL);
+			MakeFocusItem(3);
+			return true;
+		}
+		BMessage add('s00B');
+		add.AddString("name", name.c_str());
+		add.AddInt32("kind", int32(kind));
+		if (fTarget != NULL && fTarget->Looper() != NULL)
+			fTarget->Looper()->PostMessage(&add, fTarget);
+		PostMessage(B_QUIT_REQUESTED);
+		return false;
 	}
 	return TDialog::ItemHit(index, message);
 }

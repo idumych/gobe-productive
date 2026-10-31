@@ -69,9 +69,9 @@ public:
 
 	// presentations: arrows, Page Up/Down, space, Home/End change slides
 	void ShowSlide(int index);
-	// the SheetBar's tab chosen: that sheet shown (Document::ShowSheet);
-	// false if it can't be
-	bool ShowSheet(int index);
+	// the SheetBar's tab chosen: that sheet shown (Document::ShowSheet), an
+	// undo step unless `step` is false (part of another); false if it can't be
+	bool ShowSheet(int index, bool step = true);
 
 	// text editing: the caret's position in a word processing part
 	struct Caret {

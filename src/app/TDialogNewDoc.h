@@ -9,7 +9,16 @@
 
 #include "TDialog.h"
 
+class BListView;
+
 namespace gobe {
+
+// the kinds of document the parts make, with their icons, by name (as
+// File > New… and New Sheet… list them); `select`'s selected, the kinds
+// `canMake` refuses disabled
+void FillPartKinds(BListView* list, uint32 select, bool (*canMake)(uint32 kind));
+// the selected kind (0 for none or a disabled one)
+uint32 SelectedPartKind(BListView* list);
 
 class TDialogNewDoc : public TDialog {
 public:

@@ -137,29 +137,14 @@ public:
 } // namespace
 
 
-TDialogNewDoc::TDialogNewDoc(int32 documents)
-	:
-	TDialog(2, 2, 'APPL', NULL),
-	fDocuments(documents)
-{
-}
-
-
+// the part factories that make documents: the main binary's and the
+// add-ons' in Parts (PART: kind, version, makes documents, two flags,
+// large icon id, small icon id, name; TPartFactory::TPartFactory), by name
+// (NewDialogListItemsCompare), `select`'s selected, those `canMake` refuses
+// disabled
 void
-TDialogNewDoc::Init()
+FillPartKinds(BListView* list, uint32 select, bool (*canMake)(uint32 kind))
 {
-	// "Gobe" "Productive" in the user item
-	if (BView* user = Item(3)) {
-		user->SetLayout(new BGroupLayout(B_VERTICAL, 0));
-		user->GetLayout()->AddView(new TNewDocTitle(BRect()));
-	}
-	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(4));
-	BListView* list = scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL;
-	if (list == NULL)
-		return;
-	// the part factories that make documents: the main binary's and the
-	// add-ons' in Parts (PART: kind, version, makes documents, two flags,
-	// large icon id, small icon id, name; TPartFactory::TPartFactory)
 	std::vector<std::string> files = {GobeResources::Path().String()};
 	BPath parts(GobeResources::Path().String());
 	parts.GetParent(&parts);
@@ -191,20 +176,53 @@ TDialogNewDoc::Init()
 			TIconStringItem* item = new TIconStringItem(name, SmallIcon(file, int32(u32(24))),
 				kind);
 			item->SetHeight(16);
-			item->SetEnabled(CanMake(kind));
+			item->SetEnabled(canMake(kind));
 			items.push_back(item);
 		}
 	}
 	// NewDialogListItemsCompare: by name
 	std::sort(items.begin(), items.end(),
 		[](TIconStringItem* a, TIconStringItem* b) { return a->Name() < b->Name(); });
-	int32 select = 0;
+	int32 selected = 0;
 	for (TIconStringItem* item : items) {
-		if (item->Kind() == 'WORD')
-			select = list->CountItems();
+		if (item->Kind() == select)
+			selected = list->CountItems();
 		list->AddItem(item);
 	}
-	list->Select(select);
+	list->Select(selected);
+}
+
+
+uint32
+SelectedPartKind(BListView* list)
+{
+	TIconStringItem* item = list != NULL
+		? dynamic_cast<TIconStringItem*>(list->ItemAt(list->CurrentSelection())) : NULL;
+	return item != NULL && item->IsEnabled() ? item->Kind() : 0;
+}
+
+
+TDialogNewDoc::TDialogNewDoc(int32 documents)
+	:
+	TDialog(2, 2, 'APPL', NULL),
+	fDocuments(documents)
+{
+}
+
+
+void
+TDialogNewDoc::Init()
+{
+	// "Gobe" "Productive" in the user item
+	if (BView* user = Item(3)) {
+		user->SetLayout(new BGroupLayout(B_VERTICAL, 0));
+		user->GetLayout()->AddView(new TNewDocTitle(BRect()));
+	}
+	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(4));
+	BListView* list = scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL;
+	if (list == NULL)
+		return;
+	FillPartKinds(list, 'WORD', CanMake);
 	list->MakeFocus(true);
 }
 
@@ -213,10 +231,7 @@ uint32
 TDialogNewDoc::Selected() const
 {
 	BScrollView* scroll = dynamic_cast<BScrollView*>(Item(4));
-	BListView* list = scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL;
-	TIconStringItem* item = list != NULL
-		? dynamic_cast<TIconStringItem*>(list->ItemAt(list->CurrentSelection())) : NULL;
-	return item != NULL ? item->Kind() : 0;
+	return SelectedPartKind(scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL);
 }
 
 

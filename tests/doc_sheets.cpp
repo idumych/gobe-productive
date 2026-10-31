@@ -9,6 +9,8 @@
 #include <string>
 
 #include "Document.h"
+#include "Editing.h"
+#include "SSEval.h"
 
 using namespace gobe;
 
@@ -94,6 +96,58 @@ main(int argc, char** argv)
 		Check(LoadDocument(path, again, error) && again.CurrentSheet() == first
 			&& Placed(again).count(again.sheets.sheets[size_t(first)].mainPart) == 1,
 			name + ": back on the first sheet " + error);
+		remove(path.c_str());
+	}
+	// New Sheet… (a spreadsheet) in a new spreadsheet and in CheckBook:
+	// shown, cells typed, saved, reloaded with the sheet and its cells
+	for (int which = 0; which < 2; which++) {
+		Document doc;
+		std::string error;
+		std::string name = which == 0 ? "new spreadsheet" : "CheckBook";
+		bool loaded = which == 0 ? CreateBlankSpreadsheet(doc, error) : false;
+		for (int i = 1; which == 1 && i < argc && !loaded; i++)
+			if (std::string(argv[i]).find("CheckBook") != std::string::npos)
+				loaded = LoadDocument(argv[i], doc, error);
+		if (!loaded)
+			continue;
+		size_t sheetsBefore = doc.sheets.sheets.size(), partsBefore = doc.parts.parts.size();
+		int added = doc.AddSpreadsheetSheet("", error);
+		Check(added == int(sheetsBefore), name + ": sheet added " + error);
+		if (added < 0)
+			continue;
+		const LeafSheet& sheet = doc.sheets.sheets[size_t(added)];
+		Check(sheet.name == "Sheet " + std::to_string(sheetsBefore + 1), name + ": named " + sheet.name);
+		Check(doc.parts.parts.size() == partsBefore + 2 && sheet.mainPart == partsBefore
+			&& sheet.graphicsPart == partsBefore + 1, name + ": two parts");
+		Check(doc.AddSpreadsheetSheet("Budget", error) == added + 1, name + ": a second, named");
+		// "SS Default" and the display styles counted once per spreadsheet
+		size_t spreadsheets = doc.spreadsheetParts.size();
+		for (const Style& st : doc.styles.styles)
+			if (st.name == "SS Default" || st.name == "GridStyle" || st.name == "LockStyle")
+				Check(st.value4 == spreadsheets + 1, name + ": " + st.name + " used by "
+					+ std::to_string(st.value4 - 1) + " of " + std::to_string(spreadsheets));
+		Check(doc.ShowSheet(size_t(added), error), name + ": shown " + error);
+		Check(Placed(doc).count(sheet.mainPart) == 1, name + ": placed");
+		SSPart* ss = doc.EditableSpreadsheetPart(sheet.mainPart);
+		Check(ss != nullptr && SetCellInput(*ss, 0, 0, "41", nullptr, error)
+			&& SetCellInput(*ss, 1, 0, "=A1+1", nullptr, error), name + ": typed " + error);
+		UpdateDependencies(doc, sheet.mainPart);
+		std::string path = "/tmp/doc_sheets_new.gobe";
+		Check(doc.Save(path, error), name + ": save " + error);
+		Document back;
+		Check(LoadDocument(path, back, error), name + ": reload " + error);
+		Check(back.sheets.sheets.size() == sheetsBefore + 2 && back.CurrentSheet() == added
+			&& back.sheets.sheets[sheetsBefore + 1].name == "Budget", name + ": the sheets back");
+		const SSPart* again = back.SpreadsheetPart(back.sheets.sheets[size_t(added)].mainPart);
+		if (again != nullptr) {
+			SSBook book(back);
+			SSEvaluator e(*again, &book, int(back.sheets.sheets[size_t(added)].mainPart));
+			Check(e.Value(1, 0).type == SSValue::kNumber && e.Value(1, 0).number == 42,
+				name + ": =A1+1 is 42");
+		} else
+			Check(false, name + ": the new sheet's spreadsheet back");
+		Check(back.ShowSheet(size_t(added) + 1, error) && back.ShowSheet(0, error), name
+			+ ": the sheets shown after reloading " + error);
 		remove(path.c_str());
 	}
 	printf("doc_sheets: documents %d, switches %d, ok %d, failed %d\n", documents, switches, sOk,

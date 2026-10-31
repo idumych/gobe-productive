@@ -1,5 +1,6 @@
 #include "Document.h"
 
+#include "BlankParts.h"
 #include "DocWriter.h"
 #include "Editing.h"
 #include "WPPart.h"
@@ -302,6 +303,133 @@ Document::MainPart() const
 	if (sheet < sheets.sheets.size() && sheets.sheets[sheet].mainPart < parts.parts.size())
 		return int(sheets.sheets[sheet].mainPart);
 	return -1;
+}
+
+
+int
+Document::AddSpreadsheetSheet(const std::string& name, std::string& error)
+{
+	if (sheets.sheets.empty()) {
+		error = "no sheets";
+		return -1;
+	}
+	uint32_t base = kNoPart;
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (styles.styles[i].name == "Default" && styles.styles[i].value10 == Sig("Basi"))
+			base = uint32_t(i);
+	if (base == kNoPart) {
+		error = "no Default style";
+		return -1;
+	}
+	// TPart::TPart: the next part ids
+	uint32_t id = 0;
+	for (const PartRecord& p : parts.parts)
+		if (p.data.size() >= 20)
+			id = std::max(id, uint32_t(p.data[16]) << 24 | uint32_t(p.data[17]) << 16
+				| uint32_t(p.data[18]) << 8 | p.data[19]);
+	SheetStyles sheetStyles = AddSheetStyles(styles, base);
+	stylesChanged = true;
+	// the parts' selections: the drawing's (no shapes), the sheet's (A1)
+	uint32_t main = uint32_t(parts.parts.size()), graphics = main + 1;
+	uint32_t drawingSelection = uint32_t(selections.selections.size());
+	uint32_t cellSelection = drawingSelection + 1;
+	{
+		DocWriter body;
+		body.Sig(Sig("GRFX"));
+		body.UInt32(graphics);
+		body.UInt32(drawingSelection);
+		body.UInt32(0);
+		DocWriter record;
+		record.UInt32(uint32_t(body.Data().size()));
+		record.Bytes(body.Data());
+		addedSelections.push_back(record.Data());
+		Selection s;
+		s.id = drawingSelection;
+		s.kind = Sig("GRFX");
+		s.part = graphics;
+		s.value = drawingSelection;
+		selections.selections.push_back(s);
+	}
+	{
+		DocWriter body;
+		body.Sig(Sig("SPRD"));
+		body.UInt32(main);
+		body.UInt32(cellSelection);
+		body.Sig(Sig("CELL"));
+		body.UInt16(0);
+		body.UInt16(0);
+		body.UInt32(1);
+		for (int i = 0; i < 4; i++)
+			body.UInt16(0);
+		body.Bool(true);
+		DocWriter record;
+		record.UInt32(uint32_t(body.Data().size()));
+		record.Bytes(body.Data());
+		addedSelections.push_back(record.Data());
+		Selection s;
+		s.id = cellSelection;
+		s.kind = Sig("SPRD");
+		s.part = main;
+		s.value = cellSelection;
+		s.ranges.push_back({0, 0, 0, 0});
+		s.hasCell = true;
+		selections.selections.push_back(s);
+	}
+	// the records, parsed as LoadDocument does
+	DocArchive versions(std::vector<uint8_t>{});
+	versions.SetVersions(file.header.version.values[0], file.header.version.values[3],
+		file.header.version.values[2]);
+	parts.parts.push_back({Sig("SPRD"), 0,
+		SheetPartRecord(id + 1, cellSelection, sheetStyles, false, 0)});
+	parts.parts.push_back({Sig("GRFX"), 0,
+		SheetGraphicsRecord(id + 2, drawingSelection, false, 0)});
+	try {
+		DocArchive pa(parts.parts[main].data);
+		pa.CopyVersions(versions);
+		SSPart ss;
+		ReadSSPart(pa, ss);
+		spreadsheetParts.emplace_back(main, std::move(ss));
+		DocArchive ga(parts.parts[graphics].data);
+		ga.CopyVersions(versions);
+		GRPart gr;
+		ReadGRPart(ga, gr);
+		graphicsParts.emplace_back(graphics, std::move(gr));
+	} catch (const ArchiveError& x) {
+		error = std::string("new sheet: ") + x.what();
+		return -1;
+	}
+	tails.resize(parts.parts.size());
+	tailRead.resize(parts.parts.size(), false);
+	for (uint32_t part : {main, graphics}) {
+		tailRead[part] = ReadPartTail(parts.parts[part].data, parts.parts[part].kind, versions,
+			tails[part]);
+		dirtyTails.insert(part);
+	}
+	// factories for kinds the document hasn't had
+	for (const auto& [kind, label] : {std::make_pair(Sig("SPRD"), "Spreadsheet"),
+			std::make_pair(Sig("GRFX"), "Graphics")}) {
+		bool known = false;
+		for (const PartFactoryEntry& f : factories)
+			known |= f.kind == kind;
+		if (!known) {
+			factories.push_back({kind, 1, label});
+			factoriesChanged = true;
+		}
+	}
+	// the sheet: the shown sheet's paper and rulers, not in page view
+	LeafSheet sheet = sheets.sheets[size_t(CurrentSheet())];
+	sheet.name = name;
+	if (sheet.name.empty())
+		sheet.name = "Sheet " + std::to_string(sheets.sheets.size() + 1);
+	sheet.mainPart = main;
+	sheet.graphicsPart = graphics;
+	sheet.headerPart = sheet.footerPart = kNoPart;
+	sheet.frameSheet = false;
+	sheet.pageView = false;
+	sheets.sheets.push_back(sheet);
+	sheets.sheetCount = uint32_t(sheets.sheets.size());
+	sheetsChanged = true;
+	return int(sheets.sheets.size() - 1);
 }
 
 
@@ -711,6 +839,8 @@ Document::Save(const std::string& to, std::string& error)
 		changes.sections["StyleMgr"] = WriteStyleMgr(styles);
 	if (sheetsChanged)
 		changes.sections["SheetMgr"] = WriteSheetMgr(sheets);
+	if (factoriesChanged)
+		changes.sections["PartFactory Table"] = WriteFactoryTable(factories);
 	// the flags after the window count, the rest as read
 	for (size_t s = 0; documentFlagsChanged && s < file.toc.size(); s++) {
 		if (file.toc[s].name != "Document Misc")

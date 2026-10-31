@@ -72,6 +72,7 @@ struct Document {
 	std::set<size_t> layoutRanges;
 	bool stylesChanged = false;		// the StyleMgr (written by Save)
 	bool sheetsChanged = false;		// the SheetMgr (page setup, margins)
+	bool factoriesChanged = false;	// the PartFactory Table (a sheet of a new kind)
 	bool selectionsChanged = false;	// spreadsheet selections/names moved
 	bool linksChanged = false;		// links added (the LinksMgr, written by Save)
 	// TDoc +0x70 ("Document Misc"): bit 2 shows invisibles in text
@@ -206,6 +207,13 @@ struct Document {
 	// nothing changed) for a paged root or a sheet whose parts can't be
 	// shown this way.
 	bool ShowSheet(size_t sheet, std::string& error);
+	// New Sheet… for a spreadsheet (TSheetMgr::NewSheet, TLeafSheet::
+	// TLeafSheet): a new spreadsheet part (TPartSS::TPartSS) and its
+	// drawing, without frames until the sheet is shown, their selections,
+	// the styles they use (AddSheetStyles), a factory for kinds the document
+	// hasn't had, and the sheet after the others, named `name` ("Sheet N"
+	// for "", STR# 5, 24 with the count). Returns the sheet's index, or -1.
+	int AddSpreadsheetSheet(const std::string& name, std::string& error);
 };
 
 bool LoadDocument(const std::string& path, Document& doc, std::string& error);

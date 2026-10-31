@@ -471,6 +471,44 @@ TDocWindow::MessageReceived(BMessage* message)
 					fSheetBar->Hide();
 			}
 			return;
+		case kMsgSheetNew: {
+			// TSheetMgr::HandleMessage 's00B': the dialog, or with "name" and
+			// "kind" TDocSheetNewOrDeleteCommand ("New Sheet"), then the sheet
+			// shown
+			const char* name = NULL;
+			if (fPages == NULL)
+				return;
+			if (message->FindString("name", &name) != B_OK || name == NULL) {
+				std::vector<std::string> names;
+				for (const LeafSheet& sheet : fDocument->sheets.sheets)
+					names.push_back(sheet.name);
+				(new TDialogSheetNew(this, names))->RunDialog();
+				return;
+			}
+			if (message->GetInt32("kind", 'SPRD') != 'SPRD') {
+				beep();
+				return;
+			}
+			fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 16).String(),
+				fPages->CurrentViewState());
+			std::string error;
+			int sheet = fDocument->AddSpreadsheetSheet(name, error);
+			if (sheet < 0) {
+				fprintf(stderr, "New Sheet: %s\n", error.c_str());
+				beep();
+				return;
+			}
+			// (TDocWindow::SetSheetPtr, in the same step)
+			fPages->ShowSheet(sheet, false);
+			if (fSheetBar != NULL) {
+				fSheetBar->Show();
+				fSheetBar->Update();
+			}
+			PostMessage(kMsgDocumentChanged);
+			ShowActiveRibbon();
+			InstallPartMenus();
+			return;
+		}
 		case kMsgSheetRename: {
 			// TSheetMgr::HandleMessage 's00D': the dialog, or with "name"
 			// TDocSheetRenameCommand ("Rename Sheet")

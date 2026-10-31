@@ -2,7 +2,7 @@
  * The SheetBar: TSheetBar::LoadAllElements' TTabControl (colors 0xeeeeee
  * for the shown sheet's tab, 0xd8d8d8 for the others, 0xc8c8c8 lines), one
  * tab per sheet in the SheetMgr's order, after the options menu (MENU 110:
- * New Sheet…, Delete Sheet, Rename Sheet…; only Rename is ported). A
+ * New Sheet… (spreadsheets), Delete Sheet (not ported), Rename Sheet…). A
  * double click on a tab renames it ('s00D').
  */
 #include "TSheetBar.h"
@@ -112,13 +112,13 @@ void
 TSheetBar::MouseDown(BPoint where)
 {
 	if (OptionsFrame().InsetByCopy(-2, -2).Contains(where)) {
-		// TSheetBar::FixOptionsMenu: Delete with more than one sheet; New
-		// and Delete aren't ported
+		// TSheetBar::FixOptionsMenu: Delete with more than one sheet (not
+		// ported)
 		TMenu items(110, true);
 		BPopUpMenu menu("options", false, false);
 		while (BMenuItem* item = items.RemoveItem(int32(0))) {
 			uint32 what = item->Message() != NULL ? item->Message()->what : 0;
-			item->SetEnabled(what == kMsgSheetRename);
+			item->SetEnabled(what == kMsgSheetRename || what == kMsgSheetNew);
 			menu.AddItem(item);
 		}
 		BMenuItem* chosen = menu.Go(ConvertToScreen(OptionsFrame().LeftBottom()), false, true);
