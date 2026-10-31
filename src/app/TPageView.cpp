@@ -185,6 +185,35 @@ TPageView::ShowSlide(int index)
 }
 
 
+bool
+TPageView::ShowSheet(int index)
+{
+	if (index == fDocument.CurrentSheet())
+		return true;
+	if (fCellEditor != NULL)
+		EndCellEdit(true);
+	std::string error;
+	if (!fDocument.ShowSheet(size_t(std::max(0, index)), error)) {
+		fprintf(stderr, "ShowSheet: %s\n", error.c_str());
+		return false;
+	}
+	// nothing selected in the new sheet yet (TDocWindow::SetSheetPtr:
+	// SetActivePart(NULL), then the sheet's main part)
+	fSelectedCell.active = false;
+	fSelectedCell.extra.clear();
+	fCaret.active = false;
+	fAnchor.active = false;
+	fBook->Reset();
+	Rebuild();
+	InvalidateLayout();
+	if (Parent() != NULL)
+		Parent()->Layout(false);
+	ScrollTo(0, 0);
+	Invalidate();
+	return true;
+}
+
+
 BRect
 TPageView::ContainerClip(const Document::PlacedFrame& f) const
 {

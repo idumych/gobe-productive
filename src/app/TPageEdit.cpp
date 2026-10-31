@@ -50,6 +50,7 @@
 #include "SSSort.h"
 #include "SSPaste.h"
 #include "Names.h"
+#include "TSheetBar.h"
 #include "TDocWindow.h"
 #include "TEntryBar.h"
 #include "TTranslate.h"
@@ -4942,6 +4943,17 @@ TPageView::RunScript(const std::string& script, Document& document)
 			if (!ExportFile(fDocument, command.c_str() + (tab ? 10 : 12),
 					tab ? kSaveTabText : kSaveCommaText, error))
 				fprintf(stderr, "export: %s\n", error.String());
+		} else if (command.compare(0, 6, "sheet ") == 0) {
+			// "sheet N": the SheetBar's tab N (from 0) chosen
+			if (Window() != NULL) {
+				BMessage msg(kMsgSheetSwitch);
+				msg.AddInt32("ActiveTab", atoi(command.c_str() + 6));
+				Window()->MessageReceived(&msg);
+			}
+			if (fDocument.CurrentSheet() != atoi(command.c_str() + 6))
+				ShowSheet(atoi(command.c_str() + 6));
+			fprintf(stderr, "sheet %d main part %d\n", fDocument.CurrentSheet(),
+				fDocument.MainPart());
 		} else if (command.compare(0, 11, "exportsylk ") == 0) {
 			// "exportsylk <path>": Save As in the SYLK format
 			BString error;

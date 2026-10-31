@@ -130,6 +130,9 @@ not released yet: build it to try it.
 - Spreadsheets: shown, cells edited (values and formulas, evaluated), cut,
   copy and paste, Fill Down and Fill Right, the selected rows inserted and
   deleted.
+- Sheets: the SheetBar (View > Show SheetBar) has a tab per sheet; a tab
+  shows its sheet (CheckBook's Setup, Summary and months), and the
+  document saves showing it.
 - Viewing: drawings, charts (2D), images, tables, clocks and presentations.
 
 ### Since 0.1.1: spreadsheets
@@ -186,10 +189,10 @@ documents.
 **Not yet**
 
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
-FormatBar; named selections; Import and Export Styles; New Window; Show
-Clipboard; creating and linking frames; drawing tools; in spreadsheets
-charts made from cells; new documents of other kinds; the Word, Excel,
-HTML and SYLK translators; the thesaurus and dictionary (they need data
+FormatBar; Import and Export Styles; New Window; Show Clipboard; creating
+and linking frames; drawing tools; in spreadsheets charts made from cells;
+new documents of other kinds than word processing and spreadsheets; the
+Word, Excel and HTML translators; the thesaurus and dictionary (they need data
 files that weren't part of Gobe Productive). Documents saved by the port
 open in the port; they haven't been tried in the original on BeOS.
 

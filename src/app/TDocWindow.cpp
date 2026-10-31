@@ -47,6 +47,7 @@
 #include "TPageBar.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
+#include "TSheetBar.h"
 #include "TSpellDialogs.h"
 #include "TFindDialog.h"
 #include "TPreferences.h"
@@ -182,6 +183,10 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 				fEntryBar->Hide();
 				pages->fEntryBar = fEntryBar;
 			}
+			// the SheetBar, shown for documents with several sheets
+			fSheetBar = new TSheetBar(*document);
+			if (document->sheets.sheets.size() < 2)
+				fSheetBar->Hide();
 		} else
 			desk = new TDocView(*document);
 		// (the status line is the port's: which slide a presentation shows,
@@ -236,6 +241,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		layout.Add(fRuler);
 	if (fEntryBar != NULL)
 		layout.Add(fEntryBar);
+	if (fSheetBar != NULL)
+		layout.Add(fSheetBar);
 	layout
 		.Add(desk)
 		.AddGroup(B_HORIZONTAL)
@@ -452,6 +459,33 @@ TDocWindow::MessageReceived(BMessage* message)
 			return;
 		// Window > Hide/Show PartBar: the part bar and the active part's
 		// ribbon (the ruler)
+		case 'sMF3':	// Show/Hide SheetBar
+			if (fSheetBar != NULL) {
+				if (fSheetBar->IsHidden())
+					fSheetBar->Show();
+				else
+					fSheetBar->Hide();
+			}
+			return;
+		case kMsgSheetSwitch: {
+			// TDocWinSheetSwitchCommand (by index, or by "name")
+			int32 index = message->GetInt32("ActiveTab", -1);
+			const char* name = NULL;
+			if (index < 0 && message->FindString("name", &name) == B_OK)
+				for (size_t i = 0; i < fDocument->sheets.sheets.size(); i++)
+					if (fDocument->sheets.sheets[i].name == name)
+						index = int32(i);
+			if (fPages == NULL || index < 0 || !fPages->ShowSheet(index)) {
+				beep();
+				return;
+			}
+			if (fSheetBar != NULL)
+				fSheetBar->Update();
+			PostMessage(kMsgDocumentChanged);
+			ShowActiveRibbon();
+			InstallPartMenus();
+			return;
+		}
 		case 'sMF6':
 			if (fPartBar != NULL) {
 				bool hide = !fPartBar->IsHidden();
@@ -1275,7 +1309,8 @@ TDocWindow::MenusBeginning()
 		if (item == NULL)
 			continue;
 		BView* bar = ribbon.command == 'sMF6' ? (BView*)fPartBar
-			: ribbon.command == 'sMF4' ? (BView*)fFormatBar : NULL;
+			: ribbon.command == 'sMF4' ? (BView*)fFormatBar
+			: ribbon.command == 'sMF3' ? (BView*)fSheetBar : NULL;
 		bool shown = bar != NULL && !bar->IsHidden();
 		item->SetLabel(GobeResources::IndexString(1, ribbon.string + (shown ? 0 : 1)).String());
 		item->SetEnabled(bar != NULL);

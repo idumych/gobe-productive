@@ -298,9 +298,164 @@ Document::GraphicsPart(size_t part) const
 int
 Document::MainPart() const
 {
-	if (!sheets.sheets.empty() && sheets.sheets[0].mainPart < parts.parts.size())
-		return int(sheets.sheets[0].mainPart);
+	size_t sheet = size_t(CurrentSheet());
+	if (sheet < sheets.sheets.size() && sheets.sheets[sheet].mainPart < parts.parts.size())
+		return int(sheets.sheets[sheet].mainPart);
 	return -1;
+}
+
+
+int
+Document::CurrentSheet() const
+{
+	int root = RootPart();
+	if (root < 0)
+		return 0;
+	// TRootPart::Write: the sheet after TPart's fields (32 bytes)
+	const std::vector<uint8_t>& d = parts.parts[size_t(root)].data;
+	if (d.size() < 36)
+		return 0;
+	uint32_t sheet = uint32_t(d[32]) << 24 | uint32_t(d[33]) << 16 | uint32_t(d[34]) << 8 | d[35];
+	return sheet < sheets.sheets.size() ? int(sheet) : 0;
+}
+
+
+bool
+Document::ShowSheet(size_t sheet, std::string& error)
+{
+	int root = RootPart();
+	if (sheet >= sheets.sheets.size()) {
+		error = "no such sheet";
+		return false;
+	}
+	if (int(sheet) == CurrentSheet())
+		return true;
+	if (root < 0 || parts.parts[size_t(root)].kind != Sig("BROT") || !tailRead[size_t(root)]
+			|| tails[size_t(root)].portals.size() != 1
+			|| tails[size_t(root)].portals[0].frames.size() != 1) {
+		error = "the sheets aren't shown in a browse root";
+		return false;
+	}
+	const LeafSheet& from = sheets.sheets[size_t(CurrentSheet())];
+	const LeafSheet& to = sheets.sheets[sheet];
+	auto usable = [&](uint32_t part, bool main) {
+		if (part == kNoPart)
+			return !main;
+		if (part >= parts.parts.size() || !tailRead[part])
+			return false;
+		uint32_t kind = parts.parts[part].kind;
+		return kind == Sig("SPRD") || kind == Sig("WORD") || kind == Sig("GRFX")
+			|| kind == Sig("chrt");
+	};
+	if (!usable(to.mainPart, true) || !usable(to.graphicsPart, false)) {
+		error = "the sheet's parts can't be shown";
+		return false;
+	}
+	// the shown sheet's frames in the root: their sizes and styles, then gone
+	struct Shown {
+		bool found = false;
+		Frame frame;
+	} oldMain, oldGraphics;
+	auto takeOut = [&](uint32_t part, Shown& shown) {
+		if (part >= tails.size() || !tailRead[part])
+			return;
+		std::vector<Portal>& portals = tails[part].portals;
+		for (size_t i = 0; i < portals.size(); i++)
+			if (portals[i].part == uint32_t(root) && !portals[i].frames.empty()) {
+				shown.found = true;
+				shown.frame = portals[i].frames[0];
+				portals.erase(portals.begin() + i);
+				dirtyTails.insert(part);
+				return;
+			}
+	};
+	takeOut(from.mainPart, oldMain);
+	takeOut(from.graphicsPart, oldGraphics);
+	const Frame& rootFrame = tails[size_t(root)].portals[0].frames[0];
+	if (!oldMain.found) {
+		oldMain.frame.extent[0] = rootFrame.extent[0];
+		oldMain.frame.extent[1] = rootFrame.extent[1];
+		oldMain.frame.style = rootFrame.style;
+	}
+	if (!oldGraphics.found)
+		oldGraphics.frame = oldMain.frame;
+
+	// a portal in the root with one frame (TPortal: 0, its flags, 1)
+	auto bring = [&](uint32_t part, const Frame& like, uint32_t flags) -> uint32_t {
+		if (part == kNoPart)
+			return kNoPart;
+		uint32_t kind = parts.parts[part].kind;
+		Portal portal;
+		portal.part = uint32_t(root);
+		portal.values[0] = 0;
+		portal.values[1] = flags;
+		portal.values[2] = 1;
+		Frame f;
+		f.origin[0] = like.origin[0];
+		f.origin[1] = like.origin[1];
+		f.extent[0] = like.extent[0];
+		f.extent[1] = like.extent[1];
+		f.style = like.style;
+		f.shape[0] = 0;
+		f.shape[1] = f.shape[2] = kNoPart;
+		f.part = part;
+		f.container = uint32_t(root);
+		DocWriter raw, portalRaw;
+		float rect[4] = {0, 0, f.extent[0], f.extent[1]};
+		if (kind == Sig("SPRD")) {
+			// TSSFrame: the cells shown (SetSize sets them again), the rectangle
+			raw.UInt16(0);
+			raw.UInt16(0);
+			raw.UInt16(uint16_t(f.extent[1] / 16));
+			raw.UInt16(uint16_t(f.extent[0] / 72));
+			raw.Rect(rect);
+			f.cells[2] = uint16_t(f.extent[1] / 16);
+			f.cells[3] = uint16_t(f.extent[0] / 72);
+			std::copy(rect, rect + 4, f.sheetRect);
+		} else if (kind == Sig("WORD")) {
+			// TWPFrame: the text it shows (all of it), the heights (none yet)
+			uint32_t length = 0;
+			if (const WPPart* wp = WordPart(part))
+				for (const WPParagraph& p : wp->paragraphs)
+					length += uint32_t(p.text.size());
+			f.textStart = 0;
+			f.textLength = length;
+			f.textAt = 1;
+			raw.UInt32(0);
+			raw.UInt32(length);
+			for (int i = 0; i < 4; i++)
+				raw.Float(0);
+			portalRaw.Float(0);				// TWPPortal
+		} else {
+			raw.Rect(rect);					// TFrameGR
+			std::copy(rect, rect + 4, f.sheetRect);
+			portalRaw.UInt32(0);			// TGRPortal: view 0
+			portal.view = 0;
+		}
+		f.raw = raw.Data();
+		portal.raw = portalRaw.Data();
+		portal.frames.push_back(f);
+		tails[part].portals.push_back(portal);
+		dirtyTails.insert(part);
+		return uint32_t(tails[part].portals.size() - 1);
+	};
+	uint32_t mainPortal = bring(to.mainPart, oldMain.frame, 12);
+	uint32_t graphicsPortal = bring(to.graphicsPart, oldGraphics.frame, 4);
+	// TBrowseRootFrame: the main frame and the graphics frame
+	DocWriter pointers;
+	pointers.UInt32(to.mainPart);
+	pointers.UInt32(mainPortal);
+	pointers.UInt32(0);
+	pointers.UInt32(to.graphicsPart);
+	pointers.UInt32(graphicsPortal);
+	pointers.UInt32(to.graphicsPart == kNoPart ? kNoPart : 0);
+	tails[size_t(root)].portals[0].frames[0].raw = pointers.Data();
+	dirtyTails.insert(size_t(root));
+	std::vector<uint8_t>& record = parts.parts[size_t(root)].data;
+	for (int i = 0; i < 4; i++)
+		record[32 + i] = uint8_t(sheet >> (24 - 8 * i));
+	ComputeHiddenFrames();
+	return true;
 }
 
 

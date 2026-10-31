@@ -194,8 +194,18 @@ struct Document {
 	// selections added since loading (records written at the end of the
 	// SelectionMgr by Save)
 	std::vector<std::vector<uint8_t>> addedSelections;
-	// the first sheet's main part (what Save As exports), or -1
+	// the shown sheet's main part (what Save As exports), or -1
 	int MainPart() const;
+	// the sheet the root part shows (TRootPart: its index in the SheetMgr)
+	int CurrentSheet() const;
+	// TDocWindow::SetSheetPtr for a browse root (TDocWindow::NewRootFrame
+	// makes a new root for the sheet): the shown sheet's main and graphics
+	// parts lose their frames in the root, sheet `sheet`'s get frames of the
+	// same size, the root frame points at them (TBrowseRootFrame) and the
+	// root part names the sheet; the tails are written by Save. False (and
+	// nothing changed) for a paged root or a sheet whose parts can't be
+	// shown this way.
+	bool ShowSheet(size_t sheet, std::string& error);
 };
 
 bool LoadDocument(const std::string& path, Document& doc, std::string& error);
