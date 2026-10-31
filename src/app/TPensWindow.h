@@ -2,8 +2,8 @@
 // Ink's pens: MajorType 1, MinorType 3; its TPenView's list of the front
 // document's pens) and the pen dialog (TDialogEditPen, DIAL/Item 32: a
 // new pen or one edited). The window's other kinds and inks (colours,
-// patterns, gradients and their sets) and the pen view's width controls
-// aren't ported.
+// patterns, gradients and their sets)
+// aren't ported here (TInkEditors: the editors, the width controls).
 #ifndef GOBE_TPENSWINDOW_H
 #define GOBE_TPENSWINDOW_H
 
@@ -36,8 +36,9 @@ public:
 	static void Open();
 	// the list made again from the front document's pens
 	static void Refresh();
-	// test hooks: "select N", "new", "edit", "clear", "apply" (posted to
-	// the open window)
+	// test hooks: "select N", "new", "edit", "clear", "cut", "copy",
+	// "paste", "apply", "width +|-|N", "editink 0|1|2", "editor COMMAND"
+	// (posted to the open window)
 	static void Script(const std::string& command);
 
 protected:
@@ -50,6 +51,7 @@ private:
 
 	std::vector<PenType> fPens;
 	BMenu* fEdit = NULL;
+	class TPenWidthView* fWidth = NULL;
 };
 
 
