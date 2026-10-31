@@ -7,9 +7,12 @@
 #include <cstdio>
 #include <fstream>
 
+#include <sys/stat.h>
+
 #include "DocArchive.h"
 #include "Document.h"
 #include "Fields.h"
+#include "PNG.h"
 #include "SSEval.h"
 #include "Styles.h"
 #include "WPPart.h"
@@ -158,8 +161,16 @@ Translated(unsigned char c)
 }
 
 
-void WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book,
-	std::string& out);
+// what the export writes to: the text, the pictures (none collected
+// when `images` is null), the file's name for their folder
+struct Output {
+	SSBook& book;
+	std::string& out;
+	std::string title;
+	std::vector<HTMLImage>* images;
+};
+
+void WriteWord(const Document& doc, size_t part, const WPPart& wp, Output& o);
 
 
 // the part of a word processing part's text from `start`, `length`
@@ -230,6 +241,34 @@ FillAttribute(const StyleMgr& styles, uint32_t style)
 }
 
 
+// TExportHTML::writeBitmap: the frame's picture as a file in the
+// "<name>.images" folder ("image.N", from 0), then <IMG SRC WIDTH HEIGHT>.
+// The original draws the frame into a bitmap and writes it as GIF or JPEG
+// through the system's translators; the port writes an image part's
+// bitmap (the rectangle the frame shows) as PNG, and nothing for other
+// frames.
+void
+WritePicture(const Document& doc, const Frame& frame, Output& o)
+{
+	const IMPart* image = doc.ImagePart(frame.part);
+	if (image == nullptr || o.images == nullptr)
+		return;
+	std::vector<uint8_t> png = BitmapPNG(image->image, frame.sheetRect);
+	if (png.empty())
+		return;
+	int width = 0, height = 0;
+	if (png.size() > 24) {
+		width = png[16] << 24 | png[17] << 16 | png[18] << 8 | png[19];
+		height = png[20] << 24 | png[21] << 16 | png[22] << 8 | png[23];
+	}
+	std::string name = "image." + std::to_string(o.images->size()) + ".png";
+	o.images->push_back({name, png});
+	char size[64];
+	snprintf(size, sizeof size, "\" WIDTH=\"%i\" HEIGHT=\"%i\">", width, height);
+	o.out += "<IMG SRC=\"" + o.title + ".images/" + name + size;
+}
+
+
 // TExportHTML::WriteTable, WriteTableRow, WriteTableCell, with what
 // TTableExport::DoExport gives the translator: the first frame's width
 // and height (WIDTH only when it isn't 0), a BORDER of its pen's size
@@ -239,8 +278,9 @@ FillAttribute(const StyleMgr& styles, uint32_t style)
 // from its first paragraph's own alignment or else the frame style's
 // horizontal alignment, VALIGN from its vertical one; its text.
 void
-WriteTable(const Document& doc, size_t part, SSBook& book, std::string& out)
+WriteTable(const Document& doc, size_t part, Output& o)
 {
+	std::string& out = o.out;
 	const TablePart* table = doc.Table(part);
 	if (table == nullptr)
 		return;
@@ -311,7 +351,7 @@ WriteTable(const Document& doc, size_t part, SSBook& book, std::string& out)
 						: " VALIGN=TOP";
 			}
 			out += ">";
-			WriteWord(doc, table->textPart, cellText, book, out);
+			WriteWord(doc, table->textPart, cellText, o);
 			out += "</TD>";
 		}
 		out += "</TR>";
@@ -326,8 +366,9 @@ WriteTable(const Document& doc, size_t part, SSBook& book, std::string& out)
 // showing a table is written by WriteTable, other frames (pictures) not;
 // a separator line as <HR>; a paragraph with nothing written as &nbsp;
 void
-WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book, std::string& out)
+WriteWord(const Document& doc, size_t part, const WPPart& wp, Output& o)
 {
+	std::string& out = o.out;
 	const StyleMgr& styles = doc.styles;
 	for (const WPParagraph& p : wp.paragraphs) {
 		// BeginParagraph: the paragraph style's own alignment
@@ -369,12 +410,15 @@ WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book, std:
 				else if (special->kind == Sig("FRAM")) {
 					const Frame* frame = doc.FrameOf(special->frame[0], special->frame[1]);
 					if (frame != nullptr && doc.Table(frame->part) != nullptr)
-						WriteTable(doc, frame->part, book, out);
-					else
-						beginParagraph();	// (the picture isn't written)
+						WriteTable(doc, frame->part, o);
+					else {
+						beginParagraph();
+						if (frame != nullptr)
+							WritePicture(doc, *frame, o);
+					}
 				} else {
 					beginParagraph();
-					out += open + Escaped(FieldText(book, part, *special, -1)) + close;
+					out += open + Escaped(FieldText(o.book, part, *special, -1)) + close;
 				}
 				at++;
 				continue;
@@ -406,7 +450,7 @@ WriteWord(const Document& doc, size_t part, const WPPart& wp, SSBook& book, std:
 
 
 std::string
-HTMLText(const Document& doc, const std::string& title)
+HTMLText(const Document& doc, const std::string& title, std::vector<HTMLImage>* images)
 {
 	std::string out = "<HTML>\n<HEAD>\n<TITLE>" + Escaped(title) + "</TITLE>\n</HEAD>\n<BODY";
 	// writeBody: the "Text Background" style's own fill
@@ -424,12 +468,13 @@ HTMLText(const Document& doc, const std::string& title)
 		}
 	out += ">\n";
 	SSBook book(doc);
+	Output o{book, out, title, images};
 	for (size_t s = 0; s < doc.SheetCount(); s++) {
 		uint32_t main = doc.sheets.sheets[s].mainPart;
 		if (const WPPart* wp = doc.WordPart(main))
-			WriteWord(doc, main, *wp, book, out);
+			WriteWord(doc, main, *wp, o);
 		else if (doc.Table(main) != nullptr)
-			WriteTable(doc, main, book, out);
+			WriteTable(doc, main, o);
 	}
 	out += "</BODY>\n</HTML>\n";
 	return out;
@@ -440,14 +485,33 @@ bool
 ExportHTML(const Document& doc, const std::string& path, const std::string& title,
 	std::string& error)
 {
-	std::string text = HTMLText(doc, title);
+	std::vector<HTMLImage> images;
+	std::string text = HTMLText(doc, title, &images);
 	std::ofstream file(path, std::ios::binary | std::ios::trunc);
 	if (!file) {
 		error = "cannot write " + path;
 		return false;
 	}
 	file.write(text.data(), std::streamsize(text.size()));
-	return bool(file);
+	if (!file)
+		return false;
+	if (images.empty())
+		return true;
+	// TExportHTML::CreateImagesDirectory: "<name>.images" next to the file
+	size_t slash = path.rfind('/');
+	std::string folder = (slash == std::string::npos ? std::string() : path.substr(0, slash + 1))
+		+ title + ".images";
+	mkdir(folder.c_str(), 0755);
+	for (const HTMLImage& image : images) {
+		std::ofstream picture(folder + "/" + image.name, std::ios::binary | std::ios::trunc);
+		picture.write(reinterpret_cast<const char*>(image.bytes.data()),
+			std::streamsize(image.bytes.size()));
+		if (!picture) {
+			error = "cannot write " + folder + "/" + image.name;
+			return false;
+		}
+	}
+	return true;
 }
 
 } // namespace gobe
