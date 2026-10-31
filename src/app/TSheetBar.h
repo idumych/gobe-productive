@@ -18,6 +18,8 @@ static const uint32 kMsgSheetSwitch = 's00E';
 static const uint32 kMsgSheetRename = 's00D';
 // New Sheet… ('s00B'): the dialog, or with "name" and "kind" the sheet added
 static const uint32 kMsgSheetNew = 's00B';
+// Delete Sheet ('s00C'): the shown sheet, when another is left
+static const uint32 kMsgSheetDelete = 's00C';
 
 class TSheetBar : public BView {
 public:

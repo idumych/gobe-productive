@@ -207,6 +207,14 @@ TPageView::ShowSheet(int index, bool step)
 			CurrentViewState());
 		std::swap(before, fDocument);
 	}
+	SheetShown();
+	return true;
+}
+
+
+void
+TPageView::SheetShown()
+{
 	// nothing selected in the new sheet yet (TDocWindow::SetSheetPtr:
 	// SetActivePart(NULL), then the sheet's main part)
 	fSelectedCell.active = false;
@@ -220,7 +228,6 @@ TPageView::ShowSheet(int index, bool step)
 		Parent()->Layout(false);
 	ScrollTo(0, 0);
 	Invalidate();
-	return true;
 }
 
 

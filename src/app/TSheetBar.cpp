@@ -2,7 +2,7 @@
  * The SheetBar: TSheetBar::LoadAllElements' TTabControl (colors 0xeeeeee
  * for the shown sheet's tab, 0xd8d8d8 for the others, 0xc8c8c8 lines), one
  * tab per sheet in the SheetMgr's order, after the options menu (MENU 110:
- * New Sheet… (spreadsheets), Delete Sheet (not ported), Rename Sheet…). A
+ * New Sheet… (spreadsheets), Delete Sheet, Rename Sheet…). A
  * double click on a tab renames it ('s00D').
  */
 #include "TSheetBar.h"
@@ -64,7 +64,7 @@ BRect
 TSheetBar::TabFrame(int32 index) const
 {
 	float x = OptionsFrame().right + 6;
-	for (int32 i = 0; i < int32(fDocument.sheets.sheets.size()); i++) {
+	for (int32 i = 0; i < int32(fDocument.SheetCount()); i++) {
 		float width = StringWidth(fDocument.sheets.sheets[size_t(i)].name.c_str()) + 2 * kPad;
 		if (i == index)
 			return BRect(x, 2, x + width, kHeight - 2);
@@ -91,7 +91,7 @@ TSheetBar::Draw(BRect updateRect)
 	font_height fh;
 	GetFontHeight(&fh);
 	int32 shown = fDocument.CurrentSheet();
-	for (int32 i = 0; i < int32(fDocument.sheets.sheets.size()); i++) {
+	for (int32 i = 0; i < int32(fDocument.SheetCount()); i++) {
 		BRect tab = TabFrame(i);
 		if (i == shown)
 			SetHighColor(238, 238, 238);
@@ -112,13 +112,13 @@ void
 TSheetBar::MouseDown(BPoint where)
 {
 	if (OptionsFrame().InsetByCopy(-2, -2).Contains(where)) {
-		// TSheetBar::FixOptionsMenu: Delete with more than one sheet (not
-		// ported)
+		// TSheetBar::FixOptionsMenu: Delete with more than one sheet
 		TMenu items(110, true);
 		BPopUpMenu menu("options", false, false);
 		while (BMenuItem* item = items.RemoveItem(int32(0))) {
 			uint32 what = item->Message() != NULL ? item->Message()->what : 0;
-			item->SetEnabled(what == kMsgSheetRename || what == kMsgSheetNew);
+			item->SetEnabled(what == kMsgSheetRename || what == kMsgSheetNew
+				|| (what == kMsgSheetDelete && fDocument.SheetCount() > 1));
 			menu.AddItem(item);
 		}
 		BMenuItem* chosen = menu.Go(ConvertToScreen(OptionsFrame().LeftBottom()), false, true);
@@ -129,7 +129,7 @@ TSheetBar::MouseDown(BPoint where)
 	int32 clicks = 1;
 	if (BMessage* current = Window()->CurrentMessage())
 		current->FindInt32("clicks", &clicks);
-	for (int32 i = 0; i < int32(fDocument.sheets.sheets.size()); i++)
+	for (int32 i = 0; i < int32(fDocument.SheetCount()); i++)
 		if (TabFrame(i).Contains(where)) {
 			BMessage message(clicks == 2 ? kMsgSheetRename : kMsgSheetSwitch);
 			message.AddInt32("ActiveTab", i);

@@ -199,6 +199,14 @@ struct Document {
 	int MainPart() const;
 	// the sheet the root part shows (TRootPart: its index in the SheetMgr)
 	int CurrentSheet() const;
+	// the sheets in use (TSheetMgr +0x24): the first ones; deleted sheets
+	// follow them (TSheetMgr::SuspendSheet)
+	size_t SheetCount() const;
+	// Delete Sheet (TDocSheetNewOrDeleteCommand, TSheetMgr::SuspendSheet):
+	// with another sheet left, the sheet moves past those in use (its parts
+	// stay, as the original keeps them for Undo); the one before it (or
+	// after it, for the first) is shown if it was. False if it can't be.
+	bool DeleteSheet(size_t sheet, std::string& error);
 	// TDocWindow::SetSheetPtr for a browse root (TDocWindow::NewRootFrame
 	// makes a new root for the sheet): the shown sheet's main and graphics
 	// parts lose their frames in the root, sheet `sheet`'s get frames of the

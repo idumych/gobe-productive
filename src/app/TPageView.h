@@ -72,6 +72,9 @@ public:
 	// the SheetBar's tab chosen: that sheet shown (Document::ShowSheet), an
 	// undo step unless `step` is false (part of another); false if it can't be
 	bool ShowSheet(int index, bool step = true);
+	// the document shows another sheet (Delete Sheet): nothing selected,
+	// the frames again
+	void SheetShown();
 
 	// text editing: the caret's position in a word processing part
 	struct Caret {

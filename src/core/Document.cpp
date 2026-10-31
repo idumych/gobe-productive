@@ -420,16 +420,55 @@ Document::AddSpreadsheetSheet(const std::string& name, std::string& error)
 	LeafSheet sheet = sheets.sheets[size_t(CurrentSheet())];
 	sheet.name = name;
 	if (sheet.name.empty())
-		sheet.name = "Sheet " + std::to_string(sheets.sheets.size() + 1);
+		sheet.name = "Sheet " + std::to_string(SheetCount() + 1);
 	sheet.mainPart = main;
 	sheet.graphicsPart = graphics;
 	sheet.headerPart = sheet.footerPart = kNoPart;
 	sheet.frameSheet = false;
 	sheet.pageView = false;
-	sheets.sheets.push_back(sheet);
-	sheets.sheetCount = uint32_t(sheets.sheets.size());
+	// TSheetMgr::NewSheet: after those in use, before the deleted ones
+	size_t at = SheetCount();
+	sheets.sheets.insert(sheets.sheets.begin() + long(at), sheet);
+	sheets.sheetCount = uint32_t(at + 1);
 	sheetsChanged = true;
-	return int(sheets.sheets.size() - 1);
+	return int(at);
+}
+
+
+size_t
+Document::SheetCount() const
+{
+	if (sheets.sheetCount == 0 || sheets.sheetCount > sheets.sheets.size())
+		return sheets.sheets.size();
+	return sheets.sheetCount;
+}
+
+
+bool
+Document::DeleteSheet(size_t sheet, std::string& error)
+{
+	size_t count = SheetCount();
+	if (sheet >= count || count < 2) {
+		error = "the last sheet can't be deleted";
+		return false;
+	}
+	if (int(sheet) == CurrentSheet() && !ShowSheet(sheet == 0 ? 1 : sheet - 1, error))
+		return false;
+	int shown = CurrentSheet();
+	LeafSheet moved = sheets.sheets[sheet];
+	sheets.sheets.erase(sheets.sheets.begin() + long(sheet));
+	sheets.sheets.push_back(moved);
+	sheets.sheetCount = uint32_t(count - 1);
+	sheetsChanged = true;
+	// the shown sheet's index after the move
+	if (shown > int(sheet)) {
+		int root = RootPart();
+		std::vector<uint8_t>& record = parts.parts[size_t(root)].data;
+		for (int i = 0; i < 4; i++)
+			record[32 + i] = uint8_t(uint32_t(shown - 1) >> (24 - 8 * i));
+		dirtyTails.insert(size_t(root));
+	}
+	return true;
 }
 
 
@@ -452,7 +491,7 @@ bool
 Document::ShowSheet(size_t sheet, std::string& error)
 {
 	int root = RootPart();
-	if (sheet >= sheets.sheets.size()) {
+	if (sheet >= SheetCount()) {
 		error = "no such sheet";
 		return false;
 	}

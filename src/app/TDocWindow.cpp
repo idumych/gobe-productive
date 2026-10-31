@@ -186,7 +186,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			}
 			// the SheetBar, shown for documents with several sheets
 			fSheetBar = new TSheetBar(*document);
-			if (document->sheets.sheets.size() < 2)
+			if (document->SheetCount() < 2)
 				fSheetBar->Hide();
 		} else
 			desk = new TDocView(*document);
@@ -480,8 +480,8 @@ TDocWindow::MessageReceived(BMessage* message)
 				return;
 			if (message->FindString("name", &name) != B_OK || name == NULL) {
 				std::vector<std::string> names;
-				for (const LeafSheet& sheet : fDocument->sheets.sheets)
-					names.push_back(sheet.name);
+				for (size_t i = 0; i < fDocument->SheetCount(); i++)
+					names.push_back(fDocument->sheets.sheets[i].name);
 				(new TDialogSheetNew(this, names))->RunDialog();
 				return;
 			}
@@ -509,17 +509,41 @@ TDocWindow::MessageReceived(BMessage* message)
 			InstallPartMenus();
 			return;
 		}
+		case kMsgSheetDelete: {
+			// TSheetMgr::HandleMessage 's00C': the shown sheet, when another
+			// is left (TDocSheetNewOrDeleteCommand, "Delete Sheet")
+			if (fPages == NULL || fDocument->SheetCount() < 2) {
+				beep();
+				return;
+			}
+			int32 index = message->GetInt32("ActiveTab", fDocument->CurrentSheet());
+			fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 17).String(),
+				fPages->CurrentViewState());
+			std::string error;
+			if (!fDocument->DeleteSheet(size_t(index), error)) {
+				fprintf(stderr, "Delete Sheet: %s\n", error.c_str());
+				beep();
+				return;
+			}
+			fPages->SheetShown();
+			if (fSheetBar != NULL)
+				fSheetBar->Update();
+			PostMessage(kMsgDocumentChanged);
+			ShowActiveRibbon();
+			InstallPartMenus();
+			return;
+		}
 		case kMsgSheetRename: {
 			// TSheetMgr::HandleMessage 's00D': the dialog, or with "name"
 			// TDocSheetRenameCommand ("Rename Sheet")
 			int32 index = message->GetInt32("ActiveTab", fDocument->CurrentSheet());
 			const char* name = NULL;
-			if (fPages == NULL || index < 0 || size_t(index) >= fDocument->sheets.sheets.size())
+			if (fPages == NULL || index < 0 || size_t(index) >= fDocument->SheetCount())
 				return;
 			if (message->FindString("name", &name) != B_OK || name == NULL) {
 				std::vector<std::string> names;
-				for (const LeafSheet& sheet : fDocument->sheets.sheets)
-					names.push_back(sheet.name);
+				for (size_t i = 0; i < fDocument->SheetCount(); i++)
+					names.push_back(fDocument->sheets.sheets[i].name);
 				(new TDialogSheetRename(this, names, index))->RunDialog();
 				return;
 			}
@@ -539,7 +563,7 @@ TDocWindow::MessageReceived(BMessage* message)
 			int32 index = message->GetInt32("ActiveTab", -1);
 			const char* name = NULL;
 			if (index < 0 && message->FindString("name", &name) == B_OK)
-				for (size_t i = 0; i < fDocument->sheets.sheets.size(); i++)
+				for (size_t i = 0; i < fDocument->SheetCount(); i++)
 					if (fDocument->sheets.sheets[i].name == name)
 						index = int32(i);
 			if (fPages == NULL || index < 0 || !fPages->ShowSheet(index)) {

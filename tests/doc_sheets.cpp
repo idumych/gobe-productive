@@ -148,6 +148,25 @@ main(int argc, char** argv)
 			Check(false, name + ": the new sheet's spreadsheet back");
 		Check(back.ShowSheet(size_t(added) + 1, error) && back.ShowSheet(0, error), name
 			+ ": the sheets shown after reloading " + error);
+		// Delete Sheet: the shown one goes past those in use, the one before
+		// it is shown; saved and reloaded
+		size_t count = back.SheetCount();
+		Check(back.ShowSheet(size_t(added), error) && back.DeleteSheet(size_t(added), error),
+			name + ": deleted " + error);
+		Check(back.SheetCount() == count - 1 && back.CurrentSheet() == added - 1
+			&& back.sheets.sheets.back().name == "Sheet " + std::to_string(sheetsBefore + 1),
+			name + ": the sheet before shown, the deleted one last");
+		Check(!back.ShowSheet(count - 1, error), name + ": a deleted sheet isn't shown");
+		Check(back.Save(path, error), name + ": save after deleting " + error);
+		Document third;
+		Check(LoadDocument(path, third, error) && third.SheetCount() == count - 1
+			&& third.sheets.sheets[count - 2].name == "Budget", name + ": deleted after reloading");
+		Check(third.AddSpreadsheetSheet("Later", error) == int(count - 1)
+			&& third.sheets.sheets[count - 1].name == "Later", name + ": a new sheet before the deleted");
+		// the last one left can't go
+		Document one;
+		if (CreateBlankSpreadsheet(one, error))
+			Check(!one.DeleteSheet(0, error), "the last sheet stays");
 		remove(path.c_str());
 	}
 	printf("doc_sheets: documents %d, switches %d, ok %d, failed %d\n", documents, switches, sOk,
