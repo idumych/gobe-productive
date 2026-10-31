@@ -5,7 +5,10 @@ systems: **Haiku** (and Renku OS), **VitruvianOS** (a BeOS-like OS based on
 Linux) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-This is a **preview** focused on the word processor. See [Status](#status).
+The released **preview** (0.1.1) is focused on the word processor. Since
+then, work has moved to spreadsheets: most of the original's spreadsheet
+editing now works in the sources here and will be in the next release. See
+[Status](#status).
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
 > with Gobe Software or the current owners of Gobe Productive. It contains
@@ -102,9 +105,12 @@ On Linux (X11), with Edit Styles:
 
 ## Status
 
-This preview is about the word processor.
+The 0.1.1 preview is about the word processor; spreadsheets in it are
+shown and their cells can be edited, with formulas evaluated. Everything
+listed under [Since 0.1.1](#since-011-spreadsheets) is in the sources but
+not released yet: build it to try it.
 
-**Works**
+**Works in 0.1.1**
 
 - Opening and saving Gobe Productive documents. Only what was edited is
   rewritten; everything else is kept byte for byte. File > New (word
@@ -124,29 +130,50 @@ This preview is about the word processor.
   Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
   formatting a style directly).
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
-- Spreadsheets: formulas evaluated, cells editable, with the original's
-  Format and Options menus when cells are selected: Number… (the number
-  format categories), Lock and Unlock Cells, Column Width…, Row Height…,
-  Display Options… (grid, locked cells shaded, formulas, headings, circular
-  references marked), Fill
-  Down, Right, Up and Left, Go To Cell…, Move Cells… (formulas and named
-  ranges follow the cells), Insert Cells… and Delete Cells… (shifting the
-  cells down or right, up or left; whole rows and columns, selected by
-  their headings, go in and out), Sort… (up to three keys, ascending or
-  descending), Calculate Now, Auto Calculate; the cell context menu,
-  with Move Cells Here.
+- Spreadsheets: shown, cells edited (values and formulas, evaluated), cut,
+  copy and paste, Fill Down and Fill Right, the selected rows inserted and
+  deleted.
 - Viewing: drawings, charts (2D), images, tables, clocks and presentations.
+
+### Since 0.1.1: spreadsheets
+
+With cells selected, the original's Format and Options menus appear, and
+these work as they did in Gobe Productive, with its dialogs and alerts:
+
+- **Formats:** Number… (the original's number format categories), Lock
+  Cells and Unlock Cells (locked cells refuse changes), Column Width…, Row
+  Height…, Display Options… (grid, locked cells shaded, formulas instead of
+  their results, column and row headings, circular references marked).
+- **Filling:** Fill Down, Right, Up and Left.
+- **Moving cells:** Move Cells… and the context menu's Move Cells Here;
+  formulas, and named ranges, follow the cells they refer to.
+- **Inserting and deleting:** Insert Cells… and Delete Cells… shift cells
+  down or right, up or left; whole rows and columns, selected by clicking
+  their headings, go in and out, the sheet growing and shrinking with them.
+  References to deleted cells become #REF!.
+- **Sorting:** Sort… by up to three keys, each ascending or descending, in
+  the original's order (numbers, text, true/false, errors, empty cells).
+- **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
+- **Selecting:** whole rows and columns by their headings (shift-click or
+  drag for more), the corner for every cell in use; the cell context menu.
+- The edits can be undone (display options and Auto Calculate are
+  settings, not edits, as in the original), and the sheet's locks, sizes,
+  headings and options are saved with the document.
+
+Tested on Haiku R1/beta6 in a virtual machine, with the original's sample
+documents.
 
 **Not yet**
 
 The ToolBar; pattern and gradient inks, fill, pen and transparency in the
 FormatBar; named selections; Import and Export Styles; New Window; Show
 Clipboard; creating and linking frames; drawing tools; in spreadsheets
-resizing rows and columns by dragging their headings, Select Dependents;
-new documents of other kinds; the Word, Excel, HTML and SYLK translators;
-the thesaurus and dictionary (they need data files that weren't part of
-Gobe Productive). Documents saved by the port open in the port; they
-haven't been tried in the original on BeOS.
+selections of several ranges and Select Dependents, resizing rows and
+columns by dragging their headings, charts made from cells; new documents
+of other kinds; the Word, Excel, HTML and SYLK translators; the thesaurus
+and dictionary (they need data files that weren't part of Gobe
+Productive). Documents saved by the port open in the port; they haven't
+been tried in the original on BeOS.
 
 ## Building
 
