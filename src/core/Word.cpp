@@ -130,12 +130,15 @@ ApplyChar(const std::vector<uint8_t>& d, size_t at, size_t end, CharProps& c)
 		if (at + size_t(size) > end)
 			break;
 		uint8_t o = at < d.size() ? d[at] : 0;
-		// (0x80: as the style, 0x81: the style's opposite: off and on here)
-		bool on = o == 1 || o == 0x81;
+		// a toggle: 0 off, 1 on, 0x80 as the style has it, 0x81 the
+		// style's opposite (the properties start as the style's)
+		auto toggle = [o](bool style) {
+			return o == 0x80 ? style : o == 0x81 ? !style : o != 0;
+		};
 		switch (sprm) {
-			case 0x0835: c.bold = on; break;
-			case 0x0836: c.italic = on; break;
-			case 0x0837: c.strike = on; break;
+			case 0x0835: c.bold = toggle(c.bold); break;
+			case 0x0836: c.italic = toggle(c.italic); break;
+			case 0x0837: c.strike = toggle(c.strike); break;
 			case 0x2a3e: c.underline = o != 0; break;
 			case 0x4a43: c.halfPoints = U16(d, at); break;
 			case 0x2a48: c.superscript = o == 1; c.subscript = o == 2; break;
@@ -201,6 +204,96 @@ ApplyPara(const std::vector<uint8_t>& d, size_t at, size_t end, ParaProps& p)
 	}
 }
 
+// the style sheet (STSH): each style's kind, base and properties (its
+// UPXs' sprms), resolved through the bases; the default font
+struct StyleSheet {
+	struct Style {
+		bool used = false;
+		int kind = 0;				// stk: 1 paragraph, 2 character
+		uint16_t base = 0x0fff;		// istdBase (0x0fff: none)
+		std::vector<uint8_t> papx, chpx;	// the UPXs' sprms
+	};
+	std::vector<Style> styles;
+	uint16_t defaultFont = 0;		// rgftcStandardChpStsh[0]
+	bool present = false;
+
+	// [MS-DOC] STSH: cbStshi, the STSHI (cstd, cbSTDBaseInFile, ...,
+	// rgftcStandardChpStsh), then each style's cbStd and STD (the base
+	// part, xstzName, the UPXs, each padded to an even length)
+	void Read(const std::vector<uint8_t>& t, uint32_t fc, uint32_t lcb)
+	{
+		if (lcb < 4 || size_t(fc) + lcb > t.size())
+			return;
+		size_t end = size_t(fc) + lcb;
+		uint16_t cbStshi = U16(t, fc);
+		size_t stshi = size_t(fc) + 2;
+		uint16_t cstd = U16(t, stshi);
+		uint16_t cbBase = U16(t, stshi + 2);
+		if (cbStshi >= 14)
+			defaultFont = U16(t, stshi + 12);
+		size_t at = stshi + cbStshi;
+		present = true;
+		for (uint16_t i = 0; i < cstd && at + 2 <= end; i++) {
+			uint16_t cbStd = U16(t, at);
+			at += 2;
+			Style style;
+			if (cbStd >= 10 && at + cbStd <= end) {
+				style.used = true;
+				style.kind = U16(t, at + 2) & 0xf;
+				style.base = U16(t, at + 2) >> 4;
+				int cupx = U16(t, at + 4) & 0xf;
+				size_t q = at + cbBase;
+				size_t name = U16(t, q);
+				q += 2 + name * 2 + 2;
+				size_t stdEnd = at + cbStd;
+				for (int u = 0; u < cupx && q + 2 <= stdEnd; u++) {
+					size_t cb = U16(t, q);
+					q += 2;
+					if (q + cb > stdEnd)
+						break;
+					std::vector<uint8_t> upx(t.begin() + long(q), t.begin() + long(q + cb));
+					if (style.kind == 1 && u == 0)
+						style.papx.assign(upx.size() >= 2 ? upx.begin() + 2 : upx.end(), upx.end());
+					else if ((style.kind == 1 && u == 1) || (style.kind == 2 && u == 0))
+						style.chpx = upx;
+					q += cb + (cb & 1);
+				}
+			}
+			styles.push_back(style);
+			at += cbStd;
+		}
+	}
+
+	// a style's character properties through its bases (none: the
+	// defaults, 10 points in the default font)
+	CharProps Char(uint16_t istd, int depth = 0) const
+	{
+		CharProps c;
+		if (!present)
+			return c;
+		if (istd >= styles.size() || !styles[istd].used || depth > 16) {
+			c.halfPoints = 20;
+			c.font = defaultFont;
+			return c;
+		}
+		const Style& s = styles[istd];
+		c = Char(s.base, depth + 1);
+		ApplyChar(s.chpx, 0, s.chpx.size(), c);
+		return c;
+	}
+
+	ParaProps Para(uint16_t istd, int depth = 0) const
+	{
+		ParaProps p;
+		if (!present || istd >= styles.size() || !styles[istd].used || depth > 16)
+			return p;
+		const Style& s = styles[istd];
+		p = Para(s.base, depth + 1);
+		ApplyPara(s.papx, 0, s.papx.size(), p);
+		return p;
+	}
+};
+
 } // namespace
 
 
@@ -234,6 +327,8 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 	uint32_t fcChpx = U32(word, 0xfa), lcbChpx = U32(word, 0xfe);
 	uint32_t fcPapx = U32(word, 0x102), lcbPapx = U32(word, 0x106);
 	uint32_t fcFonts = U32(word, 0x112), lcbFonts = U32(word, 0x116);
+	StyleSheet stsh;
+	stsh.Read(table, U32(word, 0xa2), U32(word, 0xa6));
 	// the fonts' names (SttbfFfn: FFNs, the name from byte 40)
 	std::vector<std::string> fonts;
 	if (lcbFonts > 4 && fcFonts + lcbFonts <= table.size()) {
@@ -320,33 +415,68 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 	std::vector<std::pair<std::pair<uint32_t, uint32_t>, size_t>> chpx, papx;
 	fkpEntries(fcChpx, lcbChpx, false, chpx);
 	fkpEntries(fcPapx, lcbPapx, true, papx);
-	auto charProps = [&](uint32_t fc) {
-		CharProps c;
-		uint32_t at = fc;
+	// a paragraph's PAPX (its mark's FC): where its istd and sprms are
+	auto papxOf = [&](uint32_t fc, size_t& from, size_t& to) {
+		for (const auto& e : papx)
+			if (fc >= e.first.first && fc < e.first.second) {
+				if (e.second == 0 || e.second >= word.size())
+					return false;
+				size_t q = e.second;
+				size_t cb = word[q++];
+				size_t length = cb != 0 ? cb * 2 - 1 : size_t(word[q++]) * 2;
+				from = q;
+				to = std::min(word.size(), q + length);
+				return to >= from + 2;
+			}
+		return false;
+	};
+	auto styleOf = [&](uint32_t markFC) {
+		size_t from, to;
+		return papxOf(markFC, from, to) ? U16(word, from) : uint16_t(0);
+	};
+	// a character's properties: its paragraph style's, then its
+	// character style's (sprmCIstd), then its own
+	auto charProps = [&](uint32_t fc, uint16_t paragraphStyle) {
+		CharProps c = stsh.Char(paragraphStyle);
 		for (const auto& e : chpx)
-			if (at >= e.first.first && at < e.first.second) {
-				if (e.second != 0 && e.second < word.size())
-					ApplyChar(word, e.second + 1, e.second + 1 + word[e.second], c);
+			if (fc >= e.first.first && fc < e.first.second) {
+				if (e.second != 0 && e.second < word.size()) {
+					size_t from = e.second + 1, to = e.second + 1 + word[e.second];
+					for (size_t q = from; q + 4 <= to; ) {
+						uint16_t sprm = U16(word, q);
+						if (sprm == 0x4a30) {
+							uint16_t istd = U16(word, q + 2);
+							if (stsh.present && istd < stsh.styles.size()) {
+								const auto& cs = stsh.styles[istd];
+								ApplyChar(cs.chpx, 0, cs.chpx.size(), c);
+							}
+							break;
+						}
+						int size = OperandSize(sprm);
+						q += 2 + size_t(size < 0 ? word[q + 2] + 1 : size);
+					}
+					ApplyChar(word, from, to, c);
+				}
 				break;
 			}
 		return c;
 	};
 	auto paraProps = [&](uint32_t fc) {
-		ParaProps p;
-		uint32_t at = fc;
-		for (const auto& e : papx)
-			if (at >= e.first.first && at < e.first.second) {
-				if (e.second != 0 && e.second < word.size()) {
-					size_t q = e.second;
-					size_t cb = word[q++];
-					size_t length = cb != 0 ? cb * 2 - 1 : size_t(word[q++]) * 2;
-					// (the istd first, then the sprms)
-					ApplyPara(word, q + 2, std::min(word.size(), q + length), p);
-				}
-				break;
-			}
+		size_t from, to;
+		if (!papxOf(fc, from, to))
+			return stsh.Para(0);
+		// the istd first, then the sprms
+		ParaProps p = stsh.Para(U16(word, from));
+		ApplyPara(word, from + 2, to, p);
 		return p;
 	};
+	// each character's paragraph style (from the paragraph's mark)
+	std::vector<uint16_t> paragraphStyles(chars.size(), 0);
+	for (size_t i = chars.size(), style = 0; i-- > 0;) {
+		if (chars[i] == 0x0d || chars[i] == 0x0c || chars[i] == 0x07)
+			style = styleOf(fcs[i]);
+		paragraphStyles[i] = uint16_t(style);
+	}
 
 	// the paragraphs: text, runs, properties (from the paragraph mark)
 	paragraphs.clear();
@@ -355,8 +485,10 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 	bool haveCurrent = false;
 	int field = 0;				// inside a field's code (until its separator)
 	std::vector<int> fieldStack;
+	size_t charIndex = 0;		// the character being added (its paragraph's style)
 	auto addChar = [&](uint32_t c, uint32_t fc) {
-		CharProps props = charProps(fc);
+		CharProps props = charProps(fc, charIndex < paragraphStyles.size()
+			? paragraphStyles[charIndex] : 0);
 		WordParagraph& p = paragraphs.back();
 		if (!haveCurrent || !(props == current) || p.runs.empty()) {
 			WordRun run;
@@ -381,6 +513,7 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 	};
 	for (size_t i = 0; i < chars.size(); i++) {
 		uint32_t c = chars[i];
+		charIndex = i;
 		// fields: 0x13 begin, 0x14 the result follows, 0x15 end
 		if (c == 0x13) {
 			fieldStack.push_back(1);

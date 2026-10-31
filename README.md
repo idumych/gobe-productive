@@ -151,7 +151,7 @@ sizes, headings and options are saved with the document.
 | Calculate Now, Auto Calculate, Go To Cell…; named selections (Name Selection…, Edit Names…, names in formulas) | next |
 | The FormatBar and PartBar for cells: font, size, faces, colours, alignment, Wrap Text, borders (with Transparency > Other…), Number Formatting | next |
 | Selecting rows, columns and every cell by the headings; several ranges at once with Command-click; Select Dependents | next |
-| Charts made from cells (Make Chart is shown but off) | not yet |
+| Charts made from cells (Make Chart is shown but off) | in progress |
 
 ### Frames and drawing
 
@@ -160,7 +160,7 @@ sizes, headings and options are saved with the document.
 | Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
 | Creating and linking frames | not yet |
 | Drawing tools | not yet |
-| Pattern and gradient inks; fill, pen and transparency in the FormatBar | not yet |
+| Pattern and gradient inks; fill, pen and transparency in the FormatBar | in progress |
 
 ### Other formats (translators)
 
@@ -178,7 +178,7 @@ Opened with File > Open, saved with Save As's File Format menu.
 | Text tables: tab, comma or semicolon separated, opened as spreadsheets and saved from them (cells as shown, or formulas with Show Formulas on) | next |
 | SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths, row heights, the default font) | next |
 | Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | next |
-| Microsoft Word: Word 97 and later documents opened (faces, sizes, fonts, colours, alignment, indents, spacing, line breaks, fields as their results) | next |
+| Microsoft Word: Word 97 and later documents opened (their style sheet applied: faces, sizes, fonts, colours, alignment, indents, spacing; line breaks, fields as their results) | next |
 | Microsoft Word: text documents saved as Word 97 (text, faces, sizes, fonts, colours, alignment, indents, spacing, line and page breaks, fields as their text; not frames, tables or styles) | next |
 
 Ranges are written A1..B2, as Gobe Productive writes them (A1:B2 is still
