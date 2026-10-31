@@ -50,7 +50,45 @@ ReadInk(DocArchive& a, Ink& ink)
 				ink.angle = a.Float();
 		}
 	}
-	else {
+	else if (kind == Sig("FPAT")) {
+		// TFillPattern: 'TPAT', a byte, the bitmap (TOutputArchive::
+		// WriteBitmap: 'BMAP', its size, a bool, the color space, bytes
+		// per row, the bounds, compressed, the data's size, the data,
+		// 'BmaP'). In the ink sets up to 3 zero bytes come before the zlib
+		// data, and the fill's size is a few bytes off: read through it;
+		// the pixels kept as they are.
+		// (a property's fill ends the data: its size is right)
+		if (start + size != a.Data().size()) {
+			try {
+				a.CheckSig(Sig("TPAT"));
+				a.UInt8();
+				a.CheckSig(Sig("BMAP"));
+				uint32_t bytes = a.UInt32();
+				if (bytes != 0) {
+					a.Bool();
+					a.UInt32();
+					a.UInt32();
+					float bounds[4];
+					a.Rect(bounds);
+					bool compressed = a.FileFormatVersion() > 0x15 && a.Bool();
+					if (compressed)
+						bytes = a.UInt32();
+					for (int pad = 0; compressed && pad < 3 && a.Position() < a.Data().size()
+							&& a.Data()[a.Position()] == 0; pad++)
+						a.UInt8();
+					a.Bytes(bytes);
+				}
+				a.CheckSig(Sig("BmaP"));
+				size_t end = a.Position();
+				a.Seek(start - 8);
+				ink.otherFill = a.Bytes(end - (start - 8));
+				return true;
+			} catch (const ArchiveError&) {
+			}
+		}
+		a.Seek(start - 8);
+		ink.otherFill = a.Bytes(size_t(size) + 8);
+	} else {
 		a.Seek(start - 8);
 		ink.otherFill = a.Bytes(size_t(size) + 8);
 	}

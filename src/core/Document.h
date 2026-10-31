@@ -17,6 +17,7 @@
 #include "GRPart.h"
 #include "IMPart.h"
 #include "PartTail.h"
+#include "InkSets.h"
 #include "Pens.h"
 #include "SSPart.h"
 #include "TablePart.h"
@@ -36,6 +37,7 @@ struct Document {
 	LinksMgr links;
 	SheetMgr sheets;
 	PenMgr pens;			// the document's pens ("PenMgr")
+	SetMgr inkSets;			// the document's own ink sets ("SetMgr")
 	// parsed word processing parts, index into parts.parts
 	std::vector<std::pair<size_t, WPPart>> wordParts;
 	std::vector<std::pair<size_t, GRPart>> graphicsParts;
@@ -78,6 +80,7 @@ struct Document {
 	bool selectionsChanged = false;	// spreadsheet selections/names moved
 	bool linksChanged = false;		// links added (the LinksMgr, written by Save)
 	bool pensChanged = false;		// pens made, edited or deleted (the PenMgr)
+	bool inkSetsChanged = false;	// its ink sets changed (the SetMgr)
 	// TDoc +0x70 ("Document Misc"): bit 2 shows invisibles in text
 	uint32_t documentFlags = 0;
 	bool documentFlagsChanged = false;

@@ -137,7 +137,8 @@ struct LinksMgr {
 void ReadLinksMgr(DocArchive& a, LinksMgr& out);
 std::vector<uint8_t> WriteLinksMgr(const LinksMgr& links);
 
-// "SetMgr" (unparseable): 'SETM', 3 zero u32s (ink set counts), 'SetM'.
+// "SetMgr" with no sets: 'SETM', 3 zero u32s (ink set counts), 'SetM'
+// (InkSets.h reads and writes it with its sets).
 std::vector<uint8_t> WriteSetMgr();
 
 // "PenMgr" (unparseable): 'PENM', u8 flag, bool, pen count, pen entries,
