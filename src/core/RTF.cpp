@@ -5,6 +5,7 @@
 #include "Editing.h"
 #include "InlineParts.h"
 #include "PNG.h"
+#include "Word.h"
 
 #include <algorithm>
 #include <cmath>
@@ -1472,8 +1473,21 @@ RTFWriter::Picture(const WPMiscInfo& frame)
 {
 	const Frame* f = FrameAt(fDoc, frame.frame);
 	const IMPart* image = f != nullptr ? fDoc.ImagePart(f->part) : nullptr;
-	if (image == nullptr)
+	if (image == nullptr) {
+		// a table: its cells' text, a \line before each row, \tab between
+		// the cells (the port's)
+		std::string table = TableText(fDoc, frame.frame), segment;
+		for (char c : table) {
+			if (c == '\x01' || c == '\t') {
+				Text(segment);
+				segment.clear();
+				fOut += c == '\t' ? "\\tab " : "\\line ";
+			} else
+				segment += c;
+		}
+		Text(segment);
 		return;
+	}
 	std::vector<uint8_t> png = BitmapPNG(image->image, f->sheetRect);
 	if (png.size() < 24)
 		return;

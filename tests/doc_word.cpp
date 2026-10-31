@@ -12,6 +12,7 @@
 
 #include "Document.h"
 #include "Excel.h"
+#include "HTMLImport.h"
 #include "Styles.h"
 #include "WPPart.h"
 #include "Word.h"
@@ -209,6 +210,27 @@ main()
 			|| ResolveTextStyle(doc.styles, style).alignment == 1, "centered in the document");
 	}
 	remove(path.c_str());
+
+	// Save As Word of a document with a table: its cells' text a line a
+	// row, tabs between the cells (WordBytes; the table itself isn't
+	// written)
+	Document tabled;
+	std::string importError;
+	Check(ImportHTMLText("<HTML><BODY><P>Before</P><TABLE><TR><TD>Name<TD>Count"
+		"<TR><TD>Apples<TD>12</TABLE><P>After</P></BODY></HTML>", tabled, importError),
+		"a table opened " + importError);
+	std::vector<WordParagraph> written;
+	std::string readError;
+	Check(ReadWord(WordBytes(tabled), written, readError), "the table written " + readError);
+	std::string all;
+	for (const WordParagraph& p : written) {
+		for (const WordRun& r : p.runs)
+			all += r.text;
+		all += '\n';
+	}
+	Check(all.find("Name\tCount") != std::string::npos
+		&& all.find("Apples\t12") != std::string::npos && all.find("After") != std::string::npos,
+		"the table's cells written: " + all);
 	printf("doc_word: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed != 0 || sOk == 0;
 }

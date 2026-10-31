@@ -184,6 +184,34 @@ main(int argc, char** argv)
 		MakeAndReopen(loan, main, range, "LoanCalculator", 10, 2, expected.names1, expected.names2,
 			expected.table.empty() ? std::vector<float>() : expected.table[0]);
 	}
+	// StockPrice: its sheet only as large as its cells (the drawing's
+	// frame 284 x 629): the chart made inside it, not right of the cells
+	for (int i = 1; i < argc; i++) {
+		std::string path = argv[i];
+		if (path.size() < 10 || path.compare(path.size() - 10, 10, "StockPrice") != 0)
+			continue;
+		Document stock;
+		Check(LoadDocument(path, stock, error), "StockPrice " + error);
+		size_t main = size_t(stock.MainPart());
+		int chart = MakeChart(stock, main, Range(10, 2, 12, 3), error);
+		Check(chart >= 0, "StockPrice: a chart " + error);
+		const Frame* inside = nullptr;
+		const Frame* drawingFrame = nullptr;
+		for (size_t p = 0; p < stock.tails.size(); p++)
+			if (stock.tailRead[p])
+				for (const Portal& portal : stock.tails[p].portals)
+					for (const Frame& f : portal.frames) {
+						if (chart >= 0 && f.part == uint32_t(chart))
+							inside = &f;
+						else if (f.part == stock.sheets.sheets[0].graphicsPart)
+							drawingFrame = &f;
+					}
+		Check(inside != nullptr && drawingFrame != nullptr
+			&& inside->origin[0] >= 0 && inside->origin[1] >= 0
+			&& inside->origin[0] + inside->extent[0] <= drawingFrame->extent[0]
+			&& inside->origin[1] + inside->extent[1] <= drawingFrame->extent[1],
+			"StockPrice: the chart within the drawing's frame: " + (inside == nullptr ? std::string("none") : std::to_string(inside->origin[0]) + "," + std::to_string(inside->origin[1]) + " " + std::to_string(inside->extent[0]) + "x" + std::to_string(inside->extent[1])) + (drawingFrame == nullptr ? " no drawing" : " in " + std::to_string(drawingFrame->extent[0]) + "x" + std::to_string(drawingFrame->extent[1])));
+	}
 	printf("doc_makechart: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed ? 1 : 0;
 }

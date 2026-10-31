@@ -12,6 +12,7 @@
 #include "Document.h"
 #include "Excel.h"
 #include "Fields.h"
+#include "InlineParts.h"
 #include "SSEval.h"
 #include "Styles.h"
 #include "WPPart.h"
@@ -383,6 +384,42 @@ Dop()
 } // namespace
 
 
+// a table frame's cells as text: each row on a line of its own (a line
+// break, 0x01), the cells' text (their line ends as spaces) between tabs;
+// empty for another frame
+std::string
+TableText(const Document& doc, const uint32_t pointer[3])
+{
+	const Frame* frame = FrameAt(doc, pointer);
+	const TablePart* table = frame != nullptr ? doc.Table(frame->part) : nullptr;
+	const WPPart* text = table != nullptr ? doc.WordPart(table->textPart) : nullptr;
+	if (text == nullptr)
+		return "";
+	std::string all;
+	for (const WPParagraph& p : text->paragraphs)
+		all += p.text;
+	std::string out;
+	for (const TableRow& row : table->rows) {
+		out += '\x01';
+		for (size_t c = 0; c < row.cells.size(); c++) {
+			if (c > 0)
+				out += '\t';
+			const Frame* cell = FrameAt(doc, row.cells[c].frame);
+			if (cell == nullptr || cell->textStart >= all.size())
+				continue;
+			std::string t = all.substr(cell->textStart, cell->textLength);
+			while (!t.empty() && (t.back() == '\n' || t.back() == '\r'))
+				t.pop_back();
+			for (char& ch : t)
+				if (ch == '\n' || ch == '\r' || ch == '\t')
+					ch = ' ';
+			out += t;
+		}
+	}
+	return out;
+}
+
+
 std::vector<WordParagraph>
 WordParagraphsOf(const Document& doc, size_t part)
 {
@@ -452,9 +489,13 @@ WordParagraphsOf(const Document& doc, size_t part)
 				if (m.position == at)
 					special = &m;
 			if (special != nullptr) {
-				// fields as their text; frames and separator lines aren't
-				// written
-				if (special->kind != Sig("FRAM") && special->kind != Sig("LINE"))
+				// fields as their text; a table as its cells' text (a line
+				// each row, a tab between cells: the port's, the original
+				// writes Word tables); other frames and separator lines
+				// aren't written
+				if (special->kind == Sig("FRAM"))
+					add(props, TableText(doc, special->frame));
+				else if (special->kind != Sig("LINE"))
 					add(props, FieldText(book, part, *special, -1));
 				at++;
 				continue;
