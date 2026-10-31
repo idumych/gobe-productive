@@ -302,6 +302,8 @@ FormatType(SaveFormat format)
 			return "text/x-semicolon-separated-values";
 		case kSaveExcel:
 			return "application/vnd.ms-excel";
+		case kSaveWord:
+			return "application/msword";
 		default:
 			return NULL;
 	}
@@ -467,11 +469,15 @@ AddFormatField(BFilePanel* panel, bool textFormats, bool sheetFormats)
 		item->SetMarked(true);
 		menu->AddItem(item);
 		if (textFormats) {
-			// the translators' formats by name: HTML, Plain Text, RTF
+			// the translators' formats by name: HTML, Microsoft Word,
+			// Plain Text, RTF
 			menu->AddSeparatorItem();
 			BMessage* html = new BMessage(kMsgFormat);
 			html->AddInt32("format", kSaveHTML);
 			menu->AddItem(new BMenuItem("HTML", html));
+			BMessage* word = new BMessage(kMsgFormat);
+			word->AddInt32("format", kSaveWord);
+			menu->AddItem(new BMenuItem("Microsoft Word", word));
 			BMessage* text = new BMessage(kMsgFormat);
 			text->AddInt32("format", kSavePlainText);
 			menu->AddItem(new BMenuItem("Plain Text", text));
@@ -538,6 +544,8 @@ ExportFile(const Document& doc, const char* path, SaveFormat format, BString& er
 		ok = ExportSylk(doc, part, path, message);
 	} else if (format == kSaveExcel) {
 		ok = ExportExcel(doc, path, message);
+	} else if (format == kSaveWord) {
+		ok = ExportWord(doc, path, message);
 	} else if (format == kSaveTabText || format == kSaveCommaText
 			|| format == kSaveSemicolonText) {
 		ok = ExportTable(doc, part, path, format == kSaveTabText ? '\t'

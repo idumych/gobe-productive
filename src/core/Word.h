@@ -44,6 +44,25 @@ bool ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& para
 // Opens a Word 97 file as a new word processing document.
 bool ImportWord(const std::string& path, Document& doc, std::string& error);
 
+// The paragraphs of a word processing part as TExportWORD writes them:
+// each run's style resolved into a WordRun (every run with its size, font
+// and color), each paragraph's style into its WordParagraph; a line break
+// 0x01, fields as their text, frames and separator lines left out.
+std::vector<WordParagraph> WordParagraphsOf(const Document& doc, size_t part);
+
+// A Word 97 file (TExportWORD): an OLE compound file with WordDocument
+// and 1Table streams: the FIB (nFib 0xc1), the text at 0x400 as one
+// piece (Windows-1252 when every character has a byte there, else
+// UTF-16), the CHPX and PAPX FKPs and their bin tables, a style sheet
+// with Normal, one section, the font table (BeOS's Dutch801 and Swis721
+// as Times New Roman and Arial, as TFontTblWORD has them), the DOP;
+// paragraphs end in 0x0D (0x0C after a page break), line breaks are 0x0B.
+std::vector<uint8_t> WordFileBytes(const std::vector<WordParagraph>& paragraphs);
+
+// Save As "Microsoft Word": the document's main word processing part.
+std::vector<uint8_t> WordBytes(const Document& doc);
+bool ExportWord(const Document& doc, const std::string& path, std::string& error);
+
 } // namespace gobe
 
 #endif

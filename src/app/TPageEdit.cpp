@@ -4998,6 +4998,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 			BString error;
 			if (!ExportFile(fDocument, command.c_str() + 12, kSaveExcel, error))
 				fprintf(stderr, "exportexcel: %s\n", error.String());
+		} else if (command.compare(0, 11, "exportword ") == 0) {
+			// "exportword <path>": Save As in the Microsoft Word format
+			BString error;
+			if (!ExportFile(fDocument, command.c_str() + 11, kSaveWord, error))
+				fprintf(stderr, "exportword: %s\n", error.String());
 		} else if (command.compare(0, 11, "exportsylk ") == 0) {
 			// "exportsylk <path>": Save As in the SYLK format
 			BString error;

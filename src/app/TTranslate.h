@@ -55,7 +55,8 @@ enum SaveFormat {
 	kSaveTabText,		// TextTranslator 'TABT', text/tab-separated-values
 	kSaveCommaText,		// 'COMA', text/x-comma-separated-values
 	kSaveSemicolonText,	// 'SEMI', text/x-semicolon-separated-values
-	kSaveExcel			// ExcelTranslator 'XLS8', application/vnd.ms-excel
+	kSaveExcel,			// ExcelTranslator 'XLS8', application/vnd.ms-excel
+	kSaveWord			// WORDTranslator 'MSWD', application/msword
 };
 
 // Adds the "File Format" popup to a save panel (SavePanel::SavePanel);
