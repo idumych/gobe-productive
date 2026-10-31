@@ -1805,8 +1805,11 @@ TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 	BRect area = plot.InsetByCopy(8, 8);
 	area.left += 36;
 	area.bottom -= labelFrames ? 4 : 16;
+	// bars for the bar types and a 2D chart whose series are bars
+	// (T2DBarSeries, kind 0: what Make Chart makes)
 	bool bars = chart.chartType == Sig("BAR3") || chart.chartType == Sig("BAR2")
-		|| (chart.chartType >> 8) == (Sig("BAR ") >> 8);
+		|| (chart.chartType >> 8) == (Sig("BAR ") >> 8)
+		|| (chart.chartType == Sig("2DSM") && !chart.sets.empty() && chart.sets[0].kind == 0);
 	if (hasLegend && legend.left > area.left + 40 && legend.left < area.right
 		&& legend.top < area.bottom && legend.bottom > area.top)
 		area.right = legend.left - 10;	// the 3D plot doesn't reach the legend

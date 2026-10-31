@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "GRPart.h"
+#include "SSPart.h"
 
 namespace gobe {
 
@@ -83,6 +84,27 @@ void ReadChartPart(DocArchive& a, ChartPart& out);
 // chart type and the chart (TChart, then a 2DSM chart's axes and series
 // sets or another type's body as read), the two u32, 'cht-'.
 std::vector<uint8_t> WriteChartSection(const ChartPart& part, int fileFormat);
+
+struct Document;
+
+// TDataAccessor::DataChanged for `range` of spreadsheet part `part`:
+// categories down the rows unless the range is wider than tall (series
+// across), a first row or column more than half not numbers taken as the
+// names (the first category's labels name the series, the first series'
+// the categories), the values cached series-major (0 for what isn't a
+// number); counts as TDataAccessor::Write writes them.
+ChartData ChartDataOf(const Document& doc, size_t part, const SSRange& range);
+
+// Make Chart (the PartBar's button and the Options menu: 's00T' with Kind
+// 'chrt', TDocWindow::DoInsertFrame): a new chart part (TChartPart::
+// TChartPart(TDoc*): a 2D bar chart, T2DXYAxisChart kind 0, its pieces,
+// styles, axes ranged by T2DXYAxisChart::FindMinMax) of `range`'s values,
+// linked to the cells (an unnamed reference in the spreadsheet, a TLink),
+// framed in the sheet's drawing right of the last column with anything in
+// it, level with the cells (320 x 200: the port's place and size),
+// which gets a FRAM shape for it. The chart part's index, or -1 with
+// `error`.
+int MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error);
 
 } // namespace gobe
 

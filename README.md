@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress.svg" alt="Port progress: 38 of 46 features done, 8 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress.svg" alt="Port progress: 39 of 46 features done, 7 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. Since
 then, spreadsheets have caught up with the original's editing, documents
@@ -153,7 +153,7 @@ sizes, headings and options are saved with the document.
 | Calculate Now, Auto Calculate, Go To Cell…; named selections (Name Selection…, Edit Names…, names in formulas) | next |
 | The FormatBar and PartBar for cells: font, size, faces, colours, alignment, Wrap Text, borders (with Transparency > Other…), Number Formatting | next |
 | Selecting rows, columns and every cell by the headings; several ranges at once with Command-click; Select Dependents | next |
-| Charts made from cells (Make Chart is shown but off; charts and drawings can be written back, the first step) | in progress |
+| Charts made from cells: Make Chart (the PartBar's button, the cells' context menu) charts the selected cells as a 2D bar chart beside the data, series and categories named from the labels, linked to the cells; undoable, saved | next |
 
 ### Frames and drawing
 

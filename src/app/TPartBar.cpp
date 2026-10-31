@@ -461,12 +461,11 @@ TPartBar::BuildSheet()
 	number->tip = IndexString(SheetResources(), 1507, 8);
 	AddElement(number);
 	at.x += 20 + 15;
-	// (making a chart from cells isn't ported: off)
+	// Make Chart ('s00T' Kind 'chrt')
 	BMessage* chart = new BMessage('s00T');
 	chart->AddInt32("Kind", 'chrt');
 	TMICNButtonElement* make = new TMICNButtonElement('chrt', at, PartIcon('chrt'), chart);
 	make->tip = IndexString(SheetResources(), 1507, 9);
-	make->enabled = false;
 	AddElement(make);
 }
 
