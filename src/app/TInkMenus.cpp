@@ -5,6 +5,7 @@
 #include <GradientRadial.h>
 #include <FindDirectory.h>
 #include <InterfaceDefs.h>
+#include <Region.h>
 #include <Path.h>
 
 #include <algorithm>
@@ -232,7 +233,29 @@ void
 DrawInkCell(BView* view, const Ink& ink, BRect r, bool selected)
 {
 	auto color = [](const Color& c) { return make_color(c.r, c.g, c.b, 255); };
-	if (ink.gradient) {
+	int width = 0, height = 0;
+	std::vector<uint8_t> rgba;
+	if (FillPatternPixels(ink, width, height, rgba) && width > 0 && height > 0) {
+		// a bitmap pattern ('FPAT'): its picture tiled into the cell
+		BBitmap bitmap(BRect(0, 0, width - 1, height - 1), B_RGBA32);
+		uint8* bits = (uint8*)bitmap.Bits();
+		for (int y = 0; y < height; y++)
+			for (int x = 0; x < width; x++) {
+				const uint8_t* from = &rgba[(size_t(y) * width + x) * 4];
+				uint8* to = bits + y * bitmap.BytesPerRow() + x * 4;
+				to[0] = from[2];
+				to[1] = from[1];
+				to[2] = from[0];
+				to[3] = from[3];
+			}
+		view->PushState();
+		BRegion clip(r);
+		view->ConstrainClippingRegion(&clip);
+		for (float y = r.top; y <= r.bottom; y += height)
+			for (float x = r.left; x <= r.right; x += width)
+				view->DrawBitmap(&bitmap, BPoint(x, y));
+		view->PopState();
+	} else if (ink.gradient) {
 		// as TPageView::SetInk draws them
 		BGradient* g;
 		if (ink.gradientType == 'GDrl') {

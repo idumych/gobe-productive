@@ -416,6 +416,9 @@ TPensWindow::Init()
 	for (int32 i = 0; BWindow* window = be_app->WindowAt(i); i++)
 		if (dynamic_cast<TDocWindow*>(window) != NULL)
 			AddToSubset(window);
+	// (sized by ChangeMinorType to what it shows, not by the layout's
+	// limits)
+	SetFlags(Flags() & ~B_AUTO_UPDATE_SIZE_LIMITS);
 	BMenuBar* bar = new BMenuBar("mMenuBar");
 	fKind = new TMenu(150);
 	for (int32 i = 0; BMenuItem* item = fKind->ItemAt(i); i++) {
@@ -442,6 +445,7 @@ TPensWindow::Init()
 		// (the item's height as the contents need)
 		user->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, B_SIZE_UNLIMITED));
 		user->SetExplicitMinSize(BSize(150, 20));
+		user->SetExplicitPreferredSize(BSize(B_SIZE_UNSET, B_SIZE_UNSET));
 		BGroupLayout* layout = new BGroupLayout(B_VERTICAL, 0);
 		user->SetLayout(layout);
 		layout->AddView(fInks);
@@ -514,6 +518,20 @@ TPensWindow::ChangeMinorType(int32 minor)
 	if (fKinds != NULL)
 		fKinds->Invalidate();
 	ResizeToPreferred();
+	// (and as large as the ink view asks: the dialog's items keep their
+	// sizes otherwise)
+	for (int pass = 0; pass < 4 && fInks != NULL && !fInks->IsHidden(); pass++) {
+		Layout(true);
+		BSize want = fInks->ExplicitMinSize();
+		BView* user = Item(1);
+		BRect shown = user != NULL ? user->Bounds() : fInks->Bounds();
+		float dx = std::max(0.0f, want.width - shown.Width());
+		float dy = std::max(0.0f, want.height - shown.Height());
+		if (dx < 1 && dy < 1)
+			break;
+		SetSizeLimits(0, 10000, 0, 10000);
+		ResizeBy(std::ceil(dx), std::ceil(dy));
+	}
 }
 
 
@@ -521,7 +539,18 @@ TPensWindow::ChangeMinorType(int32 minor)
 void
 TPensWindow::SwitchToSet(const std::string& name)
 {
-	SetActiveInkSet(fMinor, name);
+	// (a name as shown: without the files' trailing space)
+	std::string chosen = name;
+	for (const InkSetRef& set : InkSetsOfKind(fMinor, &fDocSets)) {
+		std::string trimmed = set.set.name;
+		while (!trimmed.empty() && trimmed.back() == ' ')
+			trimmed.pop_back();
+		if (set.set.name == name)
+			break;
+		if (trimmed == name)
+			chosen = set.set.name;
+	}
+	SetActiveInkSet(fMinor, chosen);
 	ChangeMinorType(fMinor);
 }
 
@@ -630,7 +659,11 @@ TPensWindow::MenusBeginning()
 			const std::string& name = set.set.name;
 			BMessage* message = new BMessage('sMA7');
 			message->AddString("ink name", name.c_str());
-			BMenuItem* item = new BMenuItem(name.c_str(), message);
+			// (the files' names end with a space: shown without it)
+			std::string label = name;
+			while (!label.empty() && label.back() == ' ')
+				label.pop_back();
+			BMenuItem* item = new BMenuItem(label.c_str(), message);
 			item->SetMarked(name == active);
 			fSets->AddItem(item);
 		}
@@ -1043,13 +1076,42 @@ TPensWindow::MessageReceived(BMessage* message)
 				gobe::EditInk(atoi(command.c_str() + 8), NULL, this, BMessage('GieR'));
 			} else if (command.compare(0, 7, "editor ") == 0) {
 				InkEditorScript(command.substr(7));
+			} else if (command.compare(0, 7, "newset ") == 0) {
+				// "newset NAME": New Set… with that name typed
+				BMessage add('sMA5');
+				add.AddString("ink name", command.substr(7).c_str());
+				MessageReceived(&add);
+			} else if (command.compare(0, 5, "dims ") == 0) {
+				// "dims COLUMNS CELL GAP": Set Dimensions… so
+				int columns = 0, cell = 0, gap = 0;
+				sscanf(command.c_str() + 5, "%d %d %d", &columns, &cell, &gap);
+				BMessage dims('sMA6');
+				dims.AddInt32("columns", columns);
+				dims.AddInt32("cellSize", cell);
+				dims.AddInt32("gapSize", gap);
+				MessageReceived(&dims);
+			} else if (command.compare(0, 7, "saveas ") == 0) {
+				// "saveas PATH": Save Set As… to that file
+				BPath path(command.substr(7).c_str());
+				BPath parent;
+				entry_ref directory;
+				if (path.GetParent(&parent) == B_OK
+						&& create_directory(parent.Path(), 0755) == B_OK
+						&& get_ref_for_path(parent.Path(), &directory) == B_OK) {
+					BMessage save(kMsgSaveSet);
+					save.AddRef("directory", &directory);
+					save.AddString("name", path.Leaf());
+					MessageReceived(&save);
+				}
 			} else if (command == "apply") {
 				BMessage apply(fMinor == 3 ? kMsgApplyPen : kMsgApplyInk);
 				MessageReceived(&apply);
 			} else if (command == "show") {
 				MenusBeginning();
-				printf("inks \"%s\" kind %d tab %d set \"%s\" inks %d\n", Title(), int(fMajor),
-					int(fMinor), fMinor < 3 ? fSet.set.name.c_str() : "", int(fSet.set.inks.size()));
+				printf("inks \"%s\" kind %d tab %d set \"%s\" inks %d (%d columns, cell %d, gap %d)"
+					" window %.0fx%.0f\n", Title(), int(fMajor), int(fMinor),
+					fMinor < 3 ? fSet.set.name.c_str() : "", int(fSet.set.inks.size()),
+					fSet.set.columns, fSet.set.cell, fSet.set.gap, Bounds().Width(), Bounds().Height());
 				for (int32 i = 0; fSets != NULL && i < fSets->CountItems(); i++)
 					printf("inks set %s%s\n", fSets->ItemAt(i)->Label(),
 						fSets->ItemAt(i)->IsMarked() ? " (marked)" : "");
