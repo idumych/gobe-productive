@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Redraws docs/progress.svg from the README's Status tables.
+"""Redraws the progress bar (docs/progress-<counts>.svg) from the README's
+Status tables.
 
 Every table row under "## Status" whose last cell is 0.1.1, next,
 in progress or not yet counts as one feature. The bar has a block per
 feature: released, in the sources, in progress, left. The README's
-<img> alt text gets the same counts, and its address a ?v= query with
-them, so a cached bar isn't shown after it changes.
+<img> points at it and its alt text gets the same counts.
 usage: tools/readme_progress.py (from port/ or anywhere)
 """
+import glob
 import os
 import re
 
 ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..")
 README = os.path.join(ROOT, "README.md")
-SVG = os.path.join(ROOT, "docs", "progress.svg")
+DOCS = os.path.join(ROOT, "docs")
 STATES = ["0.1.1", "next", "in progress", "not yet"]
 
 
@@ -80,15 +81,19 @@ def main():
         readme = f.read()
     states = count(readme)
     image, done, n = svg(states)
-    os.makedirs(os.path.dirname(SVG), exist_ok=True)
-    with open(SVG, "w") as f:
+    # a new file name whenever the counts change (progress-<done>-<total>-
+    # <in progress>.svg), the old ones removed: GitHub's caches keep an
+    # image by its address for minutes and ignore a query string
+    os.makedirs(DOCS, exist_ok=True)
+    name = f"progress-{done}-{n}-{states.count('in progress')}.svg"
+    for old in glob.glob(os.path.join(DOCS, "progress*.svg")):
+        if os.path.basename(old) != name:
+            os.remove(old)
+    with open(os.path.join(DOCS, name), "w") as f:
         f.write(image)
     alt = f"Port progress: {done} of {n} features done, {n - done} left (see Status)"
-    # the counts in the image's address, so GitHub and browsers don't keep
-    # showing a cached bar after it changes
-    counts = "-".join(str(states.count(state)) for state in STATES)
-    readme = re.sub(r'<img src="docs/progress\.svg[^"]*" alt="[^"]*"',
-        f'<img src="docs/progress.svg?v={counts}" alt="{alt}"', readme)
+    readme = re.sub(r'<img src="docs/progress[^"]*" alt="[^"]*"',
+        f'<img src="docs/{name}" alt="{alt}"', readme)
     with open(README, "w") as f:
         f.write(readme)
     print(f"{done} of {n} done: " + ", ".join(f"{states.count(s)} {s}" for s in STATES))
