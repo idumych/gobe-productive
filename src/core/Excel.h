@@ -53,10 +53,18 @@ struct ExcelSheet {
 	uint16_t rows = 0, columns = 0;				// DIMENSIONS: one past the last
 };
 
+// a defined name (NAME) for a range of one of the workbook's worksheets
+struct ExcelName {
+	std::string name;
+	size_t sheet = 0;			// index into ExcelBook::sheets
+	uint16_t row1 = 0, column1 = 0, row2 = 0, column2 = 0;
+};
+
 struct ExcelBook {
 	int version = 0;			// the BOF's: 0x0500 BIFF5, 0x0600 BIFF8
 	bool date1904 = false;		// DATEMODE
 	std::vector<ExcelSheet> sheets;
+	std::vector<ExcelName> names;
 };
 
 // TImportExcel::DoTranslate's reading: the workbook globals (BOUNDSHEET,
@@ -64,12 +72,15 @@ struct ExcelBook {
 // (NUMBER, RK, MULRK, LABEL, LABELSST, BOOLERR, FORMULA and STRING, BLANK
 // and MULBLANK skipped), COLINFO widths and DIMENSIONS. Formulas are
 // turned from their tokens into Gobe's text (TExcelParser: the function
-// names as the translator's FunctionNames has them, ranges "A1..B2");
-// numbers in date and time formats become Gobe's days (AdjustTimeValue).
+// names as the translator's FunctionNames has them, ranges "A1..B2",
+// defined names by name); defined names (NAME, BIFF8) that are a range of
+// a worksheet (tRef3d, tArea3d through EXTERNSHEET) are kept; numbers in
+// date and time formats become Gobe's days (AdjustTimeValue).
 bool ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error);
 
 // Opens a workbook as a new spreadsheet document: a sheet per worksheet
-// (CreateBlankSpreadsheet, AddSheet), named as in the workbook, the cells
+// (CreateBlankSpreadsheet, AddSheet), named as in the workbook, its
+// defined names as named selections (CreateNamedReferences), the cells
 // typed (formulas the parser refuses keep their values), their number
 // formats, the column widths. `notice` gets a message when formulas
 // couldn't be converted.

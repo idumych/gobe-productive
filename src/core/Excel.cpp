@@ -12,6 +12,7 @@
 
 #include "Document.h"
 #include "Editing.h"
+#include "Names.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 
@@ -377,7 +378,8 @@ GobeFormat(const std::string& excel)
 // TExcelParser: a formula's tokens (BIFF8's or BIFF5's) as Gobe's text; ""
 // if one can't be (an unknown function, a name, another sheet)
 std::string
-FormulaText(const std::vector<uint8_t>& d, size_t at, size_t length, int row, int column, bool biff8)
+FormulaText(const std::vector<uint8_t>& d, size_t at, size_t length, int row, int column, bool biff8,
+	const std::vector<std::string>& names)
 {
 	std::vector<std::string> stack;
 	size_t end = std::min(d.size(), at + length);
@@ -569,7 +571,14 @@ FormulaText(const std::vector<uint8_t>& d, size_t at, size_t length, int row, in
 				stack.push_back(RefName(r1, c1, rr1, cr1) + ".." + RefName(r2, c2, rr2, cr2));
 				continue;
 			}
-			case 0x23:		// tName
+			case 0x23: {	// tName: a defined name (from 1) Gobe has too
+				uint16_t index = U16(d, p);
+				p += biff8 ? 4 : 14;
+				if (index == 0 || index > names.size() || names[index - 1].empty())
+					return "";
+				stack.push_back(names[index - 1]);
+				continue;
+			}
 			case 0x39:		// tNameX
 			case 0x3a:		// tRef3d
 			case 0x3b:		// tArea3d
@@ -641,6 +650,12 @@ ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error)
 	std::vector<std::string> sst;
 	std::map<uint16_t, std::string> formats;
 	std::vector<uint16_t> xfFormat;
+	std::vector<uint16_t> externSheets;
+	struct RawName {
+		std::string name;
+		std::vector<uint8_t> definition;
+	};
+	std::vector<RawName> rawNames;
 	struct SheetAt {
 		std::string name;
 		uint32_t offset;
@@ -670,6 +685,34 @@ ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error)
 			case 0xe0:		// XF: its FORMAT's index
 				xfFormat.push_back(U16(d, 2));
 				break;
+			case 0x17:		// EXTERNSHEET (BIFF8): the sheet each XTI names
+				if (biff8)
+					for (size_t i = 0, n = U16(d, 0); i < n && 2 + i * 6 + 6 <= d.size(); i++)
+						externSheets.push_back(U16(d, 2 + i * 6 + 2));
+				break;
+			case 0x18: {	// NAME (BIFF8): its text and definition
+				if (!biff8) {
+					rawNames.push_back({"", {}});
+					break;
+				}
+				uint16_t options = U16(d, 0);
+				size_t nameLength = d.size() > 3 ? d[3] : 0;
+				size_t formulaLength = U16(d, 4);
+				at = 14;
+				uint8_t flags = at < d.size() ? d[at++] : 0;
+				std::string name;
+				for (size_t i = 0; i < nameLength && at < d.size(); i++) {
+					uint16_t ch = (flags & 1) ? U16(d, at) : d[at];
+					at += (flags & 1) ? 2 : 1;
+					name += ch < 0x80 ? char(ch) : '?';
+				}
+				// (built-in names, Print_Area and the like, aren't kept)
+				if (options & 0x20)
+					name.clear();
+				rawNames.push_back({name, std::vector<uint8_t>(d.begin() + long(std::min(at,
+					d.size())), d.begin() + long(std::min(at + formulaLength, d.size())))});
+				break;
+			}
 			case 0xfc: {	// SST, with its CONTINUE records
 				uint32_t count = U32(d, 4);
 				std::vector<uint8_t> all = d;
@@ -728,6 +771,40 @@ ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error)
 			default:
 				break;
 		}
+	}
+	// the names that are one range of a worksheet (tRef3d or tArea3d)
+	std::vector<size_t> worksheetIndex(sheets.size(), size_t(-1));
+	for (size_t i = 0, n = 0; i < sheets.size(); i++)
+		if (sheets[i].worksheet)
+			worksheetIndex[i] = n++;
+	std::vector<std::string> nameTexts;
+	for (const RawName& raw : rawNames) {
+		const std::vector<uint8_t>& t = raw.definition;
+		std::string text;
+		if (!raw.name.empty() && !t.empty()) {
+			uint8_t token = uint8_t((t[0] & 0x1f) | 0x20);
+			uint16_t xti = U16(t, 1);
+			size_t tab = xti < externSheets.size() ? externSheets[xti] : size_t(-1);
+			if ((token == 0x3a && t.size() >= 7) || (token == 0x3b && t.size() >= 11)) {
+				ExcelName n;
+				n.name = raw.name;
+				n.row1 = U16(t, 3);
+				if (token == 0x3a) {
+					n.row2 = n.row1;
+					n.column1 = n.column2 = U16(t, 5) & 0xff;
+				} else {
+					n.row2 = U16(t, 5);
+					n.column1 = U16(t, 7) & 0xff;
+					n.column2 = U16(t, 9) & 0xff;
+				}
+				if (tab < worksheetIndex.size() && worksheetIndex[tab] != size_t(-1)) {
+					n.sheet = worksheetIndex[tab];
+					book.names.push_back(n);
+					text = raw.name;
+				}
+			}
+		}
+		nameTexts.push_back(text);
 	}
 	auto formatOf = [&](uint16_t xf) -> std::string {
 		if (xf >= xfFormat.size())
@@ -872,7 +949,8 @@ ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error)
 						if (found != shared.end())
 							formula = found->second;
 					}
-					cell.formula = FormulaText(formula, 0, formula.size(), rowAt, colAt, biff8);
+					cell.formula = FormulaText(formula, 0, formula.size(), rowAt, colAt, biff8,
+						nameTexts);
 					cell.badFormula = cell.formula.empty();
 					sheet.cells.push_back(cell);
 					lastFormula = cell.kind == ExcelCell::kString ? &sheet.cells.back() : nullptr;
@@ -930,6 +1008,9 @@ ImportExcel(const std::string& path, Document& doc, std::string& error, std::str
 	if (!CreateBlankSpreadsheet(doc, error))
 		return false;
 	int bad = 0;
+	// the sheets first, then the names (their formulas need them), then
+	// the cells
+	std::vector<size_t> partOf;
 	for (size_t s = 0; s < book.sheets.size(); s++) {
 		const ExcelSheet& sheet = book.sheets[s];
 		size_t index = 0;
@@ -942,7 +1023,16 @@ ImportExcel(const std::string& path, Document& doc, std::string& error, std::str
 			doc.sheets.sheets[0].name = sheet.name;
 			doc.sheetsChanged = true;
 		}
-		size_t part = doc.sheets.sheets[index].mainPart;
+		partOf.push_back(doc.sheets.sheets[index].mainPart);
+	}
+	for (const ExcelName& name : book.names)
+		if (name.sheet < partOf.size() && ValidName(name.name)) {
+			SSRange range{{name.row1, name.column1}, {name.row2, name.column2}};
+			NameCellSelection(doc, partOf[name.sheet], name.name, {range}, range.from);
+		}
+	for (size_t s = 0; s < book.sheets.size(); s++) {
+		const ExcelSheet& sheet = book.sheets[s];
+		size_t part = partOf[s];
 		SSPart* ss = doc.EditableSpreadsheetPart(part);
 		if (ss == nullptr)
 			continue;

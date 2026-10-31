@@ -146,8 +146,9 @@ not released yet: build it to try it.
   spreadsheets, dates and currencies included. Fonts aren't carried.
 - **Excel:** workbooks from Excel 5 on (.xls) open as spreadsheets, a
   sheet per worksheet with its name: numbers, text, booleans, errors,
-  number formats, dates, column widths, and formulas turned into Gobe's
-  (those using names, other sheets or data tables keep their values).
+  number formats, dates, column widths, defined names (as named
+  selections), and formulas turned into Gobe's (those reaching into other
+  sheets or data tables keep their values).
 - **Ranges** are written A1..B2, as Gobe Productive writes them (A1:B2 is
   still understood).
 

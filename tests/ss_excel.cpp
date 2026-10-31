@@ -185,6 +185,35 @@ main()
 	bound2.resize(6);
 	bound2.add(String8("Notes", false));
 	Record(book, 0x85, bound2);
+	// a defined name "Rates" for Prices!B2:B3 (EXTERNSHEET's XTI 0 is the
+	// first sheet; NAME's definition a tArea3d)
+	Bytes extern_;
+	extern_.u16(1);
+	extern_.u16(0);
+	extern_.u16(0);
+	extern_.u16(0);
+	Record(book, 0x17, extern_);
+	Bytes name;
+	name.u16(0);			// options
+	name.u8(0);				// keyboard shortcut
+	name.u8(5);				// the name's length
+	name.u16(11);			// the definition's
+	name.u16(0);
+	name.u16(0);			// (a global name)
+	name.u8(0);
+	name.u8(0);
+	name.u8(0);
+	name.u8(0);
+	name.u8(0);				// flags: 8-bit characters
+	for (char ch : std::string("Rates"))
+		name.u8(uint8_t(ch));
+	name.u8(0x3b);			// tArea3d
+	name.u16(0);
+	name.u16(1);
+	name.u16(2);
+	name.u16(1);
+	name.u16(1);
+	Record(book, 0x18, name);
 	Record(book, 0x0a, Bytes());
 	// sheet 1
 	uint32_t first = uint32_t(book.size());
@@ -290,6 +319,15 @@ main()
 	concat.u8(0x08);
 	formula(4, 3, 0, 0, true, concat);
 	Record(book, 0x207, String8("abcd", true));
+	// F5: =SUM(Rates) (tName 1, tFuncVar SUM)
+	Bytes named;
+	named.u8(0x43);
+	named.u16(1);
+	named.u16(0);
+	named.u8(0x22);
+	named.u8(1);
+	named.u16(4);
+	formula(4, 5, 0, 5.5, false, named);
 	Bytes boolean;
 	boolean.u16(1);
 	boolean.u16(3);
@@ -358,6 +396,11 @@ main()
 			"a date in Gobe's days");
 		Check(read.sheets[0].columnWidths.count(0) && read.sheets[0].columnWidths.at(0) == 140,
 			"column A 20 characters (140 points)");
+		c = find(0, 4, 5);
+		Check(c && c->formula == "=SUM(Rates)", "a defined name: " + (c ? c->formula : std::string()));
+		Check(read.names.size() == 1 && read.names[0].name == "Rates" && read.names[0].sheet == 0
+			&& read.names[0].row1 == 1 && read.names[0].row2 == 2 && read.names[0].column1 == 1,
+			"the name's range");
 		Check((c = find(1, 0, 0)) && c->text == "Caf\xc3\xa9", "Latin-1 text as UTF-8");
 		Check((c = find(1, 1, 0)) && c->text == "\xce\xa9 ok", "16-bit text as UTF-8");
 	}
@@ -378,6 +421,8 @@ main()
 		Check(e.Value(4, 1).number == 5.5, "SUM evaluated: " + std::to_string(e.Value(4, 1).number));
 		Check(e.Value(4, 2).number == 2.5 * 3 + 2, "the mix evaluated");
 		Check(e.Value(4, 3).text == "abcd", "the string formula");
+		Check(e.Value(4, 5).number == 5.5 && doc.NamedSelection("Rates") != nullptr,
+			"=SUM(Rates) through the named selection");
 		Check(CellInput(*ss, 4, 1) == "=SUM(B2..B3)", "the formula as typed");
 		Check(e.Value(2, 3).type == SSValue::kError, "the error");
 		Check(std::fabs(ss->ColumnWidth(0) - 140) < 0.01, "column A's width");
