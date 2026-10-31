@@ -2356,8 +2356,8 @@ TPageView::Draw(BRect updateRect)
 
 	// printing (TPageFrame::Draw): the pages' contents only
 	if (!IsPrinting()) {
-		// (browse view: the text on white)
-		if (fBrowse)
+		// (browse view, a frame window: the text on white)
+		if (fBrowse || fFrameOnly.active)
 			SetHighColor(255, 255, 255);
 		else
 			SetHighColor(152, 152, 152);

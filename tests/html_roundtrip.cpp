@@ -172,6 +172,22 @@ main(int argc, char** argv)
 		};
 		Check(bold(h) && !bold(a), "TH bold, TD not");
 	}
+	// COLSPAN: the cells after a spanning one stay in their columns
+	{
+		Document spans;
+		Check(ImportHTMLText("<HTML><BODY><TABLE><TR><TD COLSPAN=2 WIDTH=500>wide<TD>c"
+			"<TR><TD>a<TD>b<TD>c2</TABLE></BODY></HTML>", spans, error, folder), "spans " + error);
+		if (spans.tableParts.size() == 1) {
+			size_t t = spans.tableParts[0].first;
+			const TablePart* tp = spans.Table(t);
+			Check(tp->rows.size() == 2 && tp->rows[0].cells.size() == 3
+				&& CellText(spans, t, 0, 0) == "wide" && CellText(spans, t, 0, 1) == ""
+				&& CellText(spans, t, 0, 2) == "c" && CellText(spans, t, 1, 2) == "c2",
+				"COLSPAN=2: the next cell in the third column");
+			Check(tp->rows[0].cells[0].size[0] < 500, "a spanning cell's WIDTH not one column's");
+		} else
+			Check(false, "a table with a span");
+	}
 	std::string handHTML = HTMLText(hand, "t");
 	Check(handHTML.find("<TD WIDTH=") != std::string::npos
 		&& handHTML.find("<B>H1</B>") != std::string::npos, "TH bold in HTML again");

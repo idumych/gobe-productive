@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="720" height="92" viewBox="0 0 720 92" role="img" aria-label="58 of 59 features done, 1 left">
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="92" viewBox="0 0 720 92" role="img" aria-label="59 of 59 features done, 0 left">
 <style>
 text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; fill: #1f2328; }
 .title { font-size: 15px; font-weight: 600; }
@@ -16,8 +16,8 @@ text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sa
   .left { fill: #3d444d; }
 }
 </style>
-<text class="title" x="0" y="20">Port progress: 58 of 59 features (98%)</text>
-<text class="small" x="720" y="20" text-anchor="end">1 left</text>
+<text class="title" x="0" y="20">Port progress: 59 of 59 features (100%)</text>
+<text class="small" x="720" y="20" text-anchor="end">0 left</text>
 <rect class="released" x="0.0" y="34" width="9.3" height="22" rx="2"/>
 <rect class="released" x="12.3" y="34" width="9.3" height="22" rx="2"/>
 <rect class="released" x="24.5" y="34" width="9.3" height="22" rx="2"/>
@@ -76,9 +76,9 @@ text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sa
 <rect class="sources" x="674.0" y="34" width="9.3" height="22" rx="2"/>
 <rect class="sources" x="686.2" y="34" width="9.3" height="22" rx="2"/>
 <rect class="sources" x="698.5" y="34" width="9.3" height="22" rx="2"/>
-<rect class="doing" x="710.7" y="34" width="9.3" height="22" rx="2"/>
+<rect class="sources" x="710.7" y="34" width="9.3" height="22" rx="2"/>
 <rect class="released" x="0" y="70" width="12" height="12" rx="2"/><text class="small" x="18" y="80">13 released in 0.1.1</text>
-<rect class="sources" x="180" y="70" width="12" height="12" rx="2"/><text class="small" x="198" y="80">45 in the sources</text>
-<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">1 in progress</text>
+<rect class="sources" x="180" y="70" width="12" height="12" rx="2"/><text class="small" x="198" y="80">46 in the sources</text>
+<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">0 in progress</text>
 <rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">0 not started</text>
 </svg>

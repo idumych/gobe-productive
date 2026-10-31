@@ -4,7 +4,7 @@ Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
 systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
 documents and works the way the original did, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-58-59-1.svg" alt="Port progress: 58 of 59 features done, 1 left (see Status)" width="720"></p>
+<p align="center"><img src="docs/progress-59-59-0.svg" alt="Port progress: 59 of 59 features done, 0 left (see Status)" width="720"></p>
 
 The released **preview** (0.1.1) is focused on the word processor. A
 lot has come since, in the sources here and in the next release:
@@ -147,7 +147,7 @@ Clipboard.
 | Styles: applying paragraph and basic styles, New Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, formatting a style directly) | 0.1.1 |
 | Import Styles and Export Styles (Edit Styles' File menu): the styles picked, written as the original's styles files and read back | next |
 | Spell checking with the original's dictionaries | 0.1.1 |
-| Spreadsheet and drawing odds and ends: row and column sizes dragged at the headings, the SheetBar's tab menu (rename, reorder), SYLK dates, HTML column spans, short dashes drawn as marks, the frame window's white page | in progress |
+| Spreadsheet and drawing odds and ends: row and column sizes dragged at the headings, the SheetBar's tab menu (rename, reorder), SYLK dates, HTML column spans (the cells after a span in their columns), short dashes drawn as marks, the frame window's white page | next |
 | Writing Tools' Thesaurus… and Dictionary…, on files made from WordNet (see [The thesaurus and dictionary](#the-thesaurus-and-dictionary)) | next |
 | Word Count, the text ruler, the FormatBar and PartBar, zoom, the browse view, Preferences, History, Document Size | 0.1.1 |
 
@@ -203,7 +203,7 @@ Opened with File > Open, saved with Save As's File Format menu.
 | HTML: text documents opened and saved (paragraphs, headings, alignment, sizes, colours, faces, lists, rules, entities) | next |
 | HTML: tables saved as tables (a table in the text, a table sheet), as the original wrote them | next |
 | HTML: pictures in the text saved as PNG files in a "<name>.images" folder (image parts; the original drew any frame and wrote GIF or JPEG) | next |
-| HTML: tables opened as tables (a table part in the text, its cells' text formatted, WIDTH, BORDER, CELLPADDING, tables in cells; column spans as of the next row) and pictures (PNG, and through the system's translators GIF, JPEG and the rest; else the ALT text) | next |
+| HTML: tables opened as tables (a table part in the text, its cells' text formatted, WIDTH, BORDER, CELLPADDING, tables in cells; a cell spanning columns keeps the cells after it in their columns, the spanned ones left empty: cells aren't merged) and pictures (PNG, and through the system's translators GIF, JPEG and the rest; else the ALT text) | next |
 | Text tables: tab, comma or semicolon separated, opened as spreadsheets and saved from them (cells as shown, or formulas with Show Formulas on) | next |
 | SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths, row heights, the default font) | next |
 | Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | next |
