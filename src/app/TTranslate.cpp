@@ -219,10 +219,10 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice);
 	} else if (kind == kSylkFile) {
 		ok = ImportSylk(path, doc, message, &notice);
-	} else if (kind == kTextFile || kind == kTableFile) {
-		// a table opens as a spreadsheet in the original (the Text
-		// translator's 'TABT', 'COMA', 'SEMI' formats); not ported yet,
-		// it opens as text
+	} else if (kind == kTableFile) {
+		// the Text translator's 'TABT', 'COMA', 'SEMI' formats: a spreadsheet
+		ok = ImportTable(path, doc, message);
+	} else if (kind == kTextFile) {
 		TextAttributes attributes;
 		ReadTextAttributes(path, attributes);
 		ok = ImportText(path, doc, message, &attributes);

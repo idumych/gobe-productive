@@ -237,6 +237,21 @@ LooksLikeText(const std::string& head)
 }
 
 
+char
+TableDelimiter(const std::string& head)
+{
+	size_t tabs = 0, commas = 0, semicolons = 0;
+	for (char c : head) {
+		tabs += c == '\t';
+		commas += c == ',';
+		semicolons += c == ';';
+	}
+	if (commas < tabs && semicolons < tabs)
+		return '\t';
+	return semicolons < commas ? ',' : ';';
+}
+
+
 float
 TableLikeness(const std::string& head)
 {
@@ -253,18 +268,8 @@ TableLikeness(const std::string& head)
 	size_t lines = std::max(lf, cr);
 	if (lines == 0)
 		return 0.01f;
-	char delimiter;
-	size_t count;
-	if (commas < tabs && semicolons < tabs) {
-		delimiter = '\t';
-		count = tabs;
-	} else if (semicolons < commas) {
-		delimiter = ',';
-		count = commas;
-	} else {
-		delimiter = ';';
-		count = semicolons;
-	}
+	char delimiter = TableDelimiter(head);
+	size_t count = delimiter == '\t' ? tabs : delimiter == ',' ? commas : semicolons;
 	size_t perLine = count / lines;
 	if (perLine <= 1)
 		return 0.01f;
@@ -354,6 +359,71 @@ FilterText(std::string& text, std::vector<TextRun>* runs)
 }
 
 } // namespace
+
+
+bool
+ImportTable(const std::string& path, Document& doc, std::string& error, char delimiter)
+{
+	std::ifstream file(path, std::ios::binary);
+	if (!file) {
+		error = "cannot open " + path;
+		return false;
+	}
+	std::string text((std::istreambuf_iterator<char>(file)),
+		std::istreambuf_iterator<char>());
+	if (delimiter == 0)
+		delimiter = TableDelimiter(text.substr(0, 0x8000));
+	int conversion = DetectConversion(text);
+	if (conversion >= 0)
+		text = ConvertToUTF8(conversion, text, '?');
+	FilterText(text, nullptr);
+
+	if (!CreateBlankSpreadsheet(doc, error))
+		return false;
+	size_t part = size_t(doc.MainPart());
+	SSPart* ss = doc.EditableSpreadsheetPart(part);
+	if (ss == nullptr) {
+		error = "no spreadsheet";
+		return false;
+	}
+	// GetNextCell: the delimiters and LFs before a cell move to its column
+	// and row, then the cell runs to the next delimiter or LF
+	uint32_t row = 0, column = 0;
+	size_t at = 0;
+	std::string ignored;
+	while (at < text.size()) {
+		while (at < text.size() && (text[at] == delimiter || text[at] == '\n')) {
+			if (text[at] == delimiter)
+				column++;
+			else {
+				row++;
+				column = 0;
+			}
+			at++;
+		}
+		size_t end = at;
+		while (end < text.size() && text[end] != delimiter && text[end] != '\n')
+			end++;
+		if (end > at && row < 0xffff && column < 0xffff) {
+			std::string cell = text.substr(at, end - at);
+			uint16_t r = uint16_t(row), c = uint16_t(column);
+			if (!SetCellInput(*ss, r, c, cell, nullptr, ignored)) {
+				// a formula that doesn't parse: the text as it is
+				SetCellInput(*ss, r, c, "x", nullptr, ignored);
+				for (SSCell& sc : ss->cells)
+					if (sc.id.a == r && sc.id.b == c)
+						sc.text = cell;
+			}
+			if (r > ss->used.to.a)
+				ss->used.to.a = r;
+			if (c > ss->used.to.b)
+				ss->used.to.b = c;
+		}
+		at = end;
+	}
+	UpdateDependencies(doc, part);
+	return true;
+}
 
 
 bool

@@ -94,6 +94,19 @@ TextPosition PositionAt(const WPPart& part, size_t offset);
 // 0.5 and more open as a spreadsheet). `head` is the file's first 32 KB.
 bool LooksLikeText(const std::string& head);
 float TableLikeness(const std::string& head);
+// the delimiter TableLikeness counts: tab, ',' or ';' (the translator's
+// TABT, COMA and SEMI formats)
+char TableDelimiter(const std::string& head);
+
+// Opens a text table as a new spreadsheet (CreateBlankSpreadsheet), as the
+// Text translator's TABT, COMA and SEMI formats do (TTextToBlockStream::
+// WriteSpreadsheet, GetNextCell): the text read as ImportText reads it,
+// cut into cells at `delimiter` (0: TableDelimiter's) and rows at LF, with
+// no quoting (two delimiters in a row skip a column, two LFs a row); each
+// cell's text typed into its cell (SetCellInput; text if it's a formula
+// that doesn't parse).
+bool ImportTable(const std::string& path, Document& doc, std::string& error,
+	char delimiter = 0);
 
 // Imports a text file into `doc` (made with CreateBlankDocument): the
 // encoding detected, CR LF and lone CR turned into LF, control characters

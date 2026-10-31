@@ -120,6 +120,7 @@ not released yet: build it to try it.
   Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, and
   formatting a style directly).
 - Plain text and RTF: opened as documents, saved with Save As's File Format.
+  Text tables (tab, comma or semicolon separated) open as spreadsheets.
 - SYLK: a spreadsheet saved as SYLK with Save As's File Format (values as
   calculated, formulas in R1C1, column widths); SYLK files opened as new
   spreadsheets. Number formats and fonts (SYLK's P records) aren't carried
