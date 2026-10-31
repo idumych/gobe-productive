@@ -150,6 +150,9 @@ public:
 	// the ToolBar's tool (TDocWindow +0x1c0): 'ARRW' or a shape tool
 	// (Drawing.h); a shape tool's shape is dragged out in a drawing
 	uint32 Tool() const { return fTool; }
+	// the frame selected (a part frame in a drawing), NULL if none
+	const uint32_t* SelectedFrame() const { return fFrame.active ? fFrame.pointer : NULL; }
+	uint32 PartKind() const { return fPartKind; }
 	void SetTool(uint32 tool);
 	class TRibbon* fToolBar = NULL;
 	// a selected shape
@@ -272,6 +275,19 @@ private:
 	void DrawShapeSelection(float dx, float dy);
 	uint32 fTool = 0x41525257;	// 'ARRW'
 	std::vector<ShapeRef> fShapes;	// selected, all in one part
+	// a part frame in a drawing selected (TPageFrames.cpp: its edge
+	// clicked with the arrow), the part tool's kind
+	struct FrameRef {
+		bool active = false;
+		uint32_t pointer[3] = {};
+	};
+	FrameRef fFrame;
+	uint32 fPartKind = 'WORD';
+	bool FrameClick(BPoint where);
+	bool FinishPartFrame(size_t drawing, const std::vector<std::array<float, 2>>& points);
+	void DrawFrameSelection(float dx, float dy);
+	bool FrameCommand(BMessage* message);
+	void InsertPartFrame(uint32_t kind);
 	ShapeDrag fShapeDrag;
 	int fShapeMode = 0;			// what a handle does: 0 resize, 1 rotate, 2 reshape
 	bool fShapesWereSelected = false;

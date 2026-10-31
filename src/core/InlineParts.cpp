@@ -4,12 +4,15 @@
 #include "InlineParts.h"
 
 #include <algorithm>
+#include <cmath>
 
 #include <zlib.h>
 
 #include "BlankParts.h"
 #include "DocWriter.h"
 #include "Document.h"
+#include "GRPart.h"
+#include "SSPart.h"
 #include "PartTail.h"
 #include "Styles.h"
 #include "TablePart.h"
@@ -253,7 +256,7 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 {
 	size_t rows = table.rows.size(), columns = table.columns.size();
 	if (rows == 0 || columns == 0 || table.cells.size() != rows
-			|| doc.WordPart(container) == nullptr) {
+			|| container >= doc.parts.parts.size()) {
 		error = "an empty table";
 		return -1;
 	}
@@ -500,7 +503,7 @@ SetCellRanges(Document& doc, size_t table, const std::vector<size_t>& paragraphs
 int
 AddImagePart(Document& doc, size_t container, const ArchiveBitmap& bitmap, std::string& error)
 {
-	if (bitmap.Empty() || doc.WordPart(container) == nullptr) {
+	if (bitmap.Empty() || container >= doc.parts.parts.size()) {
 		error = "no picture";
 		return -1;
 	}
@@ -572,6 +575,413 @@ InsertInlineFrame(Document& doc, size_t container, TextPosition at, size_t part)
 		raw.UInt32(v);
 	frame.raw = raw.Data();
 	return InsertField(*wp, at, frame);
+}
+
+// #pragma mark - frames in drawings
+
+
+namespace {
+
+bool
+IsDrawing(const Document& doc, size_t part)
+{
+	return part < doc.parts.parts.size() && (doc.parts.parts[part].kind == Sig("GRFX")
+		|| doc.parts.parts[part].kind == Sig("PRES")) && doc.GraphicsPart(part) != nullptr;
+}
+
+
+gobe::Frame*
+MutableFrame(Document& doc, const uint32_t pointer[3])
+{
+	return const_cast<gobe::Frame*>(FrameAt(doc, pointer));
+}
+
+
+// the next shape id in a drawing (TShape +0x20): after its shapes' and
+// the frames it places
+uint32_t
+NextShapeId(const Document& doc, size_t drawing)
+{
+	uint32_t id = 0;
+	const GRPart* gr = doc.GraphicsPart(drawing);
+	for (const GRLayer& l : gr->layers)
+		for (const Shape& s : l.shapes) {
+			if (s.kind != Sig("FRAM"))
+				id = std::max(id, s.values[2] + 1);
+			else if (const gobe::Frame* f = FrameAt(doc, s.frame))
+				id = std::max(id, f->shape[2] + 1);
+		}
+	return id;
+}
+
+
+// a WORD part with one empty paragraph, its styles and selection (as
+// AddSheet makes a text sheet's), read in; its index or -1
+int
+NewWordPart(Document& doc, std::string& error)
+{
+	uint32_t base = DefaultStyle(doc);
+	if (base == kNone) {
+		error = "no Default style";
+		return -1;
+	}
+	uint32_t part = uint32_t(doc.parts.parts.size());
+	WordStyles styles = AddWordStyles(doc.styles, base);
+	doc.stylesChanged = true;
+	uint32_t selection = AddSelection(doc, Sig("WORD"), part);
+	doc.parts.parts.push_back({Sig("WORD"), 0, WordPartRecord(NextPartId(doc), selection,
+		styles.paragraph, styles.run, false, 0)});
+	doc.tails.resize(doc.parts.parts.size());
+	doc.tailRead.resize(doc.parts.parts.size(), false);
+	DocArchive versions = Versions(doc);
+	try {
+		DocArchive a(doc.parts.parts[part].data);
+		a.CopyVersions(versions);
+		WPPart wp;
+		ReadWPPart(a, wp);
+		doc.wordParts.emplace_back(part, std::move(wp));
+	} catch (const ArchiveError& x) {
+		error = std::string("new text: ") + x.what();
+		return -1;
+	}
+	doc.tailRead[part] = ReadPartTail(doc.parts.parts[part].data, Sig("WORD"), versions,
+		doc.tails[part]);
+	if (!doc.tailRead[part]) {
+		error = "a new text's tail doesn't read";
+		return -1;
+	}
+	return int(part);
+}
+
+} // namespace
+
+
+bool
+AddFrameShape(Document& doc, size_t drawing, size_t layer, const uint32_t pointer[3])
+{
+	gobe::Frame* frame = MutableFrame(doc, pointer);
+	if (!IsDrawing(doc, drawing) || frame == nullptr)
+		return false;
+	// a frame in a drawing is one of its shapes: its id among them
+	frame->shape[1] = 0;
+	frame->shape[2] = NextShapeId(doc, drawing);
+	doc.dirtyTails.insert(pointer[0]);
+	GRPart* gr = doc.EditableGraphicsPart(drawing);
+	if (gr->layers.empty())
+		gr->layers.push_back({"Layer 1", {}});
+	if (layer >= gr->layers.size())
+		layer = gr->layers.size() - 1;
+	// TPartGR::InsertChildFrame: a FRAM entry pointing at it
+	Shape s;
+	s.kind = Sig("FRAM");
+	for (int i = 0; i < 3; i++)
+		s.frame[i] = pointer[i];
+	gr->layers[layer].shapes.push_back(s);
+	return true;
+}
+
+
+int
+AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind, const float rect[4],
+	std::string& error)
+{
+	if (!IsDrawing(doc, drawing)) {
+		error = "not a drawing";
+		return -1;
+	}
+	float x = std::min(rect[0], rect[2]), y = std::min(rect[1], rect[3]);
+	float width = std::fabs(rect[2] - rect[0]), height = std::fabs(rect[3] - rect[1]);
+	if (width < 4 || height < 4) {
+		error = "too small";
+		return -1;
+	}
+	// the drawing's frames' style with an opaque white background (the
+	// port's: the text under a frame isn't wrapped around it)
+	Ink white;
+	white.set = true;
+	white.color = {255, 255, 255, 255};
+	white.low = {255, 255, 255, 255};
+	DocWriter opaque;
+	opaque.Float(1);
+	uint32_t frameStyle = DerivedStyle(doc.styles, FrameStyle(doc, drawing),
+		{Property{Sig("BCol"), InkBytes(white)}, Property{Sig("BTra"), opaque.Data()}});
+	doc.stylesChanged = true;
+	int made = -1;
+	if (kind == Sig("TBLE")) {
+		// TInsertTableDialog's default: 2 x 2, the frame shared
+		NewTable table;
+		table.columns = {width / 2, width / 2};
+		table.rows = {height / 2, height / 2};
+		table.cells = {{"", ""}, {"", ""}};
+		table.border = 1;
+		size_t text = 0;
+		made = AddTablePart(doc, drawing, table, text, error);
+	} else if (kind == Sig("BITS")) {
+		// an empty (white) picture of the frame's size
+		ArchiveBitmap bitmap;
+		bitmap.colorSpace = 0x2008;
+		uint32_t w = uint32_t(std::max(1.0f, std::round(width)));
+		uint32_t h = uint32_t(std::max(1.0f, std::round(height)));
+		bitmap.bytesPerRow = w * 4;
+		bitmap.bounds[2] = float(w - 1);
+		bitmap.bounds[3] = float(h - 1);
+		bitmap.bits.assign(size_t(w) * h * 4, 255);
+		made = AddImagePart(doc, drawing, bitmap, error);
+	} else if (kind == Sig("WORD")) {
+		made = NewWordPart(doc, error);
+		if (made >= 0) {
+			// TWPFrame: the text (none), then 0, 0, 15, 0
+			DocWriter raw;
+			raw.UInt32(0);
+			raw.UInt32(uint32_t(doc.WordPart(size_t(made))->paragraphs.empty() ? 0
+				: doc.WordPart(size_t(made))->paragraphs[0].text.size()));
+			for (float v : {0.0f, 0.0f, 15.0f, 0.0f})
+				raw.Float(v);
+			Portal shown;
+			shown.part = uint32_t(drawing);
+			shown.values[2] = 1;
+			DocWriter portalRaw;
+			portalRaw.Float(0);
+			shown.raw = portalRaw.Data();
+			gobe::Frame f = MakeFrame(uint32_t(made), uint32_t(drawing), x, y, width, height,
+				frameStyle, 0, raw.Data());
+			f.textAt = 1;
+			f.textLength = uint32_t(doc.WordPart(size_t(made))->paragraphs.empty() ? 0
+				: doc.WordPart(size_t(made))->paragraphs[0].text.size());
+			shown.frames.push_back(f);
+			doc.tails[size_t(made)].portals = {shown};
+			doc.dirtyTails.insert(size_t(made));
+			doc.dirtyParts.insert(size_t(made));
+		}
+	} else if (kind == Sig("SPRD") || kind == Sig("GRFX")) {
+		uint32_t base = DefaultStyle(doc);
+		if (base == kNone) {
+			error = "no Default style";
+			return -1;
+		}
+		uint32_t part = uint32_t(doc.parts.parts.size());
+		uint32_t id = NextPartId(doc);
+		DocArchive versions = Versions(doc);
+		Portal shown;
+		shown.part = uint32_t(drawing);
+		shown.values[2] = 1;
+		DocWriter raw;
+		if (kind == Sig("SPRD")) {
+			// AddSheet's: the spreadsheet styles, its selection (A1)
+			SheetStyles styles = AddSheetStyles(doc.styles, base);
+			doc.stylesChanged = true;
+			uint32_t selection = uint32_t(doc.selections.selections.size());
+			DocWriter body;
+			body.Sig(Sig("SPRD"));
+			body.UInt32(part);
+			body.UInt32(selection);
+			body.Sig(Sig("CELL"));
+			body.UInt16(0);
+			body.UInt16(0);
+			body.UInt32(1);
+			for (int i = 0; i < 4; i++)
+				body.UInt16(0);
+			body.Bool(true);
+			DocWriter record;
+			record.UInt32(uint32_t(body.Data().size()));
+			record.Bytes(body.Data());
+			doc.addedSelections.push_back(record.Data());
+			Selection s;
+			s.id = selection;
+			s.kind = Sig("SPRD");
+			s.part = part;
+			s.value = selection;
+			s.ranges.push_back({0, 0, 0, 0});
+			s.hasCell = true;
+			doc.selections.selections.push_back(s);
+			doc.parts.parts.push_back({Sig("SPRD"), 0, SheetPartRecord(id, selection, styles,
+				false, 0)});
+			// TSSFrame: the cells shown (from A1, as many as fit), the
+			// rectangle
+			raw.UInt16(0);
+			raw.UInt16(0);
+			raw.UInt16(uint16_t(std::ceil(height / 16)));
+			raw.UInt16(uint16_t(std::ceil(width / 72)));
+		} else {
+			uint32_t selection = uint32_t(doc.selections.selections.size());
+			DocWriter body;
+			body.Sig(Sig("GRFX"));
+			body.UInt32(part);
+			body.UInt32(selection);
+			body.UInt32(0);
+			DocWriter record;
+			record.UInt32(uint32_t(body.Data().size()));
+			record.Bytes(body.Data());
+			doc.addedSelections.push_back(record.Data());
+			Selection s;
+			s.id = selection;
+			s.kind = Sig("GRFX");
+			s.part = part;
+			s.value = selection;
+			doc.selections.selections.push_back(s);
+			doc.parts.parts.push_back({Sig("GRFX"), 0, SheetGraphicsRecord(id, selection, false, 0)});
+			DocWriter portalRaw;
+			portalRaw.UInt32(0);		// TGRPortal: view 0
+			shown.raw = portalRaw.Data();
+		}
+		float shownRect[4] = {0, 0, width, height};
+		raw.Rect(shownRect);
+		doc.tails.resize(doc.parts.parts.size());
+		doc.tailRead.resize(doc.parts.parts.size(), false);
+		try {
+			DocArchive a(doc.parts.parts[part].data);
+			a.CopyVersions(versions);
+			if (kind == Sig("SPRD")) {
+				SSPart ss;
+				ReadSSPart(a, ss);
+				doc.spreadsheetParts.emplace_back(part, std::move(ss));
+			} else {
+				GRPart gr;
+				ReadGRPart(a, gr);
+				doc.graphicsParts.emplace_back(part, std::move(gr));
+			}
+		} catch (const ArchiveError& x) {
+			error = std::string("new part: ") + x.what();
+			return -1;
+		}
+		doc.tailRead[part] = ReadPartTail(doc.parts.parts[part].data, kind, versions,
+			doc.tails[part]);
+		if (!doc.tailRead[part]) {
+			error = "a new part's tail doesn't read";
+			return -1;
+		}
+		gobe::Frame f = MakeFrame(part, uint32_t(drawing), x, y, width, height, frameStyle, 0,
+			raw.Data());
+		for (int i = 0; i < 4; i++)
+			f.sheetRect[i] = shownRect[i];
+		if (kind == Sig("SPRD")) {
+			f.cells[2] = uint16_t(std::ceil(height / 16));
+			f.cells[3] = uint16_t(std::ceil(width / 72));
+		}
+		shown.frames.push_back(f);
+		doc.tails[part].portals = {shown};
+		doc.dirtyTails.insert(part);
+		AddFactory(doc, kind, kind == Sig("SPRD") ? "Spreadsheet" : "Graphics");
+		made = int(part);
+	} else {
+		error = "frames of that kind can't be made";
+		return -1;
+	}
+	if (made < 0)
+		return -1;
+	// at the rectangle in the drawing
+	gobe::Frame* frame = &doc.tails[size_t(made)].portals[0].frames[0];
+	if (kind == Sig("BITS"))
+		frame->style = frameStyle;
+	frame->origin[0] = x;
+	frame->origin[1] = y;
+	frame->extent[0] = width;
+	frame->extent[1] = height;
+	uint32_t pointer[3] = {uint32_t(made), 0, 0};
+	if (!AddFrameShape(doc, drawing, layer, pointer)) {
+		error = "its frame";
+		return -1;
+	}
+	AddFactory(doc, Sig("WORD"), "Word Processing");
+	return made;
+}
+
+
+bool
+AddLinkedFrame(Document& doc, const uint32_t pointer[3], uint32_t made[3], std::string& error)
+{
+	gobe::Frame* frame = MutableFrame(doc, pointer);
+	if (frame == nullptr || doc.WordPart(pointer[0]) == nullptr || !IsDrawing(doc, frame->container)) {
+		error = "not a text frame in a drawing";
+		return false;
+	}
+	// TDocWindow::MakeLinkedFrame: the part's next frame in the same portal
+	// (the text flows on into it), the frame's size, right of it
+	Portal* portal = nullptr;
+	for (Portal& p : doc.tails[pointer[0]].portals)
+		if (p.values[0] == pointer[1])
+			portal = &p;
+	uint32_t id = 0;
+	for (const gobe::Frame& f : portal->frames)
+		id = std::max(id, f.values[1] + 1);
+	gobe::Frame linked = *frame;
+	linked.origin[0] += frame->extent[0] + 18;
+	linked.values[1] = id;
+	linked.textStart = frame->textStart + frame->textLength;
+	linked.textLength = 0;
+	portal->frames.push_back(linked);
+	portal->values[1] = uint32_t(portal->frames.size());
+	portal->values[2] = uint32_t(portal->frames.size());
+	doc.dirtyTails.insert(pointer[0]);
+	made[0] = pointer[0];
+	made[1] = pointer[1];
+	made[2] = id;
+	size_t layer = 0;
+	if (const GRPart* gr = doc.GraphicsPart(frame->container))
+		for (size_t l = 0; l < gr->layers.size(); l++)
+			for (const Shape& s : gr->layers[l].shapes)
+				if (s.kind == Sig("FRAM") && s.frame[0] == pointer[0])
+					layer = l;
+	return AddFrameShape(doc, portal->part, layer, made);
+}
+
+
+bool
+CloneFrame(Document& doc, const uint32_t pointer[3], uint32_t made[3], std::string& error)
+{
+	const gobe::Frame* frame = FrameAt(doc, pointer);
+	if (frame == nullptr || !IsDrawing(doc, frame->container)) {
+		error = "not a frame in a drawing";
+		return false;
+	}
+	// TDocWindow::DoCloneFrame: another view of the part (a portal of its
+	// own in the same drawing with a frame like it), down and right
+	const Portal* source = nullptr;
+	for (const Portal& p : doc.tails[pointer[0]].portals)
+		if (p.values[0] == pointer[1])
+			source = &p;
+	uint32_t portalId = 0;
+	for (const Portal& p : doc.tails[pointer[0]].portals)
+		portalId = std::max(portalId, p.values[0] + 1);
+	Portal clone;
+	clone.part = source->part;
+	clone.values[0] = portalId;
+	clone.values[2] = 1;
+	clone.raw = source->raw;
+	clone.view = source->view;
+	gobe::Frame f = *frame;
+	f.origin[0] += 18;
+	f.origin[1] += 18;
+	f.values[1] = 0;
+	clone.frames.push_back(f);
+	doc.tails[pointer[0]].portals.push_back(clone);
+	doc.dirtyTails.insert(pointer[0]);
+	made[0] = pointer[0];
+	made[1] = portalId;
+	made[2] = 0;
+	size_t layer = 0;
+	if (const GRPart* gr = doc.GraphicsPart(clone.part))
+		for (size_t l = 0; l < gr->layers.size(); l++)
+			for (const Shape& s : gr->layers[l].shapes)
+				if (s.kind == Sig("FRAM") && s.frame[0] == pointer[0])
+					layer = l;
+	return AddFrameShape(doc, clone.part, layer, made);
+}
+
+
+uint32_t
+FrameCommandFlags(uint32_t flags, uint32_t command)
+{
+	// TFrameCommand::Perform, doAutoGrow: 'sM34' grows down (8), 'sM35'
+	// across (4), each turning the scroll bars off; 'sM36' the scroll bars
+	// (0x20), turning the growing off
+	if (command == Sig("sM34") || command == Sig("sM35")) {
+		uint32_t bit = command == Sig("sM34") ? 8 : 4;
+		return (flags & bit) ? flags & ~bit : (flags & ~0x20u) | bit;
+	}
+	if (command == Sig("sM36"))
+		return (flags & ~0xcu) ^ 0x20;
+	return flags;
 }
 
 } // namespace gobe

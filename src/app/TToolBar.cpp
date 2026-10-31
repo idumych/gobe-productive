@@ -1,5 +1,8 @@
 #include "TToolBar.h"
 
+#include <MenuItem.h>
+#include <PopUpMenu.h>
+
 #include "Drawing.h"
 #include "GobeResources.h"
 #include "TPageView.h"
@@ -23,6 +26,42 @@ const struct {
 const uint32 kToolFamily = 'TOOL';
 const float kWidth = 26;
 
+
+// the part tool (TPartMenu behind its button): a pop-up of the part kinds
+// a frame can be made of; the one chosen sends TDocWindow::SetTool's
+// 'sM4Q' with Tool 'PART' and its Kind
+class TPartToolElement : public TMICNButtonElement {
+public:
+	TPartToolElement(BPoint where, int32 micn)
+		:
+		TMICNButtonElement(kToolPart, where, micn, NULL)
+	{
+	}
+
+	virtual void Invoke(TRibbon* ribbon)
+	{
+		static const struct {
+			const char* name;
+			uint32 kind;
+		} kParts[] = {
+			{"Word Processing", 'WORD'}, {"Spreadsheet", 'SPRD'}, {"Graphics", 'GRFX'},
+			{"Table", 'TBLE'}, {"Image Processing", 'BITS'}
+		};
+		BPopUpMenu* menu = new BPopUpMenu("parts", false, false);
+		for (const auto& p : kParts) {
+			BMessage* message = new BMessage('sM4Q');
+			message->AddInt32("Tool", int32(kToolPart));
+			message->AddInt32("Kind", int32(p.kind));
+			menu->AddItem(new BMenuItem(p.name, message));
+		}
+		BPoint at = ribbon->ConvertToScreen(BPoint(rect.right + 1, rect.top));
+		BMenuItem* chosen = menu->Go(at, false, true, false);
+		if (chosen != NULL && chosen->Message() != NULL)
+			ribbon->Send(chosen->Message());
+		delete menu;
+	}
+};
+
 } // namespace
 
 
@@ -34,13 +73,17 @@ TToolBar::TToolBar(TPageView* view)
 	// TToolBar::LoadAllElements
 	float y = 2;
 	for (const auto& t : kTools) {
-		BMessage* message = new BMessage(kMsgTool);
-		message->AddInt32("tool", int32(t.tool));
-		TMICNButtonElement* button = new TMICNButtonElement(t.tool, BPoint(2, y), t.icon,
-			message);
+		TMICNButtonElement* button;
+		if (t.tool == kToolPart)
+			button = new TPartToolElement(BPoint(2, y), t.icon);
+		else {
+			BMessage* message = new BMessage(kMsgTool);
+			message->AddInt32("tool", int32(t.tool));
+			button = new TMICNButtonElement(t.tool, BPoint(2, y), t.icon, message);
+		}
 		button->family = kToolFamily;
 		button->selectable = true;
-		button->enabled = t.tool == kToolArrow || ToolMakesShapes(t.tool);
+		button->enabled = t.tool == kToolArrow || t.tool == kToolPart || ToolMakesShapes(t.tool);
 		button->tip = GobeResources::IndexString(4, t.tip).String();
 		AddElement(button);
 		y += 27;

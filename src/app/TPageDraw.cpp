@@ -201,7 +201,7 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 		Invalidate();
 		return true;
 	}
-	if (ToolMakesShapes(fTool)) {
+	if (ToolMakesShapes(fTool) || fTool == kToolPart) {
 		size_t part;
 		float x, y;
 		if (!DrawingAt(where, part, x, y))
@@ -319,6 +319,12 @@ TPageView::FinishShape(bool dropFollower)
 	std::vector<DrawPoint> points(fShapeDrag.points.begin(), fShapeDrag.points.end());
 	size_t part = fShapeDrag.part;
 	fShapeDrag = ShapeDrag();
+	// the part tool: a part frame (TPageFrames.cpp)
+	if (fTool == kToolPart) {
+		if (!FinishPartFrame(part, points))
+			Invalidate();
+		return;
+	}
 	if (dropFollower && fTool == kToolPolygon && points.size() > 2)
 		points.pop_back();		// (the point following the pointer)
 	size_t layer = DrawingLayer(fDocument, part);

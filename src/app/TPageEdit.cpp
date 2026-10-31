@@ -282,10 +282,17 @@ TPageView::TextSelectionRange() const
 bool
 TPageView::HitText(BPoint where, Caret& caret) const
 {
+	// the topmost text frame under the point (frames laid out later are
+	// drawn over the earlier ones): only its lines
+	const BRect* top = NULL;
+	for (const Line& line : fLines)
+		if (line.angle == 0 && line.textFrame.Contains(where))
+			top = &line.textFrame;
 	for (size_t i = 0; i < fLines.size(); i++) {
 		const Line& line = fLines[i];
 		if (line.angle != 0 || where.y < line.frame.top || where.y >= line.frame.bottom
-			|| where.x < line.frame.left - 6 || where.x > line.frame.right + 6)
+			|| where.x < line.frame.left - 6 || where.x > line.frame.right + 6
+			|| (top != NULL && line.textFrame != *top))
 			continue;
 		const WPPart* wp = fDocument.WordPart(line.part);
 		if (wp == NULL)
@@ -323,7 +330,8 @@ TPageView::HitText(BPoint where, Caret& caret) const
 	const Line* first = NULL;
 	for (const Line& line : fLines) {
 		if (line.angle != 0 || !line.textFrame.Contains(where)
-				|| fDocument.WordPart(line.part) == NULL)
+				|| fDocument.WordPart(line.part) == NULL
+				|| (top != NULL && line.textFrame != *top))
 			continue;
 		if (line.frame.top <= where.y && (above == NULL || line.frame.top >= above->frame.top))
 			above = &line;
@@ -1455,6 +1463,9 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		}
 		return;
 	}
+	// a part frame's edge: the frame selected
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && FrameClick(where))
+		return;
 
 	size_t part;
 	int row, column;
@@ -1903,6 +1914,9 @@ TPageView::MessageReceived(BMessage* message)
 	// the drawing part's commands for the selected shapes (Arrange, the
 	// FormatBar's fill and pen)
 	if (ShapeCommand(message))
+		return;
+	// part frames: the part tool's kind, the Frame menu (TPageFrames.cpp)
+	if (FrameCommand(message))
 		return;
 	switch (message->what) {
 		case kMsgCellCommit:
@@ -5695,6 +5709,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM5B': case 'sM5D':											// part bar
 		case 'sf02': case 'sf03': case 'sf0L': case 'sf0V': case 'sMB6':	// format bar
 		case 'sf0M': case 'sf0N': case 'sf04': case 'sf05': case 'sf0R': case 'sf0D':
+		case 'sM4Q': case 'sM32': case 'sM33': case 'sM34': case 'sM35': case 'sM36':	// frames
 		case 'sMB0': case 'sMB1':	// Edit Styles' Import and Export Styles
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:

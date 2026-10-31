@@ -55,6 +55,7 @@
 #include "TPreferences.h"
 #include "TWPDialogs.h"
 #include "TStylesEdit.h"
+#include "InlineParts.h"
 #include "Find.h"
 #include "TWPRuler.h"
 #include "Styles.h"
@@ -357,12 +358,22 @@ TDocWindow::InstallBaseMenus()
 	bar->AddItem(new TMenu(4));
 
 	TMenu* frameMenu = new TMenu(5);
-	// TPartMenu(1, 's00T'): one item per part factory; parts aren't ported
-	// yet, so list them from the PART resources' names as disabled items
+	// TPartMenu(1, 's00T'): one item per part factory a frame can be made
+	// of (the port's: text, spreadsheets, drawings, tables, pictures),
+	// sending 's00T' with its Kind (TDocWindow::DoInsertFrame)
 	BMenu* parts = new BMenu("Parts");
-	BMenuItem* none = new BMenuItem("(parts not ported yet)", NULL);
-	none->SetEnabled(false);
-	parts->AddItem(none);
+	static const struct {
+		const char* name;
+		uint32 kind;
+	} kParts[] = {
+		{"Word Processing", 'WORD'}, {"Spreadsheet", 'SPRD'}, {"Graphics", 'GRFX'},
+		{"Table", 'TBLE'}, {"Image Processing", 'BITS'}
+	};
+	for (const auto& p : kParts) {
+		BMessage* message = new BMessage('s00T');
+		message->AddInt32("Kind", int32(p.kind));
+		parts->AddItem(new BMenuItem(p.name, message));
+	}
 	frameMenu->AddItem(parts, 0);
 	frameMenu->AddItem(new BSeparatorItem(), 1);
 	bar->AddItem(frameMenu);
@@ -1539,8 +1550,21 @@ TDocWindow::MenusBeginning()
 				&& size_t(fDocument->MainPart()) < fDocument->parts.parts.size())
 			drawing = fDocument->parts.parts[size_t(fDocument->MainPart())].kind == Sig("GRFX");
 		enable('sM25', drawing);
-		for (uint32 command : {'sM30', 'sM32', 'sM33', 'sM34', 'sM35', 'sM36'})
-			enable(command, false);
+		// the Frame menu's frame commands (TNormalDocWinHelper::FixMenus)
+		// with a frame selected: Make Linked Frame for text, the autogrow
+		// and scroll bar settings marked as the frame has them; Open
+		// Frame Window isn't ported (a second window on the document)
+		const uint32_t* framePointer = fPages != NULL ? fPages->SelectedFrame() : NULL;
+		const gobe::Frame* frame = framePointer != NULL && fDocument != NULL
+			? FrameAt(*fDocument, framePointer) : NULL;
+		enable('sM30', false);
+		enable('sM32', frame != NULL && fDocument->WordPart(framePointer[0]) != NULL);
+		for (uint32 command : {'sM33', 'sM34', 'sM35', 'sM36'})
+			enable(command, frame != NULL);
+		for (const auto& [command, bit] : {std::make_pair('sM34', 8u), std::make_pair('sM35', 4u),
+				std::make_pair('sM36', 0x20u)})
+			if (BMenuItem* item = KeyMenuBar()->FindItem(command))
+				item->SetMarked(frame != NULL && (frame->values[3] & bit) != 0);
 	}
 	// TWPPart::FixMenus: Columns… in the main text with Page View on;
 	// Insert Footnote…, Frame Break and Page Break not in a header, footer
