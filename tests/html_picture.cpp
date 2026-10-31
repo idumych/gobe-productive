@@ -112,6 +112,7 @@ main(int argc, char** argv)
 		part.sheetRect[1] = 20;
 		part.sheetRect[2] = 49;
 		part.sheetRect[3] = 39;
+		part.values[1] = 1;		// its id (TFrame +0x38)
 		holder.frames = {whole, part};
 		doc.tails[D].portals = {holder};
 		WPPart* wp = doc.EditableWordPart(main);
@@ -121,7 +122,8 @@ main(int argc, char** argv)
 			frame.kind = Sig("FRAM");
 			frame.position = k * 6;
 			frame.frame[0] = uint32_t(D);
-			frame.frame[1] = k;
+			frame.frame[1] = 0;
+			frame.frame[2] = k;
 			wp->paragraphs[0].misc.push_back(frame);
 		}
 		std::vector<HTMLImage> images;

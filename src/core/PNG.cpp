@@ -3,6 +3,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <fstream>
+#include <iterator>
 
 #include <zlib.h>
 
@@ -93,6 +95,143 @@ BitmapPNG(const ArchiveBitmap& bitmap, const float crop[4])
 			rgba.push_back(bitmap.colorSpace == kRGBA32 ? bitmap.bits[at + 3] : 255);
 		}
 	return EncodePNG(width, height, rgba);
+}
+
+bool
+DecodePNG(const std::vector<uint8_t>& png, ArchiveBitmap& bitmap)
+{
+	static const uint8_t kSignature[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+	if (png.size() < 8 || !std::equal(kSignature, kSignature + 8, png.begin()))
+		return false;
+	auto big = [&](size_t at) {
+		return uint32_t(png[at]) << 24 | png[at + 1] << 16 | png[at + 2] << 8 | png[at + 3];
+	};
+	uint32_t width = 0, height = 0;
+	int depth = 0, type = -1;
+	std::vector<uint8_t> deflated, palette, transparency;
+	for (size_t at = 8; at + 12 <= png.size();) {
+		uint32_t length = big(at);
+		if (at + 12 + length > png.size())
+			return false;
+		std::string chunk(png.begin() + long(at + 4), png.begin() + long(at + 8));
+		const uint8_t* data = &png[at + 8];
+		if (chunk == "IHDR" && length >= 13) {
+			width = big(at + 8);
+			height = big(at + 12);
+			depth = data[8];
+			type = data[9];
+			if (data[12] != 0)
+				return false;	// interlaced
+		} else if (chunk == "PLTE")
+			palette.assign(data, data + length);
+		else if (chunk == "tRNS")
+			transparency.assign(data, data + length);
+		else if (chunk == "IDAT")
+			deflated.insert(deflated.end(), data, data + length);
+		else if (chunk == "IEND")
+			break;
+		at += 12 + length;
+	}
+	int channels = type == 0 ? 1 : type == 2 ? 3 : type == 3 ? 1 : type == 4 ? 2 : type == 6 ? 4 : 0;
+	bool small = (type == 0 || type == 3) && (depth == 1 || depth == 2 || depth == 4);
+	if (width == 0 || height == 0 || width > 16384 || height > 16384 || channels == 0
+			|| !(depth == 8 || small) || (type == 3 && palette.empty()))
+		return false;
+	size_t bits = size_t(channels) * size_t(depth);
+	size_t row = (size_t(width) * bits + 7) / 8, step = std::max<size_t>(1, bits / 8);
+	std::vector<uint8_t> raw((row + 1) * height);
+	uLongf size = uLongf(raw.size());
+	if (uncompress(raw.data(), &size, deflated.data(), uLong(deflated.size())) != Z_OK
+			|| size != raw.size())
+		return false;
+	// the filters (None, Sub, Up, Average, Paeth), row by row
+	std::vector<uint8_t> pixels(row * height), previous(row, 0);
+	for (uint32_t y = 0; y < height; y++) {
+		uint8_t filter = raw[y * (row + 1)];
+		uint8_t* line = &pixels[y * row];
+		const uint8_t* in = &raw[y * (row + 1) + 1];
+		for (size_t x = 0; x < row; x++) {
+			int a = x >= step ? line[x - step] : 0, b = previous[x];
+			int c = x >= step ? previous[x - step] : 0;
+			int value = in[x];
+			switch (filter) {
+				case 0: break;
+				case 1: value += a; break;
+				case 2: value += b; break;
+				case 3: value += (a + b) / 2; break;
+				case 4: {
+					int p = a + b - c, pa = abs(p - a), pb = abs(p - b), pc = abs(p - c);
+					value += pa <= pb && pa <= pc ? a : pb <= pc ? b : c;
+					break;
+				}
+				default: return false;
+			}
+			line[x] = uint8_t(value);
+		}
+		std::copy(line, line + row, previous.begin());
+	}
+	bitmap = ArchiveBitmap();
+	bitmap.colorSpace = 0x2008;
+	bitmap.bytesPerRow = width * 4;
+	bitmap.bounds[2] = float(width - 1);
+	bitmap.bounds[3] = float(height - 1);
+	bitmap.bits.resize(size_t(width) * height * 4);
+	for (uint32_t y = 0; y < height; y++) {
+		const uint8_t* line = &pixels[y * row];
+		for (uint32_t x = 0; x < width; x++) {
+			uint8_t r, g, b, alpha = 255;
+			if (small) {
+				int shift = 8 - depth - int((x * depth) % 8);
+				int v = (line[x * depth / 8] >> shift) & ((1 << depth) - 1);
+				if (type == 3) {
+					size_t i = size_t(v) * 3;
+					if (i + 2 >= palette.size())
+						return false;
+					r = palette[i];
+					g = palette[i + 1];
+					b = palette[i + 2];
+					if (size_t(v) < transparency.size())
+						alpha = transparency[size_t(v)];
+				} else
+					r = g = b = uint8_t(v * 255 / ((1 << depth) - 1));
+			} else {
+				const uint8_t* p = line + size_t(x) * size_t(channels);
+				switch (type) {
+					case 0: r = g = b = p[0]; break;
+					case 4: r = g = b = p[0]; alpha = p[1]; break;
+					case 2: r = p[0]; g = p[1]; b = p[2]; break;
+					case 6: r = p[0]; g = p[1]; b = p[2]; alpha = p[3]; break;
+					default: {
+						size_t i = size_t(p[0]) * 3;
+						if (i + 2 >= palette.size())
+							return false;
+						r = palette[i];
+						g = palette[i + 1];
+						b = palette[i + 2];
+						if (p[0] < transparency.size())
+							alpha = transparency[p[0]];
+					}
+				}
+			}
+			uint8_t* out = &bitmap.bits[(size_t(y) * width + x) * 4];
+			out[0] = b;
+			out[1] = g;
+			out[2] = r;
+			out[3] = alpha;
+		}
+	}
+	return true;
+}
+
+
+bool
+ReadPNGFile(const std::string& path, ArchiveBitmap& bitmap)
+{
+	std::ifstream file(path, std::ios::binary);
+	if (!file)
+		return false;
+	std::vector<uint8_t> png((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	return DecodePNG(png, bitmap);
 }
 
 } // namespace gobe

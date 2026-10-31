@@ -3,6 +3,7 @@
 #define GOBE_PNG_H
 
 #include <cstdint>
+#include <string>
 #include <vector>
 
 #include "IMPart.h"
@@ -18,6 +19,12 @@ std::vector<uint8_t> EncodePNG(int width, int height, const std::vector<uint8_t>
 // bottom, inclusive) of it if right >= left. Empty for other color spaces
 // or an empty bitmap.
 std::vector<uint8_t> BitmapPNG(const ArchiveBitmap& bitmap, const float crop[4]);
+
+// A PNG read into a B_RGBA32 bitmap (B, G, R, A): 8-bit gray, RGB,
+// palette (1, 2, 4 or 8 bits, with tRNS), gray with alpha and RGBA, not
+// interlaced. False if it isn't one of those.
+bool DecodePNG(const std::vector<uint8_t>& png, ArchiveBitmap& bitmap);
+bool ReadPNGFile(const std::string& path, ArchiveBitmap& bitmap);
 
 } // namespace gobe
 

@@ -3,6 +3,7 @@
 
 #include "Document.h"
 #include "Editing.h"
+#include "InlineParts.h"
 #include "PNG.h"
 
 #include <algorithm>
@@ -1469,7 +1470,7 @@ RTFWriter::FramesOf(const WPPart& part)
 void
 RTFWriter::Picture(const WPMiscInfo& frame)
 {
-	const Frame* f = fDoc.FrameOf(frame.frame[0], frame.frame[1]);
+	const Frame* f = FrameAt(fDoc, frame.frame);
 	const IMPart* image = f != nullptr ? fDoc.ImagePart(f->part) : nullptr;
 	if (image == nullptr)
 		return;

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <Bitmap.h>
 #include <Button.h>
 #include <File.h>
 #include <fs_attr.h>
@@ -20,9 +21,12 @@
 #include <PopUpMenu.h>
 #include <TextControl.h>
 #include <TextView.h>
+#include <TranslationUtils.h>
 #include <UnicodeBlockObjects.h>
 #include <UTF8.h>
 #include <Window.h>
+
+#include <memory>
 
 #include "Document.h"
 #include "GobeResources.h"
@@ -34,6 +38,8 @@
 #include "Word.h"
 
 namespace gobe {
+
+static bool ReadPicture(const std::string& path, ArchiveBitmap& picture);
 
 const FontCatalog&
 InstalledFonts()
@@ -252,7 +258,7 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	} else if (kind == kExcelFile) {
 		ok = ImportExcel(path, doc, message, &notice);
 	} else if (kind == kHTMLFile) {
-		ok = ImportHTML(path, doc, message);
+		ok = ImportHTML(path, doc, message, ReadPicture);
 	} else if (kind == kSylkFile) {
 		ok = ImportSylk(path, doc, message, &notice);
 	} else if (kind == kTableFile) {
@@ -274,6 +280,31 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	BString name(p.Leaf());
 	name << GobeResources::IndexString(5, 32);
 	doc.name = name.String();
+	return true;
+}
+
+
+// a picture file (GIF, JPEG, PNG, ...) through the system's translators,
+// as the HTML translator's pictures: a B_RGBA32 bitmap
+static bool
+ReadPicture(const std::string& path, ArchiveBitmap& picture)
+{
+	std::unique_ptr<BBitmap> bitmap(BTranslationUtils::GetBitmap(path.c_str()));
+	if (!bitmap || bitmap->InitCheck() != B_OK)
+		return false;
+	BRect bounds = bitmap->Bounds();
+	BBitmap converted(bounds, B_RGBA32);
+	if (converted.InitCheck() != B_OK || converted.ImportBits(bitmap.get()) != B_OK)
+		return false;
+	picture = ArchiveBitmap();
+	picture.colorSpace = B_RGBA32;
+	picture.bytesPerRow = uint32(converted.BytesPerRow());
+	picture.bounds[0] = 0;
+	picture.bounds[1] = 0;
+	picture.bounds[2] = bounds.Width();
+	picture.bounds[3] = bounds.Height();
+	const uint8* bits = (const uint8*)converted.Bits();
+	picture.bits.assign(bits, bits + converted.BitsLength());
 	return true;
 }
 

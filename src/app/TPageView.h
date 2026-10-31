@@ -387,7 +387,10 @@ private:
 	bool fInkLowChanged = false;
 	rgb_color fInkOldLow;
 	void RestoreInkLow();
-	LayoutResult LayoutPart(size_t part, const std::vector<FrameGeometry>& frames);
+	// (`from`, `to`: only the paragraphs starting in that text range, a
+	// table cell's frame's)
+	LayoutResult LayoutPart(size_t part, const std::vector<FrameGeometry>& frames,
+		uint32_t from = 0, uint32_t to = UINT32_MAX);
 	static BRect RotatedBounds(BRect rect, float angle);
 	// the area a frame may draw in: its containers' frames intersected
 	BRect ContainerClip(const Document::PlacedFrame& frame) const;
@@ -396,6 +399,16 @@ private:
 
 	Document& fDocument;
 	std::vector<Document::PlacedFrame> fFrames;
+	// frames shown inline in the text (a table, a picture: a FRAM special)
+	// where the layout put them, in document coordinates: their origins
+	// are set from it (TWPFrame's layout places them)
+	struct InlinePlacement {
+		size_t container;
+		uint32_t pointer[3];
+		float x, y;
+	};
+	std::vector<InlinePlacement> fInlinePlacements;
+	int fInlinePasses = 0;
 	std::vector<Line> fLines;
 	std::map<std::vector<uint32_t>, CellStyle> fCellStyles;
 	std::map<size_t, std::unique_ptr<BBitmap>> fImages;

@@ -23,6 +23,7 @@
 #include <Shape.h>
 
 #include "Fields.h"
+#include "InlineParts.h"
 #include "Notes.h"
 #include "TextImport.h"
 #include "ResourceFile.h"
@@ -411,9 +412,11 @@ TPageView::LayoutText()
 	LayoutResult main;
 	// the styles may have changed since the last layout
 	fStyleCache.clear();
+	fInlinePasses = 0;
 	for (int pass = 0;; pass++) {
 		fLines.clear();
 		fRules.clear();
+		fInlinePlacements.clear();
 		// group each word processing part's frames, in flow order
 		std::vector<std::pair<size_t, std::vector<FrameGeometry>>> flows;
 		// a frame on several pages (the header, the footer) is laid out once
@@ -424,6 +427,14 @@ TPageView::LayoutText()
 			int page;
 		};
 		std::vector<Repeat> repeats;
+		// a table's cells: each frame shows its own text (TTable: a cell's
+		// TWPFrame and its range), laid out on its own
+		struct CellFlow {
+			size_t part;
+			FrameGeometry geometry;
+			uint32_t from, to;
+		};
+		std::vector<CellFlow> cellFlows;
 		for (const auto& f : fFrames) {
 			if (fDocument.parts.parts[f.part].kind != Sig("WORD"))
 				continue;
@@ -434,6 +445,14 @@ TPageView::LayoutText()
 			auto it = std::find_if(flows.begin(), flows.end(),
 				[&](const auto& fl) { return fl.first == f.part; });
 			FrameGeometry g{r, f.frame->angle, ContainerClip(f), f.index, f.page};
+			if (f.frame->container < fDocument.parts.parts.size()
+					&& fDocument.parts.parts[f.frame->container].kind == Sig("TBLE")) {
+				r.bottom = r.top + f.height;
+				g.rect = r;
+				cellFlows.push_back({f.part, g, f.frame->textStart,
+					f.frame->textStart + f.frame->textLength});
+				continue;
+			}
 			if (it == flows.end())
 				flows.push_back({f.part, {g}});
 			else {
@@ -472,6 +491,31 @@ TPageView::LayoutText()
 					fLines.push_back(line);
 				}
 			}
+		}
+		for (const CellFlow& cell : cellFlows)
+			LayoutPart(cell.part, {cell.geometry}, cell.from, cell.to);
+		// the frames in the text where the lines put them (relative to their
+		// text's first frame); the frames placed again if one moved
+		bool movedInline = false;
+		for (const InlinePlacement& placed : fInlinePlacements) {
+			gobe::Frame* inner = const_cast<gobe::Frame*>(FrameAt(fDocument, placed.pointer));
+			auto container = std::find_if(fFrames.begin(), fFrames.end(),
+				[&](const Document::PlacedFrame& f) {
+					return f.part == placed.container && f.index == 0;
+				});
+			if (inner == NULL || container == fFrames.end())
+				continue;
+			float x = roundf(placed.x - container->x), y = roundf(placed.y - container->y);
+			if (fabsf(inner->origin[0] - x) > 0.5f || fabsf(inner->origin[1] - y) > 0.5f) {
+				inner->origin[0] = x;
+				inner->origin[1] = y;
+				fDocument.dirtyTails.insert(placed.pointer[0]);
+				movedInline = true;
+			}
+		}
+		if (movedInline && fInlinePasses++ < 8) {
+			RebuildFrames();
+			continue;
 		}
 		// the header and footer, once edited, are as high as their text
 		bool resized = false;
@@ -594,7 +638,8 @@ IsFrameBreak(char c)
 // continues in the next frame. Tabs go to the next half inch for now (the
 // paragraph's PTab stops aren't decoded yet).
 TPageView::LayoutResult
-TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
+TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, uint32_t from,
+	uint32_t to)
 {
 	LayoutResult result;
 	const WPPart* wp = fDocument.WordPart(part);
@@ -615,7 +660,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 	const float tabStop = 36;
 
 	struct Token {
-		enum Kind { kWord, kTab, kLineBreak, kRule } kind;
+		enum Kind { kWord, kTab, kLineBreak, kRule, kFrame } kind;
 		std::string text;
 		BFont font;
 		rgb_color color;
@@ -674,6 +719,10 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 	};
 
 	for (const WPParagraph& par : wp->paragraphs) {
+		if (paragraphStart < from || paragraphStart >= to) {
+			paragraphStart += uint32_t(par.text.size());
+			continue;
+		}
 		if (frameIndex >= frames.size()) {
 			result.overflow = true;
 			return result;
@@ -745,6 +794,12 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 							misc = &m;
 					if (misc != NULL && misc->kind == Sig("LINE"))
 						tokens.push_back({Token::kRule, "", font, color, false, i, i + 1,
+							misc->kind, misc, size, dy});
+					// a table or a picture in the text: as wide and high as
+					// its frame
+					else if (misc != NULL && misc->kind == Sig("FRAM")
+							&& FrameAt(fDocument, misc->frame) != NULL)
+						tokens.push_back({Token::kFrame, "", font, color, false, i, i + 1,
 							misc->kind, misc, size, dy});
 					else if (misc != NULL && (misc->kind == Sig("FORM")
 							|| misc->kind == Sig("PAGE")))
@@ -834,6 +889,19 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 					measure(tk.font, tk.size);
 					t++;
 					break;
+				}
+				if (tk.kind == Token::kFrame) {
+					// on the baseline, the line as high as it
+					const gobe::Frame* inner = FrameAt(fDocument, tk.misc->frame);
+					float ww = inner->extent[0];
+					if (!placed.empty() && x + ww > avail + 2 * pad)
+						break;
+					placed.push_back({t, x});
+					x += ww;
+					measure(tk.font, tk.size);
+					ascent = std::max(ascent, inner->extent[1]);
+					t++;
+					continue;
 				}
 				if (tk.kind == Token::kLineBreak) {
 					measure(tk.font, tk.size);
@@ -977,6 +1045,13 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 				if (tk.field == Sig("PAGE")) {
 					int page = geometry[frameIndex].page;
 					piece.text = page < 0 ? "#" : std::to_string(page + 1);
+				}
+				if (tk.kind == Token::kFrame) {
+					const gobe::Frame* inner = FrameAt(fDocument, tk.misc->frame);
+					InlinePlacement p{part, {tk.misc->frame[0], tk.misc->frame[1],
+						tk.misc->frame[2]}, left + piece.x + fBounds.left - fMargin,
+						line.baseline - inner->extent[1] + fBounds.top - fMargin};
+					fInlinePlacements.push_back(p);
 				}
 				// TMiscLineInfo::Draw: from 10 past where it is to 10 before
 				// the frame's right edge
@@ -1704,7 +1779,7 @@ TPageView::DrawTable(const Document::PlacedFrame& f, BRect r)
 			r.left + c.origin[0] + c.size[0], r.top + c.origin[1] + c.size[1]);
 	};
 	auto cellStyle = [&](const TableCell& c) {
-		const gobe::Frame* frame = fDocument.FrameOf(c.frame[0], c.frame[1]);
+		const gobe::Frame* frame = FrameAt(fDocument, c.frame);
 		return ResolveShapeStyle(fDocument.styles, frame != NULL ? frame->style : 0);
 	};
 	PushState();
