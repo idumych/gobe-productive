@@ -174,6 +174,16 @@ public:
 	size_t SelectedShapeCount() const { return fShapes.size(); }
 	// the first selected shape's look (the FormatBar's fill and pen)
 	bool SelectedShapeStyle(ShapeStyle& style) const;
+	// the pen's size, type and arrows the selection has (the FormatBar's
+	// and PartBar's menus marking them)
+	struct SelectedPen {
+		bool any = false;
+		PenType pen;
+		int arrows = 0;
+		float size = 1;
+		bool samePen = true, sameArrows = true, sameSize = true;
+	};
+	void SelectedPens(SelectedPen& state) const;
 	// Arrange's items enabled and marked (Resize, Rotate, Reshape)
 	void FixShapeMenu(BMenu* menu) const;
 	// Show Invisibles: the marks on line `index`

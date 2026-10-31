@@ -48,6 +48,7 @@
 #include "TEntryBar.h"
 #include "TPageBar.h"
 #include "TPartBar.h"
+#include "TInkMenus.h"
 #include "TSpellBar.h"
 #include "TSheetBar.h"
 #include "TSheetDialogs.h"
@@ -1809,6 +1810,15 @@ TDocWindow*
 TDocWindow::Front()
 {
 	return sWindows.empty() ? NULL : sWindows.front();
+}
+
+
+std::vector<PenType>
+TDocWindow::Pens() const
+{
+	if (fPages == NULL)
+		return AppPens();
+	return DocumentPens(fPages->Doc().pens, AppPens());
 }
 
 

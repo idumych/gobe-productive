@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <string>
 
+#include "DocArchive.h"
 #include "Document.h"
 #include "ResourceFile.h"
 #include "Drawing.h"
@@ -541,6 +542,55 @@ main(int argc, char** argv)
 		Check(head[0][0] == 53 && head[1][0] == 44 && head[2][0] == 44
 			&& std::fabs(head[1][1]) == 4 && head[1][1] == -head[2][1], "an arrowhead");
 
+		// a dash no longer than half the pen: marks across, the dash less
+		// one wide
+		PenType tiny;
+		tiny.kind = 2;
+		tiny.dash = 2;
+		tiny.gap = 4;
+		m = MarksAlong(line, tiny, 6);
+		Check(m.segments.size() == 17 && m.width == 1 && std::fabs(m.segments[0].first[0] - 1) < 1e-3
+			&& std::fabs(m.segments[0].first[1] - 3) < 1e-3, "very short dashes: marks across");
+		Check(MarksAlong(line, dash, 3).width == 3, "dashes at the pen's size");
+
+		// a document's pens: the application's until changed, then its own
+		// (copied first), saved in the PenMgr and read back exactly
+		std::vector<PenType> app = pens;
+		PenMgr mgr;
+		Check(&DocumentPens(mgr, app) == &app, "a document uses the application's pens");
+		PenType mine = dash;
+		mine.name = "Mine";
+		AddPen(mgr, app, mine);
+		Check(mgr.own && mgr.pens.size() == app.size() + 1 && mgr.pens.back().name == "Mine"
+			&& &DocumentPens(mgr, app) == &mgr.pens, "a pen made: the document's own");
+		AddPen(mgr, app, mine);
+		Check(mgr.pens.back().name == "Mine1", "the same pen again: named anew");
+		PenType edited = mine;
+		edited.gap = 9;
+		Check(ReplacePen(mgr, app, mgr.pens.size() - 2, edited) && mgr.pens[mgr.pens.size() - 2].gap == 9,
+			"a pen edited");
+		Check(DeletePen(mgr, app, mgr.pens.size() - 1) && !DeletePen(mgr, app, 99), "a pen deleted");
+		PenType odd;
+		odd.kind = -1;
+		odd.unknownKind = Sig("WAVY");
+		odd.name = "Wavy";
+		odd.unknownData = {0, 4, 'W', 'a', 'v', 'y', 0, 1, 9, 9};
+		mgr.pens.push_back(odd);
+		std::vector<uint8_t> bytes = WritePenMgr(mgr);
+		PenMgr back;
+		{
+			DocArchive a(bytes);
+			ReadPenMgr(a, back);
+		}
+		bool same = back.shared && back.own && back.pens.size() == mgr.pens.size();
+		for (size_t i = 0; same && i < back.pens.size(); i++)
+			same = SamePen(back.pens[i], mgr.pens[i]);
+		Check(same && back.pens.back().name == "Wavy" && WritePenMgr(back) == bytes,
+			"the PenMgr written and read back exactly");
+		PenMgr blank;
+		Check(WritePenMgr(blank) == std::vector<uint8_t>({'P', 'E', 'N', 'M', 0, 0, 0, 6, 1, 0, 0,
+			0, 0, 0, 'P', 'e', 'n', 'M'}), "a blank document's PenMgr");
+
 		Document doc;
 		std::string error;
 		Check(CreateBlankDrawing(doc, error), "a drawing for the pens " + error);
@@ -559,9 +609,48 @@ main(int argc, char** argv)
 		ShapePenAndArrows(again.styles, again.GraphicsPart(0)->layers[0].shapes[lineShape].style,
 			pen, arrows);
 		Check(arrows == 3 && pen.kind == 2 && pen.dash == 8, "a shape's pen and arrows kept");
+		Check(again.pens.shared && !again.pens.own && again.pens.pens.empty(),
+			"a new document's PenMgr read");
+		AddPen(again.pens, app, mine);
+		again.pensChanged = true;
+		Check(again.Save(path, error), "pens saved again " + error);
+		Document third;
+		Check(LoadDocument(path, third, error) && third.pens.own
+			&& third.pens.pens.size() == app.size() + 1 && SamePen(third.pens.pens.back(), mine),
+			"a document's own pens saved and reloaded");
 		int ellipse = AddShape(again, 0, 0, kToolEllipse, {{0, 0}, {40, 20}});
 		lo = ShapeOutline(again.GraphicsPart(0)->layers[0].shapes[ellipse]);
 		Check(lo.size() == 1 && lo[0].closed && lo[0].points.size() > 16, "an ellipse's outline");
+	}
+
+	// the samples' PenMgr sections written again as they were
+	{
+		size_t samples = 0, own = 0;
+		bool exact = true;
+		for (int i = 1; i < argc; i++) {
+			Document sample;
+			std::string error;
+			if (!LoadDocument(argv[i], sample, error))
+				continue;
+			const auto& toc = sample.file.toc;
+			for (size_t t = 0; t < toc.size(); t++) {
+				if (toc[t].name != "PenMgr")
+					continue;
+				size_t end = t + 1 < toc.size() ? toc[t + 1].offset : sample.file.tocOffset;
+				std::vector<uint8_t> section(sample.bytes.begin() + long(toc[t].offset),
+					sample.bytes.begin() + long(end));
+				std::vector<uint8_t> written = WritePenMgr(sample.pens);
+				if (section.size() < written.size()
+						|| !std::equal(written.begin(), written.end(), section.begin())) {
+					exact = false;
+					printf("PenMgr differs: %s\n", argv[i]);
+				}
+				samples++;
+				own += sample.pens.own ? 1 : 0;
+			}
+		}
+		printf("draw_shapes: PenMgr of %zu samples (%zu with their own pens)\n", samples, own);
+		Check(exact, "the samples' PenMgr written as read");
 	}
 
 	// a sample's drawing: one more shape, the others as they were

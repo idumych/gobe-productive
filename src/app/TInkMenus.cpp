@@ -3,10 +3,13 @@
 #include <Gradient.h>
 #include <GradientLinear.h>
 #include <GradientRadial.h>
+#include <InterfaceDefs.h>
 
 #include <algorithm>
 #include <cmath>
 
+#include "DocArchive.h"
+#include "DocWriter.h"
 #include "GobeResources.h"
 #include "InkSets.h"
 #include "TRibbon.h"
@@ -167,6 +170,8 @@ TIconMenuItem::DrawContent()
 	if (fIcon == NULL)
 		return;
 	BMenu* menu = Menu();
+	if (menu->Window() != NULL)
+		fScreenFrame = menu->ConvertToScreen(Frame());
 	menu->SetDrawingMode(B_OP_OVER);
 	menu->DrawBitmap(fIcon.get(), ContentLocation());
 	menu->SetDrawingMode(B_OP_COPY);
@@ -178,6 +183,16 @@ TIconMenuItem::GetContentSize(float* width, float* height)
 {
 	*width = 16;
 	*height = 16;
+}
+
+
+bool
+TIconMenuItem::ReleasedOver() const
+{
+	BPoint where;
+	uint32 buttons = 0;
+	return fScreenFrame.IsValid() && get_mouse(&where, &buttons) == B_OK && buttons == 0
+		&& fScreenFrame.Contains(where);
 }
 
 
@@ -200,8 +215,7 @@ StrokePenType(BView* view, const Outline& outline, const PenType& pen, float siz
 		}
 	}
 	PenMarks marks = MarksAlong(outline, pen, size);
-	// (THashPen: its marks at a third of its size too)
-	view->SetPenSize(pen.kind == 2 ? std::max(size, 1.0f) : PenTypeSize(pen, size) / 3);
+	view->SetPenSize(marks.width);
 	cap_mode cap = view->LineCapMode();
 	join_mode join = view->LineJoinMode();
 	view->SetLineMode(B_BUTT_CAP, B_MITER_JOIN);
@@ -269,16 +283,58 @@ TLineSampleItem::GetContentSize(float* width, float* height)
 }
 
 
-void
-AddPenTypeItems(BMenu* menu)
+const std::vector<PenType>&
+AppPens()
 {
-	for (const ResourceFile::Resource* r : GobeResources::File().All('PENS')) {
-		PenType pen;
-		if (!ParsePenResource(r->data, pen))
-			continue;
+	static std::vector<PenType> pens;
+	static bool loaded = false;
+	if (!loaded) {
+		loaded = true;
+		for (const ResourceFile::Resource* r : GobeResources::File().All('PENS')) {
+			PenType pen;
+			if (ParsePenResource(r->data, pen))
+				pens.push_back(pen);
+		}
+	}
+	return pens;
+}
+
+
+void
+AddPenToMessage(BMessage* message, const PenType& pen)
+{
+	DocWriter w;
+	WritePen(w, pen);
+	message->AddData("pen", B_RAW_TYPE, w.Data().data(), ssize_t(w.Data().size()));
+}
+
+
+bool
+PenFromMessage(const BMessage* message, PenType& pen)
+{
+	const void* data = NULL;
+	ssize_t size = 0;
+	if (message->FindData("pen", B_RAW_TYPE, &data, &size) != B_OK)
+		return false;
+	DocArchive a(std::vector<uint8_t>((const uint8_t*)data, (const uint8_t*)data + size));
+	try {
+		ReadPen(a, pen);
+	} catch (const ArchiveError&) {
+		return false;
+	}
+	return true;
+}
+
+
+void
+AddPenTypeItems(BMenu* menu, const std::vector<PenType>& pens, const PenType* marked)
+{
+	for (const PenType& pen : pens) {
 		BMessage* message = new BMessage('sf0A');
-		message->AddData("pen", B_RAW_TYPE, r->data.data(), ssize_t(r->data.size()));
-		menu->AddItem(new TLineSampleItem(pen, 0, message));
+		AddPenToMessage(message, pen);
+		TLineSampleItem* item = new TLineSampleItem(pen, 0, message);
+		item->SetMarked(marked != NULL && SamePen(*marked, pen));
+		menu->AddItem(item);
 	}
 }
 

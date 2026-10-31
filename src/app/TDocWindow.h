@@ -22,6 +22,7 @@ class BMenuField;
 
 #include <string>
 
+#include "Pens.h"
 #include "TDialog.h"
 
 class BFilePanel;
@@ -77,6 +78,9 @@ public:
 
 	// TApp::FrontDocWindow: the document window last active, or NULL
 	static TDocWindow* Front();
+	// the document's pens (TPenMgr: its own or the application's), for the
+	// Inks window (lock the window first)
+	std::vector<PenType> Pens() const;
 	// the document's other windows hold this while they use it
 	class BLocker& DocumentLock() const;
 	// the active part has text selected (TFindReplace::hasTextSelection)

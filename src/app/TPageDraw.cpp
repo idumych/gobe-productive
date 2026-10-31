@@ -20,6 +20,8 @@
 
 #include "DocArchive.h"
 #include "Drawing.h"
+#include "TInkMenus.h"
+#include "TPensWindow.h"
 #include "GobeResources.h"
 #include "InlineParts.h"
 #include "TMenu.h"
@@ -269,6 +271,41 @@ TPageView::SelectedShapeStyle(ShapeStyle& style) const
 		return false;
 	style = ResolveShapeStyle(fDocument.styles, s->style);
 	return true;
+}
+
+
+// TStyleManager::FixPropMenu for the pen's size, type and arrows: what
+// all the selected shapes (or the frame selected by its edge) have; each
+// false where they differ
+void
+TPageView::SelectedPens(SelectedPen& state) const
+{
+	state = SelectedPen();
+	std::vector<uint32_t> styles;
+	if (fShapes.empty() && fFrame.active) {
+		if (const gobe::Frame* frame = FrameAt(fDocument, fFrame.pointer))
+			styles.push_back(frame->style);
+	}
+	for (const ShapeRef& ref : fShapes)
+		if (const Shape* s = ShapeAt(fDocument, ref.part, ref.layer, ref.index))
+			if (s->kind != Sig("FRAM"))
+				styles.push_back(s->style);
+	for (size_t i = 0; i < styles.size(); i++) {
+		PenType pen;
+		int arrows = 0;
+		ShapePenAndArrows(fDocument.styles, styles[i], pen, arrows);
+		float size = ResolveShapeStyle(fDocument.styles, styles[i]).penSize;
+		if (i == 0) {
+			state.any = true;
+			state.pen = pen;
+			state.arrows = arrows;
+			state.size = size;
+			continue;
+		}
+		state.samePen = state.samePen && SamePen(pen, state.pen);
+		state.sameArrows = state.sameArrows && arrows == state.arrows;
+		state.sameSize = state.sameSize && size == state.size;
+	}
 }
 
 
@@ -826,6 +863,30 @@ bool
 TPageView::ShapeCommand(BMessage* message)
 {
 	uint32 what = message->what;
+	// the Inks window's pens (TDialogNewColor::DoAddPen 'sfI5', DoReplacePen
+	// 'sfI7' with "ink index", DoClear): the document's own pens changed
+	// (TPenMgr: the application's copied first), not undoable
+	if (what == kMsgAddPen || what == kMsgReplacePen || what == kMsgDeletePen) {
+		PenType pen;
+		size_t index = size_t(message->GetInt32("ink index", -1));
+		bool changed = what == kMsgDeletePen ? DeletePen(fDocument.pens, AppPens(), index)
+			: !PenFromMessage(message, pen) ? false
+			: what == kMsgAddPen ? (AddPen(fDocument.pens, AppPens(), pen), true)
+			: ReplacePen(fDocument.pens, AppPens(), index, pen);
+		if (changed) {
+			fDocument.pensChanged = true;
+			if (Window() != NULL)
+				Window()->PostMessage(kMsgDocumentChanged);
+			TPensWindow::Refresh();
+		}
+		// (a pen replaced: applied to the selection, DoApplyPen)
+		if (changed && what == kMsgReplacePen) {
+			BMessage apply(*message);
+			apply.what = 'sf0A';
+			return ShapeCommand(&apply);
+		}
+		return true;
+	}
 	// Arrange > Resize, Rotate, Reshape: what a handle does
 	if (what == 'sM4A' || what == 'sM4B' || what == 'sM4C') {
 		fShapeMode = what == 'sM4A' ? 0 : what == 'sM4B' ? 1 : 2;
@@ -1023,13 +1084,9 @@ TPageView::ShapeCommand(BMessage* message)
 		properties.push_back(OpacityProperty(Sig("PENz"), size));
 	} else if (what == 'sf0A') {
 		// the pen's type (TPenTypeMenuItem: TPropPenType 'PEN ', the pen
-		// as its PENS resource has it)
-		const void* data = NULL;
-		ssize_t size = 0;
+		// archived in the message)
 		PenType pen;
-		if (message->FindData("pen", B_RAW_TYPE, &data, &size) != B_OK
-				|| !ParsePenResource(std::vector<uint8_t>((const uint8_t*)data,
-					(const uint8_t*)data + size), pen))
+		if (!PenFromMessage(message, pen))
 			return true;
 		properties.push_back(PenTypeProperty(pen));
 	} else if (what == 'sf0F') {

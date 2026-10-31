@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "GRPart.h"
+#include "Pens.h"
 #include "Styles.h"
 
 namespace gobe {
@@ -178,26 +179,6 @@ int UngroupShape(Document& doc, size_t drawing, size_t layer, size_t index, std:
 // control points offsets from them), open; -1 as AddShape
 int AddBezierShape(Document& doc, size_t part, size_t layer, const std::vector<Vertex>& vertices);
 
-// A pen's kind (TPen and its subclasses; TPropPenType 'PEN '): 0 a
-// normal pen (NORM), 1 dots (PDOT: the gap, filled or hollow), 2 dashes
-// (DASH: the dash and the gap), 3 hash marks (HASH: the gap); its name,
-// whether it prints
-struct PenType {
-	int kind = 0;
-	std::string name;
-	bool print = true;
-	float dash = 0, gap = 0;
-	bool filled = false;
-};
-// a 'PENS' resource (the application's pens, TPenMgr's): the kind, the
-// name (C string), printable, then the kind's numbers (u32s,
-// little-endian); false if it isn't one
-bool ParsePenResource(const std::vector<uint8_t>& data, PenType& pen);
-// the 'PEN ' property of a pen (TPropPenType::WritePropData: present, the
-// kind's signature, the data's size, TPen::WritePenData and its
-// subclass's) and back
-Property PenTypeProperty(const PenType& pen);
-bool ReadPenType(const Property& property, PenType& pen);
 // TPropArrows 'Arrw' (a short: 0 none, 1 at the start, 2 at the end, 3
 // both ends; STR# 11, 20-23)
 Property ArrowsProperty(int arrows);
@@ -217,10 +198,12 @@ std::vector<Outline> ShapeOutline(const Shape& shape);
 // the marks a pen draws along a polyline (TDashPen, TDotPen, THashPen
 // StrokePath): dashes as segments, dots as centers (`dotSize` across: the
 // filled ones filled, all outlined with a hairline), hash marks as
-// segments across it (over the line itself at a third of the size);
-// `size` the pen's size
+// segments across it (over the line itself, all at a third of the
+// size); dashes no longer than half the pen's size as marks across, the
+// pen's size long, at the dash's length less one; `size` the pen's size
 struct PenMarks {
 	std::vector<std::pair<DrawPoint, DrawPoint>> segments;
+	float width = 1;		// the segments' pen size
 	std::vector<DrawPoint> dots;
 	float dotSize = 0;
 };

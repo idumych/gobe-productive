@@ -54,6 +54,8 @@ LoadDocumentBytes(std::vector<uint8_t> data, Document& doc, std::string& error)
 				ReadLinksMgr(a, doc.links);
 			else if (e.name == "SheetMgr")
 				ReadSheetMgr(a, doc.sheets);
+			else if (e.name == "PenMgr")
+				ReadPenMgr(a, doc.pens);
 			else if (e.name == "PartMgr")
 				ReadPartMgr(a, doc.parts);
 			else if (e.name == "Document Misc") {
@@ -944,6 +946,8 @@ Document::Save(const std::string& to, std::string& error)
 		changes.sections["StyleMgr"] = WriteStyleMgr(styles);
 	if (sheetsChanged)
 		changes.sections["SheetMgr"] = WriteSheetMgr(sheets);
+	if (pensChanged)
+		changes.sections["PenMgr"] = WritePenMgr(pens);
 	if (factoriesChanged)
 		changes.sections["PartFactory Table"] = WriteFactoryTable(factories);
 	// the flags after the window count, the rest as read

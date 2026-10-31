@@ -170,20 +170,29 @@ private:
 // value (STR# 11, 20-23: none, at the start, at the end, both ends)
 class TArrowsElement : public TMenuElement {
 public:
-	TArrowsElement(BRect rect)
+	TArrowsElement(BRect rect, TPageView* pages)
 		:
-		TMenuElement('GRAR', rect, NULL, TMICNElement::LoadIcon(0x1c))
+		TMenuElement('GRAR', rect, NULL, TMICNElement::LoadIcon(0x1c)),
+		fPages(pages)
 	{
 	}
 
+	// (TStyleManager::FixPropMenu: what all the selection has marked)
 	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon)
 	{
+		TPageView::SelectedPen state;
+		fPages->SelectedPens(state);
 		for (int32 i = 0; i < 4; i++) {
 			BMessage* message = new BMessage('sf0F');
 			message->AddInt32(kValueString, i);
-			menu->AddItem(new TLineSampleItem(PenType(), i, message));
+			TLineSampleItem* item = new TLineSampleItem(PenType(), i, message);
+			item->SetMarked(state.any && state.sameArrows && state.arrows == i);
+			menu->AddItem(item);
 		}
 	}
+
+private:
+	TPageView* fPages;
 };
 
 
@@ -533,7 +542,7 @@ TPartBar::BuildDrawing()
 	wrap->tip = tip(15);
 	AddElement(wrap);
 	at.x += 22 + 15;
-	TArrowsElement* arrows = new TArrowsElement(BRect(at, at + BPoint(19, 19)));
+	TArrowsElement* arrows = new TArrowsElement(BRect(at, at + BPoint(19, 19)), fPages);
 	arrows->tip = tip(16);
 	AddElement(arrows);
 }

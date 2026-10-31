@@ -10,6 +10,7 @@
 #include "TSheetDialogs.h"
 #include "TFormatBar.h"
 #include "TInkMenus.h"
+#include "TPensWindow.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
 #include "UrlParse.h"
@@ -3830,7 +3831,7 @@ TPageView::MessageReceived(BMessage* message)
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text", "partbar arrows N" — the part
 // bar (TPartBar).
-// "formatbar show|color N|fill N|pen N|pentype N|style NAME|names|name LABEL|ink text|fill
+// "formatbar show|color N|fill N|pen N|pentype N|penmenu|style NAME|names|name LABEL|ink text|fill
 // pattern|gradient|transparency N" — the format
 // bar (TFormatBar); "names" prints the Names menu, "name" picks its item.
 // "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
@@ -3884,11 +3885,28 @@ TPageView::RunScript(const std::string& script, Document& document)
 					}
 				} else if (what.compare(0, 8, "pentype ") == 0) {
 					// "formatbar pentype N": the pen menu's pen type N ('sf0A')
-					BMenu types("");
-					AddPenTypeItems(&types);
-					BMenuItem* item = types.ItemAt(atoi(what.c_str() + 8));
-					if (item != NULL && item->Message() != NULL)
-						MessageReceived(item->Message());
+					std::unique_ptr<BMenu> menu(TFormatBar::PenMenu(this));
+					int32 n = atoi(what.c_str() + 8);
+					for (int32 i = 0; BMenuItem* item = menu->ItemAt(i); i++)
+						if (item->Message() != NULL && item->Message()->what == 'sf0A' && n-- == 0) {
+							MessageReceived(item->Message());
+							break;
+						}
+				} else if (what == "penmenu") {
+					// "formatbar penmenu": the pen menu printed, marks and all;
+					// with the arrows the selection has
+					std::unique_ptr<BMenu> menu(TFormatBar::PenMenu(this));
+					for (int32 i = 0; BMenuItem* item = menu->ItemAt(i); i++) {
+						PenType pen;
+						const char* label = item->Message() != NULL
+							&& PenFromMessage(item->Message(), pen) ? pen.name.c_str() : item->Label();
+						printf("penmenu %d %s%s\n", int(i), label, item->IsMarked() ? " (marked)" : "");
+					}
+					SelectedPen state;
+					SelectedPens(state);
+					printf("penmenu arrows %d%s\n", state.arrows,
+						state.any && state.sameArrows ? " (marked)" : "");
+					fflush(stdout);
 				}
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
@@ -4153,6 +4171,17 @@ TPageView::RunScript(const std::string& script, Document& document)
 				TDialogPrefs::Press(-1, atoi(what.c_str() + 7));
 			else
 				TDialogPrefs::SelectPanel(atoi(what.c_str()));
+		} else if (command.compare(0, 5, "pens ") == 0) {
+			// "pens open": the Inks window on the pens; "pens select N|new|
+			// edit|clear|apply|show": its list and Edit menu
+			if (command == "pens open")
+				TPensWindow::Open();
+			else
+				TPensWindow::Script(command.substr(5));
+		} else if (command.compare(0, 10, "pendialog ") == 0) {
+			// "pendialog name X|type DASH|gap X|dash X|filled 0|1|print 0|1|
+			// check|ok|cancel|revert": the open pen dialog
+			TDialogEditPen::Script(command.substr(10));
 		} else if (command.compare(0, 8, "history ") == 0) {
 			// "history N": row N chosen in the History floater
 			TDialogHistory::Choose(atoi(command.c_str() + 8));
@@ -5766,6 +5795,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sf06': case 'sf07': case 'sf08': case 'sf0E': case 'sf0S':	// pen, shapes
 		case 'sf09':														// the pen's size
 		case 'sf0A': case 'sf0F':							// the pen's type, arrows
+		case kMsgAddPen: case kMsgReplacePen: case kMsgDeletePen:		// the Inks window's pens
 			return true;
 		default:
 			return false;

@@ -31,6 +31,9 @@ public:
 	virtual void Update();
 
 	TPageView* Pages() const { return fPages; }
+	// the pen ink's TPenMenu (sizes, the document's pens; the selection's
+	// marked)
+	static BMenu* PenMenu(TPageView* pages);
 
 	// test hook: the labels shown ("font", "size", "style") or the text
 	// indicator's color ("ink")

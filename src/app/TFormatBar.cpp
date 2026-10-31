@@ -15,6 +15,7 @@
 #include "SSStyle.h"
 #include "TDocWindow.h"
 #include "TInkMenus.h"
+#include "TPensWindow.h"
 #include "Names.h"
 #include "TMenu.h"
 #include "TPageView.h"
@@ -211,8 +212,12 @@ public:
 		}
 		// the pen's: TPenMenu (MICN 0x1b), MENU 104's sizes, then the pen
 		// types (the application's pens)
-		if (fColorCommand == 'sf06')
-			menu->AddItem(new TIconMenuItem(0x1b, PenSizeMenu()));
+		TIconMenuItem* pens = NULL;
+		if (fColorCommand == 'sf06') {
+			pens = new TIconMenuItem(0x1b,
+				TFormatBar::PenMenu(static_cast<TFormatBar*>(ribbon)->Pages()));
+			menu->AddItem(pens);
+		}
 		ribbon->DrawElement(this, true);
 		ribbon->Sync();
 		BPoint at = ribbon->ConvertToScreen(BPoint(rect.left - 1, rect.top - 2));
@@ -220,6 +225,12 @@ public:
 		ribbon->DrawElement(this, false);
 		if (chosen != NULL && chosen->Message() != NULL)
 			ribbon->Send(chosen->Message());
+		else if (chosen == NULL && pens != NULL && pens->ReleasedOver()) {
+			// (TMICNMenuBarElement::AddMenu: the pen menu's icon clicked
+			// opens the Inks window on the pens, 'sW00' MajorType 1,
+			// MinorType 3)
+			TPensWindow::Open();
+		}
 		delete menu;
 		return true;
 	}
@@ -246,27 +257,6 @@ private:
 		return transparency;
 	}
 
-	// MENU 104 (Hairline, 1-8 pt: 'sf09' with the size as "value"); Other…
-	// ('sM0U') sends 'sM0U' as the value, for the dialog
-	BMenu* PenSizeMenu()
-	{
-		BMenu* sizes = new BMenu("");
-		TMenu source(104, true);
-		while (source.CountItems() > 0) {
-			BMenuItem* item = source.RemoveItem((int32)0);
-			if (BMessage* message = item->Message()) {
-				if (message->what == 'sM0U') {
-					message->MakeEmpty();
-					message->what = 'sf09';
-					message->AddInt32(kValueString, int32('sM0U'));
-				}
-			}
-			sizes->AddItem(item);
-		}
-		sizes->AddSeparatorItem();
-		AddPenTypeItems(sizes);
-		return sizes;
-	}
 
 	uint32 fColorCommand, fPatternCommand, fGradientCommand, fTransparencyCommand;
 };
@@ -703,5 +693,40 @@ TFormatBar::Shown(const std::string& what) const
 	}
 	return "";
 }
+
+// TPenMenu: MENU 104 (Hairline, 1-8 pt: 'sf09' with the size as "value";
+// Other… ('sM0U') sends 'sM0U' as the value, for the dialog), a
+// separator, the document's pens (TPenTypeMenuItem 'sf0A'); the size and
+// the pen all the selection has marked (TPenMenuElement::FixMenu)
+BMenu*
+TFormatBar::PenMenu(TPageView* pages)
+{
+	TPageView::SelectedPen state;
+	if (pages != NULL)
+		pages->SelectedPens(state);
+	BMenu* sizes = new BMenu("");
+	TMenu source(104, true);
+	while (source.CountItems() > 0) {
+		BMenuItem* item = source.RemoveItem((int32)0);
+		if (BMessage* message = item->Message()) {
+			if (message->what == 'sM0U') {
+				message->MakeEmpty();
+				message->what = 'sf09';
+				message->AddInt32(kValueString, int32('sM0U'));
+			} else if (state.any && state.sameSize) {
+				float size = message->GetFloat(kValueString, -1);
+				if (size < 0)
+					size = float(message->GetInt32(kValueString, -1));
+				item->SetMarked(size == state.size);
+			}
+		}
+		sizes->AddItem(item);
+	}
+	sizes->AddSeparatorItem();
+	AddPenTypeItems(sizes, pages != NULL ? DocumentPens(pages->Doc().pens, AppPens()) : AppPens(),
+		state.any && state.samePen ? &state.pen : NULL);
+	return sizes;
+}
+
 
 } // namespace gobe

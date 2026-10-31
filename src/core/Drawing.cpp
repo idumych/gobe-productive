@@ -959,111 +959,6 @@ UngroupShape(Document& doc, size_t drawing, size_t layer, size_t index, std::str
 
 
 
-namespace {
-
-const uint32_t kPenKinds[4] = {Sig("NORM"), Sig("PDOT"), Sig("DASH"), Sig("HASH")};
-
-} // namespace
-
-
-bool
-ParsePenResource(const std::vector<uint8_t>& data, PenType& pen)
-{
-	auto u32 = [&](size_t at) {
-		return uint32_t(data[at]) | uint32_t(data[at + 1]) << 8 | uint32_t(data[at + 2]) << 16
-			| uint32_t(data[at + 3]) << 24;
-	};
-	if (data.size() < 5)
-		return false;
-	pen = PenType();
-	pen.kind = int(u32(0));
-	if (pen.kind < 0 || pen.kind > 3)
-		return false;
-	size_t at = 4;
-	while (at < data.size() && data[at] != 0)
-		pen.name += char(data[at++]);
-	at++;
-	if (at + 4 > data.size())
-		return false;
-	pen.print = u32(at) != 0;
-	at += 4;
-	auto next = [&](float& value) {
-		if (at + 4 > data.size())
-			return false;
-		value = float(u32(at));
-		at += 4;
-		return true;
-	};
-	float filled = 0;
-	if (pen.kind == 2)
-		return next(pen.dash) && next(pen.gap);
-	if (pen.kind == 1) {
-		if (!next(pen.gap) || !next(filled))
-			return false;
-		pen.filled = filled != 0;
-	}
-	if (pen.kind == 3)
-		return next(pen.gap);
-	return true;
-}
-
-
-Property
-PenTypeProperty(const PenType& pen)
-{
-	DocWriter data;
-	data.String(pen.name);
-	data.Bool(pen.print);
-	if (pen.kind == 2) {
-		data.Float(pen.dash);
-		data.Float(pen.gap);
-	} else if (pen.kind == 1) {
-		data.Float(pen.gap);
-		data.Bool(pen.filled);
-	} else if (pen.kind == 3)
-		data.Float(pen.gap);
-	DocWriter w;
-	w.UInt32(0xffffffff);
-	w.UInt32(kPenKinds[std::max(0, std::min(3, pen.kind))]);
-	w.UInt32(uint32_t(data.Data().size()));
-	w.Bytes(data.Data());
-	return Property{Sig("PEN "), w.Data()};
-}
-
-
-bool
-ReadPenType(const Property& property, PenType& pen)
-{
-	if (property.type != Sig("PEN "))
-		return false;
-	DocArchive a(property.data);
-	try {
-		pen = PenType();
-		if (a.UInt32() == 0)
-			return true;		// (no pen: a normal one)
-		uint32_t kind = a.UInt32();
-		int index = int(std::find(kPenKinds, kPenKinds + 4, kind) - kPenKinds);
-		if (index > 3)
-			return false;
-		pen.kind = index;
-		a.UInt32();
-		pen.name = a.String();
-		pen.print = a.Bool();
-		if (index == 2) {
-			pen.dash = a.Float();
-			pen.gap = a.Float();
-		} else if (index == 1) {
-			pen.gap = a.Float();
-			pen.filled = a.Bool();
-		} else if (index == 3)
-			pen.gap = a.Float();
-	} catch (const ArchiveError&) {
-		return false;
-	}
-	return true;
-}
-
-
 Property
 ArrowsProperty(int arrows)
 {
@@ -1211,12 +1106,25 @@ MarksAlong(const Outline& outline, const PenType& pen, float size)
 	};
 	const float kEpsilon = 1e-3f;
 	if (pen.kind == 2) {
-		// TDashPen: a dash, then a gap, from the start
+		// TDashPen: a dash, then a gap, from the start; a dash no longer
+		// than half the pen's size a mark across its middle
 		float on = std::max(pen.dash, 1.0f), off = std::max(pen.gap, 1.0f);
-		for (float d = 0; d < total - kEpsilon; d += on + off)
-			dash(d, std::min(d + on, total));
+		bool across = on <= size / 2;
+		marks.width = across ? std::max(on - 1, 1.0f) : size;
+		for (float d = 0; d < total - kEpsilon; d += on + off) {
+			if (!across) {
+				dash(d, std::min(d + on, total));
+				continue;
+			}
+			DrawPoint p, u;
+			at(std::min(d + on / 2, total), p, u);
+			float half = size / 2;
+			marks.segments.push_back({{p[0] - u[1] * half, p[1] + u[0] * half},
+				{p[0] + u[1] * half, p[1] - u[0] * half}});
+		}
 		return marks;
 	}
+	marks.width = size / 3;
 	// TDotPen: a dot (the pen's size across) half its size in, then every
 	// gap; THashPen: a mark across (the pen's size long) every gap
 	float step = std::max(pen.gap, 1.0f);

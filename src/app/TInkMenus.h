@@ -60,8 +60,13 @@ public:
 	virtual void DrawContent();
 	virtual void GetContentSize(float* width, float* height);
 
+	// after the menu closed with nothing chosen: whether the mouse was let
+	// go over this item (TMICNMenuBarElement: the icon clicked)
+	bool ReleasedOver() const;
+
 private:
 	std::unique_ptr<BBitmap> fIcon;
+	BRect fScreenFrame;
 };
 
 // A pen type's marks along an outline (TDashPen, TDotPen, THashPen::
@@ -88,9 +93,16 @@ private:
 	int fArrows;
 };
 
-// TPenMenu's pen types: the application's pens (PENS, TPenMgr) as line
-// samples sending 'sf0A' with "pen" (the PENS resource's bytes)
-void AddPenTypeItems(BMenu* menu);
+// the application's pens (TPenMgr::loadDefaultPens: the PENS resources)
+const std::vector<PenType>& AppPens();
+// TPenMenu's pen types: `pens` (a document's, DocumentPens) as line
+// samples sending 'sf0A' with "pen" (the pen archived: TPen::Write); the
+// one the same as `marked` marked
+void AddPenTypeItems(BMenu* menu, const std::vector<PenType>& pens,
+	const PenType* marked = NULL);
+// a pen archived in a message ("pen": TPen::Write)
+void AddPenToMessage(BMessage* message, const PenType& pen);
+bool PenFromMessage(const BMessage* message, PenType& pen);
 
 } // namespace gobe
 
