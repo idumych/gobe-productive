@@ -67,6 +67,24 @@ enum class MoveResult { moved, locked, failed };
 MoveResult MoveCellsCommand(Document& doc, size_t part, const std::vector<SSRange>& block,
 	int rows, int columns);
 
+// TRange::Adjust: range `r` (a locked range) after `block` moved by rows,
+// columns: inside the block it moves with it; one that the move doesn't
+// leave alone along the other axis stretches by the move when the block's
+// first row (column) lies in its rows (columns). True if it changed.
+bool AdjustRange(SSRange& r, const SSRange& block, int rows, int columns);
+
+// TSSInsertCommand and TSSDeleteCommand::PerformCmd for a selection of
+// cells (kind 'CELL'), `range` of part `part`: Insert Cells shifts the
+// cells from the range to the sheet's last row (column) down (right) by the
+// range's height (width), refused (false, nothing changed) if cells that
+// aren't empty would go past it; Delete Cells shifts the cells below (right
+// of) the range up (left) over it. The locks in the way are offset
+// (TSSMoveCommand::OffsetLocks), formulas and named ranges follow
+// (MoveCells, TSSMoveCommand::MoveReferences); references to deleted cells
+// become #REF!. `vertical` is the dialog's "shiftVertical".
+bool InsertCells(Document& doc, size_t part, const SSRange& range, bool vertical);
+bool DeleteCells(Document& doc, size_t part, const SSRange& range, bool vertical);
+
 } // namespace gobe
 
 #endif

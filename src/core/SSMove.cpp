@@ -565,4 +565,126 @@ MoveCellsCommand(Document& doc, size_t partIndex, const std::vector<SSRange>& bl
 	return MoveResult::moved;
 }
 
+
+bool
+AdjustRange(SSRange& r, const SSRange& block, int rows, int columns)
+{
+	bool alongRows = columns != 0 || r.from.a < block.from.a || block.to.a < r.to.a;
+	bool alongColumns = rows != 0 || r.from.b < block.from.b || block.to.b < r.to.b;
+	if (Contains(block, r) || !alongRows || !alongColumns) {
+		r = Offset({r}, rows, columns)[0];
+		return true;
+	}
+	if ((columns == 0 && r.from.a <= block.from.a && block.from.a <= r.to.a)
+			|| (rows == 0 && r.from.b <= block.from.b && block.from.b <= r.to.b)) {
+		r.to.a = uint16_t(r.to.a + rows);
+		r.to.b = uint16_t(r.to.b + columns);
+		return true;
+	}
+	return false;
+}
+
+
+namespace {
+
+// TSSMoveCommand::OffsetLocks: when the block meets a locked range, every
+// locked range is adjusted (TRange::Adjust)
+void
+OffsetLocks(SSPart& part, const SSRange& block, int rows, int columns)
+{
+	if ((rows == 0 && columns == 0) || !RangeInList(part.locked, block))
+		return;
+	for (SSRange& r : part.locked)
+		AdjustRange(r, block, rows, columns);
+}
+
+
+// TSSCommand::RangeEmpty: no cell of the range (pinned to the sheet) holds
+// anything
+bool
+RangeEmpty(const SSPart& part, SSRange r)
+{
+	Pin(r, part.used);
+	for (const SSCell& cell : part.cells)
+		if (InRange(r, cell.id) && cell.kind != Sig("NONE"))
+			return false;
+	return true;
+}
+
+
+// the shift both commands end with: locks, cells, formulas, named ranges
+bool
+ShiftCells(Document& doc, size_t partIndex, SSPart& part, const SSRange& block, int rows,
+	int columns)
+{
+	OffsetLocks(part, block, rows, columns);
+	if (!MoveCells(part, {block}, rows, columns))
+		return false;
+	MoveNamedReferences(doc, partIndex, part, {block}, rows, columns);
+	UpdateDependencies(doc, partIndex);
+	return true;
+}
+
+} // namespace
+
+
+bool
+InsertCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical)
+{
+	SSPart* part = doc.EditableSpreadsheetPart(partIndex);
+	if (part == nullptr)
+		return false;
+	const SSRange size = part->used;
+	int rows = vertical ? r.to.a - r.from.a + 1 : 0;
+	int columns = vertical ? 0 : r.to.b - r.from.b + 1;
+	// the cells pushed past the sheet's edge must be empty
+	SSRange edge = vertical
+		? SSRange{{uint16_t(size.to.a - rows + 1), r.from.b}, {size.to.a, r.to.b}}
+		: SSRange{{r.from.a, uint16_t(size.to.b - columns + 1)}, {r.to.a, size.to.b}};
+	if (!RangeEmpty(*part, edge))
+		return false;
+	// the cells from the range to the edge, less what goes past it
+	SSRange block{r.from, r.from};
+	if (vertical) {
+		block.to.b = std::min(r.to.b, size.to.b);
+		if (rows <= size.to.a)
+			block.to.a = uint16_t(size.to.a - rows);
+		block.to.a = std::max(block.to.a, r.from.a);
+	} else {
+		block.to.a = std::min(r.to.a, size.to.a);
+		if (columns <= size.to.b)
+			block.to.b = uint16_t(size.to.b - columns);
+		block.to.b = std::max(block.to.b, r.from.b);
+	}
+	return ShiftCells(doc, partIndex, *part, block, rows, columns);
+}
+
+
+bool
+DeleteCells(Document& doc, size_t partIndex, const SSRange& r, bool vertical)
+{
+	SSPart* part = doc.EditableSpreadsheetPart(partIndex);
+	if (part == nullptr)
+		return false;
+	const SSRange size = part->used;
+	int height = r.to.a - r.from.a + 1, width = r.to.b - r.from.b + 1;
+	// the cells past the range to the edge, at least as many as it has
+	SSRange block;
+	if (vertical) {
+		block.from = {uint16_t(r.to.a + 1), r.from.b};
+		block.to = {size.to.a, std::min(r.to.b, size.to.b)};
+		if (size.to.a < block.from.a + height)
+			block.to.a = uint16_t(block.from.a + height);
+		block.to.a = std::max(block.to.a, block.from.a);
+	} else {
+		block.from = {r.from.a, uint16_t(r.to.b + 1)};
+		block.to = {std::min(r.to.a, size.to.a), size.to.b};
+		if (size.to.b < block.from.b + width)
+			block.to.b = uint16_t(block.from.b + width);
+		block.to.b = std::max(block.to.b, block.from.b);
+	}
+	return ShiftCells(doc, partIndex, *part, block, vertical ? -height : 0,
+		vertical ? 0 : -width);
+}
+
 } // namespace gobe

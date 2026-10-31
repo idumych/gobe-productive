@@ -106,6 +106,26 @@ private:
 	std::function<bool(const std::string&, uint16&, uint16&)> fParse;
 };
 
+// Options > Delete Cells… and Insert Cells… for a selection of cells
+// (TDialogDeleteInsert; TSSDialog 22): Shift Cells Up (2) or Left (3); for
+// Insert the title and the radios are STR# 1506, 4, 2 and 3 (Down,
+// Right). `vertical` is the radio on first (the selection is at least as
+// wide as it's high). OK sends `target` 'sM74' (delete) or 'sM73' (insert)
+// with "shiftVertical".
+class TDialogDeleteInsert : public TDialog {
+public:
+	TDialogDeleteInsert(BHandler* target, bool remove, bool vertical);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+	bool fDelete;
+	bool fVertical;
+};
+
 } // namespace gobe
 
 #endif

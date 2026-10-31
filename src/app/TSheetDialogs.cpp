@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include <Alert.h>
+#include <RadioButton.h>
 #include <ListItem.h>
 #include <ListView.h>
 #include <ScrollView.h>
@@ -442,6 +443,45 @@ TDialogGotoMove::ItemHit(int32 index, BMessage* message)
 	apply.AddData("cellID", B_RAW_TYPE, cell, sizeof(cell));
 	if (fTarget != NULL && fTarget->Looper() != NULL)
 		fTarget->Looper()->PostMessage(&apply, fTarget);
+	PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
+
+TDialogDeleteInsert::TDialogDeleteInsert(BHandler* target, bool remove, bool vertical)
+	:
+	TDialog(22, 22, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
+	fTarget(target),
+	fDelete(remove),
+	fVertical(vertical)
+{
+}
+
+
+void
+TDialogDeleteInsert::Init()
+{
+	SetRadioItem(fVertical ? 2 : 3, true);
+	if (!fDelete) {
+		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
+		SetTitle(IndexString(resources, 1506, 4).c_str());
+		SetLabelItem(2, IndexString(resources, 1506, 2).c_str());
+		SetLabelItem(3, IndexString(resources, 1506, 3).c_str());
+	}
+}
+
+
+bool
+TDialogDeleteInsert::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		BRadioButton* radio = dynamic_cast<BRadioButton*>(Item(2));
+		BMessage apply(fDelete ? 'sM74' : 'sM73');
+		apply.AddBool("shiftVertical", radio != NULL && radio->Value() == B_CONTROL_ON);
+		if (fTarget != NULL && fTarget->Looper() != NULL)
+			fTarget->Looper()->PostMessage(&apply, fTarget);
+	} else if (index != 1)
+		return false;
 	PostMessage(B_QUIT_REQUESTED);
 	return false;
 }

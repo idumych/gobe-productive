@@ -80,6 +80,9 @@ static const uint32 kMsgCellCancel = 'Gccl';
 // chooses); for RunScript until that dialog works
 static const uint32 kCmdInsertColumns = 'Gicl';
 static const uint32 kCmdDeleteColumns = 'Gdcl';
+// whole rows (test hooks until rows can be selected by their headings)
+static const uint32 kCmdInsertRows = 'Girw';
+static const uint32 kCmdDeleteRows = 'Gdrw';
 
 // the port's stand-in cell format commands (the Spreadsheet add-on's
 // menus aren't ported; private codes: the original's 'sM20'..'sM24' are
@@ -2433,21 +2436,48 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						return;
 					}
-					// Insert/Delete Rows and Columns
-					case 'sM73': {	// Insert Cells… (rows, until its dialog)
-						fUndo.Begin(fDocument, fSelectedCell.part, "Insert Rows",
+					// Insert Cells… and Delete Cells… (TPartSS::HandleMessage,
+					// TSSInsertCommand, TSSDeleteCommand for a selection of cells)
+					case 'sM73':
+					case 'sM74': {
+						bool remove = message->what == 'sM74';
+						if (remove && RangeLocked(r0, c0, r1, c1))
+							return;
+						const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+						if (ss == NULL)
+							return;
+						if (remove && ss->used.to.b - ss->used.from.b <= c1 - c0
+								&& ss->used.to.a - ss->used.from.a <= r1 - r0) {
+							SSAlert(4);
+							return;
+						}
+						bool vertical;
+						if (message->FindBool("shiftVertical", &vertical) != B_OK) {
+							(new TDialogDeleteInsert(this, remove, r1 - r0 <= c1 - c0))
+								->RunDialog();
+							return;
+						}
+						fUndo.BeginDocument(fDocument, SSCommandName(remove ? 10 : 11),
 							CurrentViewState());
-						InsertRowsColumns(fDocument, fSelectedCell.part, false,
-							uint16_t(r0), r1 - r0 + 1);
+						SSRange range{{uint16_t(r0), uint16_t(c0)}, {uint16_t(r1), uint16_t(c1)}};
+						if (!(remove ? DeleteCells(fDocument, fSelectedCell.part, range, vertical)
+								: InsertCells(fDocument, fSelectedCell.part, range, vertical))) {
+							beep();
+							return;
+						}
 						fBook->Reset();
+						Rebuild();
+						Invalidate();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
-					case 'sM74': {	// Delete Cells… (rows, until its dialog)
-						fUndo.Begin(fDocument, fSelectedCell.part, "Delete Rows",
-							CurrentViewState());
+					case kCmdInsertRows:
+					case kCmdDeleteRows: {
+						bool insert = message->what == kCmdInsertRows;
+						fUndo.Begin(fDocument, fSelectedCell.part,
+							insert ? "Insert Rows" : "Delete Rows", CurrentViewState());
 						InsertRowsColumns(fDocument, fSelectedCell.part, false,
-							uint16_t(r0), -(r1 - r0 + 1));
+							uint16_t(r0), insert ? r1 - r0 + 1 : -(r1 - r0 + 1));
 						fBook->Reset();
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
@@ -3249,10 +3279,18 @@ TPageView::RunScript(const std::string& script, Document& document)
 			BMessage msg('sM11');
 			MessageReceived(&msg);
 		} else if (command == "insertrows") {
-			BMessage msg('sM73');
+			BMessage msg(kCmdInsertRows);
 			MessageReceived(&msg);
 		} else if (command == "deleterows") {
-			BMessage msg('sM74');
+			BMessage msg(kCmdDeleteRows);
+			MessageReceived(&msg);
+		} else if (command.compare(0, 12, "insertcells ") == 0
+				|| command.compare(0, 12, "deletecells ") == 0) {
+			// "insertcells down|right", "deletecells up|left": Insert/Delete
+			// Cells… as their dialog's OK sends it
+			BMessage msg(command[0] == 'i' ? 'sM73' : 'sM74');
+			std::string way = command.substr(12);
+			msg.AddBool("shiftVertical", way == "down" || way == "up");
 			MessageReceived(&msg);
 		} else if (command == "insertcolumns") {
 			BMessage msg(kCmdInsertColumns);
