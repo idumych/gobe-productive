@@ -2909,6 +2909,21 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 'sM79': {	// Auto Calculate (TPartSS +0x80)
+						// not a command (no Undo), as in the original; nothing
+						// else reads the flag (the original recalculates after
+						// every change either way), and turning it on is a
+						// Calculate Now (ChangeAll)
+						SSPart* sheet = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+						if (sheet == NULL)
+							return;
+						sheet->autoCalculate = !sheet->autoCalculate;
+						if (sheet->autoCalculate) {
+							fBook->Reset();
+							Invalidate();
+						}
+						return;
+					}
 					case 'sM78':	// Calculate Now (ChangeAll: every formula again)
 						fBook->Reset();
 						Invalidate();
@@ -4593,7 +4608,7 @@ TPageView::HandlesCommand(uint32 what)
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
-		case 'sM65': case 'sM75': case 'sM76': case 'sM77':
+		case 'sM65': case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM73': case 'sM74':
 			return true;
 		default:

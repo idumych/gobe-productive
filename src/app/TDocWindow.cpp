@@ -1195,13 +1195,10 @@ TDocWindow::MenusBeginning()
 		enable('sM75', height > 1 || width > 1);
 		for (uint32 command : {'sM7A'})
 			enable(command, false);
-		// Auto Calculate marked when on; off, the original recalculates only
-		// on Calculate Now, which the port can't yet (it evaluates after every
-		// change), so it can't be turned off here
+		// Auto Calculate marked when on (TPartSS::FixMenus)
 		if (BMenuItem* item = KeyMenuBar()->FindItem('sM79')) {
 			const SSPart* ss = fDocument->SpreadsheetPart(cell.part);
 			item->SetMarked(ss != NULL && ss->autoCalculate);
-			item->SetEnabled(false);
 		}
 	}
 	if (KeyMenuBar() == NULL)
