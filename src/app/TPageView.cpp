@@ -709,7 +709,9 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry)
 			if (start >= text.size())
 				break;
 			end = std::min(end, text.size());
-			rgb_color color = make_color(st.color.r, st.color.g, st.color.b);
+			// TTra: the text's opacity as the color's alpha
+			rgb_color color = make_color(st.color.r, st.color.g, st.color.b,
+				uint8(std::lround(std::max(0.0f, std::min(1.0f, st.opacity)) * 255)));
 			std::string word;
 			size_t wordStart = start;
 			size_t i = start;
@@ -1083,6 +1085,7 @@ bool
 TPageView::SetInk(const Ink& ink, float opacity, BRect rect, BGradient** gradient)
 {
 	*gradient = NULL;
+	fInkPattern = B_SOLID_HIGH;
 	if (!ink.set || opacity <= 0)
 		return false;
 	if (ink.gradient) {
@@ -1104,7 +1107,29 @@ TPageView::SetInk(const Ink& ink, float opacity, BRect rect, BGradient** gradien
 		return true;
 	}
 	SetHighColor(ToColor(ink.color, opacity));
+	// a pattern ink (TColorPattern): the bits set show the color, the
+	// others the low color
+	bool solid = true;
+	for (int i = 0; i < 8; i++) {
+		fInkPattern.data[i] = ink.pattern[i];
+		solid = solid && ink.pattern[i] == 0xff;
+	}
+	if (!solid) {
+		if (!fInkLowChanged)
+			fInkOldLow = LowColor();
+		fInkLowChanged = true;
+		SetLowColor(ToColor(ink.low, opacity));
+	}
 	return true;
+}
+
+
+void
+TPageView::RestoreInkLow()
+{
+	if (fInkLowChanged)
+		SetLowColor(fInkOldLow);
+	fInkLowChanged = false;
 }
 
 
@@ -1120,7 +1145,8 @@ TPageView::DrawFrameBackground(const Document::PlacedFrame& f, BRect r)
 		FillRect(r, *gradient);
 		delete gradient;
 	} else
-		FillRect(r);
+		FillRect(r, fInkPattern);
+	RestoreInkLow();
 	SetDrawingMode(B_OP_COPY);
 }
 
@@ -1136,7 +1162,8 @@ TPageView::FillInk(BRect rect, const Ink& ink, float opacity, BRect inkRect)
 		FillRect(rect, *gradient);
 		delete gradient;
 	} else
-		FillRect(rect);
+		FillRect(rect, fInkPattern);
+	RestoreInkLow();
 	SetDrawingMode(B_OP_COPY);
 }
 
@@ -1555,6 +1582,7 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 				delete gradient;
 			} else
 				FillRect(rr, stipple);
+			RestoreInkLow();
 			SetDrawingMode(B_OP_COPY);
 		}
 	}
@@ -1946,24 +1974,27 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 					} else
 						draw((BGradient*)NULL);
 				};
+				const pattern p = fInkPattern;
 				fill([&](BGradient* g) {
 					if (s.kind == Sig("RECT"))
-						g ? FillRect(r, *g) : FillRect(r);
+						g ? FillRect(r, *g) : FillRect(r, p);
 					else if (s.kind == Sig("RRCT"))
 						g ? FillRoundRect(r, s.radius[0], s.radius[1], *g)
-							: FillRoundRect(r, s.radius[0], s.radius[1]);
+							: FillRoundRect(r, s.radius[0], s.radius[1], p);
 					else if (s.kind == Sig("ELPS"))
-						g ? FillEllipse(r, *g) : FillEllipse(r);
+						g ? FillEllipse(r, *g) : FillEllipse(r, p);
 					else if (s.kind == Sig("ARC "))
 						g ? FillArc(r, s.arcAngles[0], s.arcAngles[1], *g)
-							: FillArc(r, s.arcAngles[0], s.arcAngles[1]);
+							: FillArc(r, s.arcAngles[0], s.arcAngles[1], p);
 					else if (path != NULL)
-						g ? FillShape(path, *g) : FillShape(path);
+						g ? FillShape(path, *g) : FillShape(path, p);
 				});
+				RestoreInkLow();
 			}
 			SetDrawingMode(style.penOpacity >= 0.999f ? B_OP_COPY : B_OP_ALPHA);
 			if (style.penSize > 0 && SetInk(style.pen, style.penOpacity, r, &gradient)) {
 				delete gradient;	// pens: solid color only for now
+				RestoreInkLow();
 				SetPenSize(style.penSize);
 				if (s.kind == Sig("RECT"))
 					StrokeRect(r);
@@ -2138,9 +2169,15 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 		ConstrainClippingRegion(&lineClip);
 		if (line.angle != 0)
 			SetTransform(FrameRotation(line.center, line.angle));
+		drawing_mode mode = DrawingMode();
 		for (const Line::Piece& p : line.pieces) {
 			SetFont(&p.font);
 			SetHighColor(p.color);
+			if (p.color.alpha < 255) {
+				SetDrawingMode(B_OP_ALPHA);
+				SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+			} else
+				SetDrawingMode(mode);
 			if (p.field == Sig("LINE")) {
 				// half the ascent above the baseline
 				float y = line.baseline - p.font.Size() * 0.95f / 2;

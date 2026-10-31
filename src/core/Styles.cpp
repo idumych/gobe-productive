@@ -34,7 +34,7 @@ ReadInk(DocArchive& a, Ink& ink)
 		ink.gradient = true;
 		ink.gradientType = a.UInt32();
 		ink.colorCount = std::max(2, std::min(4, int(a.UInt16())));
-		a.Float();		// midpoint/bias
+		ink.echo = a.Float();
 		for (Color& c : ink.colors) {
 			c.r = a.UInt8();
 			c.g = a.UInt8();
@@ -46,14 +46,72 @@ ReadInk(DocArchive& a, Ink& ink)
 			ink.angle = a.Float();
 		else if (ink.gradientType == Sig("GDrl")) {
 			a.Point(ink.center);
-			if (a.MajorUserVersion() < 2)
-				a.Float();
+			if (a.Position() + 4 <= start + size)
+				ink.angle = a.Float();
 		}
+	}
+	else {
+		a.Seek(start - 8);
+		ink.otherFill = a.Bytes(size_t(size) + 8);
 	}
 	// the size counts from after itself; skip whatever wasn't read
 	if (a.Position() < start + size)
 		a.Seek(start + size);
 	return true;
+}
+
+
+std::vector<uint8_t>
+InkBytes(const Ink& ink)
+{
+	DocWriter w;
+	auto color = [&](const Color& c) {
+		w.UInt8(c.r);
+		w.UInt8(c.g);
+		w.UInt8(c.b);
+		w.UInt8(c.a);
+	};
+	if (!ink.otherFill.empty()) {
+		w.Bool(false);
+		w.Bytes(ink.otherFill);
+		return w.Data();
+	}
+	if (!ink.gradient) {
+		w.Bool(true);
+		color(ink.color);
+		color(ink.low);
+		w.Bytes(ink.pattern, 8);
+		return w.Data();
+	}
+	DocWriter g;
+	g.Sig(Sig("GRAD"));
+	g.UInt32(ink.gradientType);
+	g.UInt16(uint16_t(ink.colorCount));
+	g.Float(ink.echo);
+	for (const Color& c : ink.colors) {
+		g.UInt8(c.r);
+		g.UInt8(c.g);
+		g.UInt8(c.b);
+		g.UInt8(c.a);
+	}
+	if (ink.gradientType == Sig("GDrl"))
+		g.Point(ink.center);
+	g.Float(ink.angle);
+	w.Bool(false);
+	w.Sig(Sig("FGRD"));
+	w.UInt32(uint32_t(g.Data().size()));
+	w.Bytes(g.Data());
+	return w.Data();
+}
+
+
+Property
+InkProperty(uint32_t type, const Ink& ink)
+{
+	Property p;
+	p.type = type;
+	p.data = InkBytes(ink);
+	return p;
 }
 
 
@@ -132,6 +190,9 @@ ApplyProperty(const Property& property, TextStyle& style)
 				style.color = ink.color;
 				break;
 			}
+			case Sig("TTra"):	// TPropTextTransparent: TPropFloat
+				style.opacity = a.Float();
+				break;
 			case Sig("PAlg"):	// TPropParAlign: TPropShort
 				style.alignment = a.UInt16();
 				break;
@@ -276,6 +337,17 @@ AlignmentProperty(int alignment)
 	w.UInt16(uint16_t(alignment));
 	Property p;
 	p.type = Sig("PAlg");
+	p.data = w.Data();
+	return p;
+}
+
+Property
+OpacityProperty(uint32_t type, float opacity)
+{
+	DocWriter w;
+	w.Float(opacity);
+	Property p;
+	p.type = type;
 	p.data = w.Data();
 	return p;
 }

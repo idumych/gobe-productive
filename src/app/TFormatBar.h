@@ -38,6 +38,10 @@ public:
 	// test hook: what choosing color `index` of the text (fill) ink's color set,
 	// or style `name` in Styles, sends (handled at once)
 	void ChooseColor(int32 index, bool fill = false);
+	// (scripts) the pattern set's (`set` 1) or the gradient set's (2) ink
+	// `index` from its menu, or the transparency `index` percent (3), for
+	// the text or the fill
+	void ChooseInk(int32 set, int32 index, bool fill = false);
 	void ChooseStyle(const char* name);
 	// test hook: the Names menu's items ("label" or "label(off)", "|"
 	// between), or with `choose` that item's message sent (handled at once)
