@@ -43,6 +43,7 @@
 #include "TPageView.h"
 #include "TTranslate.h"
 #include "TFormatBar.h"
+#include "TEntryBar.h"
 #include "TPageBar.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
@@ -158,17 +159,28 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			fScaleSlider = scroll->Scale();
 			pages->fPageBar = scroll->Pages();
 			desk = scroll;
-			// the text ruler (TWPPart::ActivePartRibbon) for documents with text
-			bool text = false;
-			for (const auto& part : document->parts.parts)
+			// the ribbons for documents with text or cells: the FormatBar,
+			// the PartBar and the active part's ribbon, the text ruler
+			// (TWPPart::ActivePartRibbon) or the EntryBar (TPartSS's)
+			bool text = false, cells = false;
+			for (const auto& part : document->parts.parts) {
 				text = text || part.kind == Sig("WORD");
-			if (text) {
+				cells = cells || part.kind == Sig("SPRD");
+			}
+			if (text || cells) {
 				fFormatBar = new TFormatBar(pages);
 				pages->fFormatBar = fFormatBar;
 				fPartBar = new TPartBar(pages);
 				pages->fPartBar = fPartBar;
+			}
+			if (text) {
 				fRuler = new TWPRuler(pages);
 				pages->fRuler = fRuler;
+			}
+			if (cells) {
+				fEntryBar = new TEntryBar(pages);
+				fEntryBar->Hide();
+				pages->fEntryBar = fEntryBar;
 			}
 		} else
 			desk = new TDocView(*document);
@@ -222,6 +234,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		layout.Add(fSpellBar);
 	if (fRuler != NULL)
 		layout.Add(fRuler);
+	if (fEntryBar != NULL)
+		layout.Add(fEntryBar);
 	layout
 		.Add(desk)
 		.AddGroup(B_HORIZONTAL)
@@ -441,15 +455,16 @@ TDocWindow::MessageReceived(BMessage* message)
 		case 'sMF6':
 			if (fPartBar != NULL) {
 				bool hide = !fPartBar->IsHidden();
-				for (BView* view : {(BView*)fPartBar, (BView*)fRuler}) {
-					if (view == NULL)
-						continue;
-					if (hide)
-						view->Hide();
-					else
-						view->Show();
-				}
+				if (hide)
+					fPartBar->Hide();
+				else
+					fPartBar->Show();
+				ShowActiveRibbon();
 			}
+			return;
+		// (the page view's: the active part's ribbon to show)
+		case kMsgActiveRibbon:
+			ShowActiveRibbon();
 			return;
 		case 's00L':
 		{
@@ -1172,6 +1187,26 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 
 // TNormalDocWinHelper::SetupMenus: Insert Header/Footer read Remove
 // Header/Footer when the document has one (STR# 3, 22-25)
+// TDocWindow: the active part's ribbon under the PartBar while the PartBar
+// shows: the EntryBar with cells selected, else the text ruler
+void
+TDocWindow::ShowActiveRibbon()
+{
+	bool ribbons = fPartBar != NULL && !fPartBar->IsHidden();
+	bool cells = fPages != NULL && fPages->fSelectedCell.active;
+	auto show = [](BView* view, bool on) {
+		if (view == NULL || on == !view->IsHidden())
+			return;
+		if (on)
+			view->Show();
+		else
+			view->Hide();
+	};
+	show(fEntryBar, ribbons && cells);
+	show(fRuler, ribbons && !(cells && fEntryBar != NULL));
+}
+
+
 void
 TDocWindow::MenusBeginning()
 {

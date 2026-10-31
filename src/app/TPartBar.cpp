@@ -481,7 +481,7 @@ TPartBar::UpdateSheet()
 		std::string name = fPages->SelectionName();
 		if (name != address->text) {
 			address->text = name;
-			DrawElement(address);
+			Invalidate(address->rect);
 		}
 	}
 }

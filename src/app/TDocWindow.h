@@ -117,6 +117,8 @@ private:
 	class TPartBar* fPartBar = NULL;
 	class TFormatBar* fFormatBar = NULL;
 	class TSpellBar* fSpellBar = NULL;
+	class TEntryBar* fEntryBar = NULL;
+	void ShowActiveRibbon();
 	class TScaleSlider* fScaleSlider = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
 	bool fCloseAfterSave = false;	// Save As chosen in the close alert

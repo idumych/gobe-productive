@@ -50,6 +50,7 @@
 #include "SSSort.h"
 #include "SSPaste.h"
 #include "TDocWindow.h"
+#include "TEntryBar.h"
 #include "TTranslate.h"
 
 namespace gobe {
@@ -1694,6 +1695,10 @@ TPageView::KeyDown(const char* bytes, int32 count)
 		EditText(bytes, count);
 		return;
 	}
+	if (fEntryBar != NULL && fEntryBar->InEdit()) {
+		fEntryBar->Key(bytes, count);
+		return;
+	}
 	if (fSelectedCell.active) {
 		bool shift = ((modifiers() & B_SHIFT_KEY) != 0) || fScriptShift;
 		BRect rect = CellViewRect(fSelectedCell.part, fSelectedCell.row,
@@ -1729,8 +1734,18 @@ TPageView::KeyDown(const char* bytes, int32 count)
 					fSelectedCell.anchorRow = fSelectedCell.row;
 				}
 				break;
-			case B_RIGHT_ARROW:
 			case B_TAB:
+				if (shift) {
+					// TSSSelection::KeyDown: shift-Tab moves left
+					fSelectedCell.kind = SelectionKind::cells;
+					fSelectedCell.extra.clear();
+					fSelectedCell.anchorColumn = fSelectedCell.column
+						= std::max(0, fSelectedCell.column - 1);
+					fSelectedCell.anchorRow = fSelectedCell.row;
+					break;
+				}
+				// fall through
+			case B_RIGHT_ARROW:
 				fSelectedCell.kind = SelectionKind::cells;
 				fSelectedCell.extra.clear();
 				if (shift) {
@@ -1741,8 +1756,19 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				}
 				break;
 			case B_ENTER:
-				BeginCellEdit(fSelectedCell.part, fSelectedCell.row, fSelectedCell.column, rect);
-				return;
+				if (fEntryBar == NULL) {
+					BeginCellEdit(fSelectedCell.part, fSelectedCell.row, fSelectedCell.column,
+						rect);
+					return;
+				}
+				// TSSSelection::KeyDown: Enter moves down, with shift up
+				fSelectedCell.kind = SelectionKind::cells;
+				fSelectedCell.extra.clear();
+				fSelectedCell.row = shift ? std::max(0, fSelectedCell.row - 1)
+					: fSelectedCell.row + 1;
+				fSelectedCell.anchorRow = fSelectedCell.row;
+				fSelectedCell.anchorColumn = fSelectedCell.column;
+				break;
 			case B_BACKSPACE:
 			case B_DELETE: {
 				// TSSClearCommand::IsLocked
@@ -1766,6 +1792,12 @@ TPageView::KeyDown(const char* bytes, int32 count)
 				fSelectedCell.active = false;
 				break;
 			default:
+				if ((unsigned char)bytes[0] >= 0x20 && fEntryBar != NULL) {
+					// TPartSS::HandleKey: typing replaces the cell's contents
+					// in the EntryBar (TEntryBar::BeginEdit)
+					fEntryBar->BeginEdit(std::string(bytes, count).c_str());
+					return;
+				}
 				if ((unsigned char)bytes[0] >= 0x20) {
 					// typing replaces the cell's content
 					BeginCellEdit(fSelectedCell.part, fSelectedCell.row, fSelectedCell.column,
@@ -3230,6 +3262,49 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 's007': {	// the EntryBar's Enter or Tab (FlushEntryBar)
+						const char* text = message->GetString("text", "");
+						if (RangeLocked(fSelectedCell.row, fSelectedCell.column,
+								fSelectedCell.row, fSelectedCell.column))
+							return;
+						fUndo.Begin(fDocument, fSelectedCell.part, "Cell Entry",
+							CurrentViewState());
+						SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+						std::string error;
+						auto isName = [&](const std::string& n) {
+							return fDocument.NamedSelection(n, int(fSelectedCell.part)) != nullptr;
+						};
+						if (ss == NULL || !SetCellInput(*ss, uint16_t(fSelectedCell.row),
+								uint16_t(fSelectedCell.column), text, isName, error)) {
+							BString alert;
+							alert << "The formula has an error: " << error.c_str();
+							(new BAlert("Formula", alert.String(), "OK"))->Go(NULL);
+							if (fEntryBar != NULL)
+								fEntryBar->BeginEdit();
+							return;
+						}
+						UpdateDependencies(fDocument, fSelectedCell.part);
+						fBook->Reset();
+						if (!fDocument.wordParts.empty())
+							LayoutText();
+						if (fEntryBar != NULL)
+							fEntryBar->EndEdit();
+						// then the key, as TPartSS::KeyDown takes it
+						int32 key = message->GetInt32("key", B_ENTER);
+						int32 modifiers = message->GetInt32("modifiers", 0);
+						char bytes[2] = {char(key), 0};
+						bool scriptShift = fScriptShift;
+						fScriptShift = (modifiers & B_SHIFT_KEY) != 0;
+						KeyDown(bytes, 1);
+						fScriptShift = scriptShift;
+						Invalidate();
+						Window()->PostMessage(kMsgDocumentChanged);
+						return;
+					}
+					case 's008':	// its Escape: the cell's contents again
+						if (fEntryBar != NULL)
+							fEntryBar->EndEdit();
+						return;
 					case 'sM13':	// Paste Special… (TDialogSSPasteSpecial)
 						if (sCopiedCells.rows == 0) {
 							beep();
@@ -5138,7 +5213,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
 		case 'sM65': case 'sM67': case 'sM68': case 'sM69': case 'sM6A': case 'sM6B':
-		case 'sM13':
+		case 'sM13': case 's007': case 's008':
 		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':

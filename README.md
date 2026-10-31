@@ -148,6 +148,10 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
   and formats coming along; Paste Special… (values and formulas or values
   only, with or without the formatting).
 - **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
+- **The EntryBar:** the active cell's contents under the PartBar; typing
+  on a cell edits there, Enter (or Accept) puts it in and moves down, Tab
+  moves right, Escape (or Cancel) leaves the cell as it was. A double click
+  still edits in the cell.
 - **The PartBar for cells:** the selection's address (a double click goes
   to a cell), the horizontal and vertical alignment menus with Wrap Text,
   cell borders (the outline or one side, a color and a transparency),

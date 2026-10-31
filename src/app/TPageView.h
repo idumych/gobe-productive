@@ -36,6 +36,8 @@ class TWPRuler;
 static const uint32 kMsgSlideChanged = 'Gsld';
 // sent to the window when the document was edited
 static const uint32 kMsgDocumentChanged = 'Gchg';
+// the page view to its window: the active part's ribbon to show or hide
+static const uint32 kMsgActiveRibbon = 'Grib';
 // test hook: run "script" (RunScript) in the window
 static const uint32 kMsgRunScript = 'Grun';
 
@@ -118,6 +120,7 @@ public:
 	TWPRuler* fRuler = NULL;
 	class TRibbon* fPartBar = NULL;
 	class TRibbon* fFormatBar = NULL;
+	class TEntryBar* fEntryBar = NULL;	// a spreadsheet's (TEntryBar)
 	class TPageBar* fPageBar = NULL;
 	class TRibbon* fSpellBar = NULL;
 	// TDocWindow (TPageBar::SetPageNumbers): the pages in view, from 1
