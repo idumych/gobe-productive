@@ -2157,6 +2157,11 @@ TPageView::Draw(BRect updateRect)
 	// cells selected or not any more: the window shows the active part's
 	// ribbon and menus (TPartSS::InstallMenus at activation); not here,
 	// while drawing
+	// shapes selected or not any more: the drawing part's menu (MENU 50)
+	if (!IsPrinting() && Window() != NULL && ShapesSelected() != fShapesWereSelected) {
+		fShapesWereSelected = ShapesSelected();
+		Window()->PostMessage(kMsgActiveRibbon);
+	}
 	if (!IsPrinting() && Window() != NULL && (fSelectedCell.active != fCellsActive
 			|| (fEntryBar != NULL && fSelectedCell.active == fEntryBar->IsHidden()))) {
 		fCellsActive = fSelectedCell.active;

@@ -76,6 +76,33 @@ int HitHandle(const Shape& shape, float x, float y, float tolerance);
 // the box with handle `handle` dragged to (x, y)
 void DragHandle(const float bounds[4], int handle, float x, float y, float out[4]);
 
+// Arrange (TGRArrangeCommand): the shapes at `indices` of `layer` brought
+// to the front (`order` 0: last, drawn on top), sent to the back (1),
+// moved forward (2) or backward (3) one place past the shape that isn't
+// among them, keeping their own order. Returns where they are now (in the
+// order given).
+std::vector<size_t> ArrangeShapes(GRLayer& layer, const std::vector<size_t>& indices, int order);
+
+// a shape's style with `property` set (TGRFormatCommand: the shape's own
+// unnamed style changed, or one made from its named style), the styles'
+// user counts following; false if there's no such shape
+bool SetShapeProperty(Document& doc, size_t part, size_t layer, size_t index,
+	const Property& property);
+
+// the angle (degrees, counterclockwise as the shapes' are) of a point
+// around the shape's center, for rotating it by dragging (Arrange >
+// Rotate)
+float AngleAround(const Shape& shape, float x, float y);
+
+// Arrange > Reshape: a path's points (BEZI: the first path's vertices)
+// or a line's ends; the one within `tolerance` of the point, -1 if none
+int HitVertex(const Shape& shape, float x, float y, float tolerance);
+// that point moved to (x, y) (drawing coordinates); a path's box follows
+// its points (TShape::Recalc)
+void MoveVertex(Shape& shape, int vertex, float x, float y);
+// the points Reshape shows (drawing coordinates)
+std::vector<DrawPoint> ShapeVertices(const Shape& shape);
+
 } // namespace gobe
 
 #endif

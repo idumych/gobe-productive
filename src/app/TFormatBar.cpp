@@ -176,10 +176,12 @@ public:
 		fColorCommand(colorCommand)
 	{
 		tip = GobeResources::IndexString(4, tipIndex).String();
-		bool text = colorCommand == 'sf02';
-		fPatternCommand = text ? 'sf0M' : 'sf04';
-		fGradientCommand = text ? 'sf0N' : 'sf05';
-		fTransparencyCommand = text ? 'sf0R' : 'sf0D';
+		// (TTextMenuElement, TFillMenuElement, TPenMenuElement: the pen's
+		// 'sf06', 'sf07', 'sf08' and 'sf0E')
+		bool text = colorCommand == 'sf02', pen = colorCommand == 'sf06';
+		fPatternCommand = text ? 'sf0M' : pen ? 'sf07' : 'sf04';
+		fGradientCommand = text ? 'sf0N' : pen ? 'sf08' : 'sf05';
+		fTransparencyCommand = text ? 'sf0R' : pen ? 'sf0E' : 'sf0D';
 	}
 
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
@@ -434,9 +436,21 @@ TFormatBar::TFormatBar(TPageView* pages)
 		{
 			tip = GobeResources::IndexString(4, 11).String();
 		}
+		// MENU 103's items sending 'sf0S' with their percent (Other… its
+		// 'sM0U', for the dialog)
 		virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
 		{
 			AddMenuItems(menu, 103);
+			for (int32 i = 0; BMenuItem* item = menu->ItemAt(i); i++) {
+				BMessage* message = item->Message();
+				if (message == NULL)
+					continue;
+				int32 value = message->what == 'sM0U' ? int32('sM0U')
+					: message->GetInt32(kValueString, 0);
+				message->MakeEmpty();
+				message->what = 'sf0S';
+				message->AddInt32(kValueString, value);
+			}
 		}
 	};
 	TTransparencyElement* transparency = new TTransparencyElement(
@@ -520,11 +534,37 @@ TFormatBar::Update()
 		if (hasFill)
 			fill = {cell.fill.color.r, cell.fill.color.g, cell.fill.color.b, 255};
 	}
+	// shapes selected: their fill and pen (the first one's), and the
+	// transparency
+	ShapeStyle shape;
+	bool shapes = !text && !cells && fPages->SelectedShapeStyle(shape);
+	bool hasPen = false;
+	rgb_color pen = kPanel;
+	if (shapes) {
+		hasFill = shape.fill.set && shape.fillOpacity > 0;
+		if (hasFill)
+			fill = {shape.fill.color.r, shape.fill.color.g, shape.fill.color.b, 255};
+		hasPen = shape.pen.set && shape.penOpacity > 0;
+		if (hasPen)
+			pen = {shape.pen.color.r, shape.pen.color.g, shape.pen.color.b, 255};
+	}
 	if (TRibbonElement* element = GetElement('FILL')) {
-		if (element->enabled != cells) {
-			SetEnabled('FILL', cells);
-			SetEnabled('cFIL', cells);
+		if (element->enabled != (cells || shapes)) {
+			SetEnabled('FILL', cells || shapes);
+			SetEnabled('cFIL', cells || shapes);
 		}
+	}
+	if (TRibbonElement* element = GetElement('PEN ')) {
+		if (element->enabled != shapes) {
+			SetEnabled('PEN ', shapes);
+			SetEnabled('cPEN', shapes);
+			SetEnabled('Tran', shapes);
+		}
+	}
+	if (hasPen != fPenInk->has || pen != fPenInk->color) {
+		fPenInk->has = hasPen;
+		fPenInk->color = pen;
+		Invalidate(fPenInk->rect);
 	}
 	if (hasFill != fFillInk->has || fill != fFillInk->color) {
 		fFillInk->has = hasFill;

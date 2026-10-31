@@ -9,6 +9,7 @@
 #include "TMenu.h"
 #include "TSheetDialogs.h"
 #include "TFormatBar.h"
+#include "TInkMenus.h"
 #include "TPartBar.h"
 #include "TSpellBar.h"
 #include "UrlParse.h"
@@ -1448,7 +1449,7 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 
 	// the ToolBar's tools: a shape dragged out, a shape selected
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && DrawingClick(where, clicks)) {
-		if (fShape.active && fCaret.active) {
+		if (!fShapes.empty() && fCaret.active) {
 			fCaret.active = false;
 			Invalidate();
 		}
@@ -1899,6 +1900,10 @@ TPageView::KeyDown(const char* bytes, int32 count)
 void
 TPageView::MessageReceived(BMessage* message)
 {
+	// the drawing part's commands for the selected shapes (Arrange, the
+	// FormatBar's fill and pen)
+	if (ShapeCommand(message))
+		return;
 	switch (message->what) {
 		case kMsgCellCommit:
 			EndCellEdit(true, message->GetInt32("rows", 0), message->GetInt32("columns", 0));
@@ -3794,7 +3799,7 @@ TPageView::MessageReceived(BMessage* message)
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
-// "formatbar show|color N|fill N|style NAME|names|name LABEL|ink text|fill
+// "formatbar show|color N|fill N|pen N|style NAME|names|name LABEL|ink text|fill
 // pattern|gradient|transparency N" — the format
 // bar (TFormatBar); "names" prints the Names menu, "name" picks its item.
 // "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
@@ -3837,6 +3842,16 @@ TPageView::RunScript(const std::string& script, Document& document)
 					bar->ChooseColor(atoi(what.c_str() + 6));
 				else if (what.compare(0, 5, "fill ") == 0)
 					bar->ChooseColor(atoi(what.c_str() + 5), true);
+				else if (what.compare(0, 4, "pen ") == 0) {
+					// "formatbar pen N": the pen ink's color N ('sf06')
+					ColorSet set = LoadColorSet(0);
+					size_t index = size_t(atoi(what.c_str() + 4));
+					if (index < set.colors.size()) {
+						BMessage pen('sf06');
+						pen.AddData("color", B_RGB_COLOR_TYPE, &set.colors[index], 4);
+						MessageReceived(&pen);
+					}
+				}
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
 				else if (what.compare(0, 4, "ink ") == 0) {
@@ -4036,10 +4051,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 				for (size_t l = 0; l < gr.layers.size(); l++)
 					for (size_t i = 0; i < gr.layers[l].shapes.size(); i++) {
 						const Shape& sh = gr.layers[l].shapes[i];
-						printf("shape part %zu layer %zu %zu %s %g,%g %gx%g%s\n", index, l, i,
+						printf("shape part %zu layer %zu %zu %s %g,%g %gx%g%s%s\n", index, l, i,
 							FourCCString(sh.kind).c_str(), sh.origin[0], sh.origin[1],
-							sh.size[0], sh.size[1], fShape.active && fShape.part == index
-							&& fShape.layer == l && fShape.index == i ? " (selected)" : "");
+							sh.size[0], sh.size[1], sh.angle != 0 ? (" angle "
+							+ std::to_string(int(sh.angle))).c_str() : "",
+							ShapeSelected(index, l, i) ? " (selected)" : "");
 					}
 			fflush(stdout);
 		} else if (command.compare(0, 7, "cclick ") == 0) {
@@ -5691,6 +5707,9 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM7A':
 		case 'sM73': case 'sM74':
 		case 's00T':	// Make Chart
+		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange
+		case 'sM4A': case 'sM4B': case 'sM4C':
+		case 'sf06': case 'sf07': case 'sf08': case 'sf0E': case 'sf0S':	// pen, shapes
 			return true;
 		default:
 			return false;
