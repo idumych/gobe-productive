@@ -12,6 +12,7 @@
 #include "GobeResources.h"
 #include "StyleText.h"
 #include "Styles.h"
+#include "SSStyle.h"
 #include "TDocWindow.h"
 #include "TInkMenus.h"
 #include "TMenu.h"
@@ -360,7 +361,8 @@ TFormatBar::TFormatBar(TPageView* pages)
 	AddElement(fTextInk);
 	r.left = indicator.right + 15;
 	r.right = r.left + 20 - 1;
-	// (fill and pen inks are the graphics' and frames', not ported yet)
+	// (the fill ink is on for cells; fill and pen for graphics and frames
+	// aren't ported yet)
 	TInkElement* fill = new TInkElement('FILL', r, 0x17, 'sf03', 5);
 	fill->enabled = false;
 	AddElement(fill);
@@ -457,6 +459,31 @@ TFormatBar::Update()
 			name = TextSelectionStyles(doc.styles, *wp, range.first, range.second).active;
 		}
 	}
+	// cells: the active cell's font, size and inks, the fill ink on
+	CellStyle cell;
+	bool cells = !text && fPages->ActiveCellStyle(cell);
+	bool hasFill = false;
+	rgb_color fill = kPanel;
+	if (cells) {
+		font = cell.text.family;
+		size = std::to_string(int(roundf(cell.text.size)));
+		hasInk = true;
+		ink = {cell.text.color.r, cell.text.color.g, cell.text.color.b, 255};
+		hasFill = cell.fill.set;
+		if (hasFill)
+			fill = {cell.fill.color.r, cell.fill.color.g, cell.fill.color.b, 255};
+	}
+	if (TRibbonElement* element = GetElement('FILL')) {
+		if (element->enabled != cells) {
+			SetEnabled('FILL', cells);
+			SetEnabled('cFIL', cells);
+		}
+	}
+	if (hasFill != fFillInk->has || fill != fFillInk->color) {
+		fFillInk->has = hasFill;
+		fFillInk->color = fill;
+		Invalidate(fFillInk->rect);
+	}
 	for (auto [element, value] : {std::make_pair(fFont, font), std::make_pair(fSize, size),
 			std::make_pair(fStyles, name)}) {
 		if (element->label != value) {
@@ -474,12 +501,12 @@ TFormatBar::Update()
 
 
 void
-TFormatBar::ChooseColor(int32 index)
+TFormatBar::ChooseColor(int32 index, bool fill)
 {
 	ColorSet set = LoadColorSet(0);
 	if (index < 0 || size_t(index) >= set.colors.size())
 		return;
-	BMessage message('sf02');
+	BMessage message(fill ? 'sf03' : 'sf02');
 	message.AddString("ink name", "Standard");
 	message.AddData("color", B_RGB_COLOR_TYPE, &set.colors[index], 4);
 	message.AddInt32("ink index", index);

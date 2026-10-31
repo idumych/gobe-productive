@@ -49,6 +49,7 @@ Property CellHAlignProperty(int align);		// 'HAln'
 Property CellVAlignProperty(int align);		// 'VAln'
 Property CellWrapProperty(bool wrap);		// 'ClWp'
 Property CellFillProperty(Color color);		// 'FCol', solid ink
+Property FillTransparencyProperty(float opacity);	// 'FTra', 0 to 1
 // TPropBorderColor 'BCol': a solid ink and the side (0 left, 1 top, 2
 // right, 3 bottom); TPropBorderTransparency 'BTra': the opacity (0 to 1)
 // and the side

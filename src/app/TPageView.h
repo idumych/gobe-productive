@@ -185,6 +185,12 @@ public:
 	std::vector<SSRange> SelectedRanges() const;
 	// TPartSS::IsLocked for every selected range (and its alert)
 	bool SelectionLocked();
+	// the active cell's appearance (its part's, column's, row's and own
+	// styles); false without cells selected
+	bool ActiveCellStyle(CellStyle& style) const;
+	// a FormatBar property for the selected cells (TSSFormatCommand on the
+	// selection): false without cells selected (and no text caret)
+	bool FormatCells(const Property& property, const char* label);
 	// TPartSS::FlushEntryBar: the EntryBar's text in the active cell
 	bool FlushEntryBar(const char* text);
 	// the copied cells pasted at the active cell (TSSPasteCommand)

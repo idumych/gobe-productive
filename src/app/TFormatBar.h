@@ -35,9 +35,9 @@ public:
 	// test hook: the labels shown ("font", "size", "style") or the text
 	// indicator's color ("ink")
 	std::string Shown(const std::string& what) const;
-	// test hook: what choosing color `index` of the text ink's color set,
+	// test hook: what choosing color `index` of the text (fill) ink's color set,
 	// or style `name` in Styles, sends (handled at once)
-	void ChooseColor(int32 index);
+	void ChooseColor(int32 index, bool fill = false);
 	void ChooseStyle(const char* name);
 
 private:

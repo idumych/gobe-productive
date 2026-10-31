@@ -437,6 +437,18 @@ CellFillProperty(Color color)
 
 
 Property
+FillTransparencyProperty(float opacity)
+{
+	DocWriter w;
+	w.Float(opacity);
+	Property p;
+	p.type = Sig("FTra");
+	p.data = w.Data();
+	return p;
+}
+
+
+Property
 BorderColorProperty(int side, Color color)
 {
 	Property p = CellFillProperty(color);

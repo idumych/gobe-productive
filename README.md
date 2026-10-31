@@ -153,6 +153,8 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
   moves right, Escape (or Cancel) leaves the cell as it was; its function
   button opens Paste Function (the original's functions by category, with
   their help) to put a function in. A double click still edits in the cell.
+- **The FormatBar for cells:** font, size, faces, text color and fill
+  color for the selected cells, the bar showing the active cell's.
 - **The PartBar for cells:** the selection's address (a double click goes
   to a cell), the horizontal and vertical alignment menus with Wrap Text,
   cell borders (the outline or one side, a color and a transparency),

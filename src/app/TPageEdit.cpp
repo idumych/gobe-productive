@@ -2259,10 +2259,6 @@ TPageView::MessageReceived(BMessage* message)
 		}
 		// Font menu (TFormatCommand: 'sf01', "font", "style")
 		case 'sf01': {
-			if (!fCaret.active) {
-				beep();
-				return;
-			}
 			const char* family = NULL;
 			const char* style = "";
 			if (message->FindString("font", &family) != B_OK || family == NULL) {
@@ -2271,6 +2267,12 @@ TPageView::MessageReceived(BMessage* message)
 			}
 			if (message->FindString("style", &style) != B_OK || style == NULL)
 				style = "";
+			if (!fCaret.active) {
+				// for cells (TSSFormatCommand)
+				if (!FormatCells(TextFontProperty(family, style), "Font"))
+					beep();
+				return;
+			}
 			fUndo.Begin(fDocument, fCaret.part, "Font", CurrentViewState());
 			auto sel = TextSelectionRange();
 			ApplyCharacter(sel.first, sel.second,
@@ -2281,7 +2283,9 @@ TPageView::MessageReceived(BMessage* message)
 		}
 		// Size menu: value_message = 'sf0K', "value" = point size
 		case 'sf0K': {
-			if (!fCaret.active) {
+			CellStyle cellStyle;
+			bool cells = !fCaret.active && ActiveCellStyle(cellStyle);
+			if (!fCaret.active && !cells) {
 				beep();
 				return;
 			}
@@ -2292,7 +2296,8 @@ TPageView::MessageReceived(BMessage* message)
 			if (message->FindInt32(kValueString, &value) == B_OK) {
 				if (value == 'sM0U') {
 					BString text;
-					text << int32(StyleAt(TextSelectionRange().first).size);
+					text << int32(cells ? cellStyle.text.size
+						: StyleAt(TextSelectionRange().first).size);
 					BString title = GobeResources::IndexString(2, 7);
 					if (Window() != NULL)
 						(new TDialogGRSize(Window(), 'sf0K', title.String(), title.String(),
@@ -2302,6 +2307,10 @@ TPageView::MessageReceived(BMessage* message)
 				size = float(value);
 			} else if (message->FindFloat(kValueString, &size) != B_OK) {
 				beep();
+				return;
+			}
+			if (cells) {
+				FormatCells(TextSizeProperty(size), "Size");
 				return;
 			}
 			fUndo.Begin(fDocument, fCaret.part, "Size", CurrentViewState());
@@ -2314,13 +2323,25 @@ TPageView::MessageReceived(BMessage* message)
 		}
 		// Face menu: value_message = 'sf0C', "value" = face flag
 		case 'sf0C': {
-			if (!fCaret.active) {
-				beep();
-				return;
-			}
 			int32 flag = 0;
 			if (message->FindInt32(kValueString, &flag) != B_OK) {
 				beep();
+				return;
+			}
+			if (!fCaret.active) {
+				// for cells: toggled as the active cell has it
+				CellStyle cellStyle;
+				if (!ActiveCellStyle(cellStyle)) {
+					beep();
+					return;
+				}
+				uint32_t flags = 1;
+				if (flag != 1) {
+					flags = (cellStyle.text.faceFlags ^ uint32_t(flag)) & ~uint32_t(1);
+					if (flags == 0)
+						flags = 1;
+				}
+				FormatCells(TextFaceProperty(flags), "Face");
 				return;
 			}
 			fUndo.Begin(fDocument, fCaret.part, "Face", CurrentViewState());
@@ -2405,11 +2426,11 @@ TPageView::MessageReceived(BMessage* message)
 		// the format bar's text ink, a color ('sf02', TFormatCommand::
 		// ParsePropertyMesg: TPropTextColor of the ink chosen; "color" for a
 		// solid one)
-		case 'sf02': {
+		case 'sf02':
+		case 'sf03': {	// the text ink, the fill ink (cells: FCol)
 			const void* data;
 			ssize_t size;
-			if (!fCaret.active || fDocument.WordPart(fCaret.part) == NULL
-					|| message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) != B_OK
+			if (message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) != B_OK
 					|| size < 4) {
 				beep();
 				return;
@@ -2420,6 +2441,28 @@ TPageView::MessageReceived(BMessage* message)
 			color.g = c->green;
 			color.b = c->blue;
 			color.a = 255;
+			if (!fCaret.active) {
+				bool fill = message->what == 'sf03';
+				if (!FormatCells(fill ? CellFillProperty(color) : TextColorProperty(color),
+						fill ? "Cell Fill" : "Text Color")) {
+					beep();
+					return;
+				}
+				// a filled cell is opaque (every cell style with a fill
+				// color in the samples has a fill transparency too; the
+				// parts' default, SS Default, is transparent)
+				if (fill) {
+					for (const SSRange& r : SelectedRanges())
+						ApplyCellProperty(fDocument, fSelectedCell.part, r.from.a, r.from.b,
+							r.to.a, r.to.b, FillTransparencyProperty(1));
+					Invalidate();
+				}
+				return;
+			}
+			if (message->what != 'sf02' || fDocument.WordPart(fCaret.part) == NULL) {
+				beep();
+				return;
+			}
 			fUndo.Begin(fDocument, fCaret.part, std::string(GobeResources::IndexString(5, 5).String())
 				+ GobeResources::IndexString(11, 0).String(), CurrentViewState());
 			auto sel = TextSelectionRange();
@@ -3496,7 +3539,7 @@ TPageView::MessageReceived(BMessage* message)
 // "cellfill_check R C" — check if cell (R,C) has a solid fill.
 // "ruler ..." — the window's text ruler (TWPRuler::RunScript).
 // "partbar ABCD", "partbar spacing text" — the part bar (TPartBar).
-// "formatbar show|color N|style NAME" — the format bar (TFormatBar).
+// "formatbar show|color N|fill N|style NAME" — the format bar (TFormatBar).
 // "spell top|cursor|skip|learn|replace|toggle|check|choose N|show|
 // dictionaries" — the SpellBar (Spell Check's commands 'sMC0'..'sMC6',
 // "check" the PartBar's button; "show" prints it and the selection).
@@ -3535,6 +3578,8 @@ TPageView::RunScript(const std::string& script, Document& document)
 					fflush(stdout);
 				} else if (what.compare(0, 6, "color ") == 0)
 					bar->ChooseColor(atoi(what.c_str() + 6));
+				else if (what.compare(0, 5, "fill ") == 0)
+					bar->ChooseColor(atoi(what.c_str() + 5), true);
 				else if (what.compare(0, 6, "style ") == 0)
 					bar->ChooseStyle(what.c_str() + 6);
 			}
@@ -4055,29 +4100,18 @@ TPageView::RunScript(const std::string& script, Document& document)
 				NumberFormatProperty(command.substr(11)));
 			fBook->Reset();
 			Window()->PostMessage(kMsgDocumentChanged);
-		} else if (command.compare(0, 8, "cellfill ") == 0) {
-			// "cellfill R G B" — apply fill color to selection
-			if (!fSelectedCell.active) {
-				fprintf(stderr, "cellfill: no selection\n");
-				continue;
-			}
-			int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
-			int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
-			int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
-			int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+		} else if (command.compare(0, 9, "cellfill ") == 0) {
+			// "cellfill R G B": the format bar's fill ink with that color
+			// ('sf03') for the selected cells
 			int rr, gg, bb;
-			if (sscanf(command.c_str() + 8, "%d %d %d", &rr, &gg, &bb) != 3) {
+			if (sscanf(command.c_str() + 9, "%d %d %d", &rr, &gg, &bb) != 3) {
 				fprintf(stderr, "cellfill: expected 'R G B'\n");
 				continue;
 			}
-			Color col{uint8_t(rr), uint8_t(gg), uint8_t(bb), 255};
-			fUndo.Begin(fDocument, fSelectedCell.part, "Cell Fill",
-				CurrentViewState());
-			ApplyCellProperty(fDocument, fSelectedCell.part,
-				uint16_t(r0), uint16_t(c0), uint16_t(r1), uint16_t(c1),
-				CellFillProperty(col));
-			fBook->Reset();
-			Window()->PostMessage(kMsgDocumentChanged);
+			rgb_color color = {uint8(rr), uint8(gg), uint8(bb), 255};
+			BMessage msg('sf03');
+			msg.AddData("color", B_RGB_COLOR_TYPE, &color, 4);
+			MessageReceived(&msg);
 		} else if (command.compare(0, 9, "cellalign ") == 0) {
 			// "cellalign H V" — apply horizontal and vertical alignment
 			if (!fSelectedCell.active) {
@@ -5079,6 +5113,47 @@ TPageView::ParseCellReference(size_t part, const std::string& text, uint16& row,
 }
 
 
+bool
+TPageView::ActiveCellStyle(CellStyle& style) const
+{
+	if (!fSelectedCell.active || fCaret.active)
+		return false;
+	const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+	if (ss == NULL)
+		return false;
+	uint16_t row = uint16_t(fSelectedCell.row), column = uint16_t(fSelectedCell.column);
+	std::vector<uint32_t> stack = {ss->style};
+	if (const SSHeader* h = ss->Column(column))
+		stack.push_back(h->cell.style);
+	if (const SSHeader* h = ss->Row(row))
+		stack.push_back(h->cell.style);
+	if (const SSCell* cell = ss->Cell(row, column))
+		stack.push_back(cell->style);
+	style = ResolveCellStyle(fDocument.styles, stack);
+	return true;
+}
+
+
+bool
+TPageView::FormatCells(const Property& property, const char* label)
+{
+	if (!fSelectedCell.active || fCaret.active || fCellEditor != NULL
+			|| fDocument.SpreadsheetPart(fSelectedCell.part) == NULL)
+		return false;
+	if (SelectionLocked())
+		return true;
+	fUndo.Begin(fDocument, fSelectedCell.part, label, CurrentViewState());
+	for (const SSRange& r : SelectedRanges())
+		ApplyCellProperty(fDocument, fSelectedCell.part, r.from.a, r.from.b, r.to.a, r.to.b,
+			property);
+	fBook->Reset();
+	Invalidate();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
+}
+
+
 // TPartSS::FlushEntryBar: the EntryBar's text put in the active cell (a
 // formula that doesn't parse: an alert, and editing goes on)
 bool
@@ -5247,7 +5322,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM5I': case 'sM5J': case 'sM5K':
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
 		case 'sM5B': case 'sM5D':											// part bar
-		case 'sf02': case 'sf0L': case 'sf0V': case 'sMB6':				// format bar
+		case 'sf02': case 'sf03': case 'sf0L': case 'sf0V': case 'sMB6':	// format bar
 		case 'sMB2': case 'sMB3': case 'sMB4': case 'sMB5': case 'sMB7':	// Edit Styles
 		case B_CUT: case B_COPY: case B_PASTE: case B_SELECT_ALL:
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells

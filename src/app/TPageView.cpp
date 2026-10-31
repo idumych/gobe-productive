@@ -1192,16 +1192,6 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 		if (style.fill.set && style.fillOpacity > 0)
 			FillInk(rr, style.fill, style.fillOpacity, rr);
 	}
-	for (const SSCell& cell : ss.cells) {
-		int row = cell.id.a, column = cell.id.b;
-		if (row < firstRow || row >= firstRow + rows || column < firstColumn
-			|| column >= firstColumn + columns)
-			continue;
-		const CellStyle& style = SpreadsheetStyle({ss.style, cell.style});
-		BRect cr = cellRect(row, column);
-		if (style.fill.set && style.fillOpacity > 0)
-			FillInk(cr, style.fill, style.fillOpacity, cr);
-	}
 	// TSSFillManager: fills over ranges (a gradient spans all its ranges)
 	for (const SSFill& fill : ss.fills) {
 		const CellStyle& style = SpreadsheetStyle({fill.style});
@@ -1224,6 +1214,18 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 				FillInk(rr, style.fill, style.fillOpacity,
 					style.fill.gradient ? span : rr);
 		}
+	}
+	// (TSSDisplayManager::DrawCells: then each cell, its own fill over
+	// the column, row and range fills)
+	for (const SSCell& cell : ss.cells) {
+		int row = cell.id.a, column = cell.id.b;
+		if (row < firstRow || row >= firstRow + rows || column < firstColumn
+			|| column >= firstColumn + columns)
+			continue;
+		const CellStyle& style = SpreadsheetStyle({ss.style, cell.style});
+		BRect cr = cellRect(row, column);
+		if (style.fill.set && style.fillOpacity > 0)
+			FillInk(cr, style.fill, style.fillOpacity, cr);
 	}
 
 	// grid lines (GridStyle's pen)
