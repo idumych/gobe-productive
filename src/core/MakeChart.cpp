@@ -295,7 +295,7 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 	// where: right of the last column with anything in it, level with the
 	// cells, 320 x 200 (the port's choice; the original asks the drawing,
 	// TChartPart::DefaultFrameRect)
-	const float width = 320, height = 200;
+	float width = 320, height = 200;
 	uint16_t last = range.to.b;
 	for (const SSCell& c : ss->cells)
 		if (c.id.b != 0xffff)
@@ -305,6 +305,22 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 		origin[0] += ss->ColumnWidth(c);
 	for (uint16_t r = 0; r < range.from.a; r++)
 		origin[1] += ss->RowHeight(r);
+	// within the drawing's frame (a sheet as large as its cells, as
+	// StockPrice's, shows nothing past it): moved left and up to fit, and
+	// no larger than it
+	for (size_t p = 0; p < doc.tails.size(); p++) {
+		if (!doc.tailRead[p])
+			continue;
+		for (const Portal& portal : doc.tails[p].portals)
+			for (const Frame& f : portal.frames)
+				if (f.part == drawing && f.extent[0] > 0 && f.extent[1] > 0) {
+					width = std::min(width, f.extent[0]);
+					height = std::min(height, f.extent[1]);
+					origin[0] = std::max(0.0f, std::min(origin[0], f.extent[0] - width));
+					origin[1] = std::max(0.0f, std::min(origin[1], f.extent[1] - height));
+					p = doc.tails.size() - 1;
+				}
+	}
 
 	// TChartPart(TDoc*): TPartGR with a 32767-point drawing, the pieces
 	// 'Rndr' (T3DRenderer: the camera, one light at (0, 0, 0.5)) and
