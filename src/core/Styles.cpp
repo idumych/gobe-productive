@@ -2,6 +2,8 @@
 
 #include <algorithm>
 
+#include <zlib.h>
+
 #include "DocWriter.h"
 
 namespace gobe {
@@ -50,7 +52,44 @@ ReadInk(DocArchive& a, Ink& ink)
 				ink.angle = a.Float();
 		}
 	}
-	else {
+	else if (kind == Sig("FPAT")) {
+		// TFillPattern: 'TPAT', a byte, the bitmap (TOutputArchive::
+		// WriteBitmap: 'BMAP', its size, a bool, the color space, bytes
+		// per row, the bounds, compressed, the data's size, the data,
+		// 'BmaP'; TInputArchive::Read starts more than 0xfff bytes at a
+		// 4-byte boundary of the file). The fill's size is a few bytes off
+		// in the ink sets: read through it; the pixels kept as they are.
+		// (a property's fill ends the data: its size is right)
+		if (start + size != a.Data().size()) {
+			try {
+				a.CheckSig(Sig("TPAT"));
+				a.UInt8();
+				a.CheckSig(Sig("BMAP"));
+				uint32_t bytes = a.UInt32();
+				if (bytes != 0) {
+					a.Bool();
+					a.UInt32();
+					a.UInt32();
+					float bounds[4];
+					a.Rect(bounds);
+					bool compressed = a.FileFormatVersion() > 0x15 && a.Bool();
+					if (compressed)
+						bytes = a.UInt32();
+					if (bytes > 0xfff)
+						a.Seek((a.Position() + 3) & ~size_t(3));
+					a.Bytes(bytes);
+				}
+				a.CheckSig(Sig("BmaP"));
+				size_t end = a.Position();
+				a.Seek(start - 8);
+				ink.otherFill = a.Bytes(end - (start - 8));
+				return true;
+			} catch (const ArchiveError&) {
+			}
+		}
+		a.Seek(start - 8);
+		ink.otherFill = a.Bytes(size_t(size) + 8);
+	} else {
 		a.Seek(start - 8);
 		ink.otherFill = a.Bytes(size_t(size) + 8);
 	}
@@ -414,6 +453,84 @@ Property
 TabProperty(const TabStop& tab)
 {
 	return TabsProperty({tab});
+}
+
+bool
+FillPatternPixels(const Ink& ink, int& width, int& height, std::vector<uint8_t>& rgba)
+{
+	// 'FPAT', its size, 'TPAT', solid (a color pattern, not a bitmap),
+	// 'BMAP', the pixels' size, a bool, the color space, bytes per row,
+	// the bounds, compressed, the packed size, the data, 'BmaP'
+	const std::vector<uint8_t>& d = ink.otherFill;
+	if (d.size() < 14)
+		return false;
+	DocArchive a(d);
+	a.SetVersions(2, 0, 0x1e);
+	try {
+		if (a.UInt32() != Sig("FPAT"))
+			return false;
+		a.UInt32();
+		a.CheckSig(Sig("TPAT"));
+		if (a.UInt8() != 0)
+			return false;
+		a.CheckSig(Sig("BMAP"));
+		uint32_t size = a.UInt32();
+		if (size == 0)
+			return false;
+		a.Bool();
+		uint32_t space = a.UInt32();
+		uint32_t bytesPerRow = a.UInt32();
+		float bounds[4];
+		a.Rect(bounds);
+		width = int(bounds[2] - bounds[0] + 1);
+		height = int(bounds[3] - bounds[1] + 1);
+		// B_RGB32 and B_RGBA32: B, G, R, A
+		if ((space != 0x0008 && space != 0x2008) || width <= 0 || height <= 0
+				|| bytesPerRow < uint32_t(width) * 4 || size < bytesPerRow * uint32_t(height))
+			return false;
+		std::vector<uint8_t> bits;
+		if (a.Bool()) {
+			uint32_t packed = a.UInt32();
+			// (the file's 4-byte boundary isn't known here: up to 3 zero
+			// bytes before the zlib data, whose first byte never is)
+			const std::vector<uint8_t>& all = a.Data();
+			size_t at = a.Position();
+			for (int pad = 0; pad < 3 && at < all.size() && all[at] == 0; pad++)
+				at++;
+			if (at + packed > all.size())
+				return false;
+			// (some streams in the ink sets end early, their pixels all
+			// there: inflate as far as it goes)
+			bits.resize(size);
+			z_stream z = {};
+			if (inflateInit(&z) != Z_OK)
+				return false;
+			z.next_in = const_cast<Bytef*>(all.data() + at);
+			z.avail_in = packed;
+			z.next_out = bits.data();
+			z.avail_out = size;
+			int result = inflate(&z, Z_FINISH);
+			size_t out = size - z.avail_out;
+			inflateEnd(&z);
+			if (result != Z_STREAM_END && out < size_t(bytesPerRow) * height)
+				return false;
+		} else
+			bits = a.Bytes(size);
+		rgba.resize(size_t(width) * height * 4);
+		bool alpha = space == 0x2008;
+		for (int y = 0; y < height; y++)
+			for (int x = 0; x < width; x++) {
+				const uint8_t* p = &bits[size_t(y) * bytesPerRow + size_t(x) * 4];
+				uint8_t* q = &rgba[(size_t(y) * width + x) * 4];
+				q[0] = p[2];
+				q[1] = p[1];
+				q[2] = p[0];
+				q[3] = alpha ? p[3] : 255;
+			}
+	} catch (const ArchiveError&) {
+		return false;
+	}
+	return true;
 }
 
 } // namespace gobe

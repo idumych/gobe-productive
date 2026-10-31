@@ -80,7 +80,7 @@ struct Document {
 	bool selectionsChanged = false;	// spreadsheet selections/names moved
 	bool linksChanged = false;		// links added (the LinksMgr, written by Save)
 	bool pensChanged = false;		// pens made, edited or deleted (the PenMgr)
-	bool inkSetsChanged = false;	// its ink sets made or edited (the SetMgr)
+	bool inkSetsChanged = false;	// its ink sets changed (the SetMgr)
 	// TDoc +0x70 ("Document Misc"): bit 2 shows invisibles in text
 	uint32_t documentFlags = 0;
 	bool documentFlagsChanged = false;
