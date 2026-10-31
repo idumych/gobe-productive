@@ -148,6 +148,8 @@ public:
 	void ScrollCaretIntoView();
 	// Edit > Copy Format has kept a format (OurApp +0x184 not empty)
 	static bool HasCopiedFormat();
+	// cells copied as cells (Paste Special has something to paste)
+	static bool HasCopiedCells();
 	// TWPPart::SetUpContextMenu: the menu for a context click at `where`
 	// (document coordinates) in text (NULL elsewhere); the caret moves
 	// there unless it's in the selection
@@ -180,6 +182,8 @@ public:
 	std::vector<SSRange> SelectedRanges() const;
 	// TPartSS::IsLocked for every selected range (and its alert)
 	bool SelectionLocked();
+	// the copied cells pasted at the active cell (TSSPasteCommand)
+	void PasteCopiedCells(bool data, bool formulas, bool formatting);
 	// the selection's name for the PartBar's address: the active cell, or
 	// the ranges ("A1..B3,D4")
 	std::string SelectionName() const;

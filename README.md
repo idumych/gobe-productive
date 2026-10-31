@@ -143,6 +143,10 @@ these work as they did in Gobe Productive, with its dialogs and alerts:
   References to deleted cells become #REF!.
 - **Sorting:** Sort… by up to three keys, each ascending or descending, in
   the original's order (numbers, text, true/false, errors, empty cells).
+- **Copy and paste:** cells copied and pasted as cells, formulas
+  referring to the cells around where they land (absolute references stay)
+  and formats coming along; Paste Special… (values and formulas or values
+  only, with or without the formatting).
 - **Calculating:** Calculate Now, Auto Calculate, Go To Cell….
 - **The PartBar for cells:** the selection's address (a double click goes
   to a cell), the horizontal and vertical alignment menus with Wrap Text,

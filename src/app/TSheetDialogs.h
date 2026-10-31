@@ -127,6 +127,22 @@ private:
 	bool fVertical;
 };
 
+// Edit > Paste Special… with cells (TDialogSSPasteSpecial; TSSDialog 24):
+// Paste Data (2) as Values and Formulas (4) or Values Only (5), Paste
+// Formatting (6); OK, on with either box, sends `target` B_PASTE ('PSTE')
+// with "data", "formulas" and "formatting".
+class TDialogSSPasteSpecial : public TDialog {
+public:
+	TDialogSSPasteSpecial(BHandler* target);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BHandler* fTarget;
+};
+
 // Options > Sort… (TDialogSort; TSSDialog 25): the range (3), Vertical (4,
 // on a range more than one row high) or Horizontal (5), and three order
 // keys, each a range "A2..A9" (7, 11, 15) with Ascending (8, 12, 16) or

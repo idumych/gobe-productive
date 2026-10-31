@@ -1270,7 +1270,8 @@ TDocWindow::MenusBeginning()
 		bool saved = fDocument != NULL && !fDocument->path.empty();
 		enable('sM02', fModified);
 		enable('sM04', fModified && saved);
-		enable('sM13', false);
+		enable('sM13', fPages != NULL && fPages->fSelectedCell.active
+			&& TPageView::HasCopiedCells());
 		enable('sM15', false);
 		bool cells = fPages != NULL && fPages->fSelectedCell.active;
 		bool part = cells || (fPages != NULL && fPages->fCaret.active);

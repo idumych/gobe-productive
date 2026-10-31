@@ -48,6 +48,7 @@
 #include "SSEval.h"
 #include "SSMove.h"
 #include "SSSort.h"
+#include "SSPaste.h"
 #include "TDocWindow.h"
 #include "TTranslate.h"
 
@@ -76,6 +77,9 @@ SSAlert(int32 index)
 static std::vector<Property> sCopiedFormat;
 // the text last copied with its styles (the clipboard has its plain text)
 static TextFragment sCopiedText;
+// the cells last copied (the original's private scrap), with the text the
+// clipboard got: Paste pastes them as cells while the clipboard holds it
+static CopiedCells sCopiedCells;
 
 static const uint32 kMsgCellCommit = 'Gcel';
 static const uint32 kMsgCellCancel = 'Gccl';
@@ -670,6 +674,13 @@ TPageView::ReplaceRange(size_t part, uint32_t start, uint32_t end, const std::st
 	fUndo.Break();
 	TextChanged();
 	SelectRange(part, replaced.start, replaced.end);
+}
+
+
+bool
+TPageView::HasCopiedCells()
+{
+	return sCopiedCells.rows > 0;
 }
 
 
@@ -2621,6 +2632,10 @@ TPageView::MessageReceived(BMessage* message)
 								text.data(), text.size());
 							be_clipboard->Commit();
 							be_clipboard->Unlock();
+							sCopiedCells = CopyCells(fDocument, fSelectedCell.part,
+								SSRange{{uint16_t(r0), uint16_t(c0)}, {uint16_t(r1), uint16_t(c1)}},
+								fBook.get());
+							sCopiedCells.text = text;
 						}
 						return;
 					}
@@ -2643,6 +2658,10 @@ TPageView::MessageReceived(BMessage* message)
 								text.data(), text.size());
 							be_clipboard->Commit();
 							be_clipboard->Unlock();
+							sCopiedCells = CopyCells(fDocument, fSelectedCell.part,
+								SSRange{{uint16_t(r0), uint16_t(c0)}, {uint16_t(r1), uint16_t(c1)}},
+								fBook.get());
+							sCopiedCells.text = text;
 							std::string error;
 							if (ClearRange(*ss, uint16_t(r0), uint16_t(c0),
 									uint16_t(r1), uint16_t(c1))) {
@@ -2660,6 +2679,15 @@ TPageView::MessageReceived(BMessage* message)
 						}
 						fUndo.Begin(fDocument, fSelectedCell.part, "Paste",
 							CurrentViewState());
+						// Paste Special's OK: B_PASTE with "data", "formulas" and
+						// "formatting" (TSSPasteCommand's flags)
+						if (message->HasBool("data")) {
+							if (sCopiedCells.rows > 0)
+								PasteCopiedCells(message->GetBool("data", true),
+									message->GetBool("formulas", true),
+									message->GetBool("formatting", true));
+							return;
+						}
 						if (!be_clipboard->Lock())
 							return;
 						const void* data = NULL;
@@ -2669,6 +2697,12 @@ TPageView::MessageReceived(BMessage* message)
 								&data, &size) == B_OK && size > 0) {
 							std::string text((const char*)data, size);
 							be_clipboard->Unlock();
+							if (sCopiedCells.rows > 0 && text == sCopiedCells.text) {
+								// the cells copied here: TSSPasteCommand with
+								// everything (data, formulas, formatting)
+								PasteCopiedCells(true, true, true);
+								return;
+							}
 							SSPart* ss = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
 							if (ss != NULL) {
 								std::string error;
@@ -3196,6 +3230,13 @@ TPageView::MessageReceived(BMessage* message)
 						Window()->PostMessage(kMsgDocumentChanged);
 						return;
 					}
+					case 'sM13':	// Paste Special… (TDialogSSPasteSpecial)
+						if (sCopiedCells.rows == 0) {
+							beep();
+							return;
+						}
+						(new TDialogSSPasteSpecial(this))->RunDialog();
+						return;
 					case 'sM68':	// a side's border color (TPropBorderColor)
 					case 'sM69':	// its transparency (TPropBorderTransparency)
 					case 'sM6A':	// the outline's color
@@ -3547,6 +3588,16 @@ TPageView::RunScript(const std::string& script, Document& document)
 				Click(BPoint(x, y), 1, B_PRIMARY_MOUSE_BUTTON);
 				fScriptShift = false;
 			}
+		} else if (command.compare(0, 13, "pastespecial ") == 0) {
+			// "pastespecial DATA FORMULAS FORMATTING" (each 0 or 1): Paste
+			// Special's OK
+			int data = 1, formulas = 1, formatting = 1;
+			sscanf(command.c_str() + 13, "%d %d %d", &data, &formulas, &formatting);
+			BMessage msg(B_PASTE);
+			msg.AddBool("data", data != 0);
+			msg.AddBool("formulas", formulas != 0);
+			msg.AddBool("formatting", formatting != 0);
+			MessageReceived(&msg);
 		} else if (command.compare(0, 11, "cellborder ") == 0) {
 			// "cellborder SIDE R G B" (a color) or "cellborder SIDE N%" (a
 			// transparency): SIDE -1 is the outline, 0-3 left, top, right,
@@ -4949,6 +5000,38 @@ TPageView::ParseCellReference(size_t part, const std::string& text, uint16& row,
 }
 
 
+// TSSPasteCommand::ValidPaste and PerformCmd: the copied cells at the
+// active cell, the pasted block selected
+void
+TPageView::PasteCopiedCells(bool data, bool formulas, bool formatting)
+{
+	const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+	if (ss == NULL)
+		return;
+	CellID at{uint16_t(std::min(fSelectedCell.row, fSelectedCell.anchorRow)),
+		uint16_t(std::min(fSelectedCell.column, fSelectedCell.anchorColumn))};
+	if (!PasteFits(*ss, at, sCopiedCells)) {
+		SSAlert(1);	// data outside the defined size of the spreadsheet
+		return;
+	}
+	if (RangeLocked(at.a, at.b, at.a + sCopiedCells.rows - 1, at.b + sCopiedCells.columns - 1))
+		return;
+	if (!PasteCells(fDocument, fSelectedCell.part, at, sCopiedCells, data, formulas,
+			formatting))
+		return;
+	fSelectedCell.anchorRow = at.a;
+	fSelectedCell.anchorColumn = at.b;
+	fSelectedCell.row = at.a + sCopiedCells.rows - 1;
+	fSelectedCell.column = at.b + sCopiedCells.columns - 1;
+	fSelectedCell.kind = SelectionKind::cells;
+	fSelectedCell.extra.clear();
+	fBook->Reset();
+	Invalidate();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+}
+
+
 std::vector<SSRange>
 TPageView::SelectedRanges() const
 {
@@ -5055,6 +5138,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM70': case 'sM71': case 'sM7B': case 'sM7C':				// cells
 		case 'sM62': case 'sM63': case 'sM78': case 'sM60': case 'sM66': case 'sM64':
 		case 'sM65': case 'sM67': case 'sM68': case 'sM69': case 'sM6A': case 'sM6B':
+		case 'sM13':
 		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':

@@ -488,6 +488,47 @@ TDialogDeleteInsert::ItemHit(int32 index, BMessage* message)
 }
 
 
+TDialogSSPasteSpecial::TDialogSSPasteSpecial(BHandler* target)
+	:
+	TDialog(24, 24, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
+	fTarget(target)
+{
+}
+
+
+void
+TDialogSSPasteSpecial::Init()
+{
+	SetCheckBoxItem(2, true);
+	SetRadioItem(4, true);
+	SetCheckBoxItem(6, true);
+}
+
+
+bool
+TDialogSSPasteSpecial::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		BRadioButton* formulas = dynamic_cast<BRadioButton*>(Item(4));
+		BMessage paste(B_PASTE);
+		paste.AddBool("data", CheckBoxItem(2));
+		paste.AddBool("formulas", formulas != NULL && formulas->Value() == B_CONTROL_ON);
+		paste.AddBool("formatting", CheckBoxItem(6));
+		if (fTarget != NULL && fTarget->Looper() != NULL)
+			fTarget->Looper()->PostMessage(&paste, fTarget);
+	} else if (index != 1) {
+		// a box changed: OK with either on, the radios with Paste Data
+		bool data = CheckBoxItem(2);
+		SetItemEnabled(0, data || CheckBoxItem(6));
+		SetItemEnabled(4, data);
+		SetItemEnabled(5, data);
+		return false;
+	}
+	PostMessage(B_QUIT_REQUESTED);
+	return false;
+}
+
+
 TDialogSort::TDialogSort(BHandler* target, const std::vector<SSRange>& ranges)
 	:
 	TDialog(25, 25, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
