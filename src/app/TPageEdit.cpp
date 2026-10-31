@@ -2560,6 +2560,22 @@ TPageView::MessageReceived(BMessage* message)
 		// TPropTextTransparent, 'sf0D' TPropFillTransparent, value / 100)
 		case 'sf0R':
 		case 'sf0D': {
+			if (message->GetInt32(kValueString, 0) == int32('sM0U')) {
+				// Other… (TPart::HandleMessage): the dialog, with the
+				// current opacity (TPart::CurrentProperty; 1 without one)
+				float current = 1;
+				CellStyle cell;
+				if (!fCaret.active && ActiveCellStyle(cell))
+					current = message->what == 'sf0D' ? cell.fillOpacity : cell.text.opacity;
+				else if (fCaret.active && message->what == 'sf0R')
+					current = StyleAt(TextSelectionRange().first).opacity;
+				BString label = GobeResources::IndexString(2, 8);
+				BString title = label;
+				title.Truncate(title.CountChars() > 0 ? title.CountChars() - 1 : 0);
+				(new TDialogGetTransparent(Window(), *message, int32(std::lround(current * 100)),
+					title, label))->RunDialog();
+				return;
+			}
 			float opacity = message->GetInt32(kValueString, 100) / 100.0f;
 			if (opacity < 0 || opacity > 1) {
 				beep();
@@ -3543,8 +3559,11 @@ TPageView::MessageReceived(BMessage* message)
 							float current = 1;
 							if (ActiveCellStyle(active))
 								current = active.borders[side >= 0 && side < 4 ? side : 0].opacity;
+							const ResourceFile& strings = GobeResources::Part("Spreadsheet");
 							(new TDialogGetTransparent(Window(), *message,
-								int32(std::lround(current * 100))))->RunDialog();
+								int32(std::lround(current * 100)),
+								IndexString(strings, 1506, 5).c_str(),
+								IndexString(strings, 1506, 6).c_str()))->RunDialog();
 							return;
 						}
 						if ((!outline && (side < 0 || side > 3)) || SelectionLocked())

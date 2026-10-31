@@ -1118,12 +1118,14 @@ TDialogSort::ItemHit(int32 index, BMessage* message)
 
 
 TDialogGetTransparent::TDialogGetTransparent(BLooper* window, const BMessage& message,
-	int32 percent)
+	int32 percent, const BString& title, const BString& label)
 	:
 	TDialog(31, 31, 'APPL', NULL),
 	fWindow(window),
 	fMessage(message),
-	fPercent(percent)
+	fPercent(percent),
+	fTitle(title),
+	fLabel(label)
 {
 }
 
@@ -1131,9 +1133,8 @@ TDialogGetTransparent::TDialogGetTransparent(BLooper* window, const BMessage& me
 void
 TDialogGetTransparent::Init()
 {
-	const ResourceFile& strings = GobeResources::Part("Spreadsheet");
-	SetTitle(IndexString(strings, 1506, 5).c_str());
-	SetLabelItem(2, IndexString(strings, 1506, 6).c_str());
+	SetTitle(fTitle.String());
+	SetLabelItem(2, fLabel.String());
 	BString text;
 	text << fPercent;
 	SetTextItem(2, text.String());

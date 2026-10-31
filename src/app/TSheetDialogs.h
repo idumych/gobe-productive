@@ -246,13 +246,16 @@ private:
 // Options > Fill Special… (TDialogFillSpecial; TSSDialog 26): Apply To
 // rows or columns, the type, date units, Step By, Stop At, Trend. In Gobe
 
-// Transparency > Other… in a cell border menu (TDialogGetTransparent, a
-// TDialogGenericGetString: DIAL/Item 31, STR# 1506, 5 the title and 6
-// the label, the current opacity as a percent): OK checks 0 to 100 (STR#
-// 6, 13) and sends `window` `message` with it as the int32 "value".
+// Transparency > Other… (TDialogGetTransparent, a TDialogGenericGetString:
+// DIAL/Item 31 with `title` and `label`, the current opacity as a
+// percent): OK checks 0 to 100 (STR# 6, 13) and sends `window` `message`
+// with it as the int32 "value". The cell borders' strings are the
+// Spreadsheet add-on's STR# 1506, 5 and 6; TPart's (text and fill) STR#
+// 2, 8 without its last character, and STR# 2, 8.
 class TDialogGetTransparent : public TDialog {
 public:
-	TDialogGetTransparent(BLooper* window, const BMessage& message, int32 percent);
+	TDialogGetTransparent(BLooper* window, const BMessage& message, int32 percent,
+		const BString& title, const BString& label);
 
 protected:
 	virtual void Init();
@@ -262,6 +265,7 @@ private:
 	BLooper* fWindow;
 	BMessage fMessage;
 	int32 fPercent;
+	BString fTitle, fLabel;
 };
 
 // Productive 2.0.1 OK and Cancel both just close it (ItemHit), so here too.

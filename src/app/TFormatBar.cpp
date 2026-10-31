@@ -221,7 +221,7 @@ public:
 private:
 	// MENU 103 (100 Opaque, 90-10, 0 Transparent) sending the
 	// transparency command with its "value" (a percent); Other… ('sM0U')
-	// is off (its dialog is the cell borders')
+	// sends 'sM0U' as the value, for the dialog (TPart::HandleMessage)
 	BMenu* TransparencyMenu()
 	{
 		BMenu* transparency = new BMenu("");
@@ -229,14 +229,11 @@ private:
 		while (source.CountItems() > 0) {
 			BMenuItem* item = source.RemoveItem((int32)0);
 			if (BMessage* message = item->Message()) {
-				if (message->what == 'sM0U')
-					item->SetEnabled(false);
-				else {
-					int32 value = message->GetInt32(kValueString, 0);
-					message->MakeEmpty();
-					message->what = fTransparencyCommand;
-					message->AddInt32(kValueString, value);
-				}
+				int32 value = message->what == 'sM0U' ? int32('sM0U')
+					: message->GetInt32(kValueString, 0);
+				message->MakeEmpty();
+				message->what = fTransparencyCommand;
+				message->AddInt32(kValueString, value);
 			}
 			transparency->AddItem(item);
 		}
