@@ -57,21 +57,27 @@ Styles can be exported to a file and imported into another document.
 
 ## Next to the original
 
-The port is checked against Gobe Productive 2.0.1 running on BeOS 5, not
-just against its own idea of the original. Here is the Resume sample in
-both, with the ToolBar shown:
+The port is checked against Gobe Productive 2.0.1 running on BeOS 5.
+Doing so after 0.2.0 showed its ToolBar was drawn wrongly: small buttons
+with gaps, under the other bars. The next release draws it as the
+original does: 28-pixel buttons edge to edge, in a column down the left
+beside every bar, with the pop-up triangle on the arrow, part and shapes
+tools (whose icon is its shape, the star). The pop-up triangles are blue,
+as in the original, not red, and the zoom box's "100%" fits in its box.
+Here is the Resume sample in 0.2.0, the next release and the original, with
+the ToolBar shown:
 
-![The Resume sample in the original on BeOS 5 (left) and in the port on Linux (right)](docs/screenshots/compare-resume.png)
+![The Resume sample in 0.2.0 (left), the next release (middle) and the original on BeOS 5 (right)](docs/screenshots/compare-resume.png)
 
-The bars close up, at twice the size. Every button is the size the
-original's is and in the same place, to the pixel:
+The bars close up, at twice the size:
 
-![The ToolBar, FormatBar and PartBar in the original (left) and the port (right), at twice the size](docs/screenshots/compare-bars.png)
+![The ToolBar, FormatBar and PartBar in 0.2.0, the next release and the original, at twice the size](docs/screenshots/compare-bars.png)
 
 *Still different: the original saves which bars a document shows (the
 Resume opens with the spelling bar on BeOS), which the port doesn't read
-yet; the fonts are today's, so text looks a little different; and BeOS here ran in
-16-bit colour, which tints white slightly green.*
+yet; the fonts are today's, so text looks a little different; and BeOS
+here ran in 16-bit colour, which tints white slightly green. The port is
+shown on Linux.*
 
 
 ## Install
