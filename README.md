@@ -7,7 +7,7 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-61-76-0.svg" alt="Port progress: 61 of 76 features done, 15 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-62-77-0.svg" alt="Port progress: 62 of 77 features done, 15 left (see Features)" width="720"></p>
 
 Not everything is ported yet: image editing, slide shows, editing tables
 and charts, a drawing's views and layers, and a few dialogs are still to
@@ -260,7 +260,8 @@ sizes, headings and options are saved with the document.
 | Editing inks and pens in the Inks window: Cut, Copy and Paste, the pen view's width buttons and slider, a colour, pattern or gradient edited | 0.2.0 |
 | Views & Layers: a drawing's layers (New Layer, Delete Layer, Rename Layer…) and views (Delete View, Rename View…) | not yet |
 | Context menus in drawings: on the page, Draw Grid, AutoGrid and Show or Hide Graphics Ruler; on a polygon or curve, Closed, Smooth, Unsmooth, Auto-Smooth, Add To Tool Bar and its handles' edits; on an arc, Closed, Start Angle… and Arc Angle…; on a round rectangle, Corner Radius…; on a group or frame, Ungroup and Open group; in Reshape, a point's Delete, Smooth, Unsmooth and Auto-Smooth Handle(s) and a control point's Delete Control(s) | next |
-| Document > Document Size… for drawings, spreadsheets and presentations (text documents have it) | not yet |
+| Document > Document Size… for drawings (pages across and down), spreadsheets (rows and columns) and presentations (the slide size, with a pop-up of screen sizes); a new drawing is one page, as the original's are | next |
+| The graphics ruler (Window > Show Graphics Ruler): a drawing's rulers along the top and left | not yet |
 
 ### Presentations
 

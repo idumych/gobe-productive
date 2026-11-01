@@ -4313,7 +4313,8 @@ TPageView::RunScript(const std::string& script, Document& document)
 			EndCellEdit(true);
 		} else if (command.compare(0, 5, "send ") == 0 && command.size() >= 9) {
 			// "send ABCD [name=value ...]": the command to the window with
-			// fields (digits an int32, true/false a bool, else a string);
+			// fields (digits an int32, with a '.' a float, true/false a
+			// bool, else a string);
 			// fields with spaces separated by '|' instead
 			const char* c = command.c_str() + 5;
 			BMessage msg(uint32(c[0]) << 24 | uint32(c[1]) << 16 | uint32(c[2]) << 8 | c[3]);
@@ -4333,6 +4334,9 @@ TPageView::RunScript(const std::string& script, Document& document)
 					msg.AddBool(key.c_str(), value == "true");
 				else if (!value.empty() && value.find_first_not_of("-0123456789") == std::string::npos)
 					msg.AddInt32(key.c_str(), atoi(value.c_str()));
+				else if (!value.empty() && value.find('.') != std::string::npos
+						&& value.find_first_not_of("-0123456789.") == std::string::npos)
+					msg.AddFloat(key.c_str(), strtof(value.c_str(), NULL));
 				else
 					msg.AddString(key.c_str(), value.c_str());
 			}

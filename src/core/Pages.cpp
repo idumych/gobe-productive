@@ -783,4 +783,85 @@ Document::SetDocumentSize(size_t part, uint32_t across, bool titlePage)
 	return changed;
 }
 
+
+bool
+Document::DrawingPages(size_t part, uint32_t& across, uint32_t& down) const
+{
+	const GRPart* gr = GraphicsPart(part);
+	if (gr == nullptr || sheets.sheets.empty())
+		return false;
+	const float* printable = sheets.sheets[0].printable;
+	float w = printable[2] - printable[0], h = printable[3] - printable[1];
+	if (w <= 0 || h <= 0)
+		return false;
+	across = uint32_t(std::max(1.0f, std::ceil((gr->size[0] - 1) / w)));
+	down = uint32_t(std::max(1.0f, std::ceil((gr->size[1] - 1) / h)));
+	return true;
+}
+
+
+bool
+Document::SetDrawingPages(size_t part, uint32_t across, uint32_t down)
+{
+	int root = RootPart();
+	if (GraphicsPart(part) == nullptr || sheets.sheets.empty() || root < 0
+			|| parts.parts[root].kind != Sig("PROT") || across < 1 || down < 1)
+		return false;
+	const float* printable = sheets.sheets[0].printable;
+	float size[2] = {(printable[2] - printable[0]) * float(across),
+		(printable[3] - printable[1]) * float(down)};
+	bool changed = false;
+	const GRPart* gr = GraphicsPart(part);
+	if (gr->size[0] != size[0] || gr->size[1] != size[1]) {
+		GRPart* edit = EditableGraphicsPart(part);
+		edit->size[0] = size[0];
+		edit->size[1] = size[1];
+		changed = true;
+	}
+	try {
+		std::vector<uint8_t>& record = parts.parts[root].data;
+		DocArchive a(record);
+		a.CheckSig(Sig("PART"));
+		a.UInt32();
+		PartHeader header;
+		ReadPartHeader(a, header);
+		a.UInt32();
+		a.UInt32();
+		a.UInt32();
+		size_t at = a.Position();
+		if (a.UInt32() != across) {
+			PutU32(record, at, across);
+			dirtyParts.insert(size_t(root));
+			changed = true;
+		}
+	} catch (const ArchiveError&) {
+		return false;
+	}
+	size_t pages = size_t(across) * down;
+	while (PageCount() > 0 && PageCount() < pages && AddPage())
+		changed = true;
+	while (PageCount() > pages && RemoveLastPage())
+		changed = true;
+	if (changed)
+		RepositionPages();
+	return changed;
+}
+
+
+bool
+Document::SetSheetSize(size_t part, int rows, int columns)
+{
+	const SSPart* ss = SpreadsheetPart(part);
+	if (ss == nullptr || rows < 1 || columns < 1 || rows > 0x4000 || columns > 0x2bf)
+		return false;
+	const SSRange& used = ss->used;
+	if (used.from.a == 0 && used.from.b == 0 && used.to.a == rows - 1
+			&& used.to.b == columns - 1)
+		return false;
+	SSPart* edit = EditableSpreadsheetPart(part);
+	edit->used.from = CellID{0, 0};
+	edit->used.to = CellID{uint16_t(rows - 1), uint16_t(columns - 1)};
+	return true;
+}
+
 } // namespace gobe

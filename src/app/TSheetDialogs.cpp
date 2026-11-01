@@ -1164,4 +1164,55 @@ TDialogGetTransparent::ItemHit(int32 index, BMessage* message)
 	return TDialog::ItemHit(index, message);
 }
 
+
+TDialogSSDocSize::TDialogSSDocSize(BLooper* window, int32 rows, int32 columns,
+		int32 minRows, int32 minColumns)
+	:
+	TDialog(61, 61, 'SPRD', NULL, &GobeResources::Part("Spreadsheet")),
+	fWindow(window),
+	fSize{rows, columns},
+	fMinimum{minRows, minColumns}
+{
+}
+
+
+void
+TDialogSSDocSize::Init()
+{
+	SetTextItem(2, std::to_string(fSize[0]).c_str());
+	SetTextItem(3, std::to_string(fSize[1]).c_str());
+	MakeFocusItem(2);
+}
+
+
+// TDialogSSDocSize::ItemHit: OK takes rows from the cells in use to 16383
+// and columns to 702 (the original's alert had no numbers)
+bool
+TDialogSSDocSize::ItemHit(int32 index, BMessage* message)
+{
+	if (index == 0) {
+		const int32 maximum[2] = {0x3fff, 0x2be};
+		int32 size[2];
+		for (int32 i = 0; i < 2; i++) {
+			BString text = TextItem(2 + i);
+			char* end;
+			long value = strtol(text.String(), &end, 10);
+			if (end == text.String() || value < fMinimum[i] || value > maximum[i]) {
+				BString alert;
+				alert.SetToFormat(GobeResources::IndexString(6, 13).String(),
+					int(fMinimum[i]), int(maximum[i]));
+				(new BAlert("", alert.String(), "OK"))->Go(NULL);
+				MakeFocusItem(2 + i);
+				return true;
+			}
+			size[i] = int32(value);
+		}
+		BMessage set('sM21');
+		set.AddInt32("Rows", size[0]);
+		set.AddInt32("Cols", size[1]);
+		fWindow->PostMessage(&set);
+	}
+	return TDialog::ItemHit(index, message);
+}
+
 } // namespace gobe

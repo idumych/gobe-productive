@@ -168,6 +168,17 @@ struct Document {
 	uint32_t PagesAcrossCount() const;
 	bool TitlePage(size_t part) const;
 	bool SetDocumentSize(size_t part, uint32_t across, bool titlePage);
+	// for a drawing (TPartGR::GetPages, TGRSetDocSizeCommand with TPartGR::
+	// SetPages): the pages its size spans across and down (the size less a
+	// point over the first sheet's printable size, rounded up; at least 1),
+	// and setting them: the size becomes the printable size times the
+	// pages, the paged root as many pages across and pages in all
+	// (TPart::NewDataSize). False if nothing changed.
+	bool DrawingPages(size_t part, uint32_t& across, uint32_t& down) const;
+	bool SetDrawingPages(size_t part, uint32_t across, uint32_t down);
+	// for a spreadsheet (TSSSetDocSizeCommand::SetAndSave): the used range
+	// becomes rows by columns from A1. False if nothing changed.
+	bool SetSheetSize(size_t part, int rows, int columns);
 	// Document > Insert Header / Insert Footer (TDocHeaderFooterCommand;
 	// `which` 0 header, 1 footer): the sheet's header or footer part, -1 if
 	// none; inserting makes a new text part in a paragraph style based on

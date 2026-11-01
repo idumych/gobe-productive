@@ -4,6 +4,7 @@
 #include <stdlib.h>
 
 #include <algorithm>
+#include <cmath>
 #include <vector>
 #include <string.h>
 
@@ -39,6 +40,7 @@
 #include "GobeResources.h"
 #include "TDialog.h"
 #include "TDocumentDialogs.h"
+#include "TDrawDialogs.h"
 #include "TRecentDocs.h"
 #include "TDocView.h"
 #include "TPageView.h"
@@ -1120,6 +1122,89 @@ TDocWindow::MessageReceived(BMessage* message)
 	}
 	// Document > Document Size… (the main part's HandleMessage: for text,
 	// TWPPart: the dialog, then TWPSetDocSizeCmd, STR# 3, 12)
+	// (drawings: TPartGR, TDialogGRDocSize, TGRSetDocSizeCommand;
+	// spreadsheets: TPartSS, TDialogSSDocSize, TSSSetDocSizeCommand;
+	// presentations: TPartPR, TDialogPRDocSize, TPRSetDocSizeCommand,
+	// STR# 11001, 13 of Parts/Presentation)
+	if (message->what == 'sM21' && fPages != NULL && fDocument != NULL
+			&& fDocument->presentationPart >= 0) {
+		size_t part = size_t(fDocument->presentationPart);
+		const GRPart* gr = fDocument->GraphicsPart(part);
+		if (gr == NULL)
+			return;
+		int32 width, height;
+		if (message->FindInt32("Width", &width) != B_OK
+				|| message->FindInt32("Height", &height) != B_OK) {
+			(new TDialogPRDocSize(this, int32(roundf(gr->size[0])),
+				int32(roundf(gr->size[1]))))->RunDialog();
+			return;
+		}
+		if (float(width) == gr->size[0] && float(height) == gr->size[1])
+			return;
+		fPages->fUndo.BeginDocument(*fDocument, IndexString(GobeResources::Part("Presentation"),
+			11001, 13).c_str(), fPages->CurrentViewState());
+		GRPart* edit = fDocument->EditableGraphicsPart(part);
+		edit->size[0] = float(width);
+		edit->size[1] = float(height);
+		fPages->GeometryChanged();
+		PostMessage(kMsgDocumentChanged);
+		return;
+	}
+	if (message->what == 'sM21' && fPages != NULL && fDocument != NULL
+			&& fDocument->MainPart() >= 0
+			&& fDocument->GraphicsPart(size_t(fDocument->MainPart())) != NULL) {
+		size_t main = size_t(fDocument->MainPart());
+		float across, down;
+		if (message->FindFloat("Width", &across) != B_OK
+				|| message->FindFloat("Height", &down) != B_OK) {
+			uint32_t pages[2];
+			if (fDocument->DrawingPages(main, pages[0], pages[1]))
+				(new TDialogGRDocSize(this, float(pages[0]), float(pages[1])))->RunDialog();
+			return;
+		}
+		fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 12).String(),
+			fPages->CurrentViewState());
+		if (fDocument->SetDrawingPages(main, uint32_t(across), uint32_t(down))) {
+			fPages->GeometryChanged();
+			PostMessage(kMsgDocumentChanged);
+		}
+		return;
+	}
+	if (message->what == 'sM21' && fPages != NULL && fDocument != NULL
+			&& fDocument->MainPart() >= 0
+			&& fDocument->SpreadsheetPart(size_t(fDocument->MainPart())) != NULL) {
+		size_t main = size_t(fDocument->MainPart());
+		const SSPart* ss = fDocument->SpreadsheetPart(main);
+		int32 rows, columns;
+		if (message->FindInt32("Rows", &rows) != B_OK
+				|| message->FindInt32("Cols", &columns) != B_OK) {
+			// at least the cells in use (TPartSS::PrintRange)
+			int32 minRows = 1, minColumns = 1;
+			for (const SSCell& cell : ss->cells) {
+				minRows = std::max(minRows, int32(cell.id.a) + 1);
+				minColumns = std::max(minColumns, int32(cell.id.b) + 1);
+			}
+			(new TDialogSSDocSize(this, ss->used.to.a - ss->used.from.a + 1,
+				ss->used.to.b - ss->used.from.b + 1, minRows, minColumns))->RunDialog();
+			return;
+		}
+		fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 12).String(),
+			fPages->CurrentViewState());
+		if (fDocument->SetSheetSize(main, rows, columns)) {
+			// a selection past the new end goes back to A1
+			auto& sel = fPages->fSelectedCell;
+			if (sel.active && sel.part == main
+					&& (std::max(sel.row, sel.anchorRow) >= rows
+						|| std::max(sel.column, sel.anchorColumn) >= columns)) {
+				sel.row = sel.column = sel.anchorRow = sel.anchorColumn = 0;
+				sel.kind = SelectionKind::cells;
+				sel.extra.clear();
+			}
+			fPages->GeometryChanged();
+			PostMessage(kMsgDocumentChanged);
+		}
+		return;
+	}
 	if (message->what == 'sM21') {
 		if (fPages == NULL || fDocument == NULL || fDocument->PagePart() < 0
 				|| fDocument->MainPart() < 0

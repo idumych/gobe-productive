@@ -142,11 +142,19 @@ GraphicsPart(uint32_t self = kGraphicsPart, uint32_t page = kPagePart, bool main
 	uint32_t id = 2)
 {
 	// TPartGR: the grid, the drawing's size, one empty layer "Layer 1", one
-	// view "View 1" showing it (as in the documents)
+	// view "View 1" showing it (as in the documents). A drawing document's
+	// is one page's printable area (TPartGR::SetPages, as GobeNewsletter
+	// and TheWidget have it); a sheet's drawing is 1e6 square.
 	DocWriter w;
 	WritePartHeader(w, Sig("GRFX"), 2, id, 0);
 	w.Sig(Sig("GRAP"));
-	w.Bytes(Hex("00000000" "41100000" "0000" "4974240049742400" "00000000000000000000000000000000" "00"));
+	w.Bytes(Hex("00000000" "41100000" "0000"));
+	if (main) {
+		w.Float(kTextWidth);
+		w.Float(kTextHeight);
+	} else
+		w.Bytes(Hex("4974240049742400"));
+	w.Bytes(Hex("00000000000000000000000000000000" "00"));
 	w.Sig(Sig("lyr+"));
 	w.UInt32(1);
 	w.String("Layer 1");

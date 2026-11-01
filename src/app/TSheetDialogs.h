@@ -302,6 +302,25 @@ private:
 	SSRange fKey;
 };
 
+// Document > Document Size… for a spreadsheet (TDialogSSDocSize, DIAL/Item
+// 61 of Parts/Spreadsheet): the rows (2; from the cells in use to 16383)
+// and columns (3; to 702), else STR# 6, 13; OK sends `window` 'sM21' with
+// "Rows" and "Cols".
+class TDialogSSDocSize : public TDialog {
+public:
+	TDialogSSDocSize(BLooper* window, int32 rows, int32 columns, int32 minRows,
+		int32 minColumns);
+
+protected:
+	virtual void Init();
+	virtual bool ItemHit(int32 index, BMessage* message);
+
+private:
+	BLooper* fWindow;
+	int32 fSize[2];
+	int32 fMinimum[2];
+};
+
 } // namespace gobe
 
 #endif
