@@ -64,6 +64,7 @@
 #include "TSharedDocument.h"
 #include "TLexiconDialogs.h"
 #include "TStylesEdit.h"
+#include "TPresentation.h"
 #include "TTearOffs.h"
 #include "InlineParts.h"
 #include "Find.h"
@@ -149,7 +150,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	// the floaters' subsets take the new window (TFloaterMgr 'sE05')
 	std::vector<BWindow*> floaters = TearOffWindows();
 	for (BWindow* window : {(BWindow*)TDialogHistory::Open(),
-			(BWindow*)TDialogStylesEdit::Open(), (BWindow*)TDialogLayers::Open()})
+			(BWindow*)TDialogStylesEdit::Open(), (BWindow*)TDialogLayers::Open(),
+			(BWindow*)TDialogPRNavigate::Open()})
 		floaters.push_back(window);
 	for (BWindow* floater : floaters) {
 		if (floater == NULL)
@@ -158,8 +160,15 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		add.AddPointer("window", this);
 		floater->PostMessage(&add);
 	}
+	// (the part menus follow the document's kind)
+	fDocument = document;
 	TMenuBar* menuBar = InstallBaseMenus();
 	InstallPartMenus();
+	// TPartPR::Read: a presentation opens the Presentation window, unless
+	// it's open
+	if (document != NULL && document->presentationPart >= 0
+			&& TDialogPRNavigate::Open() == NULL)
+		PostMessage('PR0D');
 	// a test aid, not the original's: every DIAL resource, with
 	// GOBE_DEBUG_MENUS set
 	if (getenv("GOBE_DEBUG_MENUS") != NULL)
@@ -194,8 +203,10 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			// (a drawing document: the FormatBar for its shapes' inks, the
 			// PartBar for its alignments and arrows)
 			int mainPart = document->MainPart();
+			// (a presentation is a drawing too: TPartPR is a TPartGR)
 			bool drawing = mainPart >= 0
-				&& document->parts.parts[size_t(mainPart)].kind == Sig("GRFX");
+				&& (document->parts.parts[size_t(mainPart)].kind == Sig("GRFX")
+					|| document->parts.parts[size_t(mainPart)].kind == Sig("PRES"));
 			if (text || cells || drawing) {
 				fFormatBar = new TFormatBar(pages);
 				pages->fFormatBar = fFormatBar;
@@ -216,8 +227,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			// the ToolBar (Window > Show ToolBar): shown at first in drawings
 			fToolBar = new TToolBar(pages);
 			pages->fToolBar = fToolBar;
-			int main = document->MainPart();
-			if (main < 0 || document->parts.parts[size_t(main)].kind != Sig("GRFX"))
+			if (!drawing)
 				fToolBar->Hide();
 			// the graphics rulers (TNormalDocWinHelper: TGRRuler 13 and 14,
 			// hidden at first)
@@ -431,6 +441,8 @@ TDocWindow::InstallPartMenus()
 		drawing = fPages->ShapesSelected() || fPages->SelectedFrame() != NULL || (main >= 0
 			&& fDocument->parts.parts[size_t(main)].kind == Sig("GRFX"));
 	}
+	if (fDocument != NULL && fDocument->presentationPart >= 0 && !sheet)
+		drawing = true;
 	if (!fPartMenus.empty() && sheet == fSheetMenus && drawing == fDrawingMenus)
 		return;
 	fDrawingMenus = drawing;
@@ -444,6 +456,11 @@ TDocWindow::InstallPartMenus()
 		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
 		fPartMenus.push_back(new TMenu(52, resources));
 		fPartMenus.push_back(new TMenu(53, resources));
+	} else if (fDocument != NULL && fDocument->presentationPart >= 0) {
+		// TPartPR::InstallMenus: the drawing's, then Presentation (MENU
+		// 11001 of the Presentation part)
+		fPartMenus.push_back(new TMenu(50));
+		fPartMenus.push_back(new TMenu(11001, GobeResources::Part("Presentation")));
 	} else if (drawing)
 		fPartMenus.push_back(new TMenu(50));
 	else
@@ -511,10 +528,229 @@ TDocWindow::MakeDialogsMenu()
 }
 
 
+// TPartPR::HandleMessage: the Presentation window's commands, each a step
+// of the history named by STR# 11001 of the Presentation part (slides and
+// layers counted from 0; "layer" -1 is the slide itself)
+bool
+TDocWindow::PresentationCommand(BMessage* message)
+{
+	if (fDocument == NULL || fPages == NULL || fDocument->presentationPart < 0)
+		return false;
+	const ResourceFile& strings = GobeResources::Part("Presentation");
+	Document& doc = *fDocument;
+	int32 slide = message->GetInt32("slide", doc.currentSlide);
+	int32 layer = message->GetInt32("layer", -1);
+	const char* name = message->GetString("name", "");
+	auto begin = [&](int label) {
+		fPages->fUndo.BeginDocument(doc, IndexString(strings, 11001, label).c_str(),
+			fPages->CurrentViewState());
+	};
+	auto done = [&]() {
+		doc.SyncSlides();
+		doc.ComputeHiddenFrames();
+		fPages->GeometryChanged();
+		PostMessage(kMsgDocumentChanged);
+		RefreshPresentation();
+	};
+	// TPartPR::HandleMessage's alerts: STR# 11002, 6 (the last layer of a
+	// slide) and 7 (a layer in several slides)
+	auto lastLayer = [&](int32 k) {
+		if (doc.SlideLayers(size_t(k)).size() > 1)
+			return false;
+		// (SimpleAlert)
+		(new BAlert("Alert", IndexString(strings, 11002, 6).c_str(),
+			GobeResources::IndexString(2, 0).String()))->Go(NULL);
+		return true;
+	};
+	switch (message->what) {
+		case 'PR04':	// New Slide (TPRNewSlideCommand)
+		{
+			char layerName[256] = "";
+			if (message->GetBool("new layer", false)) {
+				const GRPart* gr = doc.PresentationGraphics();
+				snprintf(layerName, sizeof layerName, IndexString(strings, 11002, 4).c_str(),
+					int(gr != NULL ? gr->layers.size() : 0));
+			}
+			begin(7);
+			doc.NewSlide(size_t(std::max<int32>(0, slide)), name, layerName,
+				message->GetBool("share background", false));
+			done();
+			return true;
+		}
+		case 'PR0A':	// Duplicate Slide or Layer
+		{
+			std::string error;
+			if (layer < 0) {
+				char layerName[256] = "";
+				if (message->GetBool("new layer", false)) {
+					const GRPart* gr = doc.PresentationGraphics();
+					snprintf(layerName, sizeof layerName,
+						IndexString(strings, 11002, 4).c_str(),
+						int(gr != NULL ? gr->layers.size() : 0));
+				}
+				begin(12);
+				doc.DuplicateSlide(size_t(slide), name, message->GetBool("duplicate layers", false),
+					layerName, message->GetBool("share background", false), error);
+			} else {
+				begin(11);
+				doc.DuplicateSlideLayer(size_t(slide), size_t(layer), error);
+			}
+			done();
+			return true;
+		}
+		case 'PR08':	// Delete Slide or Layer
+			if (layer < 0) {
+				if (doc.slides.size() < 2)
+					return true;
+				begin(5);
+				doc.RemoveSlide(size_t(slide));
+				doc.SetCurrentSlide(size_t(std::min<int32>(slide, int32(doc.slides.size()) - 1)));
+			} else {
+				if (lastLayer(slide))
+					return true;
+				int part = doc.SlideLayerPart(size_t(slide), size_t(layer));
+				if (part < 0)
+					return true;
+				if (doc.PresentationLayerUses(size_t(part)) > 1) {
+					BAlert* alert = new BAlert("Alert", IndexString(strings, 11002, 7).c_str(),
+						GobeResources::IndexString(2, 1).String(),
+						GobeResources::IndexString(2, 0).String());
+					if (alert->Go() != 1)
+						return true;
+				}
+				begin(15);
+				doc.DeletePresentationLayer(size_t(part));
+				doc.SetCurrentSlide(size_t(slide));
+			}
+			done();
+			return true;
+		case 'PR09':	// Remove Layer (from the slide)
+			if (layer < 0 || lastLayer(slide))
+				return true;
+			begin(4);
+			doc.SlideRemoveLayer(size_t(slide), size_t(layer));
+			doc.SetCurrentSlide(size_t(slide));
+			done();
+			return true;
+		case 'PR05':	// Insert Layer (a layer of another slide shared)
+		{
+			int32 part = message->GetInt32("index", -1);
+			begin(6);
+			if (part >= 0 && doc.SlideAddLayer(size_t(slide), size_t(part),
+					size_t(message->GetInt32("position", -1))))
+				doc.SetCurrentSlide(size_t(slide));
+			done();
+			return true;
+		}
+		case 'PR0C':	// Rename Slide
+			if (layer >= 0 || name[0] == '\0')
+				return true;
+			begin(2);
+			doc.RenameSlide(size_t(slide), name);
+			done();
+			return true;
+		case 'PR0G':	// New Layer
+			if (name[0] == '\0')
+				return true;
+			begin(8);
+			doc.NewSlideLayer(size_t(slide), layer < 0 ? size_t(-1) : size_t(layer), name);
+			done();
+			return true;
+		case 'PR0E':	// a slide or a layer moved (dropped in the list)
+		{
+			int32 toSlide = message->GetInt32("slide", 1, -1);
+			int32 toLayer = message->GetInt32("layer", 1, -1);
+			if (layer < 0 && toSlide >= 0) {
+				begin(9);
+				if (doc.MoveSlide(size_t(slide), size_t(toSlide)))
+					doc.SetCurrentSlide(size_t(toSlide));
+			} else if (layer >= 0 && toSlide == slide && toLayer >= 0) {
+				begin(10);
+				doc.MoveSlideLayer(size_t(slide), size_t(layer), size_t(toLayer));
+			} else if (layer >= 0 && toSlide >= 0) {
+				// dropped on another slide: shared there (TPRInsertLayerCommand)
+				int part = doc.SlideLayerPart(size_t(slide), size_t(layer));
+				begin(6);
+				if (part >= 0 && doc.SlideAddLayer(size_t(toSlide), size_t(part),
+						toLayer < 0 ? size_t(-1) : size_t(toLayer)))
+					doc.SetCurrentSlide(size_t(toSlide));
+			} else
+				return true;
+			done();
+			return true;
+		}
+		case 'PR03':	// Set Transition (TPRSetTransitionCommand)
+			begin(3);
+			// ("refcon" the transition's type, "transition" its options)
+			doc.SetSlideTransition(size_t(slide), uint32(message->GetInt32("refcon", 0)),
+				uint32(message->GetInt32("transition", 0)));
+			done();
+			return true;
+		case 'PR06':	// Auto-start
+			begin(0);
+			doc.SetPresentationFlag(false, !doc.presentation.autoStart);
+			done();
+			return true;
+		case 'PR07':	// Cursor
+			begin(1);
+			doc.SetPresentationFlag(true, !doc.presentation.cursor);
+			done();
+			return true;
+		case 'sM4H':	// Rename Layer (TPartGR's, the part layer as "index")
+		{
+			int32 part = message->GetInt32("index", -1);
+			if (part < 0 && layer >= 0)
+				part = doc.SlideLayerPart(size_t(slide), size_t(layer));
+			const GRPart* gr = doc.PresentationGraphics();
+			if (gr == NULL || part < 0 || size_t(part) >= gr->layers.size())
+				return true;
+			if (name[0] == '\0' && !message->HasString("name")) {
+				(new TDialogLayerName(this, 'sM4H', part,
+					GobeResources::IndexString(1101, 31).String(),
+					gr->layers[size_t(part)].name.c_str()))->RunDialog();
+				return true;
+			}
+			fPages->fUndo.BeginDocument(doc, GobeResources::IndexString(1101, 31).String(),
+				fPages->CurrentViewState());
+			doc.RenamePresentationLayer(size_t(part), name);
+			done();
+			return true;
+		}
+		case 'PR02':	// Switch Layer (the slide's layer chosen in the list)
+		case 'PR0H':	// a slide chosen
+			if (slide >= 0 && slide < int32(doc.slides.size())) {
+				// (TPRSwitchLayerCommand: TPartPR::ActivateLayer)
+				doc.ActivateSlideLayer(size_t(slide), layer);
+				// (not a change of the document: no history step, no
+				// "changed" mark)
+				fPages->SlideShownChanged();
+				RefreshPresentation();
+			}
+			return true;
+	}
+	return false;
+}
+
+
 void
 TDocWindow::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+		// Presentation > Show Presentation Window… (TPartPR 'PR0D': opened,
+		// or brought to the front)
+		case 'PR0D':
+			if (TDialogPRNavigate* navigate = TDialogPRNavigate::Open())
+				navigate->Activate();
+			else if (fDocument != NULL && fDocument->presentationPart >= 0)
+				(new TDialogPRNavigate)->RunDialog();
+			return;
+		case 'PR04': case 'PR0A': case 'PR08': case 'PR09': case 'PR05': case 'PR0C':
+		case 'PR0G': case 'PR0E': case 'PR03': case 'PR06': case 'PR07': case 'PR02':
+		case 'PR0H':
+		case 'sM4H':
+			if (PresentationCommand(message))
+				return;
+			break;
 		case kMsgDocumentChanged:
 			if (!fShared->modified) {
 				fShared->modified = true;
@@ -527,6 +763,7 @@ TDocWindow::MessageReceived(BMessage* message)
 			TDialogStylesEdit::Refresh();
 			TDialogLayers::Refresh();
 			RefreshTearOffs();
+			TDialogPRNavigate::Refresh();
 			return;
 		// another window of the document changed it (laid out anew in
 		// DispatchMessage) or its windows' titles changed
@@ -1366,6 +1603,7 @@ TDocWindow::MessageReceived(BMessage* message)
 		PostMessage(kMsgDocumentChanged);
 		TDialogLayers::Refresh();
 		RefreshTearOffs();
+		TDialogPRNavigate::Refresh();
 		return;
 	}
 	if (message->what == 'sM24') {
@@ -2010,6 +2248,7 @@ TDocWindow::WindowActivated(bool active)
 		TDialogStylesEdit::Refresh();
 		TDialogLayers::Refresh();
 		RefreshTearOffs();
+		TDialogPRNavigate::Refresh();
 	}
 }
 
@@ -2254,6 +2493,48 @@ TDocWindow::TearOffState(struct TearOffState& state) const
 		state.faces = text.faceFlags;
 	}
 	GetStylesSnapshot(state.styles);
+}
+
+void
+TDocWindow::PresentationState(struct PresentationState& state) const
+{
+	if (fDocument == NULL || fDocument->presentationPart < 0)
+		return;
+	const Document& doc = *fDocument;
+	const GRPart* gr = doc.PresentationGraphics();
+	if (gr == NULL)
+		return;
+	state.presentation = true;
+	for (const GRLayer& layer : gr->layers)
+		state.partLayers.push_back(layer.name);
+	for (size_t k = 0; k < doc.slides.size(); k++) {
+		PresentationState::SlideRow row;
+		row.name = doc.SlideName(k);
+		std::vector<bool> in(gr->layers.size(), false);
+		for (size_t l = 0; l < doc.SlideLayers(k).size(); l++) {
+			int part = doc.SlideLayerPart(k, l);
+			if (part >= 0 && size_t(part) < gr->layers.size()) {
+				row.layers.push_back(gr->layers[size_t(part)].name);
+				in[size_t(part)] = true;
+			}
+		}
+		row.collapsed = doc.slides[k].collapsed;
+		row.transition = doc.slides[k].transition;
+		row.options = doc.slides[k].options;
+		state.slides.push_back(row);
+		state.inSlide.push_back(in);
+	}
+	state.currentSlide = doc.currentSlide;
+	state.currentLayer = int32(doc.presentation.layer);
+	state.autoStart = doc.presentation.autoStart;
+	state.cursor = doc.presentation.cursor;
+}
+
+
+void
+TDocWindow::RefreshPresentation()
+{
+	TDialogPRNavigate::Refresh();
 }
 
 } // namespace gobe

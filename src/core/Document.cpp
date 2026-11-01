@@ -169,19 +169,21 @@ LoadDocumentBytes(std::vector<uint8_t> data, Document& doc, std::string& error)
 			GRPart skip;
 			ReadGRPart(pa, skip);
 			pa.CheckSig(Sig("prp+"));
-			for (int k = 0; k < 3; k++)
-				pa.UInt32();
-			pa.Bool();
-			pa.Bool();
+			Document::PresentationSettings settings;
+			settings.slide = pa.UInt32();
+			settings.layer = pa.UInt32();
+			settings.scroll = pa.UInt32();
+			settings.autoStart = pa.Bool();
+			settings.cursor = pa.Bool();
 			uint32_t count = pa.UInt32();
 			std::vector<Document::Slide> slides;
 			for (uint32_t k = 0; k < count; k++) {	// TSlide::Read
 				Document::Slide slide;
 				slide.view = pa.UInt32();
-				slide.id = pa.UInt32();
+				slide.layers = pa.UInt32();
 				slide.transition = pa.UInt32();
-				pa.UInt32();
-				pa.Bool();
+				slide.options = pa.UInt32();
+				slide.collapsed = pa.Bool();
 				if (slide.view < gr.views.size())
 					slide.name = gr.views[slide.view].name;
 				slides.push_back(slide);
@@ -189,6 +191,8 @@ LoadDocumentBytes(std::vector<uint8_t> data, Document& doc, std::string& error)
 			pa.CheckSig(Sig("prp-"));
 			doc.presentationPart = int(part);
 			doc.slides = std::move(slides);
+			doc.presentation = settings;
+			doc.presentationEnd = pa.Position();
 		} catch (const ArchiveError& x) {
 			doc.warnings.push_back("PRES part " + std::to_string(part) + ": " + x.what());
 		}
@@ -985,7 +989,15 @@ Document::Save(const std::string& to, std::string& error)
 				file.header.version.values[0]);
 			out.assign(record.begin(), record.begin() + long(gr->dataStart));
 			out.insert(out.end(), data.begin(), data.end());
-			out.insert(out.end(), record.begin() + long(gr->dataEnd), record.end());
+			size_t rest = gr->dataEnd;
+			if (int(part) == presentationPart && presentationEnd > gr->dataEnd
+					&& presentationEnd <= record.size()) {
+				// TPartPR::Write: the slides after the drawing
+				std::vector<uint8_t> slides = WritePresentationBlock();
+				out.insert(out.end(), slides.begin(), slides.end());
+				rest = presentationEnd;
+			}
+			out.insert(out.end(), record.begin() + long(rest), record.end());
 		}
 		else
 			out = record;

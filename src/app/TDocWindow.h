@@ -98,6 +98,16 @@ public:
 	void GetStylesSnapshot(StylesSnapshot& snapshot) const;
 	// what the tear-off floaters show (TTearOffs.h; locked)
 	void TearOffState(struct TearOffState& state) const;
+	// what the Presentation window shows (TPresentation.h; locked)
+	void PresentationState(struct PresentationState& state) const;
+
+private:
+	// TPartPR::HandleMessage (the Presentation window's 'PR..' commands)
+	bool PresentationCommand(BMessage* message);
+	// the Presentation window again (TPartPR::UpdateFloater)
+	void RefreshPresentation();
+
+public:
 
 	// Called from TPageView after text style changes to update marks.
 	// `family` is the current font family (empty = default).

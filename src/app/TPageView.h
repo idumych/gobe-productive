@@ -98,6 +98,9 @@ public:
 	void ImportStyles(BMessage* message);
 	// the page geometry changed (Page Setup, Margins): frames, layout
 	void GeometryChanged();
+	// the slide shown or its layers switched (TPartPR::SetCurrentSlide,
+	// ActivateLayer): laid out and drawn again, the document not changed
+	void SlideShownChanged();
 	// TPartGR::ValidateSelection: the shapes selected on layers that can't
 	// be clicked any more (hidden, not editable) deselected; all of them
 	// with `all` (a layer added or deleted)

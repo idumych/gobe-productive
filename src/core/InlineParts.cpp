@@ -656,6 +656,80 @@ NewWordPart(Document& doc, std::string& error)
 } // namespace
 
 
+int
+ClonePart(Document& doc, size_t part, std::string& error)
+{
+	if (part >= doc.parts.parts.size() || part >= doc.tails.size() || !doc.tailRead[part]) {
+		error = "no such part";
+		return -1;
+	}
+	PartRecord source = doc.parts.parts[part];
+	std::vector<uint8_t> record = source.data;
+	if (record.size() < 32) {
+		error = "a part too short to copy";
+		return -1;
+	}
+	// TPart::TPart: an id of its own (and, for text and pictures, a
+	// selection of its own)
+	uint32_t id = NextPartId(doc);
+	for (int i = 0; i < 4; i++)
+		record[16 + i] = uint8_t(id >> (24 - 8 * i));
+	size_t clone = doc.parts.parts.size();
+	if (source.kind == Sig("WORD") || source.kind == Sig("BITS")) {
+		uint32_t selection = AddSelection(doc, source.kind, uint32_t(clone));
+		for (int i = 0; i < 4; i++)
+			record[28 + i] = uint8_t(selection >> (24 - 8 * i));
+	}
+	if (!AddRecord(doc, source.kind, std::move(record), error))
+		return -1;
+	// its contents as the original's were read (the record is the same)
+	if (const WPPart* wp = doc.WordPart(part))
+		doc.wordParts.emplace_back(clone, WPPart(*wp));
+	else if (const GRPart* gr = doc.GraphicsPart(part))
+		doc.graphicsParts.emplace_back(clone, GRPart(*gr));
+	else if (const IMPart* im = doc.ImagePart(part))
+		doc.imageParts.emplace_back(clone, IMPart(*im));
+	else if (const SSPart* ss = doc.SpreadsheetPart(part))
+		doc.spreadsheetParts.emplace_back(clone, SSPart(*ss));
+	else if (const ChartPart* chart = doc.Chart(part))
+		doc.chartParts.emplace_back(clone, gobe::ChartPart(*chart));
+	else if (const TablePart* table = doc.Table(part))
+		doc.tableParts.emplace_back(clone, gobe::TablePart(*table));
+	doc.dirtyParts.insert(clone);
+	return int(clone);
+}
+
+
+bool
+CopyLayerShapes(Document& doc, size_t drawing, size_t from, size_t to, std::string& error)
+{
+	const GRPart* gr = doc.GraphicsPart(drawing);
+	if (gr == nullptr || from >= gr->layers.size() || to >= gr->layers.size()) {
+		error = "no such layer";
+		return false;
+	}
+	std::vector<Shape> shapes = gr->layers[from].shapes;
+	for (Shape& shape : shapes) {
+		if (shape.kind == Sig("FRAM")) {
+			// TPartGR::InsertChildFrame of a copy of its part
+			int clone = ClonePart(doc, shape.frame[0], error);
+			if (clone < 0)
+				return false;
+			shape.frame[0] = uint32_t(clone);
+			if (gobe::Frame* frame = MutableFrame(doc, shape.frame)) {
+				frame->shape[1] = 0;
+				frame->shape[2] = NextShapeId(doc, drawing);
+			}
+		} else
+			shape.values[2] = NextShapeId(doc, drawing);
+		GRPart* edit = doc.EditableGraphicsPart(drawing);
+		edit->layers[to].shapes.push_back(shape);
+	}
+	doc.ComputeHiddenFrames();
+	return true;
+}
+
+
 bool
 AddFrameShape(Document& doc, size_t drawing, size_t layer, const uint32_t pointer[3])
 {

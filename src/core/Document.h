@@ -52,18 +52,94 @@ struct Document {
 	std::vector<std::pair<size_t, int>> hiddenFrames;	// see FrameHidden
 
 	// A presentation (TPartPR::Read: 'prp+' ... the slides 'prp-'); each
-	// slide is shown by switching the part's portal to the slide's view.
+	// slide is shown by switching the part's portal to the slide's view. A
+	// slide's layers are its view's layer infos with flag 4 on, in order
+	// (TSlide::Layer); its name is the view's (TSlide::Name).
 	struct Slide {
 		uint32_t view;				// index into the part's graphics views
-		uint32_t id = 0;
+		uint32_t layers = 0;		// TSlide +0: how many layers it has
 		uint32_t transition = 0;	// TPartPRFactory::FindTransition
-		std::string name;			// the view's name
+		uint32_t options = 0;		// TSlide +0x14: the transition's options
+		bool collapsed = false;		// TSlide +0x18: its layers hidden in the list
+		std::string name;			// the view's name (kept in step with it)
+	};
+	// TPartPR +0xc0, +0xc4, +0xc8, +0xa9, +0xaa
+	struct PresentationSettings {
+		uint32_t slide = 0;			// the current slide
+		uint32_t layer = 0;			// the current layer
+		uint32_t scroll = 0;		// the Presentation window's list (ListScrollOrigin)
+		bool autoStart = false;		// Options > Auto-start
+		bool cursor = false;		// Options > Cursor (visible in the slide show)
 	};
 	int presentationPart = -1;
 	std::vector<Slide> slides;
+	PresentationSettings presentation;
+	size_t presentationEnd = 0;		// in the part's record, just after 'prp-'
 	int currentSlide = 0;
 	// shows slide `index` (recomputes the hidden frames)
 	void ShowSlide(int index);
+
+	// Presentation.cpp: the slides and their layers (TPartPR, TSlide and the
+	// TPR...Commands' work). Slide layers count from the slide's first
+	// (TSlide::Layer); part layers are the graphics part's.
+	const GRPart* PresentationGraphics() const;
+	std::string SlideName(size_t slide) const;
+	// the infos of the slide's view that are its layers, in order
+	std::vector<size_t> SlideLayers(size_t slide) const;
+	// TSlide::IDForLayer: the part layer of its layer `layer`, -1 if none;
+	// TSlide::IndexForLayer the other way
+	int SlideLayerPart(size_t slide, size_t layer) const;
+	int SlideLayerIndex(size_t slide, size_t partLayer) const;
+	// the slides' names and layer counts from their views again
+	void SyncSlides();
+	// TPartPR::SetCurrentSlide: its layers shown, all but the first (the
+	// background) editable unless it's alone, the last active; the portal
+	// shows its view
+	bool SetCurrentSlide(size_t slide);
+	// TPartPR::ActivateLayer: the slide current with its layer `layer`
+	// alone shown and edited, or (-1) all of them as SetCurrentSlide
+	bool ActivateSlideLayer(size_t slide, int layer);
+	// TSlide::TSlide: a slide named `name` with a view of its own (every
+	// layer, none in the slide), at `at`; its index
+	size_t AddSlide(size_t at, const std::string& name);
+	// TSlide::AddLayer: part layer `partLayer` into the slide before its
+	// layer `position` (after the last if past them); RemoveLayer: its
+	// layer `layer` out of it
+	bool SlideAddLayer(size_t slide, size_t partLayer, size_t position);
+	bool SlideRemoveLayer(size_t slide, size_t layer);
+	// TPartPR::RemoveSlide (with its view; not the last slide), moving one,
+	// TSlide::SetName (its view's name), SetTransition and SetOptions;
+	// false if nothing changed
+	bool RemoveSlide(size_t slide);
+	bool MoveSlide(size_t from, size_t to);
+	bool RenameSlide(size_t slide, const std::string& name);
+	bool SetSlideTransition(size_t slide, uint32_t type, uint32_t options);
+	// Options > Auto-start (`cursor` false) and Cursor
+	bool SetPresentationFlag(bool cursor, bool on);
+	// a layer of the presentation's drawing, in every view and no slide
+	// (TGRLayerNewOrDeleteCommand); deleted from every slide and view (not
+	// the last); renamed
+	size_t AddPresentationLayer(const std::string& name);
+	bool DeletePresentationLayer(size_t partLayer);
+	bool RenamePresentationLayer(size_t partLayer, const std::string& name);
+	// how many slides have the layer
+	int PresentationLayerUses(size_t partLayer) const;
+	// the TPR...Commands that do more than one of those (each ends on the
+	// slide, made current): New Slide (at `at`; the previous slide's
+	// background shared; `newLayer`, if named, added after), Duplicate
+	// Slide (after it; its layers, or copies of them with their shapes but
+	// the background when shared; `newLayer` when not copying), New Layer
+	// (after the slide's layer `after`), Duplicate Layer (a copy, CopyName,
+	// right after it) and moving a slide's layer
+	size_t NewSlide(size_t at, const std::string& name, const std::string& newLayer,
+		bool shareBackground);
+	size_t DuplicateSlide(size_t slide, const std::string& name, bool duplicateLayers,
+		const std::string& newLayer, bool shareBackground, std::string& error);
+	bool NewSlideLayer(size_t slide, size_t after, const std::string& name);
+	bool DuplicateSlideLayer(size_t slide, size_t layer, std::string& error);
+	bool MoveSlideLayer(size_t slide, size_t from, size_t to);
+	// TPartPR::Write's block, 'prp+' to 'prp-'
+	std::vector<uint8_t> WritePresentationBlock() const;
 	void ComputeHiddenFrames();
 	std::map<size_t, uint32_t> viewOverride;	// part -> view shown
 

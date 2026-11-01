@@ -599,7 +599,8 @@ TPartBar::Update()
 	// the drawing's: shapes selected, or a drawing with no text being typed
 	int main = doc.MainPart();
 	if (!text && (fPages->ShapesSelected()
-			|| (main >= 0 && doc.parts.parts[size_t(main)].kind == Sig("GRFX")))) {
+			|| (main >= 0 && (doc.parts.parts[size_t(main)].kind == Sig("GRFX")
+				|| doc.parts.parts[size_t(main)].kind == Sig("PRES"))))) {
 		if (!fDrawing)
 			BuildDrawing();
 		UpdateDrawing();

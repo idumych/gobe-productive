@@ -71,6 +71,16 @@ TextPosition InsertInlineFrame(Document& doc, size_t container, TextPosition at,
 // `drawing` isn't a drawing or the frame isn't there.
 bool AddFrameShape(Document& doc, size_t drawing, size_t layer, const uint32_t pointer[3]);
 
+// TPart::Clone: a copy of part `part` (its record with an id and, for text
+// and pictures, a selection of its own; its frames as they are), as the
+// last part; -1 with `error` if it can't be
+int ClonePart(Document& doc, size_t part, std::string& error);
+// TGRLayer::TGRLayer(const TGRLayer&): drawing `drawing`'s layer `from`'s
+// shapes copied onto its layer `to`, each with an id of its own, a frame's
+// part copied
+bool CopyLayerShapes(Document& doc, size_t drawing, size_t from, size_t to,
+	std::string& error);
+
 // The ToolBar's part tool and the Frame menu's parts (TPartGR::DragOut
 // with a part kind, TDocWindow::DoInsertFrame): a new part of `kind`
 // ('WORD' text, 'SPRD' a spreadsheet, 'GRFX' a drawing, 'TBLE' a 2 x 2

@@ -2704,6 +2704,15 @@ TPageView::GeometryChanged()
 }
 
 
+void
+TPageView::SlideShownChanged()
+{
+	Rebuild();
+	InvalidateLayout();
+	Invalidate();
+}
+
+
 BRect
 TPageView::PageArea(int32 index, BRect printable) const
 {
