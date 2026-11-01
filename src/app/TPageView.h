@@ -123,6 +123,12 @@ public:
 	// caret is in and the page it is on, in view coordinates; false if no
 	// text has the caret
 	bool RulerFrame(BRect& text, BRect& page) const;
+	// the graphics rulers (TGRRuler, TPartGR::GetRulerPosition): the main
+	// drawing's pages along its top row (`horizontal`) or down its first
+	// column, each from and to in the view's pixels as zoomed and scrolled;
+	// none in a document that isn't a drawing
+	void DrawingRulerSpans(bool horizontal,
+		std::vector<std::pair<float, float>>& spans) const;
 	// the ruler's changes to the selected paragraphs (TParFormatCmd): their
 	// tabs at `removeTabs` taken off, then `add` set; `newStep` starts an
 	// undo step called `label`
@@ -143,6 +149,8 @@ public:
 	void SetZoom(float zoom);
 	// the window's text ruler (updated as the view draws), or NULL
 	TWPRuler* fRuler = NULL;
+	// the graphics rulers (Window > Show Graphics Ruler): top, left
+	class TGRRuler* fGRRulers[2] = {NULL, NULL};
 	class TRibbon* fPartBar = NULL;
 	class TRibbon* fFormatBar = NULL;
 	class TEntryBar* fEntryBar = NULL;	// a spreadsheet's (TEntryBar)

@@ -135,6 +135,8 @@ private:
 	bool fDrawingMenus = false;	// the part menu is MENU 50 (Arrange)
 	void ShowActiveRibbon();
 	class TScaleSlider* fScaleSlider = NULL;
+	// the document's scroll view (TDocScrollView: the graphics rulers)
+	class TDocScrollView* fScroll = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
 	bool fCloseAfterSave = false;	// Save As chosen in the close alert
 public:

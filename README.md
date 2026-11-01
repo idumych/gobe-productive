@@ -7,7 +7,7 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-63-77-0.svg" alt="Port progress: 63 of 77 features done, 14 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-64-77-0.svg" alt="Port progress: 64 of 77 features done, 13 left (see Features)" width="720"></p>
 
 Not everything is ported yet: image editing, slide shows, editing tables
 and charts, a drawing's views and layers, and a few dialogs are still to
@@ -261,7 +261,7 @@ sizes, headings and options are saved with the document.
 | Views & Layers…: a drawing's views (New View, Delete View, Rename View…, switching between them) and layers (New Layer, Delete Layer, Rename Layer…, the active layer), each layer shown, editable, locked or printed per view; new shapes go on the active layer | next |
 | Context menus in drawings: on the page, Draw Grid, AutoGrid and Show or Hide Graphics Ruler; on a polygon or curve, Closed, Smooth, Unsmooth, Auto-Smooth, Add To Tool Bar and its handles' edits; on an arc, Closed, Start Angle… and Arc Angle…; on a round rectangle, Corner Radius…; on a group or frame, Ungroup and Open group; in Reshape, a point's Delete, Smooth, Unsmooth and Auto-Smooth Handle(s) and a control point's Delete Control(s) | next |
 | Document > Document Size… for drawings (pages across and down), spreadsheets (rows and columns) and presentations (the slide size, with a pop-up of screen sizes); a new drawing is one page, as the original's are | next |
-| The graphics ruler (Window > Show Graphics Ruler): a drawing's rulers along the top and left | not yet |
+| The graphics ruler (Window > Show Graphics Ruler, or the drawing's context menu): rulers along the top and left of a drawing, in the sheet's unit, numbered on from page to page, with the unit menu on the right button | next |
 
 ### Presentations
 

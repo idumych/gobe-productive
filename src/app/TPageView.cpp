@@ -6,6 +6,7 @@
 #include "TPreferences.h"
 #include "TPageBar.h"
 #include "TRibbon.h"
+#include "TGRRuler.h"
 #include "TWPRuler.h"
 
 #include <math.h>
@@ -2406,6 +2407,9 @@ TPageView::Draw(BRect updateRect)
 	PopState();
 	if (fRuler != NULL && !IsPrinting())
 		fRuler->Update();
+	for (TGRRuler* ruler : fGRRulers)
+		if (ruler != NULL && !IsPrinting())
+			ruler->Update();
 	if (fPartBar != NULL && !IsPrinting())
 		fPartBar->Update();
 	if (fFormatBar != NULL && !IsPrinting())
@@ -2712,6 +2716,36 @@ TPageView::PageArea(int32 index, BRect printable) const
 		return BRect(x, y, x + printable.Width(), y + printable.Height());
 	}
 	return BRect();
+}
+
+void
+TPageView::DrawingRulerSpans(bool horizontal,
+	std::vector<std::pair<float, float>>& spans) const
+{
+	spans.clear();
+	int main = fDocument.MainPart();
+	uint32_t across = 1, down = 1;
+	if (main < 0 || fBrowse || fDocument.GraphicsPart(size_t(main)) == nullptr
+			|| fDocument.parts.parts[size_t(main)].kind != Sig("GRFX")
+			|| !fDocument.DrawingPages(size_t(main), across, down))
+		return;
+	across = std::max<uint32_t>(1, fDocument.PagesAcrossCount());
+	std::vector<std::pair<int, std::pair<float, float>>> pages;
+	BRect bounds = Bounds();
+	for (const auto& f : fFrames) {
+		if (int(f.part) != main || f.page < 0)
+			continue;
+		uint32_t page = uint32_t(f.page);
+		if (horizontal ? page >= across : page % across != 0)
+			continue;
+		float from = horizontal ? f.x + fMargin - fBounds.left : f.y + fMargin - fBounds.top;
+		float length = horizontal ? f.width : f.height;
+		float scroll = horizontal ? bounds.left : bounds.top;
+		pages.push_back({f.page, {from * fZoom - scroll, (from + length) * fZoom - scroll}});
+	}
+	std::sort(pages.begin(), pages.end());
+	for (const auto& page : pages)
+		spans.push_back(page.second);
 }
 
 } // namespace gobe

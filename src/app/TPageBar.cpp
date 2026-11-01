@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "GobeResources.h"
+#include "TGRRuler.h"
 #include "TPageView.h"
 #include "TRibbon.h"
 
@@ -283,6 +284,61 @@ TDocScrollView::DoLayout()
 	fPageBar->ResizeTo(fPageBar->Bounds().Width(), frame.Height());
 	bar->MoveTo(frame.left + width, frame.top);
 	bar->ResizeTo(std::max(10.0f, frame.Width() - width), frame.Height());
+	if (!RulersShown())
+		return;
+	// the rulers' 16 pixels taken from the document and its vertical bar
+	float size = TGRRuler::kSize + 1;
+	BRect bounds = Bounds();
+	fRulers[0]->MoveTo(0, 0);
+	fRulers[0]->ResizeTo(bounds.Width(), size - 1);
+	fRulers[1]->MoveTo(0, size);
+	fRulers[1]->ResizeTo(size - 1, std::max(0.0f, frame.top - 1 - size));
+	if (BView* target = Target()) {
+		BRect area = target->Frame();
+		target->MoveTo(area.left + size, area.top + size);
+		target->ResizeTo(std::max(0.0f, area.Width() - size), std::max(0.0f,
+			area.Height() - size));
+	}
+	if (BScrollBar* vertical = ScrollBar(B_VERTICAL)) {
+		BRect area = vertical->Frame();
+		vertical->MoveTo(area.left, area.top + size);
+		vertical->ResizeTo(area.Width(), std::max(0.0f, area.Height() - size));
+	}
+}
+
+
+void
+TDocScrollView::SetRulers(BView* top, BView* left)
+{
+	fRulers[0] = top;
+	fRulers[1] = left;
+	AddChild(top);
+	AddChild(left);
+	top->Hide();
+	left->Hide();
+}
+
+
+bool
+TDocScrollView::RulersShown() const
+{
+	return fRulers[0] != NULL && !fRulers[0]->IsHidden();
+}
+
+
+void
+TDocScrollView::ShowRulers(bool show)
+{
+	if (fRulers[0] == NULL || show == RulersShown())
+		return;
+	for (BView* ruler : fRulers) {
+		if (show)
+			ruler->Show();
+		else
+			ruler->Hide();
+	}
+	DoLayout();
+	Invalidate();
 }
 
 } // namespace gobe

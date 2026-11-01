@@ -5,6 +5,7 @@
 // Spreadsheet range selection: shift-click, shift+arrows, mouse drag extend
 // the range; copy/cut/paste/clear/selectall work on ranges using
 // RangeInput/ClearRange/PasteInput from Editing.h.
+#include "TGRRuler.h"
 #include "TPageView.h"
 #include "TMenu.h"
 #include "TSheetDialogs.h"
@@ -4055,6 +4056,10 @@ TPageView::RunScript(const std::string& script, Document& document)
 					fflush(stdout);
 				}
 			}
+		} else if (command.compare(0, 8, "grruler ") == 0) {
+			for (TGRRuler* ruler : fGRRulers)
+				if (ruler != NULL)
+					ruler->RunScript(command.c_str() + 8);
 		} else if (command.compare(0, 6, "ruler ") == 0) {
 			if (fRuler != NULL)
 				fRuler->RunScript(command.substr(6));

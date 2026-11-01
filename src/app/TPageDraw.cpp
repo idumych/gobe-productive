@@ -8,6 +8,7 @@
 // Delete removes them; Arrange's Bring to Front, Send to Back, Move
 // Forward and Move Backward; the FormatBar's fill, pen and transparency.
 // Each change is one undo step (STR# 1101's labels).
+#include "TGRRuler.h"
 #include "TPageView.h"
 #include "TDrawDialogs.h"
 #include "TFormatBar.h"
@@ -1541,9 +1542,11 @@ TPageView::DrawingContextMenu(BPoint where)
 		BMenuItem* autoGrid = new BMenuItem(string(1102, 5).String(), new BMessage('sM4E'));
 		autoGrid->SetMarked(gr->gridFlags[0]);
 		menu->AddItem(autoGrid);
-		// (the graphics ruler isn't ported: its item off)
-		BMenuItem* ruler = new BMenuItem(string(1102, 7).String(), new BMessage('sMF8'));
-		ruler->SetEnabled(false);
+		// Hide (6) or Show (7) Graphics Ruler
+		bool rulers = fGRRulers[0] != NULL && !fGRRulers[0]->IsHidden();
+		BMenuItem* ruler = new BMenuItem(string(1102, rulers ? 6 : 7).String(),
+			new BMessage('sMF8'));
+		ruler->SetEnabled(fGRRulers[0] != NULL);
 		menu->AddItem(ruler);
 		menu->SetTargetForItems(Window());
 		return menu;

@@ -48,6 +48,7 @@
 #include "TToolBar.h"
 #include "TTranslate.h"
 #include "TFormatBar.h"
+#include "TGRRuler.h"
 #include "TEntryBar.h"
 #include "TPageBar.h"
 #include "TPartBar.h"
@@ -174,6 +175,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			pages->fSpellBar = fSpellBar;
 			TDocScrollView* scroll = new TDocScrollView(pages);
 			fScaleSlider = scroll->Scale();
+			fScroll = scroll;
 			pages->fPageBar = scroll->Pages();
 			desk = scroll;
 			// the ribbons for documents with text or cells: the FormatBar,
@@ -212,6 +214,13 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			int main = document->MainPart();
 			if (main < 0 || document->parts.parts[size_t(main)].kind != Sig("GRFX"))
 				fToolBar->Hide();
+			// the graphics rulers (TNormalDocWinHelper: TGRRuler 13 and 14,
+			// hidden at first)
+			if (drawing) {
+				pages->fGRRulers[0] = new TGRRuler(pages, true);
+				pages->fGRRulers[1] = new TGRRuler(pages, false);
+				scroll->SetRulers(pages->fGRRulers[0], pages->fGRRulers[1]);
+			}
 			// the SheetBar, shown for documents with several sheets
 			fSheetBar = new TSheetBar(*document);
 			if (document->SheetCount() < 2)
@@ -583,6 +592,11 @@ TDocWindow::MessageReceived(BMessage* message)
 		case 'sMFE':
 			be_app->PostMessage(message);
 			return;
+		// Window > Show/Hide Graphics Ruler
+		case 'sMF8':
+			if (fScroll != NULL)
+				fScroll->ShowRulers(!fScroll->RulersShown());
+			return;
 		// Window > Hide/Show ToolBar
 		case 'sMF7':
 			if (fToolBar != NULL) {
@@ -792,6 +806,10 @@ TDocWindow::MessageReceived(BMessage* message)
 			}
 			if (fRuler != NULL)
 				fRuler->Update();
+			if (fPages != NULL)
+				for (TGRRuler* ruler : fPages->fGRRulers)
+					if (ruler != NULL)
+						ruler->Update();
 			return;
 		}
 		case kCmdSave:
@@ -1784,6 +1802,8 @@ TDocWindow::MenusBeginning()
 			: ribbon.command == 'sMF4' ? (BView*)fFormatBar
 			: ribbon.command == 'sMF3' ? (BView*)fSheetBar
 			: ribbon.command == 'sMF7' ? (BView*)fToolBar : NULL;
+		if (ribbon.command == 'sMF8' && fPages != NULL)
+			bar = fPages->fGRRulers[0];
 		bool shown = bar != NULL && !bar->IsHidden();
 		if (ribbon.command == 'sMFD')
 			shown = sClipboardWindow.IsValid();

@@ -65,10 +65,17 @@ public:
 
 	TScaleSlider* Scale() const { return fScale; }
 	TPageBar* Pages() const { return fPageBar; }
+	// the graphics rulers (TGRRuler): along the top, over the vertical
+	// scroll bar, and down the left above the zoom; shown or hidden
+	// together (Window > Show Graphics Ruler)
+	void SetRulers(BView* top, BView* left);
+	bool RulersShown() const;
+	void ShowRulers(bool show);
 
 private:
 	TScaleSlider* fScale;
 	TPageBar* fPageBar;
+	BView* fRulers[2] = {NULL, NULL};
 };
 
 } // namespace gobe
