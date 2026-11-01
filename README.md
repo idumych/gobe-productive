@@ -55,6 +55,25 @@ Styles can be exported to a file and imported into another document.
 *On Linux (X11): an HTML page opened with its table and picture.*
 
 
+## Next to the original
+
+The port is checked against Gobe Productive 2.0.1 running on BeOS 5, not
+just against its own idea of the original. Here is the Resume sample in
+both, with the ToolBar shown:
+
+![The Resume sample in the original on BeOS 5 (left) and in the port on Linux (right)](docs/screenshots/compare-resume.png)
+
+The bars close up, at twice the size. Every button is the size the
+original's is and in the same place, to the pixel:
+
+![The ToolBar, FormatBar and PartBar in the original (left) and the port (right), at twice the size](docs/screenshots/compare-bars.png)
+
+*Still different: the original saves which bars a document shows (the
+Resume opens with the spelling bar on BeOS), which the port doesn't read
+yet; the fonts are today's, so text looks a little different; and BeOS here ran in
+16-bit colour, which tints white slightly green.*
+
+
 ## Install
 
 The current release is **0.2.0**, the whole suite (0.1.1 was the word
