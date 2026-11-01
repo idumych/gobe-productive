@@ -123,6 +123,9 @@ void MoveControlPoint(Shape& shape, int handle, float x, float y);
 // Arrange > Lock, Unlock (TLockShapesCommand): TShape +0x24's 0x20; a
 // locked shape isn't moved, resized, reshaped or deleted
 const uint32_t kShapeLocked = 0x20;
+// TShape +0x24's closed bit (TShape::SetClosed: an arc drawn as a pie, a
+// path closed)
+const uint32_t kShapeClosed = 0x10;
 inline bool ShapeLocked(const Shape& shape) { return (shape.values[0] & kShapeLocked) != 0; }
 
 // Align Objects (TGRAlignShapesCommand, DIAL 202: "AlignX", "AlignY"):
@@ -148,6 +151,12 @@ bool OutlineShape(Shape& shape);
 // and control points as six numbers in text, little-endian); false if it
 // isn't one
 bool ParseToolbarShape(const std::vector<uint8_t>& data, BezierPath& path);
+
+// the inverse of ParseToolbarShape: the vertex count and closed (u32 LE), then
+// each vertex's flags (u32 LE) and its point, control1, control2 as "%.9g" text
+// + NUL bytes, little-endian
+std::vector<uint8_t> WriteToolbarShape(const BezierPath& path);
+
 // a toolbar shape made a shape in the box from `from` to `to` (DragOut:
 // the shape sized to the drag); -1 as AddShape
 int AddToolbarShape(Document& doc, size_t part, size_t layer, const BezierPath& path,

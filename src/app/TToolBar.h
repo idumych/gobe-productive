@@ -9,6 +9,9 @@
 #ifndef GOBE_TTOOLBAR_H
 #define GOBE_TTOOLBAR_H
 
+#include <vector>
+
+#include "Drawing.h"
 #include "TRibbon.h"
 
 namespace gobe {
@@ -26,6 +29,17 @@ public:
 	virtual void Update();
 
 	static const uint32 kMsgTool = 'TOOL';
+
+	// TToolbarShapes: the toolbar's shapes, the application's 'POLY'
+	// resources (ids below kUserShapes) and the ones added with a path's Add
+	// To Tool Bar (kUserShapes + n: the file n in the settings' "Gobe
+	// Productive port/Toolbar Shapes", in the POLY format), in that order
+	static const int32 kUserShapes = 1000;
+	static std::vector<int32> ShapeIds();
+	static bool ShapePath(int32 id, BezierPath& path);
+	// TToolbarShapes::AddShape: the path saved as the next user shape (26 at
+	// most); its id, or -1
+	static int32 AddShape(const BezierPath& path);
 
 private:
 	TPageView* fView;

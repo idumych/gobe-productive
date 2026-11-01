@@ -86,6 +86,20 @@ private:
 	int32 fLevels;
 };
 
+// TDialogMissingFonts (DIAL/Item 74): a document's fonts that aren't
+// installed (TStyleManager::CheckFonts, when the document is read), listed
+// (2) under STR# 6, 37 (1); OK closes it
+class TDialogMissingFonts : public TDialog {
+public:
+	explicit TDialogMissingFonts(const std::vector<std::string>& fonts);
+
+protected:
+	virtual void Init();
+
+private:
+	std::vector<std::string> fFonts;
+};
+
 } // namespace gobe
 
 #endif

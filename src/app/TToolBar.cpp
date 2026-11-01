@@ -1,11 +1,17 @@
 #include "TToolBar.h"
 
+#include <Directory.h>
+#include <Entry.h>
+#include <File.h>
+#include <FindDirectory.h>
+#include <Path.h>
 #include <MenuItem.h>
 #include <PopUpMenu.h>
 #include <Shape.h>
 #include <Window.h>
 
 #include <algorithm>
+#include <string>
 
 #include "Drawing.h"
 #include "GobeResources.h"
@@ -70,8 +76,21 @@ ShapeIn(const BezierPath& path, BRect frame, BShape& shape)
 bool
 ToolbarShape(int32 id, BezierPath& path)
 {
-	const ResourceFile::Resource* r = GobeResources::File().Find('POLY', id);
-	return r != NULL && ParseToolbarShape(r->data, path);
+	return TToolBar::ShapePath(id, path);
+}
+
+
+// TToolbarShapes::getToolbarShapesFolder: the user's added shapes
+BPath
+UserShapesFolder(bool create)
+{
+	BPath path;
+	if (find_directory(B_USER_SETTINGS_DIRECTORY, &path) != B_OK)
+		return BPath();
+	path.Append("Gobe Productive port/Toolbar Shapes");
+	if (create)
+		create_directory(path.Path(), 0755);
+	return path;
 }
 
 
@@ -149,7 +168,7 @@ public:
 		: TMICNButtonElement(kToolShapes, where, icon, NULL)
 	{
 		BezierPath path;
-		for (int32 id = 0; id < 256; id++) {
+		for (int32 id : TToolBar::ShapeIds()) {
 			if (ToolbarShape(id, path)) {
 				fShape = id;
 				break;
@@ -162,7 +181,7 @@ public:
 		BPopUpMenu* menu = new BPopUpMenu("shapes", false, false, B_ITEMS_IN_MATRIX);
 		const int32 kColumns = 6;
 		int32 count = 0;
-		for (int32 id = 0; id < 256; id++) {
+		for (int32 id : TToolBar::ShapeIds()) {
 			BezierPath path;
 			if (!ToolbarShape(id, path))
 				continue;
@@ -284,6 +303,66 @@ TToolBar::Update()
 {
 	if (fView != NULL)
 		SelectElement(fView->Tool(), kToolFamily);
+}
+
+std::vector<int32>
+TToolBar::ShapeIds()
+{
+	std::vector<int32> ids;
+	for (int32 id = 0; id < 256; id++)
+		if (GobeResources::File().Find('POLY', id) != NULL)
+			ids.push_back(id);
+	BPath folder = UserShapesFolder(false);
+	for (int32 n = 0; n < 26 && folder.InitCheck() == B_OK; n++) {
+		BPath file(folder);
+		file.Append(std::to_string(n).c_str());
+		BEntry entry(file.Path());
+		if (entry.Exists())
+			ids.push_back(kUserShapes + n);
+	}
+	return ids;
+}
+
+
+bool
+TToolBar::ShapePath(int32 id, BezierPath& path)
+{
+	if (id < kUserShapes) {
+		const ResourceFile::Resource* r = GobeResources::File().Find('POLY', id);
+		return r != NULL && ParseToolbarShape(r->data, path);
+	}
+	BPath file = UserShapesFolder(false);
+	file.Append(std::to_string(id - kUserShapes).c_str());
+	BFile in(file.Path(), B_READ_ONLY);
+	off_t size = 0;
+	if (in.InitCheck() != B_OK || in.GetSize(&size) != B_OK || size <= 0 || size > 1 << 20)
+		return false;
+	std::vector<uint8_t> data(static_cast<size_t>(size));
+	if (in.Read(data.data(), data.size()) != ssize_t(data.size()))
+		return false;
+	return ParseToolbarShape(data, path);
+}
+
+
+// TToolbarShapes::AddShape: the first free number of 26, written as POLY
+int32
+TToolBar::AddShape(const BezierPath& path)
+{
+	BPath folder = UserShapesFolder(true);
+	if (folder.InitCheck() != B_OK)
+		return -1;
+	for (int32 n = 0; n < 26; n++) {
+		BPath file(folder);
+		file.Append(std::to_string(n).c_str());
+		if (BEntry(file.Path()).Exists())
+			continue;
+		std::vector<uint8_t> data = WriteToolbarShape(path);
+		BFile out(file.Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
+		if (out.InitCheck() != B_OK || out.Write(data.data(), data.size()) != ssize_t(data.size()))
+			return -1;
+		return kUserShapes + n;
+	}
+	return -1;
 }
 
 } // namespace gobe

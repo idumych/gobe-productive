@@ -138,6 +138,11 @@ bool ExportText(const Document& doc, size_t part, const std::string& path,
 	std::string& error, TextAttributes* attributes = nullptr,
 	const FontCatalog* fonts = nullptr);
 
+// TStyleManager::CheckFonts: "family style" for each font property (TFon)
+// in the style table whose family and style aren't installed, in the
+// table's order (as the Missing Fonts dialog lists them)
+std::vector<std::string> MissingFonts(const StyleMgr& styles, const FontCatalog& installed);
+
 } // namespace gobe
 
 #endif

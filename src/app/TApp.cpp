@@ -29,6 +29,8 @@
 #include "Document.h"
 #include "GobeResources.h"
 #include "TDocWindow.h"
+#include "TextImport.h"
+#include "TDocumentDialogs.h"
 #include "TPreferences.h"
 #include "TPageView.h"
 #include "TDialogNewDoc.h"
@@ -453,10 +455,31 @@ public:
 			TDocWindow* window = new TDocWindow(frame,
 				doc->path.empty() ? doc->name.c_str() : p.Leaf(), doc);
 			window->Show();
+			CheckFonts(*doc);
 			RunScriptIn(window);
 		} catch (const std::exception& e) {
 			fprintf(stderr, "%s: %s\n", path.c_str(), e.what());
 		}
+	}
+
+	// TStyleManager::CheckFonts (TDoc::TDoc, a document read): the Missing
+	// Fonts dialog for the fonts that aren't installed. BeOS's Bitstream
+	// fonts count as there when the Liberation fonts are (TDocView::MapFont
+	// shows them in those, which have their widths); not while a script runs
+	void CheckFonts(const Document& doc)
+	{
+		if (!fScript.empty())
+			return;
+		FontCatalog fonts = InstalledFonts();
+		if (fonts.Find("Liberation Sans", "Regular") >= 0) {
+			for (const char* family : {"Dutch801 Rm BT", "Swis721 BT", "Courier10 BT",
+					"Monospac821 BT", "Swis721 BlkCn BT", "Swis721 Cn BT", "Swis721 Lt BT"})
+				for (const char* style : {"", "Roman", "Bold", "Italic", "Bold Italic"})
+					fonts.fonts.push_back({family, style, 0});
+		}
+		std::vector<std::string> missing = MissingFonts(doc.styles, fonts);
+		if (!missing.empty())
+			(new TDialogMissingFonts(missing))->RunDialog();
 	}
 
 	virtual void ReadyToRun()

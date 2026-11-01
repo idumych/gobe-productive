@@ -2320,7 +2320,21 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 					StrokeRoundRect(r, s.radius[0], s.radius[1]);
 				else if (s.kind == Sig("ELPS"))
 					StrokeEllipse(r);
-				else if (s.kind == Sig("ARC "))
+				else if (s.kind == Sig("ARC ") && (s.values[0] & kShapeClosed) != 0) {
+					// (closed: TGRArc::Stroke draws the pie)
+					for (const Outline& outline : ShapeOutline(s)) {
+						BShape pie;
+						for (size_t i = 0; i < outline.points.size(); i++) {
+							BPoint at = offset + BPoint(outline.points[i][0], outline.points[i][1]);
+							if (i == 0)
+								pie.MoveTo(at);
+							else
+								pie.LineTo(at);
+						}
+						pie.Close();
+						StrokeShape(&pie);
+					}
+				} else if (s.kind == Sig("ARC "))
 					StrokeArc(r, s.arcAngles[0], s.arcAngles[1]);
 				else if (s.kind == Sig("LINE"))
 					StrokeLine(o, o + BPoint(s.size[0], s.size[1]));

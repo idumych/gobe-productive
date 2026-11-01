@@ -10,6 +10,7 @@
 #include <MenuBar.h>
 #include <MenuItem.h>
 #include <ScrollView.h>
+#include <StringItem.h>
 #include <StringView.h>
 #include <Application.h>
 #include <Window.h>
@@ -385,6 +386,29 @@ TDialogHistorySize::ItemHit(int32 index, BMessage* message)
 		fWindow->PostMessage(&set);
 	}
 	return TDialog::ItemHit(index, message);
+}
+
+TDialogMissingFonts::TDialogMissingFonts(const std::vector<std::string>& fonts)
+	:
+	TDialog(74, 74, 'APPL', NULL),
+	fFonts(fonts)
+{
+}
+
+
+// TDialogMissingFonts::Init
+void
+TDialogMissingFonts::Init()
+{
+	BListView* list = NULL;
+	if (BScrollView* scroll = dynamic_cast<BScrollView*>(Item(2)))
+		list = dynamic_cast<BListView*>(scroll->Target());
+	else
+		list = dynamic_cast<BListView*>(Item(2));
+	if (list != NULL)
+		for (const std::string& font : fFonts)
+			list->AddItem(new BStringItem(font.c_str()));
+	SetTextItem(1, GobeResources::IndexString(6, 37).String());
 }
 
 } // namespace gobe

@@ -217,6 +217,10 @@ public:
 	// (document coordinates) in text (NULL elsewhere); the caret moves
 	// there unless it's in the selection
 	BPopUpMenu* ContextMenu(BPoint where);
+	// TPartGR::SetUpContextMenu and the shapes' (TGRArc, TGRRoundRect,
+	// TGRBezigon, TFrameGR): a right click in a drawing, or NULL when it
+	// isn't in one; a shape clicked is selected
+	BPopUpMenu* DrawingContextMenu(BPoint where);
 	Caret fCaret;
 	Caret fAnchor;
 	UndoStack& fUndo;		// the document's (TSharedDocument)

@@ -4,7 +4,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include "Document.h"
@@ -729,6 +731,31 @@ ParseToolbarShape(const std::vector<uint8_t>& data, BezierPath& path)
 }
 
 
+std::vector<uint8_t>
+WriteToolbarShape(const BezierPath& path)
+{
+	auto u32le = [](uint32_t v, std::vector<uint8_t>& out) {
+		out.push_back(uint8_t(v));
+		out.push_back(uint8_t(v >> 8));
+		out.push_back(uint8_t(v >> 16));
+		out.push_back(uint8_t(v >> 24));
+	};
+	std::vector<uint8_t> out;
+	u32le(uint32_t(path.vertices.size()), out);
+	u32le(path.closed ? 1 : 0, out);
+	for (const Vertex& v : path.vertices) {
+		u32le(v.flags, out);
+		char buf[32];
+		for (float f : {v.point[0], v.point[1], v.control1[0], v.control1[1],
+				v.control2[0], v.control2[1]}) {
+			snprintf(buf, sizeof(buf), "%.9g", f);
+			out.insert(out.end(), buf, buf + strlen(buf) + 1);
+		}
+	}
+	return out;
+}
+
+
 namespace {
 
 // a path shape from vertices (drawing coordinates), its box the points'
@@ -1016,8 +1043,13 @@ ShapeOutline(const Shape& s)
 		o.points.pop_back();
 		out.push_back(o);
 	} else if (s.kind == Sig("ARC ")) {
+		// (closed: TGRArc's pie, the center joined to the arc's ends)
 		Outline o;
 		ellipse(s.arcAngles[0], s.arcAngles[1], o);
+		if ((s.values[0] & kShapeClosed) != 0) {
+			o.points.push_back({cx, cy});
+			o.closed = true;
+		}
 		out.push_back(o);
 	} else if (s.kind == Sig("RRCT") || s.kind == Sig("RECT")) {
 		Shape copy = s;

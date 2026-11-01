@@ -9,6 +9,9 @@
 // Forward and Move Backward; the FormatBar's fill, pen and transparency.
 // Each change is one undo step (STR# 1101's labels).
 #include "TPageView.h"
+#include "TDrawDialogs.h"
+#include "TFormatBar.h"
+#include "TToolBar.h"
 
 #include <Menu.h>
 #include <Shape.h>
@@ -20,6 +23,7 @@
 
 #include "DocArchive.h"
 #include "Drawing.h"
+#include "Smooth.h"
 #include "TInkMenus.h"
 #include "TPensWindow.h"
 #include "GobeResources.h"
@@ -103,12 +107,12 @@ InkFromMessage(BMessage* message, uint32_t type, Property& property)
 }
 
 
-// a toolbar shape (TToolbarShapes: the application's 'POLY' resources)
+// a toolbar shape (TToolbarShapes: the application's 'POLY' resources and
+// the user's added ones)
 bool
 ToolbarShapePath(int32 index, BezierPath& path)
 {
-	const ResourceFile::Resource* r = GobeResources::File().Find('POLY', index);
-	return r != NULL && ParseToolbarShape(r->data, path);
+	return TToolBar::ShapePath(index, path);
 }
 
 
@@ -926,6 +930,113 @@ TPageView::ShapeCommand(BMessage* message)
 		Invalidate();
 		return true;
 	}
+	// a shape's context menu (TGRArc, TGRRoundRect, TGRBezigon::
+	// SetUpContextMenu; TPartGR::HandleMessage): Start Angle… and Arc
+	// Angle… ('sM4P' with "Type" 1 or 2: the dialog for the first selected
+	// arc; with "Angle" too: TGRSetAngleCommand, STR# 1101, 18 Set Start
+	// Angle or 19 Set Arc Angle), Corner Radius… ('sM4R': the dialog for the
+	// first round rectangle; with "XRadius" and "YRadius": TGRSetRadius-
+	// Command, 36 Set Radius), Closed ('sC00': TGRSetShapeFlagsCommand, 15
+	// Close Shapes, each shape's closed flag turned over)
+	if ((what == 'sM4P' || what == 'sM4R' || what == 'sC00') && !fShapes.empty()) {
+		GRPart* gr = fDocument.EditableGraphicsPart(fShapes[0].part);
+		if (gr == nullptr)
+			return true;
+		uint32_t kind = what == 'sM4P' ? Sig("ARC ") : what == 'sM4R' ? Sig("RRCT") : 0;
+		int32 type = message->GetInt32("Type", 1);
+		bool apply = what == 'sC00' || message->HasFloat("Angle") || message->HasFloat("XRadius");
+		if (!apply) {
+			for (const ShapeRef& ref : fShapes) {
+				const Shape* s = ShapeAt(fDocument, ref.part, ref.layer, ref.index);
+				if (s == nullptr || s->kind != kind)
+					continue;
+				if (what == 'sM4P')
+					(new TDialogAngle(Window(), type, s->arcAngles[type == 1 ? 0 : 1]))
+						->RunDialog();
+				else
+					(new TDialogRadius(Window(), s->radius[0], s->radius[1]))->RunDialog();
+				break;
+			}
+			return true;
+		}
+		int label = what == 'sM4P' ? (type == 1 ? 18 : 19) : what == 'sM4R' ? 36 : 15;
+		fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, label).String(),
+			CurrentViewState());
+		for (const ShapeRef& ref : fShapes) {
+			if (ref.layer >= gr->layers.size() || ref.index >= gr->layers[ref.layer].shapes.size())
+				continue;
+			Shape& sh = gr->layers[ref.layer].shapes[ref.index];
+			if (ShapeLocked(sh) || (kind != 0 && sh.kind != kind))
+				continue;
+			if (what == 'sM4P')
+				sh.arcAngles[type == 1 ? 0 : 1] = message->GetFloat("Angle", 0);
+			else if (what == 'sM4R') {
+				sh.radius[0] = message->GetFloat("XRadius", 0);
+				sh.radius[1] = message->GetFloat("YRadius", 0);
+			} else if (sh.kind == Sig("ARC ") || sh.kind == Sig("BEZI")) {
+				// TShape::SetClosed: the flag, and a path's own
+				bool closed = sh.kind == Sig("BEZI") && !sh.paths.empty() ? !sh.paths[0].closed
+					: (sh.values[0] & kShapeClosed) == 0;
+				sh.values[0] = closed ? sh.values[0] | kShapeClosed : sh.values[0] & ~kShapeClosed;
+				for (BezierPath& path : sh.paths)
+					path.closed = closed;
+			}
+		}
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return true;
+	}
+	// a path's Add To Tool Bar ('sM4O', TToolbarShapes::AddShape): its
+	// first path one of the ToolBar's shapes from now on (not an edit of
+	// the document)
+	if (what == 'sM4O' && !fShapes.empty()) {
+		for (const ShapeRef& ref : fShapes) {
+			const Shape* s = ShapeAt(fDocument, ref.part, ref.layer, ref.index);
+			if (s != nullptr && s->kind == Sig("BEZI") && !s->paths.empty()) {
+				TToolBar::AddShape(s->paths[0]);
+				break;
+			}
+		}
+		return true;
+	}
+	// a path's Smooth ('sC05'), Unsmooth ('sC04') and Auto-Smooth ('sC03')
+	// (TPartGR::HandleVertexMessage, TGRReshapeCommand: STR# 1101, 14
+	// Reshape Shapes): each point's flags (0x1 its controls made smooth,
+	// 0x2 smooth) set as the original sets them; Unsmooth also takes the
+	// control points away; then TGRBezigon::Recalc's smoothing
+	if ((what == 'sC03' || what == 'sC04' || what == 'sC05') && !fShapes.empty()) {
+		GRPart* gr = fDocument.EditableGraphicsPart(fShapes[0].part);
+		if (gr == nullptr)
+			return true;
+		fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, 14).String(),
+			CurrentViewState());
+		for (const ShapeRef& ref : fShapes) {
+			if (ref.layer >= gr->layers.size() || ref.index >= gr->layers[ref.layer].shapes.size())
+				continue;
+			Shape& sh = gr->layers[ref.layer].shapes[ref.index];
+			if (sh.kind != Sig("BEZI") || ShapeLocked(sh))
+				continue;
+			for (BezierPath& path : sh.paths) {
+				for (Vertex& v : path.vertices) {
+					if (what == 'sC05')
+						v.flags |= 0x3;
+					else if (what == 'sC03')
+						v.flags = uint8_t((v.flags & ~0x2) | 0x1);
+					else {
+						v.flags &= uint8_t(~0x3);
+						v.control1[0] = v.control1[1] = 0;
+						v.control2[0] = v.control2[1] = 0;
+					}
+				}
+				SmoothPath(path);
+			}
+		}
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return true;
+	}
 	// Draw Grid ('sM4D': TGrid +0x5), AutoGrid ('sM4E': +0x4): the drawing's
 	// own, saved with it
 	size_t drawing;
@@ -1315,6 +1426,131 @@ TPageView::DrawShapeSelection(float dx, float dy)
 		}
 	}
 	PopState();
+}
+
+// TPartGR::SetUpContextMenu: off the shapes, Draw Grid and Auto Grid
+// (marked as the drawing has them) and the graphics ruler (STR# 1102,
+// 4-7); on a shape (selected first, alone unless Shift is down), the
+// shape's own items (TGRArc: Closed, Start Angle…, Arc Angle…;
+// TGRRoundRect: Corner Radius…; TGRBezigon: Closed, Smooth, Unsmooth,
+// Auto-Smooth, Add To Tool Bar; TFrameGR: Ungroup, Open group; STR# 1104),
+// then Lock (marked when locked; 1102, 8), the Arrange menu (MENU 50), the
+// pen size menu (MENU 104), the transparency menu (MENU 103, 'sf0S') and
+// Create Outlines (1104, 14)
+BPopUpMenu*
+TPageView::DrawingContextMenu(BPoint where)
+{
+	size_t part;
+	float x, y;
+	if (!DrawingAt(where, part, x, y))
+		return NULL;
+	const GRPart* gr = fDocument.GraphicsPart(part);
+	if (gr == nullptr)
+		return NULL;
+	size_t layer = 0, index = 0, groupLayer = 0, groupIndex = 0;
+	bool shapeHit = HitShape(*gr, where.x - x, where.y - y, kTolerance,
+		HiddenLayers(fDocument, part), layer, index);
+	bool groupHit = HitGroup(fDocument, part, where.x - x, where.y - y, groupLayer, groupIndex);
+	if (groupHit && (!shapeHit || groupLayer > layer
+			|| (groupLayer == layer && groupIndex > index))) {
+		layer = groupLayer;
+		index = groupIndex;
+		shapeHit = true;
+	}
+	auto string = [](int32 list, int32 index) {
+		return GobeResources::IndexString(list, index);
+	};
+	// (off the shapes, text over the drawing is the click's: its own menu)
+	Caret text;
+	if (!shapeHit && HitText(where, text))
+		return NULL;
+	BPopUpMenu* menu = new BPopUpMenu("drawing", false, false);
+	if (!shapeHit) {
+		BMenuItem* grid = new BMenuItem(string(1102, 4).String(), new BMessage('sM4D'));
+		grid->SetMarked(gr->gridFlags[1]);
+		menu->AddItem(grid);
+		BMenuItem* autoGrid = new BMenuItem(string(1102, 5).String(), new BMessage('sM4E'));
+		autoGrid->SetMarked(gr->gridFlags[0]);
+		menu->AddItem(autoGrid);
+		// (the graphics ruler isn't ported: its item off)
+		BMenuItem* ruler = new BMenuItem(string(1102, 7).String(), new BMessage('sMF8'));
+		ruler->SetEnabled(false);
+		menu->AddItem(ruler);
+		menu->SetTargetForItems(Window());
+		return menu;
+	}
+	bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
+	if (!ShapeSelected(part, layer, index)) {
+		if (!shift || (!fShapes.empty() && fShapes[0].part != part))
+			fShapes.clear();
+		fShapes.push_back(Ref(part, layer, index));
+		fCaret.active = false;
+		Invalidate();
+	}
+	const Shape& s = gr->layers[layer].shapes[index];
+	// (a path is closed by its own flag, which the tools set)
+	bool closed = s.kind == Sig("BEZI") && !s.paths.empty() ? s.paths[0].closed
+		: (s.values[0] & kShapeClosed) != 0;
+	auto add = [&](const BString& label, BMessage* message, bool marked = false) {
+		BMenuItem* item = new BMenuItem(label.String(), message);
+		item->SetMarked(marked);
+		menu->AddItem(item);
+	};
+	if (s.kind == Sig("ARC ")) {
+		// TGRArc::SetUpContextMenu (its labels are the program's own)
+		add(string(1104, 0), new BMessage('sC00'), closed);
+		menu->AddSeparatorItem();
+		BMessage* start = new BMessage('sM4P');
+		start->AddInt32("Type", 1);
+		add("Start Angle\xe2\x80\xa6", start);
+		BMessage* sweep = new BMessage('sM4P');
+		sweep->AddInt32("Type", 2);
+		add("Arc Angle\xe2\x80\xa6", sweep);
+	} else if (s.kind == Sig("RRCT")) {
+		menu->AddSeparatorItem();
+		add(string(1104, 13), new BMessage('sM4R'));
+	} else if (s.kind == Sig("BEZI")) {
+		add(string(1104, 0), new BMessage('sC00'), closed);
+		add(string(1104, 1), new BMessage('sC05'));
+		add(string(1104, 2), new BMessage('sC04'));
+		add(string(1104, 3), new BMessage('sC03'));
+		add(string(1104, 4), new BMessage('sM4O'));
+	} else if (s.kind == Sig("FRAM")) {
+		add(string(1104, 10), new BMessage('sM47'));
+		add(string(1104, 11), new BMessage('sM30'));
+	}
+	if (menu->CountItems() > 0)
+		menu->AddSeparatorItem();
+	bool locked = ShapeLocked(s);
+	add(string(1102, 8), new BMessage(locked ? 'sM49' : 'sM48'), locked);
+	TMenu* arrange = new TMenu(50, true);
+	FixShapeMenu(arrange);
+	menu->AddItem(arrange);
+	BMenu* sizes = TFormatBar::PenMenu(this);
+	TMenu title(104, false);
+	BMenuItem* sizesItem = new BMenuItem(sizes);
+	menu->AddItem(sizesItem);
+	sizesItem->SetLabel(title.Name());
+	// MENU 103's items sending 'sf0S' with their percent (Other…: 'sM0U'
+	// as the value, for the dialog)
+	TMenu* transparency = new TMenu(103, true);
+	for (int32 i = 0; BMenuItem* item = transparency->ItemAt(i); i++) {
+		BMessage* message = item->Message();
+		if (message == NULL)
+			continue;
+		int32 value = message->what == 'sM0U' ? int32('sM0U') : message->GetInt32(kValueString, 0);
+		message->MakeEmpty();
+		message->what = 'sf0S';
+		message->AddInt32(kValueString, value);
+	}
+	menu->AddItem(transparency);
+	if (s.kind != Sig("FRAM"))
+		add(string(1104, 14), new BMessage('sM4T'));
+	menu->SetTargetForItems(Window());
+	arrange->SetTargetForItems(Window());
+	sizes->SetTargetForItems(Window());
+	transparency->SetTargetForItems(Window());
+	return menu;
 }
 
 } // namespace gobe

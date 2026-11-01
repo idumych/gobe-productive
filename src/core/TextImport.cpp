@@ -687,4 +687,25 @@ ExportText(const Document& doc, size_t part, const std::string& path, std::strin
 	return true;
 }
 
+std::vector<std::string>
+MissingFonts(const StyleMgr& styles, const FontCatalog& installed)
+{
+	std::vector<std::string> missing;
+	for (const Property& p : styles.properties) {
+		if (p.type != Sig("TFon"))
+			continue;
+		DocArchive a(p.data);
+		std::string family, style;
+		try {
+			family = a.String();
+			style = a.String();
+		} catch (const ArchiveError&) {
+			continue;
+		}
+		if (installed.Find(family, style) < 0)
+			missing.push_back(family + " " + style);
+	}
+	return missing;
+}
+
 } // namespace gobe
