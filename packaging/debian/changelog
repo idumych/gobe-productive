@@ -1,3 +1,11 @@
+gobeproductive (0.2.1-1) unstable; urgency=medium
+
+  * Saving no longer leaves the document marked changed.
+  * The ToolBar, pop-up indicators and zoom box drawn as the original
+    draws them on BeOS.
+
+ -- Ian <idumych@gmail.com>  Sat, 31 Oct 2026 23:16:26 -0700
+
 gobeproductive (0.2.0-1) unstable; urgency=medium
 
   * The whole suite: spreadsheets with charts, drawings, presentations,
