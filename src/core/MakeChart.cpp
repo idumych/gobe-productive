@@ -293,27 +293,45 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 	}
 
 	// where: right of the last column with anything in it, level with the
-	// cells, 320 x 200 (the port's choice; the original asks the drawing,
-	// TChartPart::DefaultFrameRect)
+	// range's first row, 320 x 200 (the port's choice; the original asks
+	// the drawing, TChartPart::DefaultFrameRect). The sheet's drawing lies
+	// over its frame from the corner, so the headings, when shown, come
+	// before the cells: the row headings' 36 points and the column
+	// headings' row, as TSSFrame draws them.
 	float width = 320, height = 200;
-	uint16_t last = range.to.b;
+	uint16_t last = range.to.b, lastRow = range.to.a;
 	for (const SSCell& c : ss->cells)
-		if (c.id.b != 0xffff)
+		if (c.id.b != 0xffff && c.id.a != 0xffff) {
 			last = std::max(last, c.id.b);
-	float origin[2] = {20, 0};
+			lastRow = std::max(lastRow, c.id.a);
+		}
+	const float headings[2] = {ss->options[4] ? 36.0f : 0.0f,
+		ss->options[3] ? ss->defaultHeight : 0.0f};
+	float origin[2] = {headings[0] + 20, headings[1]};
 	for (uint16_t c = 0; c <= last; c++)
 		origin[0] += ss->ColumnWidth(c);
 	for (uint16_t r = 0; r < range.from.a; r++)
 		origin[1] += ss->RowHeight(r);
-	// within the drawing's frame (a sheet as large as its cells, as
-	// StockPrice's, shows nothing past it): moved left and up to fit, and
-	// no larger than it
+	// within the drawing's frame (the sheet shows nothing past it): where
+	// it doesn't fit at the right, below the last row with anything in it
+	// (under the cells, not over them); where that doesn't fit either (a
+	// sheet as large as its cells, as StockPrice's), moved left and up to
+	// fit, and no larger than the frame
 	for (size_t p = 0; p < doc.tails.size(); p++) {
 		if (!doc.tailRead[p])
 			continue;
 		for (const Portal& portal : doc.tails[p].portals)
 			for (const Frame& f : portal.frames)
 				if (f.part == drawing && f.extent[0] > 0 && f.extent[1] > 0) {
+					if (origin[0] + width > f.extent[0]) {
+						float below = headings[1] + 20;
+						for (uint16_t r = 0; r <= lastRow; r++)
+							below += ss->RowHeight(r);
+						if (below + height <= f.extent[1]) {
+							origin[0] = headings[0] + 20;
+							origin[1] = below;
+						}
+					}
 					width = std::min(width, f.extent[0]);
 					height = std::min(height, f.extent[1]);
 					origin[0] = std::max(0.0f, std::min(origin[0], f.extent[0] - width));
