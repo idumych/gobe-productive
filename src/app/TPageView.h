@@ -98,6 +98,10 @@ public:
 	void ImportStyles(BMessage* message);
 	// the page geometry changed (Page Setup, Margins): frames, layout
 	void GeometryChanged();
+	// TPartGR::ValidateSelection: the shapes selected on layers that can't
+	// be clicked any more (hidden, not editable) deselected; all of them
+	// with `all` (a layer added or deleted)
+	void ValidateShapeSelection(bool all);
 	// another window of the document changed it: the values, the frames
 	// and the layout anew, the caret kept within the text
 	void DocumentChangedElsewhere();

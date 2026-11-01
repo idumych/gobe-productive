@@ -122,6 +122,41 @@ struct Document {
 	bool LayerHidden(size_t part, size_t layer) const;
 	bool FrameHidden(size_t part, int index) const;
 
+	// Views & Layers (Layers.cpp; TDialogLayers and TPartGR's commands).
+	// A drawing part's active layer (TPartGR +0x94, GRPart values[0]), the
+	// view its first portal shows (tails[part].portals[0].view), and
+	// TGRLayerInfo's flags: 0 visible, 1 editable (TPartGR::SetActiveLayer
+	// makes the active layer the only one, of those not locked), 2 locked,
+	// 3 printable.
+	size_t ActiveLayer(size_t part) const;
+	uint32_t ShownView(size_t part) const;
+	// TGRLayerSwitchCommand / TGRViewSwitchCommand; false if out of range
+	// or unchanged
+	bool SetActiveLayer(size_t part, size_t layer);
+	bool ShowView(size_t part, uint32_t view);
+	// TGRLayerNewOrDeleteCommand: New Layer (named CopyName of the last
+	// layer's name, added last, in every view with flags {1,0,0,1,0}, made
+	// active); Delete Layer (needs two layers or more and a layer without
+	// 'FRAM' shapes, else false with `error` set: its shapes go, each view
+	// drops its info and renumbers the later layers, the active layer
+	// becomes layer - 1, or 0)
+	bool NewLayer(size_t part);
+	bool DeleteLayer(size_t part, size_t layer, std::string& error);
+	// TGRViewNewOrDeleteCommand: New View (named CopyName of the last view's
+	// name, every layer in it with flags {1,0,0,1,0}, added last, shown);
+	// Delete View (needs two views or more: the portal shows view - 1, or
+	// view 1 when deleting view 0, renumbered after the removal)
+	bool NewView(size_t part);
+	bool DeleteView(size_t part, uint32_t view);
+	// TGRLayerRenameCommand / TGRViewRenameCommand; false if out of range,
+	// empty or unchanged
+	bool RenameLayer(size_t part, size_t layer, const std::string& name);
+	bool RenameView(size_t part, uint32_t view, const std::string& name);
+	// TGRLayerSetAttrCommand: flag `attr` (0..4) of the shown view's
+	// `row`th layer info set to `on`; attr 2 (locked) also clears flag 1.
+	// False if out of range or nothing changed.
+	bool SetLayerFlag(size_t part, size_t row, int attr, bool on);
+
 	// A named reference (formula names like "Products Table"): the
 	// reference of that name in any part's REFT and its selection
 	const Selection* NamedSelection(const std::string& name, int fromPart = -1) const;
@@ -251,6 +286,12 @@ struct Document {
 	// paragraph, AddWordStyles; shown in browse view).
 	int AddSheet(uint32_t kind, const std::string& name, std::string& error);
 };
+
+// CopyName: the name with its trailing number one higher ("Layer 1" ->
+// "Layer 2", "View 9" -> "View 10"), or " 2" added ("Background" ->
+// "Background 2"). Trailing digits and spaces are the number part: the
+// base is the name up to them, the result "%s %d" of base and number + 1.
+std::string CopyName(const std::string& name);
 
 bool LoadDocument(const std::string& path, Document& doc, std::string& error);
 // The same for a document's bytes (its path stays empty).

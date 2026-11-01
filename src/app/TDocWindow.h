@@ -90,6 +90,9 @@ public:
 	bool HasTextSelection() const;
 	// THistory: the steps' labels, how many are done, Show Undo Steps
 	void HistoryState(std::vector<std::string>& labels, size_t& done, bool& show) const;
+	// Views & Layers: the main drawing's views and the shown view's layers;
+	// false if the main part isn't a drawing
+	bool LayersState(struct LayersState& state) const;
 	// what Edit Styles shows: the document's styles, the active part's
 	// kinds, the selection's
 	void GetStylesSnapshot(StylesSnapshot& snapshot) const;

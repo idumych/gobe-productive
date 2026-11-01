@@ -40,6 +40,7 @@
 #include "GobeResources.h"
 #include "TDialog.h"
 #include "TDocumentDialogs.h"
+#include "TDialogLayers.h"
 #include "TDrawDialogs.h"
 #include "TRecentDocs.h"
 #include "TDocView.h"
@@ -144,7 +145,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	sWindows.insert(sWindows.begin(), this);
 	// the floaters' subsets take the new window (TFloaterMgr 'sE05')
 	for (BWindow* floater : {(BWindow*)TDialogHistory::Open(),
-			(BWindow*)TDialogStylesEdit::Open()}) {
+			(BWindow*)TDialogStylesEdit::Open(), (BWindow*)TDialogLayers::Open()}) {
 		if (floater == NULL)
 			continue;
 		BMessage add('sE05');
@@ -510,6 +511,7 @@ TDocWindow::MessageReceived(BMessage* message)
 				fSheetBar->Update();
 			TDialogHistory::Refresh();
 			TDialogStylesEdit::Refresh();
+			TDialogLayers::Refresh();
 			return;
 		// another window of the document changed it (laid out anew in
 		// DispatchMessage) or its windows' titles changed
@@ -1261,6 +1263,81 @@ TDocWindow::MessageReceived(BMessage* message)
 			fFormatBar->Update();
 		return;
 	}
+	// Document > Views & Layers… (TDocWindow: the floater, DIAL 203) and
+	// its commands (TPartGR::HandleMessage, STR# 1101 25-33): New Layer,
+	// Delete Layer, Rename Layer (without "name", the dialog), Switch
+	// Layer, Set Layer Attributes, New View, Delete View, Rename View,
+	// Switch View
+	if (message->what == 'sM25') {
+		if (TDialogLayers* layers = TDialogLayers::Open())
+			layers->Activate(true);
+		else
+			(new TDialogLayers())->RunDialog();
+		return;
+	}
+	if ((message->what >= 'sM4F' && message->what <= 'sM4N') && fPages != NULL
+			&& fDocument != NULL && fDocument->MainPart() >= 0
+			&& fDocument->parts.parts[size_t(fDocument->MainPart())].kind == Sig("GRFX")
+			&& fDocument->GraphicsPart(size_t(fDocument->MainPart())) != NULL) {
+		size_t part = size_t(fDocument->MainPart());
+		const GRPart* gr = fDocument->GraphicsPart(part);
+		int32 index = message->GetInt32("index", -1);
+		const char* name = NULL;
+		bool named = message->FindString("name", &name) == B_OK && name != NULL;
+		int32 label = 0;
+		switch (message->what) {
+			case 'sM4F': label = 29; break;
+			case 'sM4G': label = 30; break;
+			case 'sM4H': label = 31; break;
+			case 'sM4I': label = 32; break;
+			case 'sM4J': label = 33; break;
+			case 'sM4K': label = 25; break;
+			case 'sM4L': label = 26; break;
+			case 'sM4M': label = 27; break;
+			case 'sM4N': label = 28; break;
+		}
+		if (message->what == 'sM4H' && !named) {
+			if (index >= 0 && size_t(index) < gr->layers.size())
+				(new TDialogLayerName(this, 'sM4H', index,
+					GobeResources::IndexString(1101, 31).String(),
+					gr->layers[size_t(index)].name.c_str()))->RunDialog();
+			return;
+		}
+		// the commands' own checks first, so nothing changed adds no step
+		Document trial = *fDocument;
+		std::string error;
+		auto apply = [&](Document& doc) {
+			switch (message->what) {
+				case 'sM4F': return doc.NewLayer(part);
+				case 'sM4G': return index >= 0 && doc.DeleteLayer(part, size_t(index), error);
+				case 'sM4H': return index >= 0 && doc.RenameLayer(part, size_t(index), name);
+				case 'sM4I': return index >= 0 && doc.SetActiveLayer(part, size_t(index));
+				case 'sM4J': return index >= 0 && doc.SetLayerFlag(part, size_t(index),
+					int(message->GetInt32("attr", -1)), message->GetInt32("value", 0) != 0);
+				case 'sM4K': return doc.NewView(part);
+				case 'sM4L': return index >= 0 && doc.DeleteView(part, uint32_t(index));
+				case 'sM4M': return index >= 0 && named
+					&& doc.RenameView(part, uint32_t(index), name);
+				case 'sM4N': return index >= 0 && doc.ShowView(part, uint32_t(index));
+			}
+			return false;
+		};
+		if (!apply(trial)) {
+			if (!error.empty())
+				(new BAlert("", error.c_str(), "OK"))->Go(NULL);
+			return;
+		}
+		fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(1101, label).String(),
+			fPages->CurrentViewState());
+		apply(*fDocument);
+		fPages->ValidateShapeSelection(message->what == 'sM4F' || message->what == 'sM4G');
+		fDocument->ComputeHiddenFrames();
+		fPages->GeometryChanged();
+		fPages->Invalidate();
+		PostMessage(kMsgDocumentChanged);
+		TDialogLayers::Refresh();
+		return;
+	}
 	if (message->what == 'sM24') {
 		if (TDialogHistory* history = TDialogHistory::Open())
 			history->Activate(true);
@@ -1899,6 +1976,7 @@ TDocWindow::WindowActivated(bool active)
 			find->PostMessage('sD=L');
 		TDialogHistory::Refresh();
 		TDialogStylesEdit::Refresh();
+		TDialogLayers::Refresh();
 	}
 }
 
@@ -1924,6 +2002,33 @@ TDocWindow::Pens() const
 	if (fPages == NULL)
 		return AppPens();
 	return DocumentPens(fPages->Doc().pens, AppPens());
+}
+
+
+bool
+TDocWindow::LayersState(struct LayersState& state) const
+{
+	state = gobe::LayersState();
+	if (fDocument == NULL || fDocument->MainPart() < 0
+			|| fDocument->parts.parts[size_t(fDocument->MainPart())].kind != Sig("GRFX"))
+		return false;
+	size_t part = size_t(fDocument->MainPart());
+	const GRPart* gr = fDocument->GraphicsPart(part);
+	if (gr == NULL)
+		return false;
+	for (const GRView& view : gr->views)
+		state.views.push_back(view.name);
+	state.shownView = fDocument->ShownView(part);
+	if (state.shownView < gr->views.size())
+		for (const GRView::LayerInfo& info : gr->views[state.shownView].layers) {
+			gobe::LayersState::Row row;
+			row.name = info.layer < gr->layers.size() ? gr->layers[info.layer].name : "";
+			std::copy(info.flags, info.flags + 5, row.flags);
+			state.rows.push_back(row);
+		}
+	state.layers = gr->layers.size();
+	state.activeLayer = fDocument->ActiveLayer(part);
+	return true;
 }
 
 

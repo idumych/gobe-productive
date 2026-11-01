@@ -302,7 +302,15 @@ WritePartTail(const PartTail& tail, uint32_t kind)
 			w.Bytes(raw);
 			w.Sig(Sig("FraM"));
 		}
-		w.Bytes(p.raw);
+		// TGRPortal: the view shown first (Views & Layers switches it)
+		std::vector<uint8_t> portalRaw = p.raw;
+		if ((kind == Sig("GRFX") || kind == Sig("chrt") || kind == Sig("PRES"))
+				&& p.exact && portalRaw.size() >= 4) {
+			DocWriter view;
+			view.UInt32(p.view);
+			std::copy(view.Data().begin(), view.Data().end(), portalRaw.begin());
+		}
+		w.Bytes(portalRaw);
 		w.Sig(Sig("PorT"));
 	}
 	w.Sig(Sig("ParT"));

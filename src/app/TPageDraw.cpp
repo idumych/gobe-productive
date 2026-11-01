@@ -42,24 +42,39 @@ const float kHandle = 3;		// a handle's half size
 const float kTolerance = 3;		// how near a line counts as on it
 
 
+// the layers whose shapes can't be clicked: hidden, or not selectable in
+// the view shown (TGRLayerInfo flag 1, off for a locked layer)
 std::vector<bool>
 HiddenLayers(const Document& doc, size_t part)
 {
 	std::vector<bool> hidden;
-	if (const GRPart* gr = doc.GraphicsPart(part))
-		for (size_t l = 0; l < gr->layers.size(); l++)
-			hidden.push_back(doc.LayerHidden(part, l));
+	const GRPart* gr = doc.GraphicsPart(part);
+	if (gr == nullptr)
+		return hidden;
+	uint32_t view = doc.ShownView(part);
+	for (size_t l = 0; l < gr->layers.size(); l++) {
+		bool off = doc.LayerHidden(part, l);
+		if (!off && view < gr->views.size())
+			for (const GRView::LayerInfo& info : gr->views[view].layers)
+				if (info.layer == l && !info.flags[1])
+					off = true;
+		hidden.push_back(off);
+	}
 	return hidden;
 }
 
 
-// the layer new shapes go on: the first shown
+// the layer new shapes go on: the active one (TPartGR +0x94) when it's
+// shown, else the first shown
 size_t
 DrawingLayer(const Document& doc, size_t part)
 {
 	const GRPart* gr = doc.GraphicsPart(part);
 	if (gr == nullptr)
 		return 0;
+	size_t active = doc.ActiveLayer(part);
+	if (active < gr->layers.size() && !doc.LayerHidden(part, active))
+		return active;
 	for (size_t l = 0; l < gr->layers.size(); l++)
 		if (!doc.LayerHidden(part, l))
 			return l;
@@ -390,6 +405,21 @@ TPageView::DrawingAt(BPoint where, size_t& part, float& x, float& y) const
 		part = drawing;
 	}
 	return true;
+}
+
+
+void
+TPageView::ValidateShapeSelection(bool all)
+{
+	if (fShapes.empty())
+		return;
+	std::vector<bool> off = HiddenLayers(fDocument, fShapes[0].part);
+	const GRPart* gr = fDocument.GraphicsPart(fShapes[0].part);
+	fShapes.erase(std::remove_if(fShapes.begin(), fShapes.end(), [&](const ShapeRef& ref) {
+		return all || gr == nullptr || ref.layer >= off.size() || off[ref.layer]
+			|| ref.index >= gr->layers[ref.layer].shapes.size();
+	}), fShapes.end());
+	Invalidate();
 }
 
 
