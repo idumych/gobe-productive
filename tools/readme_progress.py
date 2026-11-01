@@ -96,7 +96,7 @@ def main():
             os.remove(old)
     with open(os.path.join(DOCS, name), "w") as f:
         f.write(image)
-    alt = f"Port progress: {done} of {n} features done, {n - done} left (see Status)"
+    alt = f"Port progress: {done} of {n} features done, {n - done} left (see Features)"
     readme = re.sub(r'<img src="docs/progress[^"]*" alt="[^"]*"',
         f'<img src="docs/{name}" alt="{alt}"', readme)
     with open(README, "w") as f:

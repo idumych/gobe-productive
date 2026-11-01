@@ -7,6 +7,12 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
+<p align="center"><img src="docs/progress-59-74-0.svg" alt="Port progress: 59 of 74 features done, 15 left (see Features)" width="720"></p>
+
+Not everything is ported yet: image editing, slide shows, editing tables
+and charts, a drawing's views and layers, and a few dialogs are still to
+come. The bar counts the [features](#features) by state.
+
 ![Gobe Productive on Haiku: a drawing with the ToolBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
@@ -17,7 +23,8 @@ works like the original, down to its menus and dialogs.
 
 ## What it does
 
-Every feature of the original is ported ([the full list](#features)).
+What's ported so far; [Features](#features) has the full list, with what
+isn't yet.
 
 **Word processing.** Styles and the style sheet, the FormatBar and ruler,
 tabs, columns, headers and footers, footnotes and endnotes, live fields, find and replace,
@@ -36,9 +43,14 @@ original's fill and pen inks, dashed, dotted and hashed pens and arrows.
 **Frames.** Text, spreadsheet, drawing, table and picture frames dragged
 out anywhere in a document, text wrapped around them, text frames linked
 so the text flows on. Open Frame Window edits a frame on its own.
+Pictures are shown and saved but not edited yet (the original's image
+processing part), and tables and charts aren't edited yet beyond their
+text and cells.
 
 **Presentations.** File > New makes a presentation the way the original
-did, and the original's presentations open and show their slides.
+did, and the original's presentations open and show their slides in the
+document. Not yet: the slide show itself, New Slide…, Duplicate Slide and
+transitions.
 
 
 **Inks and pens.** The original's colours, patterns, gradients and
@@ -81,9 +93,11 @@ shown on Linux.*
 
 ## Install
 
-The current release is **0.2.1**: the whole suite, as in 0.2.0, with
-saving fixed, the ToolBar drawn as the original's, and the FormatBar's
-pop-up menus working on Linux (0.1.1 was the word processor only).
+The current release is **0.2.1**: the word processor, spreadsheets,
+drawings, frames and presentations as in 0.2.0 (see [Features](#features)
+for what isn't ported yet), with saving fixed, the ToolBar drawn as the
+original's, and the FormatBar's pop-up menus working on Linux (0.1.1 was
+the word processor only).
 
 | System | Download | Install |
 |---|---|---|
@@ -167,7 +181,9 @@ comes with them (`LICENSE-WordNet`) and must stay with the files.
 ## Features
 
 What the original Gobe Productive 2.0.1 does, area by area. The last
-column is the release each feature came in.
+column is the release each feature came in, or "not yet". The "not yet"
+rows came from checking every menu command and dialog of the original
+(the main program and each part) against the port.
 
 ### Documents and windows
 
@@ -184,6 +200,7 @@ column is the release each feature came in.
 | The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | 0.2.0 |
 | The ToolBar's part tool: text, spreadsheet, drawing, table and picture frames dragged out in a drawing | 0.2.0 |
 | The ToolBar's Bezier tool (a press a point, a drag its control points) and toolbar shapes (the original's shapes, chosen from its menu, dragged out) | 0.2.0 |
+| The Missing Fonts dialog: a document using fonts that aren't installed says which, and what replaces them | not yet |
 
 ### Word processor
 
@@ -238,6 +255,40 @@ sizes, headings and options are saved with the document.
 | Ink set files: the original's ink sets (its "Ink Sets" folder, SETF archives) read and written, a document's own sets | 0.2.0 |
 | The Inks window's Kind menu (fill, pen and text ink) and its colours, patterns (bitmap patterns too), gradients and pens (opened by a click on an ink menu's icon; a click applies an ink); the Sets menu choosing among the application's sets, the ink set files and the document's own; the File menu's New Set…, Save Set, Save Set As…, Revert To Saved Set and Set Dimensions…; inks made, edited, cleared, cut, copied and pasted into the sets (a document's saved with it, a file's to its file) | 0.2.0 |
 | Editing inks and pens in the Inks window: Cut, Copy and Paste, the pen view's width buttons and slider, a colour, pattern or gradient edited | 0.2.0 |
+| Views & Layers: a drawing's layers (New Layer, Delete Layer, Rename Layer…) and views (Delete View, Rename View…) | not yet |
+| The drawing dialogs Arc Angle, Corner Radius and Scale (a frame's scale) | not yet |
+| Document > Document Size… for drawings, spreadsheets and presentations (text documents have it) | not yet |
+
+### Presentations
+
+| Feature | State |
+|---|---|
+| Slide shows: Start Presentation…, the presentation window (Show Presentation Window…), its Settings… (Auto-start, Cursor) | not yet |
+| New Slide…, Duplicate Slide, slide names and moving between slides | not yet |
+| Slide transitions | not yet |
+| A presentation's layers: New Layer…, Rename Layer… | not yet |
+
+### Tables
+
+| Feature | State |
+|---|---|
+| The Table menu: Merge Cells, Split Cell…, Select Row, Select Column, Insert and Delete Row and Column, Distribute Rows and Columns Evenly, Cell Gutter…, and the cells' vertical alignment (top, center, bottom) | not yet |
+| Insert Table… and the table's options | not yet |
+
+### Charts
+
+| Feature | State |
+|---|---|
+| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… and Axis… (axis options) | not yet |
+
+### Image processing
+
+| Feature | State |
+|---|---|
+| New image processing documents (File > New, Image Processing) and their Document Size… | not yet |
+| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings | not yet |
+| Selections: marquee, lasso and magic wand; moved, duplicated, floated and unfloated, inverted, deselected, deleted; Crop; pictures pasted and dropped in | not yet |
+| Plug-in filters (ImageManip and GIMP plug-ins) and Edit Externally… | not yet |
 
 ### Other formats (translators)
 
