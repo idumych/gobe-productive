@@ -63,14 +63,14 @@ with gaps, under the other bars. 0.2.1 draws it as the original does: 28-pixel b
 beside every bar, with the pop-up triangle on the arrow, part and shapes
 tools (whose icon is its shape, the star). The pop-up triangles are blue,
 as in the original, not red, and the zoom box's "100%" fits in its box.
-Here is the Resume sample in 0.2.0, 0.2.1 and the original, with the
+Here is the Resume sample in 0.2.0, the original and 0.2.1, with the
 ToolBar shown:
 
-![The Resume sample in 0.2.0 (left), 0.2.1 (middle) and the original on BeOS 5 (right)](docs/screenshots/compare-resume.png)
+![The Resume sample in 0.2.0 (left), the original on BeOS 5 (middle) and 0.2.1 (right)](docs/screenshots/compare-resume.png)
 
 The bars close up, at twice the size:
 
-![The ToolBar, FormatBar and PartBar in 0.2.0, 0.2.1 and the original, at twice the size](docs/screenshots/compare-bars.png)
+![The ToolBar, FormatBar and PartBar in 0.2.0, the original and 0.2.1, at twice the size](docs/screenshots/compare-bars.png)
 
 *Still different: the original saves which bars a document shows (the
 Resume opens with the spelling bar on BeOS), which the port doesn't read
