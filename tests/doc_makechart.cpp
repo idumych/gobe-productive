@@ -6,6 +6,7 @@
 // (series down), a block without labels, and LoanCalculator's payments
 // the same way.
 // Arguments: documents (LoanCalculator is used if given).
+#include <cmath>
 #include <cstdio>
 #include <string>
 
@@ -147,6 +148,59 @@ main(int argc, char** argv)
 			Set(*ss, r, c, cells[r][c]);
 	MakeAndReopen(doc, part, Range(0, 0, 3, 2), "labelled", 3, 2, {"Q1", "Q2", "Q3"},
 		{"North", "South"}, {10, 15, 7, 20, 5, 9.5f});
+	{
+		// placed right of the last column with anything in it: past the
+		// row headings (36 points: the sheet's drawing starts at the
+		// frame's corner) and the columns, level with the range's first
+		// row below the column headings
+		const SSPart* sheet = doc.SpreadsheetPart(part);
+		float right = 36 + 20;
+		for (uint16_t c = 0; c <= 2; c++)
+			right += sheet->ColumnWidth(c);
+		const Frame* placed = nullptr;
+		for (size_t p = 0; p < doc.tails.size(); p++)
+			if (doc.tailRead[p])
+				for (const Portal& portal : doc.tails[p].portals)
+					for (const Frame& f : portal.frames)
+						if (!doc.chartParts.empty() && f.part == doc.chartParts.back().first)
+							placed = &f;
+		Check(sheet->options[3] && sheet->options[4] && placed != nullptr
+			&& std::fabs(placed->origin[0] - right) < 0.5f
+			&& std::fabs(placed->origin[1] - sheet->defaultHeight) < 0.5f,
+			"the chart right of the cells, past the headings: "
+			+ (placed == nullptr ? std::string("none") : std::to_string(placed->origin[0]) + ","
+			+ std::to_string(placed->origin[1])) + " for " + std::to_string(right));
+	}
+
+	{
+		// four columns: no room at the right in the new sheet's frame (609
+		// points): below the cells instead, not over them
+		Document four;
+		Check(CreateBlankSpreadsheet(four, error), "another new spreadsheet " + error);
+		size_t fourPart = four.spreadsheetParts.empty() ? 0 : four.spreadsheetParts[0].first;
+		SSPart* fs = four.EditableSpreadsheetPart(fourPart);
+		const char* block[4][4] = {{"", "North", "South", "West"}, {"Q1", "10", "20", "12"},
+			{"Q2", "15", "5", "9"}, {"Q3", "7", "9.5", "14"}};
+		for (uint16_t r = 0; fs != nullptr && r < 4; r++)
+			for (uint16_t c = 0; c < 4; c++)
+				Set(*fs, r, c, block[r][c]);
+		int made = MakeChart(four, fourPart, Range(0, 0, 3, 3), error);
+		const Frame* placed = nullptr;
+		for (size_t p = 0; p < four.tails.size(); p++)
+			if (four.tailRead[p])
+				for (const Portal& portal : four.tails[p].portals)
+					for (const Frame& f : portal.frames)
+						if (made >= 0 && f.part == uint32_t(made))
+							placed = &f;
+		const SSPart* sheet = four.SpreadsheetPart(fourPart);
+		float below = sheet->defaultHeight + 20;
+		for (uint16_t r = 0; r <= 3; r++)
+			below += sheet->RowHeight(r);
+		Check(placed != nullptr && std::fabs(placed->origin[0] - 56) < 0.5f
+			&& std::fabs(placed->origin[1] - below) < 0.5f,
+			"four columns: the chart below the cells: " + (placed == nullptr ? std::string("none")
+			: std::to_string(placed->origin[0]) + "," + std::to_string(placed->origin[1])));
+	}
 
 	// wide (more columns than rows): series down; and no labels at all
 	ss = doc.EditableSpreadsheetPart(part);
