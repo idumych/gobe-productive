@@ -59,19 +59,18 @@ Styles can be exported to a file and imported into another document.
 
 The port is checked against Gobe Productive 2.0.1 running on BeOS 5.
 Doing so after 0.2.0 showed its ToolBar was drawn wrongly: small buttons
-with gaps, under the other bars. The next release draws it as the
-original does: 28-pixel buttons edge to edge, in a column down the left
+with gaps, under the other bars. 0.2.1 draws it as the original does: 28-pixel buttons edge to edge, in a column down the left
 beside every bar, with the pop-up triangle on the arrow, part and shapes
 tools (whose icon is its shape, the star). The pop-up triangles are blue,
 as in the original, not red, and the zoom box's "100%" fits in its box.
-Here is the Resume sample in 0.2.0, the next release and the original, with
-the ToolBar shown:
+Here is the Resume sample in 0.2.0, 0.2.1 and the original, with the
+ToolBar shown:
 
-![The Resume sample in 0.2.0 (left), the next release (middle) and the original on BeOS 5 (right)](docs/screenshots/compare-resume.png)
+![The Resume sample in 0.2.0 (left), 0.2.1 (middle) and the original on BeOS 5 (right)](docs/screenshots/compare-resume.png)
 
 The bars close up, at twice the size:
 
-![The ToolBar, FormatBar and PartBar in 0.2.0, the next release and the original, at twice the size](docs/screenshots/compare-bars.png)
+![The ToolBar, FormatBar and PartBar in 0.2.0, 0.2.1 and the original, at twice the size](docs/screenshots/compare-bars.png)
 
 *Still different: the original saves which bars a document shows (the
 Resume opens with the spelling bar on BeOS), which the port doesn't read
@@ -82,17 +81,18 @@ shown on Linux.*
 
 ## Install
 
-The current release is **0.2.0**, the whole suite (0.1.1 was the word
-processor only).
+The current release is **0.2.1**: the whole suite, as in 0.2.0, with
+saving fixed, the ToolBar drawn as the original's, and the FormatBar's
+pop-up menus working on Linux (0.1.1 was the word processor only).
 
 | System | Download | Install |
 |---|---|---|
-| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.2.0-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/gobeproductive-0.2.0-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.2.0-1-x86_64.hpkg` |
-| Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.2.0-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-x86_64.AppImage) | `chmod +x GobeProductive-0.2.0-x86_64.AppImage`, then run it |
-| Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.2.0-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-aarch64.AppImage) | `chmod +x GobeProductive-0.2.0-aarch64.AppImage`, then run it |
+| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.2.1-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.1/gobeproductive-0.2.1-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.2.1-1-x86_64.hpkg` |
+| Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.2.1-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.1/GobeProductive-0.2.1-x86_64.AppImage) | `chmod +x GobeProductive-0.2.1-x86_64.AppImage`, then run it |
+| Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.2.1-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.1/GobeProductive-0.2.1-aarch64.AppImage) | `chmod +x GobeProductive-0.2.1-aarch64.AppImage`, then run it |
 
 Checksums and release notes are on the
-[release page](https://github.com/idumych/gobe-productive/releases/tag/v0.2.0).
+[release page](https://github.com/idumych/gobe-productive/releases/tag/v0.2.1).
 On Haiku it appears in the Deskbar's Applications menu. The Command key is
 **Alt** on Haiku and **Ctrl** on Linux.
 
@@ -132,24 +132,17 @@ the app), and you can name the image, installer or program in the
 BeOS-format (BFS) CD images can't be read yet: copy the installer or the
 folder out of the image first (Haiku can mount it), and choose that.
 
-### Known issue in 0.2.0
-
-After File > Save the document is written correctly, but the window title
-keeps its unsaved "*", the status line shows "Command 'Gsvd' - not ported
-yet", and quitting asks to save again. Choosing Don't Save loses nothing
-that was saved. It's fixed in the sources for the next release.
-
-### Where 0.2.0 was tested
+### Where 0.2.1 was tested
 
 | System | What was tested |
 |---|---|
-| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed and saved; on the build just before, also reopening, Edit Styles and Make Chart |
-| Linux x86_64, X11 | The AppImage (Xvfb and Openbox): unpacked the original, opened a document, typed and saved |
+| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed and saved (the title loses its "*", quitting doesn't ask again), reopened it, Edit Styles; the ToolBar |
+| Linux x86_64, X11 | The AppImage (Xvfb and Openbox): unpacked the original from its installer, opened a document, typed, saved, quit and reopened it, Edit Styles from the style menu |
 | Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
 | Linux aarch64, X11 | Started on an arm64 machine: the window appears |
 | Renku OS | Not tried; the Haiku package should install there |
 
-There's no Haiku arm64 package yet. The other features new in 0.2.0 were
+There's no Haiku arm64 package yet. The other features were
 tried during development in a Haiku R1/beta6 VM and by the host tests,
 not on the release builds. Also untested so far: real hardware,
 interactive Wayland desktops, real Gobe Productive CD images (only images
