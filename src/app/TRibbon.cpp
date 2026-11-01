@@ -92,25 +92,34 @@ TMICNButtonElement::TMICNButtonElement(uint32 id, BPoint where, int32 micn, BMes
 
 
 // TMICNButtonElement::Draw: the icon in the middle, a pixel lower right
-// when pressed
+// when pressed (TMICNMenuElement::Draw: the pop-up indicator too)
 void
 TMICNButtonElement::Draw(BView* view, bool down)
 {
 	view->SetHighColor(kPanel);
 	view->FillRect(rect);
-	if (fIcon != NULL) {
-		BPoint at(roundf(rect.left + rect.Width() * 0.5f - 8),
-			roundf(rect.top + rect.Height() * 0.5f - 8));
-		if (down)
-			at += BPoint(1, 1);
-		view->SetDrawingMode(B_OP_OVER);
-		view->DrawBitmap(fIcon.get(), at);
-		view->SetDrawingMode(B_OP_COPY);
-	}
+	BPoint at(roundf(rect.left + rect.Width() * 0.5f - 8),
+		roundf(rect.top + rect.Height() * 0.5f - 8));
+	if (down)
+		at += BPoint(1, 1);
+	DrawIcon(view, at);
+	if (popUp)
+		TRibbon::DrawPopUpIndicator(view, down ? rect.OffsetByCopy(1, 1) : rect);
 	if (down)
 		TRibbon::DrawOutlineDown(view, rect);
 	else
 		TRibbon::DrawOutlineUp(view, rect, selected);
+}
+
+
+void
+TMICNButtonElement::DrawIcon(BView* view, BPoint where)
+{
+	if (fIcon == NULL)
+		return;
+	view->SetDrawingMode(B_OP_OVER);
+	view->DrawBitmap(fIcon.get(), where);
+	view->SetDrawingMode(B_OP_COPY);
 }
 
 
@@ -468,10 +477,12 @@ TMenuElement::MouseDown(TRibbon* ribbon, BPoint where)
 }
 
 
+// (the original's colour is 0xffff0000 as a little-endian rgb_color:
+// blue)
 void
 TRibbon::DrawPopUpIndicator(BView* view, BRect r)
 {
-	view->SetHighColor(255, 0, 0);
+	view->SetHighColor(0, 0, 255);
 	for (int i = 0; i < 3; i++)
 		view->StrokeLine(BPoint(r.right - 5 + i, r.bottom - 3 - i),
 			BPoint(r.right - 5 + i, r.bottom - 3));

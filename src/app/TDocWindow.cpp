@@ -257,24 +257,27 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 
 	BLayoutBuilder::Group<> layout(this, B_VERTICAL, 0);
 	layout.Add(menuBar);
-	if (fFormatBar != NULL)
-		layout.Add(fFormatBar);
-	if (fPartBar != NULL)
-		layout.Add(fPartBar);
-	if (fSpellBar != NULL)
-		layout.Add(fSpellBar);
-	if (fRuler != NULL)
-		layout.Add(fRuler);
-	if (fEntryBar != NULL)
-		layout.Add(fEntryBar);
-	if (fSheetBar != NULL)
-		layout.Add(fSheetBar);
-	// the ToolBar beside the document
+	// the ToolBar down the left, from the menu bar; the other bars and the
+	// document beside it
 	{
 		BLayoutBuilder::Group<>::GroupBuilder middle = layout.AddGroup(B_HORIZONTAL, 0);
 		if (fToolBar != NULL)
 			middle.Add(fToolBar);
-		middle.Add(desk);
+		auto bars = middle.AddGroup(B_VERTICAL, 0);
+		if (fFormatBar != NULL)
+			bars.Add(fFormatBar);
+		if (fPartBar != NULL)
+			bars.Add(fPartBar);
+		if (fSpellBar != NULL)
+			bars.Add(fSpellBar);
+		if (fRuler != NULL)
+			bars.Add(fRuler);
+		if (fEntryBar != NULL)
+			bars.Add(fEntryBar);
+		if (fSheetBar != NULL)
+			bars.Add(fSheetBar);
+		bars.Add(desk);
+		bars.End();
 		middle.End();
 	}
 	layout

@@ -28,7 +28,51 @@ const struct {
 };
 
 const uint32 kToolFamily = 'TOOL';
-const float kWidth = 26;
+// (33 wide: the tools at 2, 28 square)
+const float kWidth = 32;
+
+
+// a toolbar shape's outline scaled into `frame`
+void
+ShapeIn(const BezierPath& path, BRect frame, BShape& shape)
+{
+	float left = 1e9f, top = 1e9f, right = -1e9f, bottom = -1e9f;
+	for (const Vertex& v : path.vertices) {
+		left = std::min(left, v.point[0]);
+		right = std::max(right, v.point[0]);
+		top = std::min(top, v.point[1]);
+		bottom = std::max(bottom, v.point[1]);
+	}
+	float scale = std::min(frame.Width() / std::max(right - left, 0.001f),
+		frame.Height() / std::max(bottom - top, 0.001f));
+	auto at = [&](float x, float y) {
+		return BPoint(frame.left + (x - left) * scale, frame.top + (y - top) * scale);
+	};
+	const std::vector<Vertex>& v = path.vertices;
+	if (v.empty())
+		return;
+	shape.MoveTo(at(v[0].point[0], v[0].point[1]));
+	size_t n = v.size();
+	for (size_t i = 1; i < n + (path.closed ? 1 : 0); i++) {
+		const Vertex& a = v[i - 1];
+		const Vertex& b = v[i % n];
+		BPoint c[3] = {at(a.point[0] + a.control2[0], a.point[1] + a.control2[1]),
+			at(b.point[0] + b.control1[0], b.point[1] + b.control1[1]),
+			at(b.point[0], b.point[1])};
+		shape.BezierTo(c);
+	}
+	if (path.closed)
+		shape.Close();
+}
+
+
+// the toolbar shape 'POLY' `id`
+bool
+ToolbarShape(int32 id, BezierPath& path)
+{
+	const ResourceFile::Resource* r = GobeResources::File().Find('POLY', id);
+	return r != NULL && ParseToolbarShape(r->data, path);
+}
 
 
 // the part tool (TPartMenu behind its button): a pop-up of the part kinds
@@ -82,33 +126,8 @@ public:
 	virtual void DrawContent()
 	{
 		BView* view = Menu();
-		BRect frame = Frame().InsetByCopy(3, 3);
-		float left = 1e9f, top = 1e9f, right = -1e9f, bottom = -1e9f;
-		for (const Vertex& v : fPath.vertices) {
-			left = std::min(left, v.point[0]);
-			right = std::max(right, v.point[0]);
-			top = std::min(top, v.point[1]);
-			bottom = std::max(bottom, v.point[1]);
-		}
-		float scale = std::min(frame.Width() / std::max(right - left, 0.001f),
-			frame.Height() / std::max(bottom - top, 0.001f));
-		auto at = [&](float x, float y) {
-			return BPoint(frame.left + (x - left) * scale, frame.top + (y - top) * scale);
-		};
 		BShape shape;
-		const std::vector<Vertex>& v = fPath.vertices;
-		shape.MoveTo(at(v[0].point[0], v[0].point[1]));
-		size_t n = v.size();
-		for (size_t i = 1; i < n + (fPath.closed ? 1 : 0); i++) {
-			const Vertex& a = v[i - 1];
-			const Vertex& b = v[i % n];
-			BPoint c[3] = {at(a.point[0] + a.control2[0], a.point[1] + a.control2[1]),
-				at(b.point[0] + b.control1[0], b.point[1] + b.control1[1]),
-				at(b.point[0], b.point[1])};
-			shape.BezierTo(c);
-		}
-		if (fPath.closed)
-			shape.Close();
+		ShapeIn(fPath, Frame().InsetByCopy(3, 3), shape);
 		view->PushState();
 		view->MovePenTo(B_ORIGIN);
 		view->SetHighColor(0, 0, 0);
@@ -122,11 +141,21 @@ private:
 
 
 // TToolBarPopUp 'TOOS' (TToolbarShapesMenu): the shapes in a grid; one
-// chosen is the tool's shape
+// chosen is the tool's shape, and its picture the tool's icon (at first
+// the menu's first, TToolBarPopUp::getFirstMenuImage): white, outlined
 class TShapesElement : public TMICNButtonElement {
 public:
 	TShapesElement(BPoint where, int32 icon)
-		: TMICNButtonElement(kToolShapes, where, icon, NULL) {}
+		: TMICNButtonElement(kToolShapes, where, icon, NULL)
+	{
+		BezierPath path;
+		for (int32 id = 0; id < 256; id++) {
+			if (ToolbarShape(id, path)) {
+				fShape = id;
+				break;
+			}
+		}
+	}
 
 	virtual bool MouseDown(TRibbon* ribbon, BPoint where)
 	{
@@ -134,9 +163,8 @@ public:
 		const int32 kColumns = 6;
 		int32 count = 0;
 		for (int32 id = 0; id < 256; id++) {
-			const ResourceFile::Resource* r = GobeResources::File().Find('POLY', id);
 			BezierPath path;
-			if (r == NULL || !ParseToolbarShape(r->data, path))
+			if (!ToolbarShape(id, path))
 				continue;
 			BMessage* message = new BMessage(TToolBar::kMsgTool);
 			message->AddInt32("tool", int32(kToolShapes));
@@ -150,12 +178,35 @@ public:
 		BMenuItem* chosen = count > 0 ? menu->Go(at, false, true, false) : NULL;
 		ribbon->DrawElement(this, false);
 		if (chosen != NULL && chosen->Message() != NULL) {
+			fShape = chosen->Message()->GetInt32("shape", fShape);
 			ribbon->SelectElement(kToolShapes, kToolFamily);
 			ribbon->Send(chosen->Message());
 		}
 		delete menu;
 		return true;
 	}
+
+protected:
+	virtual void DrawIcon(BView* view, BPoint where)
+	{
+		BezierPath path;
+		if (fShape < 0 || !ToolbarShape(fShape, path)) {
+			TMICNButtonElement::DrawIcon(view, where);
+			return;
+		}
+		BShape shape;
+		ShapeIn(path, BRect(where, where + BPoint(15, 15)), shape);
+		view->PushState();
+		view->MovePenTo(B_ORIGIN);
+		view->SetHighColor(255, 255, 255);
+		view->FillShape(&shape);
+		view->SetHighColor(0, 0, 0);
+		view->StrokeShape(&shape);
+		view->PopState();
+	}
+
+private:
+	int32 fShape = -1;
 };
 
 } // namespace
@@ -166,7 +217,9 @@ TToolBar::TToolBar(TPageView* view)
 	TRibbon("ToolBar"),
 	fView(view)
 {
-	// TToolBar::LoadAllElements
+	// TToolBar::LoadAllElements: TToolBarElements and TToolBarPopUps (the
+	// arrow, part and shapes tools), 28 square, each 27 below the last
+	// (their edges shared), 6 more after the part tool
 	float y = 2;
 	for (const auto& t : kTools) {
 		TMICNButtonElement* button;
@@ -179,6 +232,8 @@ TToolBar::TToolBar(TPageView* view)
 			message->AddInt32("tool", int32(t.tool));
 			button = new TMICNButtonElement(t.tool, BPoint(2, y), t.icon, message);
 		}
+		button->rect.Set(2, y, 2 + 28 - 1, y + 28 - 1);
+		button->popUp = t.tool == kToolArrow || t.tool == kToolPart || t.tool == kToolShapes;
 		button->family = kToolFamily;
 		button->selectable = true;
 		button->enabled = true;

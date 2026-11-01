@@ -67,6 +67,14 @@ public:
 	virtual void Invoke(TRibbon* ribbon);
 	virtual bool Clickable() const { return true; }
 
+	// with the pop-up indicator, as TMICNMenuElement draws it (the
+	// ToolBar's pop-ups)
+	bool popUp = false;
+
+protected:
+	// the icon (Draw, before the outline)
+	virtual void DrawIcon(BView* view, BPoint where);
+
 private:
 	std::unique_ptr<BMessage> fMessage;
 };
@@ -122,7 +130,7 @@ public:
 	// the outlines (DrawElementRect, DrawElementOutlineUp, ...Down)
 	static void DrawOutlineUp(BView* view, BRect rect, bool selected);
 	static void DrawOutlineDown(BView* view, BRect rect);
-	// DrawPopUpIndicator: a small red triangle in the bottom right corner
+	// DrawPopUpIndicator: a small blue triangle in the bottom right corner
 	static void DrawPopUpIndicator(BView* view, BRect rect);
 
 private:

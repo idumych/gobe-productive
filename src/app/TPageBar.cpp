@@ -26,15 +26,18 @@ const float kSteps[20] = {0.015625f, 0.03125f, 0.0625f, 0.125f, 0.25f, 1.0f / 3,
 const uint32 kMsgRepeat = 'Gzrp';
 
 
-// the plain font, smaller until it fits `height` (as TPageBar and
-// TScaleSlider shrink theirs; with the height of BeOS's Bitstream fonts,
-// 1.2 x the size)
+// the plain font, smaller until its ascent and descent fit `height` (as
+// TPageBar and TScaleSlider shrink theirs)
 BFont
 FittingFont(float height)
 {
 	BFont font(be_plain_font);
-	while (font.Size() * 1.2f > height && font.Size() > 1)
+	font_height fh;
+	font.GetHeight(&fh);
+	while (fh.ascent + fh.descent > height && font.Size() > 1) {
 		font.SetSize(font.Size() - 1);
+		font.GetHeight(&fh);
+	}
 	return font;
 }
 
