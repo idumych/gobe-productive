@@ -498,11 +498,8 @@ void
 TDocWindow::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
-		case kMsgDocumentSaved:
-			fSaving = false;
-			break;
 		case kMsgDocumentChanged:
-			if (!fSaving && !fShared->modified) {
+			if (!fShared->modified) {
 				fShared->modified = true;
 				fShared->TitlesChanged();
 			}
@@ -933,8 +930,11 @@ TDocWindow::MessageReceived(BMessage* message)
 				return;
 			// TDoc::RevertAlert: "Revert “name” to last saved version?",
 			// Cancel (Esc) or Revert
+			BString name = fDocument->name.c_str();
+			if (name.IsEmpty())
+				name = BPath(fDocument->path.c_str()).Leaf();
 			BString text = GobeResources::IndexString(2, 17);
-			text << fDocument->name.c_str() << GobeResources::IndexString(2, 18);
+			text << name << GobeResources::IndexString(2, 18);
 			BAlert* alert = new BAlert("Revert", text.String(),
 				GobeResources::IndexString(2, 1).String(),
 				GobeResources::IndexString(2, 16).String(), NULL, B_WIDTH_AS_USUAL,
@@ -1404,12 +1404,11 @@ TDocWindow::Save(const std::string& path)
 		fPages->DocumentSaved();
 		fPages->DocumentReloaded();
 	}
-	// laying the document out again posts kMsgDocumentChanged; those
-	// aren't edits
-	fSaving = true;
-	PostMessage(kMsgDocumentSaved);
 	fShared->modified = false;
 	fShared->Changed(this);
+	// (this window has the document as saved: not laid out again as if
+	// another window had changed it, which marked it changed again)
+	fSeenGeneration = fShared->generation;
 	fShared->TitlesChanged();
 	fStatus->SetText(("Saved " + path).c_str());
 	return true;

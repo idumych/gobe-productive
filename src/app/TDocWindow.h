@@ -134,7 +134,6 @@ private:
 	class TScaleSlider* fScaleSlider = NULL;
 	class BFilePanel* fInsertPanel = NULL;	// File > Insert…
 	bool fCloseAfterSave = false;	// Save As chosen in the close alert
-	bool fSaving = false;	// saved; changes ignored until kMsgDocumentSaved
 public:
 	// the application is quitting (the close alert asks "before quitting?")
 	bool fAppQuitting = false;
