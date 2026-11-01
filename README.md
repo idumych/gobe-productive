@@ -2,7 +2,7 @@
 
 Gobe Productive 2.0.1, the integrated office suite for BeOS, rebuilt for
 today's systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland),
-on x86_64 and arm64. One document can hold text, spreadsheets, drawings,
+on x86_64 (and arm64 on Linux). One document can hold text, spreadsheets, drawings,
 charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
@@ -63,7 +63,6 @@ processor only).
 | System | Download | Install |
 |---|---|---|
 | Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.2.0-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/gobeproductive-0.2.0-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.2.0-1-x86_64.hpkg` |
-| Haiku (arm64, nightly) | [gobeproductive-0.2.0-1-arm64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/gobeproductive-0.2.0-1-arm64.hpkg) | `pkgman install ./gobeproductive-0.2.0-1-arm64.hpkg` |
 | Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.2.0-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-x86_64.AppImage) | `chmod +x GobeProductive-0.2.0-x86_64.AppImage`, then run it |
 | Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.2.0-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-aarch64.AppImage) | `chmod +x GobeProductive-0.2.0-aarch64.AppImage`, then run it |
 
@@ -108,22 +107,29 @@ the app), and you can name the image, installer or program in the
 BeOS-format (BFS) CD images can't be read yet: copy the installer or the
 folder out of the image first (Haiku can mount it), and choose that.
 
+### Known issue in 0.2.0
+
+After File > Save the document is written correctly, but the window title
+keeps its unsaved "*", the status line shows "Command 'Gsvd' - not ported
+yet", and quitting asks to save again. Choosing Don't Save loses nothing
+that was saved. It's fixed in the sources for the next release.
+
 ### Where 0.2.0 was tested
 
 | System | What was tested |
 |---|---|
-| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed, saved, reopened, Edit Styles, Make Chart |
-| Haiku arm64 (a master nightly, hrev60314, in QEMU) | Installed the package, unpacked the original, opened a document, typed, saved, reopened, Edit Styles |
-| Linux x86_64, X11 | The same, with the AppImage (Xvfb and Openbox), and a new drawing |
+| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed and saved; on the build just before, also reopening, Edit Styles and Make Chart |
+| Linux x86_64, X11 | The AppImage (Xvfb and Openbox): unpacked the original, opened a document, typed and saved |
 | Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
 | Linux aarch64, X11 | Started on an arm64 machine: the window appears |
 | Renku OS | Not tried; the Haiku package should install there |
 
-The other features new in 0.2.0 were tried during development in a Haiku
-R1/beta6 VM and by the host tests, not again on the release builds.
-Also untested so far: real hardware, interactive Wayland desktops, real
-Gobe Productive CD images (only images made from the installer), and
-opening documents saved by the port in the original on BeOS.
+There's no Haiku arm64 package yet. The other features new in 0.2.0 were
+tried during development in a Haiku R1/beta6 VM and by the host tests,
+not on the release builds. Also untested so far: real hardware,
+interactive Wayland desktops, real Gobe Productive CD images (only images
+made from the installer), and opening documents saved by the port in the
+original on BeOS.
 
 ## The thesaurus and dictionary
 
