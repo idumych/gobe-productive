@@ -29,6 +29,10 @@ public:
 		const ResourceFile* resources = NULL);
 
 	virtual void MessageReceived(BMessage* message);
+	// TDialogWindow::DispatchMessage: Escape (without Command, Control or
+	// Option) in a dialog that isn't a floater closes it, or, when it can't
+	// be closed, presses its Cancel button (item 1)
+	virtual void DispatchMessage(BMessage* message, BHandler* target);
 
 	static bool Exists(int32 dialogId);
 

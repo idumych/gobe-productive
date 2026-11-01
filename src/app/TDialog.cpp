@@ -480,6 +480,37 @@ TDialog::MakeControl(const ItemData& item)
 
 
 void
+TDialog::DispatchMessage(BMessage* message, BHandler* target)
+{
+	const char* bytes;
+	int32 modifiers;
+	bool floater = Feel() == B_FLOATING_SUBSET_WINDOW_FEEL
+		|| Feel() == B_FLOATING_APP_WINDOW_FEEL || Feel() == B_FLOATING_ALL_WINDOW_FEEL;
+	if (message->what == B_KEY_DOWN && !floater
+			&& message->FindString("bytes", &bytes) == B_OK && bytes[0] == B_ESCAPE
+			&& message->FindInt32("modifiers", &modifiers) == B_OK
+			&& (modifiers & (B_COMMAND_KEY | B_CONTROL_KEY | B_OPTION_KEY)) == 0) {
+		if ((Flags() & B_NOT_CLOSABLE) == 0) {
+			PostMessage(B_QUIT_REQUESTED);
+			return;
+		}
+		// the Cancel button shown pressed for a moment, then invoked
+		if (BButton* cancel = dynamic_cast<BButton*>(Item(1))) {
+			cancel->SetValue(1);
+			UpdateIfNeeded();
+			snooze(100000);
+			cancel->SetValue(0);
+			UpdateIfNeeded();
+			snooze(100000);
+			cancel->Invoke();
+			return;
+		}
+	}
+	BWindow::DispatchMessage(message, target);
+}
+
+
+void
 TDialog::MessageReceived(BMessage* message)
 {
 	if (message->HasInt32("dialog")) {
