@@ -5819,7 +5819,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM4A': case 'sM4B': case 'sM4C':
 		case 'sM44': case 'sM45': case 'sM48': case 'sM49': case 'sM4D': case 'sM4E': case 'sM4T':
 		case 'sM46': case 'sM47':
-		case 'sM4P': case 'sM4R': case 'sC00': case 'sC03': case 'sC04': case 'sC05': case 'sM4O':	// shape menus
+		case 'sM4P': case 'sM4R': case 'sC00': case 'sC02': case 'sC03': case 'sC04': case 'sC05': case 'sC06': case 'sM4O':	// shape menus
 		case 'sf06': case 'sf07': case 'sf08': case 'sf0E': case 'sf0S':	// pen, shapes
 		case 'sf09':														// the pen's size
 		case 'sf0A': case 'sf0F':							// the pen's type, arrows

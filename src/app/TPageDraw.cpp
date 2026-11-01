@@ -1005,6 +1005,40 @@ TPageView::ShapeCommand(BMessage* message)
 	// Reshape Shapes): each point's flags (0x1 its controls made smooth,
 	// 0x2 smooth) set as the original sets them; Unsmooth also takes the
 	// control points away; then TGRBezigon::Recalc's smoothing
+	// a point's Delete Handle(s) ('sC02': TDeleteShapesCommand while
+	// reshaping, the point taken out; a path keeps two) and a control point's
+	// Delete Control(s) ('sC06': it put back on its point)
+	if ((what == 'sC02' || what == 'sC06') && !fShapes.empty()) {
+		GRPart* gr = fDocument.EditableGraphicsPart(fShapes[0].part);
+		const ShapeRef& ref = fShapes[0];
+		if (gr == nullptr || ref.layer >= gr->layers.size()
+				|| ref.index >= gr->layers[ref.layer].shapes.size())
+			return true;
+		Shape& sh = gr->layers[ref.layer].shapes[ref.index];
+		if (sh.kind != Sig("BEZI") || ShapeLocked(sh) || sh.paths.empty())
+			return true;
+		std::vector<Vertex>& vertices = sh.paths[0].vertices;
+		int32 n = message->GetInt32(what == 'sC02' ? "vertex" : "control", -1);
+		size_t v = size_t(what == 'sC02' ? n : n / 2);
+		if (n < 0 || v >= vertices.size() || (what == 'sC02' && vertices.size() <= 2))
+			return true;
+		fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, 14).String(),
+			CurrentViewState());
+		if (what == 'sC02') {
+			vertices.erase(vertices.begin() + long(v));
+			// (the box around the points again)
+			MoveVertex(sh, 0, sh.origin[0] + vertices[0].point[0],
+				sh.origin[1] + vertices[0].point[1]);
+		} else {
+			float* c = n % 2 == 0 ? vertices[v].control1 : vertices[v].control2;
+			c[0] = c[1] = 0;
+			vertices[v].flags &= uint8_t(~0x3);
+		}
+		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return true;
+	}
 	if ((what == 'sC03' || what == 'sC04' || what == 'sC05') && !fShapes.empty()) {
 		GRPart* gr = fDocument.EditableGraphicsPart(fShapes[0].part);
 		if (gr == nullptr)
@@ -1017,8 +1051,13 @@ TPageView::ShapeCommand(BMessage* message)
 			Shape& sh = gr->layers[ref.layer].shapes[ref.index];
 			if (sh.kind != Sig("BEZI") || ShapeLocked(sh))
 				continue;
+			// (one point: the one a Reshape menu named)
+			int32 only = message->GetInt32("vertex", -1);
 			for (BezierPath& path : sh.paths) {
-				for (Vertex& v : path.vertices) {
+				for (size_t i = 0; i < path.vertices.size(); i++) {
+					Vertex& v = path.vertices[i];
+					if (only >= 0 && (&path != &sh.paths[0] || int32(i) != only))
+						continue;
 					if (what == 'sC05')
 						v.flags |= 0x3;
 					else if (what == 'sC03')
@@ -1510,11 +1549,31 @@ TPageView::DrawingContextMenu(BPoint where)
 		menu->AddSeparatorItem();
 		add(string(1104, 13), new BMessage('sM4R'));
 	} else if (s.kind == Sig("BEZI")) {
-		add(string(1104, 0), new BMessage('sC00'), closed);
-		add(string(1104, 1), new BMessage('sC05'));
-		add(string(1104, 2), new BMessage('sC04'));
-		add(string(1104, 3), new BMessage('sC03'));
-		add(string(1104, 4), new BMessage('sM4O'));
+		// (Reshape: TGRBezigon::addVertexItem's, for the point or the
+		// control point clicked)
+		float px = where.x - x, py = where.y - y;
+		int control = fShapeMode == 2 ? HitControlPoint(s, px, py, kHandle + 1) : -1;
+		int vertex = fShapeMode == 2 && control < 0 ? HitVertex(s, px, py, kHandle + 1) : -1;
+		auto at = [&](uint32 what, const char* field, int32 value) {
+			BMessage* message = new BMessage(what);
+			message->AddInt32(field, value);
+			return message;
+		};
+		if (vertex >= 0) {
+			add(string(1104, 5), at('sC02', "vertex", vertex));
+			add(string(1104, 6), at('sC05', "vertex", vertex));
+			add(string(1104, 7), at('sC04', "vertex", vertex));
+			add(string(1104, 8), at('sC03', "vertex", vertex));
+		} else if (control >= 0)
+			add(string(1104, 9), at('sC06', "control", control));
+		else {
+			add(string(1104, 0), new BMessage('sC00'), closed);
+			add(string(1104, 1), new BMessage('sC05'));
+			add(string(1104, 2), new BMessage('sC04'));
+			add(string(1104, 3), new BMessage('sC03'));
+			menu->AddSeparatorItem();
+			add(string(1104, 4), new BMessage('sM4O'));
+		}
 	} else if (s.kind == Sig("FRAM")) {
 		add(string(1104, 10), new BMessage('sM47'));
 		add(string(1104, 11), new BMessage('sM30'));
