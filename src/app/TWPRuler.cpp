@@ -12,6 +12,7 @@
 #include "Document.h"
 #include "Editing.h"
 #include "GobeResources.h"
+#include "Ruler.h"
 #include "TMenu.h"
 #include "TPageView.h"
 #include "TWPDialogs.h"
@@ -19,10 +20,6 @@
 namespace gobe {
 
 namespace {
-
-// TRuler::UnitSize: points per unit (in, cm, mm, pc, pt, li); "lines"
-// count as points on the ruler
-const float kUnitSize[6] = {72.0f, 28.3464f, 2.83464f, 12.0f, 1.0f, 1.0f};
 
 // TRuler::drawSeparator, TWPRuler::Draw
 const rgb_color kGray = {0x70, 0x70, 0x70, 255};
@@ -125,20 +122,32 @@ TWPRuler::PreferredSize()
 
 
 int
-TWPRuler::Unit() const
+RulerUnit(const Document& doc)
 {
-	const Document& doc = fPages->Doc();
 	int unit = doc.sheets.sheets.empty() ? 0 : int(doc.sheets.sheets[0].unit);
 	return unit >= 0 && unit < 6 ? unit : 0;
 }
 
 
 int32
-TWPRuler::Divisions() const
+RulerDivisions(const Document& doc)
 {
-	const Document& doc = fPages->Doc();
 	int32 divisions = doc.sheets.sheets.empty() ? 8 : int32(doc.sheets.sheets[0].divisions);
 	return std::max<int32>(1, divisions);
+}
+
+
+int
+TWPRuler::Unit() const
+{
+	return RulerUnit(fPages->Doc());
+}
+
+
+int32
+TWPRuler::Divisions() const
+{
+	return RulerDivisions(fPages->Doc());
 }
 
 
@@ -280,61 +289,15 @@ TWPRuler::DrawElement(const Element& e)
 }
 
 
-// TRuler::CalcTicks: labels `count` units apart at least 40 pixels, each
-// split in `divisions`
+// TRuler::CalcTicks (Ruler.cpp)
 void
 TWPRuler::Ticks(float zoom, float& major, float& minor, int32& count, int32& divisions) const
 {
-	int32 sheetDivisions = Divisions();
-	float unit = kUnitSize[Unit()] * zoom;
-	count = 1;
-	if (count * unit < 40) {
-		do {
-			if (count < 2)
-				count = 2;
-			else if (count < 5)
-				count = 5;
-			else if (count < 10)
-				count = 10;
-			else if (count < 20)
-				count = 20;
-			else if (count < 50)
-				count = 50;
-			else if (count < 100)
-				count = 100;
-			else
-				count *= 2;
-		} while (count * unit < 40);
-	}
-	major = count * unit;
-	if (count == 1) {
-		divisions = sheetDivisions;
-		while (major < divisions * 5.0f) {
-			if (divisions % 2 == 0)
-				divisions /= 2;
-			else if (divisions % 3 == 0)
-				divisions /= 3;
-			else if (divisions % 5 == 0)
-				divisions /= 5;
-			else if (divisions % 7 == 0)
-				divisions /= 7;
-			else if (divisions % 11 == 0)
-				divisions /= 11;
-			else if (divisions % 13 == 0)
-				divisions /= 13;
-			else {
-				divisions = 1;
-				break;
-			}
-		}
-	} else if (count % 5 == 0)
-		divisions = 5;
-	else {
-		divisions = major > 60 ? 8 : 4;
-		if (sheetDivisions * count < divisions)
-			divisions = sheetDivisions * count;
-	}
-	minor = major / divisions;
+	RulerTicks t = CalcRulerTicks(kRulerUnitSize[Unit()] * zoom, Divisions());
+	major = t.major;
+	minor = t.minor;
+	count = t.count;
+	divisions = t.divisions;
 }
 
 
@@ -371,32 +334,9 @@ TWPRuler::DrawTicks(float start, float end)
 	};
 	// TRuler::drawCurrentHashType: the ticks between labels
 	auto tick = [&](float x, int32 index) {
-		float height = 0.55f;
-		switch (divisions) {
-			case 2:
-				if (index != 1)
-					return;
-				break;
-			case 3:
-			case 5:
-				height = 0.75f;
-				break;
-			case 4:
-				if (index != 2)
-					height = 0.75f;
-				break;
-			case 8:
-				if (index % 2 == 1)
-					height = 0.85f;
-				else if (index != 4)
-					height = 0.75f;
-				break;
-			default:
-				if (divisions % 2 != 0 || index != divisions / 2)
-					height = 0.85f;
-				break;
-		}
-		hash(x, height);
+		float height = RulerHashHeight(divisions, index);
+		if (height >= 0)
+			hash(x, height);
 	};
 
 	hash(start, 0);
@@ -778,27 +718,34 @@ TWPRuler::HandleTabCommand(int index, uint32 command)
 void
 TWPRuler::UnitPopUp(BPoint where)
 {
+	RulerUnitPopUp(this, where, Unit(), Divisions());
+}
+
+
+void
+RulerUnitPopUp(BView* view, BPoint where, int unit, int32 divisions)
+{
 	BPopUpMenu menu("unit", false, false);
 	TMenu source(241, true);
 	int32 count = source.CountItems();
 	if (count > 0)
 		source.ItemAt(count - 1)->SetLabel(GobeResources::IndexString(2, 25).String());
-	if (BMenuItem* item = source.FindValue(Unit()))
+	if (BMenuItem* item = source.FindValue(unit))
 		item->SetMarked(true);
 	while (source.CountItems() > 0)
 		menu.AddItem(source.RemoveItem((int32)0));
-	BMenuItem* chosen = menu.Go(ConvertToScreen(where), false, false, false);
+	BMenuItem* chosen = menu.Go(view->ConvertToScreen(where), false, false, false);
 	if (chosen == NULL || chosen->Message() == NULL)
 		return;
 	if (menu.IndexOf(chosen) < 5) {
-		BMessage unit(*chosen->Message());
-		unit.what = 's00L';
-		Window()->PostMessage(&unit);
+		BMessage message(*chosen->Message());
+		message.what = 's00L';
+		view->Window()->PostMessage(&message);
 	} else {
-		BString divisions;
-		divisions << Divisions();
-		(new TDialogSetRulerDivisions(Window(), GobeResources::IndexString(2, 23).String(),
-			GobeResources::IndexString(2, 24).String(), divisions.String()))->RunDialog();
+		BString text;
+		text << divisions;
+		(new TDialogSetRulerDivisions(view->Window(), GobeResources::IndexString(2, 23).String(),
+			GobeResources::IndexString(2, 24).String(), text.String()))->RunDialog();
 	}
 }
 

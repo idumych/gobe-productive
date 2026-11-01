@@ -20,11 +20,21 @@
 namespace gobe {
 
 class TPageView;
+struct Document;
 
 // Edit Tab's OK (TDialogTabEdit::ItemHit 's00O'): "tab" (the stop's index),
 // "position" (from the text's edge), "type", "alignChar", "fill",
 // "fillChar"
 static const uint32 kMsgModifyTab = 's00O';
+
+// the first sheet's ruler unit (0 in to 5 li) and divisions
+// (TDocWindow +0x1b0 and its ruler divisions), for both rulers
+int RulerUnit(const Document& doc);
+int32 RulerDivisions(const Document& doc);
+// the unit menu (MENU 241, its last item Set Ruler Divisions…, STR# 2,25),
+// `unit` marked: a unit goes to `view`'s window as 's00L', the last item
+// opens TDialogSetRulerDivisions
+void RulerUnitPopUp(BView* view, BPoint where, int unit, int32 divisions);
 
 class TWPRuler : public BView {
 public:

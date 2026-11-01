@@ -634,6 +634,9 @@ TPageView::Paginate(const LayoutResult& main)
 	int pagePart = fDocument.PagePart();
 	if (mainPart < 0 || pagePart < 0 || !fDocument.dirtyParts.count(size_t(mainPart)))
 		return false;
+	// (a drawing's pages are its Document Size, TPartGR::SetPages)
+	if (fDocument.WordPart(size_t(mainPart)) == nullptr)
+		return false;
 	if (main.overflow)
 		return fDocument.AddPage();
 	if (fDocument.PageCount() < 2)
