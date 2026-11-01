@@ -530,7 +530,7 @@ protected:
 			old->RemoveSelf();
 			delete old;
 		}
-		scroll->AddChild(fList);
+		// (BScrollView::SetTarget adds it as a child)
 		scroll->SetTarget(fList);
 	}
 
