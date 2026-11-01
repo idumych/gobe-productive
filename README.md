@@ -107,13 +107,13 @@ opening documents saved by the port in the original on BeOS.
 
 ## Screenshots
 
-On Haiku, with the History floater:
+On Haiku, a drawing with the ToolBar and the drawing's PartBar: fills, dashed, dotted and hashed pens, arrows, two shapes selected:
 
-![Gobe Productive on Haiku: a document and the History floater](docs/screenshots/haiku-history.png)
+![Gobe Productive on Haiku: a drawing with the ToolBar, PartBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
-On Linux (X11), with Edit Styles:
+On Linux (X11), an HTML page opened with its table and picture:
 
-![Gobe Productive on Linux: the Edit Styles floater](docs/screenshots/linux-edit-styles.png)
+![Gobe Productive on Linux: a document with a picture in the text and a table](docs/screenshots/linux-table-picture.png)
 
 ## Status
 
