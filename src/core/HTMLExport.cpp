@@ -14,6 +14,7 @@
 #include "Fields.h"
 #include "InlineParts.h"
 #include "PNG.h"
+#include "Progress.h"
 #include "SSEval.h"
 #include "Styles.h"
 #include "WPPart.h"
@@ -488,6 +489,9 @@ ExportHTML(const Document& doc, const std::string& path, const std::string& titl
 {
 	std::vector<HTMLImage> images;
 	std::string text = HTMLText(doc, title, &images);
+	// (the Status window: the HTML made, then written with its pictures)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	std::ofstream file(path, std::ios::binary | std::ios::trunc);
 	if (!file) {
 		error = "cannot write " + path;
@@ -496,8 +500,10 @@ ExportHTML(const Document& doc, const std::string& path, const std::string& titl
 	file.write(text.data(), std::streamsize(text.size()));
 	if (!file)
 		return false;
-	if (images.empty())
+	if (images.empty()) {
+		ReportProgress(1, 1);
 		return true;
+	}
 	// TExportHTML::CreateImagesDirectory: "<name>.images" next to the file
 	size_t slash = path.rfind('/');
 	std::string folder = (slash == std::string::npos ? std::string() : path.substr(0, slash + 1))
@@ -512,6 +518,7 @@ ExportHTML(const Document& doc, const std::string& path, const std::string& titl
 			return false;
 		}
 	}
+	ReportProgress(1, 1);
 	return true;
 }
 

@@ -17,6 +17,7 @@
 #include "Editing.h"
 #include "InlineParts.h"
 #include "PNG.h"
+#include "Progress.h"
 #include "Styles.h"
 #include "WPPart.h"
 
@@ -977,9 +978,15 @@ ImportHTML(const std::string& path, Document& doc, std::string& error,
 		return false;
 	}
 	std::string html((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+	// (the Status window: the file read, then the document made)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	size_t slash = path.rfind('/');
-	return ImportHTMLText(html, doc, error, slash == std::string::npos ? "." : path.substr(0, slash),
-		readPicture);
+	if (!ImportHTMLText(html, doc, error, slash == std::string::npos ? "." : path.substr(0, slash),
+			readPicture))
+		return false;
+	ReportProgress(1, 1);
+	return true;
 }
 
 } // namespace gobe

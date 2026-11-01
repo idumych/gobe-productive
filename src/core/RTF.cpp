@@ -7,6 +7,7 @@
 #include "Editing.h"
 #include "InlineParts.h"
 #include "PNG.h"
+#include "Progress.h"
 #include "Word.h"
 
 #include <algorithm>
@@ -1295,12 +1296,17 @@ ImportRTF(const std::string& path, Document& doc, std::string& error,
 	}
 	std::string data((std::istreambuf_iterator<char>(file)),
 		std::istreambuf_iterator<char>());
+	// (the Status window: the file read, the RTF read, the document made)
+	if (StepCancelled(error, 1, 3))
+		return false;
 
 	RTFReader reader(data, fonts);
 	if (reader.Read() != 0) {
 		error = "not readable as RTF";
 		return false;
 	}
+	if (StepCancelled(error, 2, 3))
+		return false;
 	if (reader.unmatched && warning != nullptr)
 		*warning = "This file contains improper RTF (unmatched braces). "
 			"Will attempt to open anyway.";
@@ -1529,6 +1535,7 @@ ImportRTF(const std::string& path, Document& doc, std::string& error,
 				InsertMultiline(*main, after, "\n");
 		}
 	}
+	ReportProgress(1, 1);
 	return true;
 }
 
@@ -2137,6 +2144,9 @@ ExportRTF(const Document& doc, size_t part, const std::string& path, std::string
 	const FontCatalog& fonts)
 {
 	std::string rtf = ExportedRTF(doc, part, fonts);
+	// (the Status window: the RTF made, then written)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	std::ofstream file(path, std::ios::binary | std::ios::trunc);
 	if (!file) {
 		error = "cannot write " + path;
@@ -2147,6 +2157,7 @@ ExportRTF(const Document& doc, size_t part, const std::string& path, std::string
 		error = "cannot write " + path;
 		return false;
 	}
+	ReportProgress(1, 1);
 	return true;
 }
 

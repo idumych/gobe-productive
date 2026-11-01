@@ -12,6 +12,7 @@
 #include "Excel.h"
 #include "InlineParts.h"
 #include "PNG.h"
+#include "Progress.h"
 #include "Styles.h"
 #include "WPPart.h"
 
@@ -718,8 +719,14 @@ ImportWord(const std::string& path, Document& doc, std::string& error)
 		return false;
 	}
 	std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+	// (the Status window: the file read, the Word document read, the
+	// document made)
+	if (StepCancelled(error, 1, 3))
+		return false;
 	std::vector<WordParagraph> read;
 	if (!ReadWord(file, read, error))
+		return false;
+	if (StepCancelled(error, 2, 3))
 		return false;
 	// a table's paragraphs as one empty paragraph that will hold it (its
 	// cells' text, a line each paragraph; its columns' widths those of its
@@ -862,6 +869,7 @@ ImportWord(const std::string& path, Document& doc, std::string& error)
 		if (made >= 0)
 			InsertInlineFrame(doc, part, {tables[t].first, 0}, size_t(made));
 	}
+	ReportProgress(1, 1);
 	return true;
 }
 

@@ -3,6 +3,7 @@
 
 #include "Document.h"
 #include "Editing.h"
+#include "Progress.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 
@@ -374,6 +375,9 @@ ImportTable(const std::string& path, Document& doc, std::string& error, char del
 	}
 	std::string text((std::istreambuf_iterator<char>(file)),
 		std::istreambuf_iterator<char>());
+	// (the Status window: the file read, then the cells)
+	if (StepCancelled(error, 1, 3))
+		return false;
 	if (delimiter == 0)
 		delimiter = TableDelimiter(text.substr(0, 0x8000));
 	int conversion = DetectConversion(text);
@@ -395,6 +399,8 @@ ImportTable(const std::string& path, Document& doc, std::string& error, char del
 	size_t at = 0;
 	std::string ignored;
 	while (at < text.size()) {
+		if (StepCancelled(error, 1, 3, 2.0 * double(at), double(text.size())))
+			return false;
 		while (at < text.size() && (text[at] == delimiter || text[at] == '\n')) {
 			if (text[at] == delimiter)
 				column++;
@@ -425,6 +431,7 @@ ImportTable(const std::string& path, Document& doc, std::string& error, char del
 		at = end;
 	}
 	UpdateDependencies(doc, part);
+	ReportProgress(1, 1);
 	return true;
 }
 
@@ -442,7 +449,11 @@ ExportTable(const Document& doc, size_t part, const std::string& path, char deli
 	SSEvaluator eval(*ss, &book, int(part));
 	// the cells with something to show, by row then column
 	std::map<std::pair<uint16_t, uint16_t>, std::string> shown;
+	// (the Status window: the cells' values, then the text written)
+	size_t done = 0;
 	for (const SSCell& cell : ss->cells) {
+		if (StepCancelled(error, 0, 2, double(done++), double(ss->cells.size())))
+			return false;
 		if (cell.id.b == 0xffff)
 			continue;
 		SSValue value = eval.Value(cell.id.a, cell.id.b);
@@ -480,7 +491,10 @@ ExportTable(const Document& doc, size_t part, const std::string& path, char deli
 		return false;
 	}
 	file.write(text.data(), std::streamsize(text.size()));
-	return bool(file);
+	if (!file)
+		return false;
+	ReportProgress(1, 1);
+	return true;
 }
 
 
@@ -495,6 +509,9 @@ ImportText(const std::string& path, Document& doc, std::string& error,
 	}
 	std::string text((std::istreambuf_iterator<char>(file)),
 		std::istreambuf_iterator<char>());
+	// (the Status window: the file read, the text converted, the styles)
+	if (StepCancelled(error, 1, 3))
+		return false;
 
 	// conversion "Automatic"; the attributes only count for UTF-8
 	// (TTextToBlockStream::GetStyles: field_0x14 < 0)
@@ -507,6 +524,8 @@ ImportText(const std::string& path, Document& doc, std::string& error,
 	if (attributes != nullptr)
 		runs = attributes->runs;
 	FilterText(text, attributes != nullptr ? &runs : nullptr);
+	if (StepCancelled(error, 2, 3))
+		return false;
 
 	if (!CreateBlankDocument(doc, error))
 		return false;
@@ -537,6 +556,7 @@ ImportText(const std::string& path, Document& doc, std::string& error,
 		ApplyCharacterProperty(doc, part, a, b, TextSizeProperty(runs[i].size));
 		ApplyCharacterProperty(doc, part, a, b, TextColorProperty(runs[i].color));
 	}
+	ReportProgress(1, 1);
 	return true;
 }
 
@@ -674,6 +694,9 @@ ExportText(const Document& doc, size_t part, const std::string& path, std::strin
 		return false;
 	}
 	std::string text = ExportedText(doc, part, attributes, fonts);
+	// (the Status window: the text made, then written)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	std::ofstream file(path, std::ios::binary | std::ios::trunc);
 	if (!file) {
 		error = "cannot write " + path;
@@ -684,6 +707,7 @@ ExportText(const Document& doc, size_t part, const std::string& path, std::strin
 		error = "cannot write " + path;
 		return false;
 	}
+	ReportProgress(1, 1);
 	return true;
 }
 

@@ -10,6 +10,7 @@
 
 #include "Document.h"
 #include "Editing.h"
+#include "Progress.h"
 #include "SSEval.h"
 #include "SSStyle.h"
 
@@ -236,6 +237,9 @@ ImportSylk(const std::string& path, Document& doc, std::string& error, std::stri
 	while ((length = fread(buffer, 1, sizeof buffer, file)) > 0)
 		data.append(buffer, length);
 	fclose(file);
+	// (the Status window: the file read, then the sheet made)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	SylkSheet sheet;
 	if (!ReadSylk(data, sheet, error))
 		return false;
@@ -248,6 +252,7 @@ ImportSylk(const std::string& path, Document& doc, std::string& error, std::stri
 	}
 	if (bad > 0 && notice != nullptr)
 		*notice = std::to_string(bad) + " formulas couldn't be read; their cells have their values.";
+	ReportProgress(1, 1);
 	return true;
 }
 
@@ -260,6 +265,9 @@ ExportSylk(const Document& doc, size_t part, const std::string& path, std::strin
 		return false;
 	}
 	std::string text = WriteSylk(SpreadsheetToSylk(doc, part));
+	// (the Status window: the SYLK made, then written)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	FILE* file = fopen(path.c_str(), "wb");
 	if (file == nullptr) {
 		error = strerror(errno);
@@ -269,6 +277,8 @@ ExportSylk(const Document& doc, size_t part, const std::string& path, std::strin
 	ok = fclose(file) == 0 && ok;
 	if (!ok)
 		error = "write error";
+	else
+		ReportProgress(1, 1);
 	return ok;
 }
 

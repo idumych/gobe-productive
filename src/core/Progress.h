@@ -31,6 +31,16 @@ private:
 // installed reporter; true without one. False: stop, the user cancelled.
 bool ReportProgress(double done, double total);
 
+// step `step` (from 0) of `steps` equal steps, `done` of `total` through
+// it: ReportProgress(step + done / total, steps). The importers' steps:
+// the file read (TStatusFile: the first third), then their own work.
+bool ReportStep(int step, int steps, double done = 0, double total = 1);
+
+// ReportStep for an importer or exporter: true when the user cancelled,
+// with `error` set to kCancelledError (it then returns false)
+bool StepCancelled(std::string& error, int step, int steps, double done = 0,
+	double total = 1);
+
 // the error text an importer or exporter returns when it stopped for a
 // cancel (the app shows no alert for it)
 extern const char* const kCancelledError;

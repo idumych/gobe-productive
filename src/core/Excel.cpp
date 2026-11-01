@@ -11,6 +11,7 @@
 #include <fstream>
 #include <iterator>
 
+#include "Progress.h"
 #include "Document.h"
 #include "Editing.h"
 #include "Names.h"
@@ -1015,8 +1016,14 @@ ImportExcel(const std::string& path, Document& doc, std::string& error, std::str
 		return false;
 	}
 	std::vector<uint8_t> file((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+	// (the Status window: the file read, the workbook read, then each
+	// sheet's cells)
+	if (StepCancelled(error, 1, 3))
+		return false;
 	ExcelBook book;
 	if (!ReadExcel(file, book, error))
+		return false;
+	if (StepCancelled(error, 2, 3))
 		return false;
 	if (!CreateBlankSpreadsheet(doc, error))
 		return false;
@@ -1044,6 +1051,8 @@ ImportExcel(const std::string& path, Document& doc, std::string& error, std::str
 			NameCellSelection(doc, partOf[name.sheet], name.name, {range}, range.from);
 		}
 	for (size_t s = 0; s < book.sheets.size(); s++) {
+		if (StepCancelled(error, 2, 3, double(s), double(book.sheets.size())))
+			return false;
 		const ExcelSheet& sheet = book.sheets[s];
 		size_t part = partOf[s];
 		SSPart* ss = doc.EditableSpreadsheetPart(part);
@@ -1113,6 +1122,7 @@ ImportExcel(const std::string& path, Document& doc, std::string& error, std::str
 	}
 	if (bad > 0 && notice != nullptr)
 		*notice = std::to_string(bad) + " formulas couldn't be read; their cells have their values.";
+	ReportProgress(1, 1);
 	return true;
 }
 
@@ -1778,13 +1788,19 @@ bool
 ExportExcel(const Document& doc, const std::string& path, std::string& error)
 {
 	std::vector<uint8_t> bytes = ExcelBytes(doc);
+	// (the Status window: the workbook made, then written)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	std::ofstream file(path, std::ios::binary | std::ios::trunc);
 	if (!file) {
 		error = "cannot write " + path;
 		return false;
 	}
 	file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-	return bool(file);
+	if (!file)
+		return false;
+	ReportProgress(1, 1);
+	return true;
 }
 
 } // namespace gobe

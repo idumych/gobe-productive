@@ -15,6 +15,7 @@
 #include "IMPart.h"
 #include "InlineParts.h"
 #include "PNG.h"
+#include "Progress.h"
 #include "SSEval.h"
 #include "Styles.h"
 #include "TablePart.h"
@@ -915,11 +916,15 @@ ExportWord(const Document& doc, const std::string& path, std::string& error)
 		return false;
 	}
 	std::vector<uint8_t> bytes = WordBytes(doc);
+	// (the Status window: the Word file made, then written)
+	if (StepCancelled(error, 1, 2))
+		return false;
 	std::ofstream out(path, std::ios::binary);
 	if (!out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()))) {
 		error = "cannot write " + path;
 		return false;
 	}
+	ReportProgress(1, 1);
 	return true;
 }
 
