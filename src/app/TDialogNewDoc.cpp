@@ -139,9 +139,9 @@ public:
 
 // the part factories that make documents: the main binary's and the
 // add-ons' in Parts (PART: kind, version, makes documents, two flags,
-// large icon id, small icon id, name; TPartFactory::TPartFactory), by name
-// (NewDialogListItemsCompare), `select`'s selected, those `canMake` refuses
-// disabled
+// large icon id, small icon id, name; TPartFactory::TPartFactory), in the
+// factories' NewDialogOrder (NewDialogListItemsCompare), `select`'s
+// selected, those `canMake` refuses disabled
 void
 FillPartKinds(BListView* list, uint32 select, bool (*canMake)(uint32 kind))
 {
@@ -180,9 +180,21 @@ FillPartKinds(BListView* list, uint32 select, bool (*canMake)(uint32 kind))
 			items.push_back(item);
 		}
 	}
-	// NewDialogListItemsCompare: by name
-	std::sort(items.begin(), items.end(),
-		[](TIconStringItem* a, TIconStringItem* b) { return a->Name() < b->Name(); });
+	// NewDialogListItemsCompare: by NewDialogOrder (TWPPartFactory 0,
+	// TPartGRFactory 1, TPartSSFactory 2, TPartIMFactory 3, TPartPRFactory 4;
+	// TPartFactory's -1)
+	auto order = [](uint32 kind) {
+		switch (kind) {
+			case 'WORD': return 0;
+			case 'GRFX': return 1;
+			case 'SPRD': return 2;
+			case 'BITS': return 3;
+			case 'PRES': return 4;
+		}
+		return -1;
+	};
+	std::stable_sort(items.begin(), items.end(),
+		[&](TIconStringItem* a, TIconStringItem* b) { return order(a->Kind()) < order(b->Kind()); });
 	int32 selected = 0;
 	for (TIconStringItem* item : items) {
 		if (item->Kind() == select)
