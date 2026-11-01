@@ -39,6 +39,9 @@ class TWPRuler;
 static const uint32 kMsgSlideChanged = 'Gsld';
 // sent to the window when the document was edited
 static const uint32 kMsgDocumentChanged = 'Gchg';
+// posted by a save after the document is laid out again: the changes
+// posted before it were the layout's, not edits
+static const uint32 kMsgDocumentSaved = 'Gsvd';
 // the page view to its window: the active part's ribbon to show or hide
 static const uint32 kMsgActiveRibbon = 'Grib';
 // test hook: run "script" (RunScript) in the window

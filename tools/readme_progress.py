@@ -2,7 +2,7 @@
 """Redraws the progress bar (docs/progress-<counts>.svg) from the README's
 Status tables.
 
-Every table row under "## Status" whose last cell is a release (0.1.1, 0.2.0…),
+Every table row under "## Features" whose last cell is a release (0.1.1, 0.2.0…),
 next, in progress or not yet counts as one feature. The bar has a block per
 feature: released, in the sources, in progress, left. The README's
 <img> points at it and its alt text gets the same counts.
@@ -20,7 +20,7 @@ RELEASE = re.compile(r"\d+\.\d+\.\d+")
 
 
 def count(readme):
-    status = readme.split("## Status", 1)[1].split("\n## ", 1)[0]
+    status = readme.split("## Features", 1)[1].split("\n## ", 1)[0]
     states = []
     for line in status.splitlines():
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
@@ -31,7 +31,7 @@ def count(readme):
         elif cells[-1] in STATES:
             states.append(cells[-1])
     if not states:
-        raise SystemExit("no feature rows under ## Status")
+        raise SystemExit("no feature rows under ## Features")
     return states
 
 

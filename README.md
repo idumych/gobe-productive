@@ -1,32 +1,13 @@
 # Gobe Productive, ported
 
-Gobe Productive 2.0.1, the office suite for BeOS, rebuilt to run on today's
-systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland). It opens and saves Gobe Productive
-documents and works the way the original did, down to its menus and dialogs.
+Gobe Productive 2.0.1, the integrated office suite for BeOS, rebuilt for
+today's systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland),
+on x86_64 and arm64. One document can hold text, spreadsheets, drawings,
+charts, pictures and slides, each in a frame of its own, the way Gobe
+did it in 1999. The port opens and saves Gobe Productive documents and
+works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-59-59-0.svg" alt="Port progress: 59 of 59 features done, 0 left (see Status)" width="720"></p>
-
-Release **0.2.0** has every part of the suite, where 0.1.1 had only
-the word processor:
-
-- **Spreadsheets** edit as the original's did, with Make Chart for charts
-  of the selected cells.
-- **Drawings:** the ToolBar and its tools draw shapes. They can be
-  selected, moved, resized, rotated, reshaped, aligned, locked and given
-  fill and pen inks.
-- **Frames:** text, spreadsheet, drawing, table and picture frames can be
-  dragged out with the part tool, and text frames linked so text flows on.
-- **New documents:** File > New makes text documents, spreadsheets,
-  drawings and presentations.
-- **Inks:** the original's pattern and gradient inks and transparency,
-  for text, cells and shapes.
-- **Styles** can be exported and imported.
-- **Other formats:** Word, Excel, HTML, RTF, SYLK and text tables open and
-  save; Word, RTF and HTML with their tables and pictures.
-- **Writing Tools:** the thesaurus and dictionary, on files made from
-  WordNet.
-
-[Status](#status) lists what works and what's left.
+![Gobe Productive on Haiku: a drawing with the ToolBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
 > **Unofficial.** This is an independent reimplementation, not affiliated
 > with Gobe Software or the current owners of Gobe Productive. It contains
@@ -34,7 +15,70 @@ the word processor:
 > sample documents or dictionaries. It needs your own copy of the original
 > (below). See [LICENSE](LICENSE) for the licence and the full notice.
 
-## You need the original Gobe Productive 2.0
+## What it does
+
+Every feature of the original is ported ([the full list](#features)).
+
+**Word processing.** Styles and the style sheet, the FormatBar and ruler,
+tabs, columns, headers and footers, footnotes and endnotes, live fields, find and replace,
+spelling, Word Count, the thesaurus and dictionary, History and Undo.
+
+
+**Spreadsheets.** Formulas and the original's functions, cell formats,
+borders, sorting and fill, sheets in tabs, and Make Chart for charts of
+the selected cells.
+
+
+**Drawing.** The ToolBar's shapes, lines, curves and Bezier paths:
+select, move, resize, rotate, reshape, align, group, lock, give them the
+original's fill and pen inks, dashed, dotted and hashed pens and arrows.
+
+**Frames.** Text, spreadsheet, drawing, table and picture frames dragged
+out anywhere in a document, text wrapped around them, text frames linked
+so the text flows on. Open Frame Window edits a frame on its own.
+
+**Presentations.** File > New makes a presentation the way the original
+did, and the original's presentations open and show their slides.
+
+
+**Inks and pens.** The original's colours, patterns, gradients and
+transparency, its pen types and widths, the Inks window with ink sets and
+editors for each kind.
+
+
+**Other formats.** Word 97 and later, Excel, RTF, HTML, SYLK and text
+tables open and save; Word, RTF and HTML keep their tables and pictures.
+Styles can be exported to a file and imported into another document.
+
+![Gobe Productive on Linux: an HTML page with a picture in the text and a table](docs/screenshots/linux-table-picture.png)
+
+*On Linux (X11): an HTML page opened with its table and picture.*
+
+
+## Install
+
+The current release is **0.2.0**, the whole suite (0.1.1 was the word
+processor only).
+
+| System | Download | Install |
+|---|---|---|
+| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.2.0-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/gobeproductive-0.2.0-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.2.0-1-x86_64.hpkg` |
+| Haiku (arm64, nightly) | [gobeproductive-0.2.0-1-arm64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/gobeproductive-0.2.0-1-arm64.hpkg) | `pkgman install ./gobeproductive-0.2.0-1-arm64.hpkg` |
+| Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.2.0-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-x86_64.AppImage) | `chmod +x GobeProductive-0.2.0-x86_64.AppImage`, then run it |
+| Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.2.0-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-aarch64.AppImage) | `chmod +x GobeProductive-0.2.0-aarch64.AppImage`, then run it |
+
+Checksums and release notes are on the
+[release page](https://github.com/idumych/gobe-productive/releases/tag/v0.2.0).
+On Haiku it appears in the Deskbar's Applications menu. The Command key is
+**Alt** on Haiku and **Ctrl** on Linux.
+
+Documents lay out best with the Liberation fonts (metrically like the
+Times, Helvetica and Courier designs of BeOS's Bitstream fonts): on Haiku
+`pkgman install liberation_fonts`; the AppImage brings them along.
+Without them the port uses Noto, which is wider, so lines break in other
+places than they did in Gobe.
+
+### You need the original Gobe Productive 2.0
 
 The port reads the original's menus, dialogs, strings and pictures (and its
 dictionaries, help and samples) from your own copy at runtime. The original
@@ -64,66 +108,42 @@ the app), and you can name the image, installer or program in the
 BeOS-format (BFS) CD images can't be read yet: copy the installer or the
 folder out of the image first (Haiku can mount it), and choose that.
 
-## Install
-
-The current release is **0.2.0**: the whole suite (spreadsheets, charts,
-drawings, presentations, frames, inks and pens, more formats), where
-0.1.1 was the word processor only.
-
-| System | Download | Install |
-|---|---|---|
-| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.2.0-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/gobeproductive-0.2.0-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.2.0-1-x86_64.hpkg` |
-| Haiku (arm64, nightly) | [gobeproductive-0.2.0-1-arm64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/gobeproductive-0.2.0-1-arm64.hpkg) | `pkgman install ./gobeproductive-0.2.0-1-arm64.hpkg` |
-| Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.2.0-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-x86_64.AppImage) | `chmod +x GobeProductive-0.2.0-x86_64.AppImage`, then run it |
-| Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.2.0-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.0/GobeProductive-0.2.0-aarch64.AppImage) | `chmod +x GobeProductive-0.2.0-aarch64.AppImage`, then run it |
-
-Checksums and release notes are on the
-[release page](https://github.com/idumych/gobe-productive/releases/tag/v0.2.0).
-On Haiku it appears in the Deskbar's Applications menu.
-The Command key is **Alt** on Haiku and **Ctrl** on Linux.
-
-Documents lay out best with the Liberation fonts (metrically like the
-Times, Helvetica and Courier designs of BeOS's Bitstream fonts): on Haiku
-`pkgman install liberation_fonts`; the AppImage brings them along.
-Without them the port uses Noto, which is wider, so lines break in other
-places than they did in Gobe.
-
 ### Where 0.2.0 was tested
 
 | System | What was tested |
 |---|---|
-| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed, saved, reopened, Edit Styles |
-| Haiku arm64 (a master nightly in QEMU) | Installed the package and ran the same checks |
-| Linux x86_64, X11 | The same, with the AppImage (Xvfb and Openbox) |
+| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed, saved, reopened, Edit Styles, Make Chart |
+| Haiku arm64 (a master nightly, hrev60314, in QEMU) | Installed the package, unpacked the original, opened a document, typed, saved, reopened, Edit Styles |
+| Linux x86_64, X11 | The same, with the AppImage (Xvfb and Openbox), and a new drawing |
 | Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
 | Linux aarch64, X11 | Started on an arm64 machine: the window appears |
 | Renku OS | Not tried; the Haiku package should install there |
 
-The features new in 0.2.0 were tried during development in a Haiku
+The other features new in 0.2.0 were tried during development in a Haiku
 R1/beta6 VM and by the host tests, not again on the release builds.
 Also untested so far: real hardware, interactive Wayland desktops, real
 Gobe Productive CD images (only images made from the installer), and
 opening documents saved by the port in the original on BeOS.
 
-## Screenshots
+## The thesaurus and dictionary
 
-On Haiku, a drawing with the ToolBar and the drawing's PartBar: fills, dashed, dotted and hashed pens, arrows, two shapes selected:
+Gobe Productive's Thesaurus… and Dictionary… read the thesaurus and
+dictionary files BeOS kept in `/boot/optional/goodies`, which aren't
+available any more. The port reads files in the same formats made from
+[WordNet 3.0](https://wordnet.princeton.edu) instead: download its
+database (`WNdb-3.0.tar.gz`), unpack it, and run
 
-![Gobe Productive on Haiku: a drawing with the ToolBar, PartBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
+    tools/wordnet_to_gobe.py <the unpacked dict folder> <a folder>
 
-On Linux (X11), an HTML page opened with its table and picture:
+then put the `thesaurus` and `dictionary` it writes into the port's
+settings folder (`~/config/settings/Gobe Productive port` on Haiku,
+`~/.config/cosmoe/Gobe Productive port` on Linux). WordNet's licence
+comes with them (`LICENSE-WordNet`) and must stay with the files.
 
-![Gobe Productive on Linux: a document with a picture in the text and a table](docs/screenshots/linux-table-picture.png)
+## Features
 
-## Status
-
-What the original Gobe Productive 2.0.1 does, area by area, and how far
-the port has come. **0.1.1** and **0.2.0** are the releases a feature came in; **next** works in
-the sources here and will be in the next release (build it to try it);
-**in progress** is being written; **not yet** isn't started. The bar at
-the top counts these rows (`tools/readme_progress.py` redraws it), one row
-per feature, whatever its size: drawing tools weigh as much as Show
-Clipboard.
+What the original Gobe Productive 2.0.1 does, area by area. The last
+column is the release each feature came in.
 
 ### Documents and windows
 
@@ -227,27 +247,14 @@ haven't been opened in Microsoft Word; Excel files open in xlrd but
 haven't been opened in Excel; styles files haven't been tried in the
 original.
 
-## The thesaurus and dictionary
-
-Gobe Productive's Thesaurus… and Dictionary… read the thesaurus and
-dictionary files BeOS kept in `/boot/optional/goodies`, which aren't
-available any more. The port reads files in the same formats made from
-[WordNet 3.0](https://wordnet.princeton.edu) instead: download its
-database (`WNdb-3.0.tar.gz`), unpack it, and run
-
-    tools/wordnet_to_gobe.py <the unpacked dict folder> <a folder>
-
-then put the `thesaurus` and `dictionary` it writes into the port's
-settings folder (`~/config/settings/Gobe Productive port` on Haiku,
-`~/.config/cosmoe/Gobe Productive port` on Linux). WordNet's licence
-comes with them (`LICENSE-WordNet`) and must stay with the files.
-
 ## Building
 
 The same sources build on both systems; the Makefile finds out which
 one it's on.
 
 - **Haiku:** `pkgman install gcc make haiku_devel zlib_devel`, then `make`.
+- **Haiku arm64:** cross-built on Linux: `sh tools/haiku-arm64/make-sysroot.sh <dir>`
+  once, then `. <dir>/env.sh && make HAIKU_CROSS=1 && sh packaging/build-hpkg-arm64.sh`.
 - **Linux:** build [Hokku](https://github.com/idumych/hokku) (the Haiku API
   as a library, a fork of Cosmoe), then `make COSMOE_ROOT=<its prefix>`.
 
@@ -255,7 +262,7 @@ Run `./GobeProductive [document…]`. `make test` runs the host-side tests of
 the portable core (`src/core`, no Haiku API) on any system; with the
 original's files at `../original/installed` they also run on its sample
 documents. The packages are built by `packaging/` (`build-hpkg.sh` on
-Haiku; `appimage.yml` in GitHub Actions).
+Haiku, `build-hpkg-arm64.sh` for Haiku arm64; `appimage.yml` in GitHub Actions).
 
 | Path | Contents |
 |---|---|

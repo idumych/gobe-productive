@@ -495,8 +495,11 @@ void
 TDocWindow::MessageReceived(BMessage* message)
 {
 	switch (message->what) {
+		case kMsgDocumentSaved:
+			fSaving = false;
+			break;
 		case kMsgDocumentChanged:
-			if (!fShared->modified) {
+			if (!fSaving && !fShared->modified) {
 				fShared->modified = true;
 				fShared->TitlesChanged();
 			}
@@ -1398,6 +1401,10 @@ TDocWindow::Save(const std::string& path)
 		fPages->DocumentSaved();
 		fPages->DocumentReloaded();
 	}
+	// laying the document out again posts kMsgDocumentChanged; those
+	// aren't edits
+	fSaving = true;
+	PostMessage(kMsgDocumentSaved);
 	fShared->modified = false;
 	fShared->Changed(this);
 	fShared->TitlesChanged();
@@ -1749,8 +1756,12 @@ TDocWindow::QuitRequested()
 		}
 	}
 	if (fShared->modified && fDocument != NULL) {
+		// the document's name as in the title
+		BString name = fDocument->name.c_str();
+		if (name.IsEmpty() && !fDocument->path.empty())
+			name = BPath(fDocument->path.c_str()).Leaf();
 		BString text = GobeResources::IndexString(2, 13);
-		text << fDocument->name.c_str() << GobeResources::IndexString(2, fAppQuitting ? 14 : 15);
+		text << name << GobeResources::IndexString(2, fAppQuitting ? 14 : 15);
 		BAlert* alert = new BAlert("Alert Thread", text.String(),
 			GobeResources::IndexString(2, 12).String(), GobeResources::IndexString(2, 1).String(),
 			GobeResources::IndexString(2, 11).String(), B_WIDTH_AS_USUAL, B_WARNING_ALERT);
