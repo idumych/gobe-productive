@@ -1242,7 +1242,7 @@ TPageView::ShapeCommand(BMessage* message)
 	bool arrange = what == 'sM40' || what == 'sM41' || what == 'sM42' || what == 'sM43';
 	bool format = what == 'sf03' || what == 'sf04' || what == 'sf05' || what == 'sf06'
 		|| what == 'sf07' || what == 'sf08' || what == 'sf0D' || what == 'sf0E' || what == 'sf0S'
-		|| what == 'sf09' || what == 'sf0A' || what == 'sf0F';
+		|| what == 'sf09' || what == 'sf0A' || what == 'sf0F' || what == 'sf0T';
 	// (a frame selected by its edge takes the formats too)
 	bool frame = fShapes.empty() && fFrame.active && format
 		&& FrameAt(fDocument, fFrame.pointer) != nullptr;
@@ -1278,7 +1278,21 @@ TPageView::ShapeCommand(BMessage* message)
 	// gradient: FCol; 'sf0D' FTra), the pen ('sf06', 'sf07', 'sf08': PCol;
 	// 'sf0E' PTra), the shapes' transparency ('sf0S': fill and pen)
 	std::vector<Property> properties;
-	if (what == 'sf09') {
+	// the Transparency floater's buttons ('sf0T', TFormatCommand::
+	// ParseMessage with "prop type" ' Tra'): each shape's own opacity
+	// (TPropShapeTransparent, 1 without one) plus the value, 0 to 1
+	float delta = what == 'sf0T' ? message->GetFloat(kValueString, 0.1f) : 0;
+	auto stepped = [&](uint32_t style) {
+		ShapeStyle shape = ResolveShapeStyle(fDocument.styles, style);
+		float opacity = std::max(0.0f, std::min(1.0f,
+			std::min(shape.fillOpacity, shape.penOpacity) + delta));
+		return std::vector<Property>{OpacityProperty(Sig("FTra"), opacity),
+			OpacityProperty(Sig("PTra"), opacity)};
+	};
+	if (what == 'sf0T') {
+		if (message->GetInt32("prop type", 0) != int32(Sig(" Tra")))
+			return true;
+	} else if (what == 'sf09') {
 		// the pen's size (TPropPenSize: the FormatBar pen menu's Pen Size,
 		// MENU 104: Hairline 0, 1-8 points; Other…: the dialog)
 		float size = message->GetFloat(kValueString, -1);
@@ -1349,12 +1363,15 @@ TPageView::ShapeCommand(BMessage* message)
 		const Shape* sh = ShapeAt(fDocument, ref.part, ref.layer, ref.index);
 		if (sh == nullptr || sh->kind == Sig("FRAM"))
 			continue;		// (a group's frame: its shapes keep theirs)
-		for (const Property& p : properties)
+		for (const Property& p : what == 'sf0T' ? stepped(sh->style) : properties)
 			SetShapeProperty(fDocument, part, ref.layer, ref.index, p);
 	}
-	if (frame && what != 'sf0F')
-		for (const Property& p : properties)
+	if (frame && what != 'sf0F') {
+		const gobe::Frame* edge = FrameAt(fDocument, fFrame.pointer);
+		for (const Property& p : what == 'sf0T' && edge != nullptr ? stepped(edge->style)
+				: properties)
 			SetFrameProperty(fDocument, fFrame.pointer, p);
+	}
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);

@@ -1,7 +1,10 @@
 #include "TPageBar.h"
 
+#include <Application.h>
 #include <MessageRunner.h>
+#include <Messenger.h>
 #include <ScrollBar.h>
+#include <Slider.h>
 #include <Window.h>
 
 #include <algorithm>
@@ -12,6 +15,7 @@
 #include "TGRRuler.h"
 #include "TPageView.h"
 #include "TRibbon.h"
+#include "Zoom.h"
 
 namespace gobe {
 
@@ -25,6 +29,7 @@ const float kSteps[20] = {0.015625f, 0.03125f, 0.0625f, 0.125f, 0.25f, 1.0f / 3,
 	2.0f / 3, 0.75f, 1.0f, 1.25f, 4.0f / 3, 1.5f, 1.75f, 2.0f, 4.0f, 8.0f, 16.0f, 32.0f, 64.0f};
 
 const uint32 kMsgRepeat = 'Gzrp';
+const uint32 kMsgSliderValue = 'Gzsv';	// the slider window's value
 
 
 // the plain font, smaller until its ascent and descent fit `height` (as
@@ -181,7 +186,23 @@ TScaleSlider::MouseDown(BPoint where)
 		SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
 		return;
 	}
-	SetScale(fScale == 1 ? fOther : 1, true);
+	// TScaleSlider::MouseDown: the percent clicked switches between 100%
+	// and the last other zoom; held (a third of a second) or pressed with
+	// another button, the slider window (TScaleSliderTrack, SliderTrack)
+	uint32 held = 0;
+	BPoint pointer;
+	GetMouse(&pointer, &held, false);
+	if (held == B_PRIMARY_MOUSE_BUTTON) {
+		for (int i = 0; i < 6 && held != 0; i++) {
+			snooze(50000);
+			GetMouse(&pointer, &held, false);
+		}
+	}
+	if (held == 0) {
+		SetScale(fScale == 1 ? fOther : 1, true);
+		return;
+	}
+	TSliderWindow::Track(this, ConvertToScreen(B_ORIGIN));
 }
 
 
@@ -200,6 +221,11 @@ TScaleSlider::MouseUp(BPoint where)
 void
 TScaleSlider::MessageReceived(BMessage* message)
 {
+	// TSliderView::trackInThumb: TScaleSlider::SetValue
+	if (message->what == kMsgSliderValue) {
+		SetScale(ZoomForSliderValue(message->GetFloat("value", 0.5f)), true);
+		return;
+	}
 	if (message->what == kMsgRepeat) {
 		BPoint where;
 		uint32 buttons;
@@ -254,6 +280,130 @@ TPageBar::Draw(BRect updateRect)
 	SetHighColor(kGray);
 	StrokeLine(BPoint(bounds.left, bounds.top), BPoint(bounds.left, bounds.bottom));
 	StrokeLine(BPoint(bounds.left, bounds.top), BPoint(bounds.right, bounds.top));
+}
+
+
+// TSliderWindow: a bordered floating window 150 by 25 just above the
+// zoom, its TSliderView a BSlider of 0 to 100 at the zoom's position
+// (TScaleSlider +0xdc)
+void
+TSliderWindow::Track(TScaleSlider* scale, BPoint origin)
+{
+	BRect frame(origin.x, origin.y - 25, origin.x + 149, origin.y - 1);
+	BWindow* window = new BWindow(frame, "SliderWindow", B_BORDERED_WINDOW_LOOK,
+		B_FLOATING_ALL_WINDOW_FEEL, B_NOT_MOVABLE | B_NOT_CLOSABLE | B_NOT_ZOOMABLE
+			| B_NOT_MINIMIZABLE | B_NOT_RESIZABLE | B_AVOID_FOCUS);
+	BView* view = new BView(BRect(0, 0, 149, 24), "SliderView", B_FOLLOW_ALL, B_WILL_DRAW);
+	view->SetViewColor(kPanel);
+	BSlider* slider = new BSlider(BRect(3, 0, 146, 24), "BeSlider", NULL, NULL, 0, 100,
+		B_BLOCK_THUMB, B_FOLLOW_LEFT_RIGHT | B_FOLLOW_TOP);
+	slider->SetHashMarks(B_HASH_MARKS_BOTH);
+	slider->SetHashMarkCount(3);
+	slider->SetBarColor(kGray);
+	slider->SetValue(int32(std::lround(SliderValueForZoom(scale->Scale()) * 100)));
+	view->AddChild(slider);
+	window->AddChild(view);
+	window->Show();
+
+	struct Tracking {
+		BWindow* window;
+		BView* view;
+		BSlider* slider;
+		BMessenger target;
+	};
+	Tracking* tracking = new Tracking{window, view, slider, BMessenger(scale)};
+	thread_id thread = spawn_thread([](void* data) -> int32 {
+		Tracking* t = static_cast<Tracking*>(data);
+		BPoint where;
+		uint32 buttons = 0;
+		// TSliderView::Track: on the thumb, it follows the pointer; out of
+		// the view (14 more below it), the slider window is torn off
+		if (!t->window->Lock()) {
+			delete t;
+			return 0;
+		}
+		BRect thumb = t->slider->ThumbFrame();
+		thumb = t->view->ConvertFromParent(t->slider->ConvertToParent(thumb));
+		BRect keep = t->view->Bounds();
+		keep.bottom += 14;
+		t->view->GetMouse(&where, &buttons, false);
+		t->window->Unlock();
+		bool inThumb = false, tearOff = false;
+		while (buttons != 0) {
+			if (thumb.Contains(where)) {
+				inThumb = true;
+				break;
+			}
+			if (!keep.Contains(where)) {
+				tearOff = true;
+				break;
+			}
+			snooze(20000);
+			if (!t->window->Lock())
+				break;
+			t->view->GetMouse(&where, &buttons, false);
+			t->window->Unlock();
+		}
+		if (inThumb) {
+			// TSliderView::trackInThumb: each new value zooms
+			int32 last = -1;
+			while (buttons != 0 && t->window->Lock()) {
+				int32 value = t->slider->ValueForPoint(t->slider->ConvertFromParent(
+					t->view->ConvertToParent(where)));
+				value = std::max(int32(0), std::min(int32(100), value));
+				if (value != last) {
+					t->slider->SetValue(value);
+					last = value;
+					BMessage set(kMsgSliderValue);
+					set.AddFloat("value", value / 100.0f);
+					t->target.SendMessage(&set);
+				}
+				t->window->Unlock();
+				snooze(20000);
+				if (!t->window->Lock())
+					break;
+				t->view->GetMouse(&where, &buttons, false);
+				t->window->Unlock();
+			}
+		} else if (tearOff && t->window->Lock()) {
+			// TSliderView::trackTearOff: an outline of the view, centered
+			// on the pointer, follows it until it comes back or the button
+			// comes up; dropped outside, the Scale floater there
+			BRect outline = t->view->Bounds();
+			outline.OffsetTo(where.x - outline.Width() / 2, where.y - outline.Height() / 2);
+			t->view->BeginRectTracking(outline, B_TRACK_WHOLE_RECT);
+			t->window->Unlock();
+			while (buttons != 0 && !keep.Contains(where)) {
+				snooze(20000);
+				if (!t->window->Lock())
+					break;
+				t->view->GetMouse(&where, &buttons, false);
+				t->window->Unlock();
+			}
+			if (t->window->Lock()) {
+				t->view->EndRectTracking();
+				if (!keep.Contains(where)) {
+					BMessage torn('sW05');
+					torn.AddPoint("DropPoint", t->view->ConvertToScreen(BPoint(
+						where.x - outline.Width() / 2, where.y - outline.Height() / 2)));
+					be_app->PostMessage(&torn);
+				}
+				t->window->Unlock();
+			}
+		}
+		// TSliderWindow::StartTracking: then it closes
+		if (t->window->Lock())
+			t->window->Quit();
+		delete t;
+		return 0;
+	}, "slider track", B_NORMAL_PRIORITY, tracking);
+	if (thread >= 0)
+		resume_thread(thread);
+	else {
+		delete tracking;
+		if (window->Lock())
+			window->Quit();
+	}
 }
 
 

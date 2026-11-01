@@ -2,10 +2,13 @@
 
 #include "TPreferences.h"
 
+#include <Application.h>
 #include <MenuItem.h>
+#include <PopUpMenu.h>
 #include <Window.h>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 
@@ -468,12 +471,156 @@ TMenuElement::MouseDown(TRibbon* ribbon, BPoint where)
 	ribbon->DrawElement(this, true);
 	ribbon->Sync();
 	BPoint at = ribbon->ConvertToScreen(BPoint(rect.left + 1, rect.bottom + 1));
-	BMenuItem* chosen = menu->Go(at, false, true, false);
+	BRect torn;
+	BMenuItem* chosen = tearOff != 0
+		? TrackTearOff(menu, ribbon, at, ribbon->ConvertToScreen(rect), torn)
+		: menu->Go(at, false, true, false);
 	ribbon->DrawElement(this, false);
 	if (chosen != NULL && chosen->Message() != NULL)
 		ribbon->Send(chosen->Message());
+	else if (torn.IsValid()) {
+		BMessage message(tearOff);
+		message.AddPoint("DropPoint", torn.LeftTop());
+		be_app->PostMessage(&message);
+	}
 	delete menu;
 	return true;
+}
+
+
+namespace {
+
+// TTrackMenuTearOff's state, shared with its thread
+struct TearOffWatch {
+	BPopUpMenu* menu;
+	BRect keepIn;
+	std::vector<BMenu*> submenus;		// those that tear off, if not the menu
+	int32 tornIndex = -1;
+	std::atomic<bool> done{false};
+	std::atomic<bool> torn{false};
+	BRect frame;		// the menu's, when it was torn off
+	BPoint pointer;
+};
+
+
+// TMenu::TrackTearOff: until the button that opened the menu comes up,
+// the pointer out of the menu and of the element tears it off; the menu
+// is closed as Escape closes it
+int32
+WatchTearOff(void* data)
+{
+	TearOffWatch* watch = static_cast<TearOffWatch*>(data);
+	while (!watch->done) {
+		snooze(20000);
+		BWindow* window = watch->menu->Window();
+		if (window == NULL || !watch->menu->LockLooper())
+			continue;
+		BPoint pointer;
+		uint32 buttons = 0;
+		watch->menu->GetMouse(&pointer, &buttons, false);
+		watch->menu->ConvertToScreen(&pointer);
+		BRect frame = window->Frame();
+		if (buttons == 0) {
+			watch->menu->UnlockLooper();
+			break;
+		}
+		watch->menu->UnlockLooper();
+		if (frame.Contains(pointer) || watch->keepIn.Contains(pointer))
+			continue;
+		// a row of submenus: the open one, if the pointer is out of it too
+		int32 open = -1;
+		BRect openFrame;
+		for (size_t i = 0; i < watch->submenus.size(); i++) {
+			BMenu* sub = watch->submenus[i];
+			if (sub->Window() == NULL || !sub->LockLooper())
+				continue;
+			if (sub->Window() != NULL) {
+				open = int32(i);
+				openFrame = sub->Window()->Frame();
+			}
+			sub->UnlockLooper();
+		}
+		if (!watch->submenus.empty()) {
+			if (open < 0 || openFrame.Contains(pointer))
+				continue;
+			frame = openFrame;
+			watch->tornIndex = open;
+		}
+		watch->frame = frame;
+		watch->pointer = pointer;
+		watch->torn = true;
+		// closed as Escape closes them, the submenu and the menu
+		BMessage key(B_KEY_DOWN);
+		key.AddInt32("raw_char", B_ESCAPE);
+		key.AddInt32("key", 1);
+		key.AddInt32("modifiers", 0);
+		key.AddString("bytes", "\x1b");
+		key.AddData("byte", B_INT8_TYPE, "\x1b", 1);
+		if (open >= 0) {
+			BMenu* sub = watch->submenus[open];
+			if (sub->LockLooper()) {
+				if (BWindow* subWindow = sub->Window())
+					subWindow->PostMessage(&key, sub);
+				sub->UnlockLooper();
+			}
+		}
+		if (watch->menu->LockLooper()) {
+			if (BWindow* menuWindow = watch->menu->Window())
+				menuWindow->PostMessage(&key, watch->menu);
+			watch->menu->UnlockLooper();
+		}
+		break;
+	}
+	return 0;
+}
+
+} // namespace
+
+
+BMenuItem*
+TrackTearOff(BPopUpMenu* menu, BView* view, BPoint where, BRect keepIn, BRect& torn)
+{
+	int32 index;
+	return TrackTearOff(menu, view, where, keepIn, std::vector<BMenu*>(), torn, index);
+}
+
+
+BMenuItem*
+TrackTearOff(BPopUpMenu* menu, BView* view, BPoint where, BRect keepIn,
+	const std::vector<BMenu*>& submenus, BRect& torn, int32& tornIndex)
+{
+	torn = BRect();
+	tornIndex = -1;
+	TearOffWatch watch;
+	watch.menu = menu;
+	watch.keepIn = keepIn;
+	watch.submenus = submenus;
+	thread_id thread = spawn_thread(WatchTearOff, "tear off", B_NORMAL_PRIORITY, &watch);
+	if (thread >= 0)
+		resume_thread(thread);
+	BMenuItem* chosen = menu->Go(where, false, true, false);
+	watch.done = true;
+	if (thread >= 0) {
+		status_t result;
+		wait_for_thread(thread, &result);
+	}
+	if (!watch.torn)
+		return chosen;
+	// the outline follows the pointer until the button comes up
+	BRect outline = watch.frame;
+	BPoint offset = watch.pointer - outline.LeftTop();
+	view->BeginRectTracking(view->ConvertFromScreen(outline), B_TRACK_WHOLE_RECT);
+	BPoint pointer;
+	uint32 buttons;
+	do {
+		snooze(20000);
+		view->GetMouse(&pointer, &buttons, false);
+	} while (buttons != 0);
+	view->EndRectTracking();
+	outline.OffsetTo(view->ConvertToScreen(pointer) - offset);
+	torn = outline;
+	tornIndex = watch.tornIndex;
+	return NULL;
 }
 
 

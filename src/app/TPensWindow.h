@@ -49,7 +49,8 @@ public:
 	// 'sW00' (TApp: the floater shown on the "MajorType" (0 fill, 1 pen, 2
 	// text ink) and "MinorType" (0 colours, 1 patterns, 2 gradients, 3
 	// pens), or brought to the front and switched to them)
-	static void Open(int32 major = 1, int32 minor = 3);
+	// (torn off: moved to `where`, its top left, screen; x < 0 leaves it)
+	static void Open(int32 major = 1, int32 minor = 3, BPoint where = BPoint(-1, -1));
 	// the list made again from the front document's pens and the sets
 	static void Refresh();
 	// test hooks: "kind N", "tab N", "set NAME", "select N", "new",

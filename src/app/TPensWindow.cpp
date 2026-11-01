@@ -373,17 +373,23 @@ TPensWindow::~TPensWindow()
 // TApp::MessageReceived 'sW00': the floater shown on that kind of ink, or
 // brought to the front and switched to it
 void
-TPensWindow::Open(int32 major, int32 minor)
+TPensWindow::Open(int32 major, int32 minor, BPoint where)
 {
-	if (sPens != NULL) {
+	TPensWindow* pens = sPens;
+	if (pens != NULL) {
 		BMessage change(kMsgMajorType);
 		change.AddInt32(kValueString, major);
 		change.AddInt32("minor", minor);
-		sPens->PostMessage(&change);
-		sPens->Activate();
-		return;
+		pens->PostMessage(&change);
+		pens->Activate();
+	} else {
+		pens = new TPensWindow(major, minor);
+		pens->RunDialog();
 	}
-	(new TPensWindow(major, minor))->RunDialog();
+	if (where.x >= 0 && pens->Lock()) {
+		pens->MoveTo(where);
+		pens->Unlock();
+	}
 }
 
 

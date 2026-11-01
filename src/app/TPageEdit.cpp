@@ -6,6 +6,7 @@
 // the range; copy/cut/paste/clear/selectall work on ranges using
 // RangeInput/ClearRange/PasteInput from Editing.h.
 #include "TGRRuler.h"
+#include "TTearOffs.h"
 #include "TPageView.h"
 #include "TMenu.h"
 #include "TSheetDialogs.h"
@@ -21,6 +22,7 @@
 #include "TWPRuler.h"
 
 #include <Alert.h>
+#include <Application.h>
 #include <Beep.h>
 #include <Clipboard.h>
 #include <Cursor.h>
@@ -2454,6 +2456,64 @@ TPageView::MessageReceived(BMessage* message)
 			UpdateMarks();
 			return;
 		}
+		// Text Formatting's A- and A+ ('sf0O', TFormatCommand: each run's
+		// size, or "default_value" if it has none, plus the value; 2 to
+		// 510, whole points)
+		case 'sf0O': {
+			float delta = message->GetFloat(kValueString, 1);
+			auto stepped = [delta](float size) {
+				return float(int(std::max(2.0f, std::min(510.0f, size + delta))));
+			};
+			CellStyle cellStyle;
+			bool cells = !fCaret.active && ActiveCellStyle(cellStyle);
+			if (!fCaret.active && !cells) {
+				beep();
+				return;
+			}
+			if (cells) {
+				FormatCells(TextSizeProperty(stepped(cellStyle.text.size)), "Size");
+				return;
+			}
+			const WPPart* wp = fDocument.WordPart(fCaret.part);
+			if (wp == nullptr)
+				return;
+			auto sel = TextSelectionRange();
+			// the selection cut where its style runs start, each piece's
+			// size taken before any changes
+			std::vector<std::pair<TextPosition, TextPosition>> pieces;
+			std::vector<float> sizes;
+			bool caret = sel.first.paragraph == sel.second.paragraph
+				&& sel.first.offset == sel.second.offset;
+			if (caret) {
+				pieces.push_back(sel);
+				sizes.push_back(StyleAt(sel.first).size);
+			}
+			for (size_t p = sel.first.paragraph; !caret
+					&& p <= sel.second.paragraph && p < wp->paragraphs.size(); p++) {
+				const WPParagraph& paragraph = wp->paragraphs[p];
+				uint32_t from = p == sel.first.paragraph ? sel.first.offset : 0;
+				uint32_t to = p == sel.second.paragraph ? sel.second.offset
+					: uint32_t(paragraph.text.size());
+				std::vector<uint32_t> cuts{from, to};
+				for (const WPStyleRun& run : paragraph.runs)
+					if (run.position > from && run.position < to)
+						cuts.push_back(run.position);
+				std::sort(cuts.begin(), cuts.end());
+				cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+				for (size_t i = 0; i + 1 < cuts.size(); i++) {
+					TextPosition a{p, cuts[i]}, b{p, cuts[i + 1]};
+					pieces.push_back({a, b});
+					sizes.push_back(StyleAt(a).size);
+				}
+			}
+			fUndo.Begin(fDocument, fCaret.part, "Size", CurrentViewState());
+			for (size_t i = 0; i < pieces.size(); i++)
+				ApplyCharacter(pieces[i].first, pieces[i].second,
+					TextSizeProperty(stepped(sizes[i])));
+			TextChanged();
+			UpdateMarks();
+			return;
+		}
 		// Face menu: value_message = 'sf0C', "value" = face flag
 		case 'sf0C': {
 			int32 flag = 0;
@@ -4056,6 +4116,18 @@ TPageView::RunScript(const std::string& script, Document& document)
 					fflush(stdout);
 				}
 			}
+		} else if (command.compare(0, 8, "tearoff ") == 0 && command.size() >= 12) {
+			// "tearoff sW02 x y": as if that menu was dropped there;
+			// "tearoff sW02 <floater command>": TearOffScript
+			uint32 what = uint32(command[8]) << 24 | uint32(command[9]) << 16
+				| uint32(command[10]) << 8 | uint32(command[11]);
+			float x, y;
+			if (sscanf(command.c_str() + 12, "%f %f", &x, &y) == 2) {
+				BMessage torn(what);
+				torn.AddPoint("DropPoint", BPoint(x, y));
+				be_app->PostMessage(&torn);
+			} else
+				TearOffScript(what, command.size() > 13 ? command.substr(13) : "");
 		} else if (command.compare(0, 8, "grruler ") == 0) {
 			for (TGRRuler* ruler : fGRRulers)
 				if (ruler != NULL)
@@ -5807,6 +5879,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM55': case 'sM56': case 'sM57': case 'sM58': case 'sM59':
 		case 'sM5I': case 'sM5J': case 'sM5K':
 		case 'sf01': case 'sf0K': case 'sf0C': case 300:					// text menus
+		case 'sf0O':	// Text Formatting's A- and A+
 		case 'sM5B': case 'sM5D':											// part bar
 		case 'sf02': case 'sf03': case 'sf0L': case 'sf0V': case 'sMB6':	// format bar
 		case 'sf0M': case 'sf0N': case 'sf04': case 'sf05': case 'sf0R': case 'sf0D':
@@ -5830,6 +5903,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM46': case 'sM47':
 		case 'sM4P': case 'sM4R': case 'sC00': case 'sC02': case 'sC03': case 'sC04': case 'sC05': case 'sC06': case 'sM4O':	// shape menus
 		case 'sf06': case 'sf07': case 'sf08': case 'sf0E': case 'sf0S':	// pen, shapes
+		case 'sf0T':	// the Transparency floater's buttons
 		case 'sf09':														// the pen's size
 		case 'sf0A': case 'sf0F':							// the pen's type, arrows
 		case kMsgAddPen: case kMsgReplacePen: case kMsgDeletePen:		// the Inks window's pens

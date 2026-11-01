@@ -96,6 +96,8 @@ public:
 	// what Edit Styles shows: the document's styles, the active part's
 	// kinds, the selection's
 	void GetStylesSnapshot(StylesSnapshot& snapshot) const;
+	// what the tear-off floaters show (TTearOffs.h; locked)
+	void TearOffState(struct TearOffState& state) const;
 
 	// Called from TPageView after text style changes to update marks.
 	// `family` is the current font family (empty = default).

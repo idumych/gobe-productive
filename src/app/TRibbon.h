@@ -79,6 +79,21 @@ private:
 	std::unique_ptr<BMessage> fMessage;
 };
 
+// TMenu::Track with a tear-off message (TTrackMenuTearOff, TMenu::
+// TrackTearOff): `menu` pops up at `where` (screen) over `view`; while the
+// button that opened it stays down, a thread watches the pointer, and
+// dragged out of the menu and of `keepIn` (screen) the menu closes and an
+// outline of it follows the pointer until the button comes up. Returns
+// the item chosen, NULL if none; `torn` gets the menu's frame where it
+// was dropped (screen), invalid if it wasn't torn off.
+BMenuItem* TrackTearOff(BPopUpMenu* menu, BView* view, BPoint where, BRect keepIn,
+	BRect& torn);
+// the same for a row of submenus that each tear off (TMICNMenuBarElement::
+// AddMenu): the one open is torn off when the pointer leaves it, the row
+// and `keepIn`; `tornIndex` gets which
+BMenuItem* TrackTearOff(BPopUpMenu* menu, BView* view, BPoint where, BRect keepIn,
+	const std::vector<BMenu*>& submenus, BRect& torn, int32& tornIndex);
+
 // TMenuElement and TMICNMenuElement: a button with a label or an icon and
 // the pop-up indicator; pressing it pops up its menu below it, filled by
 // FillMenu (TMenuElement::FixMenu: its items, marked as the selection has
@@ -92,6 +107,9 @@ public:
 	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon) = 0;
 
 	std::string label;
+	// TMenu::SetTearOffMessage: what a menu dragged off sends the
+	// application, with "DropPoint" (its frame's top left, screen); 0 none
+	uint32 tearOff = 0;
 
 protected:
 	std::unique_ptr<BBitmap> fIcon;

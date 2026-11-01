@@ -495,16 +495,16 @@ TDialogStylesEdit::Update(bool force)
 // cleared ones not) under a heading; TStyleListView::BuildList: the
 // active one shown as it is ("+"), the applied ones marked; the list made
 // again only if it changed
-void
-TDialogStylesEdit::GetStyles()
+std::vector<StyleRow>
+StyleRows(const StylesSnapshot& snapshot)
 {
-	const StyleMgr& styles = fSnapshot.styles;
-	std::string active = fSnapshot.selection.active;
+	const StyleMgr& styles = snapshot.styles;
+	std::string active = snapshot.selection.active;
 	std::string bare = active;
 	if (!bare.empty() && bare.back() == '+')
 		bare.pop_back();
-	std::vector<Row> rows;
-	for (uint32 type : fSnapshot.types) {
+	std::vector<StyleRow> rows;
+	for (uint32 type : snapshot.types) {
 		std::vector<int32> named;
 		for (size_t i = 0; i < styles.styles.size(); i++) {
 			const Style& s = styles.styles[i];
@@ -516,17 +516,17 @@ TDialogStylesEdit::GetStyles()
 		std::stable_sort(named.begin(), named.end(), [&](int32 a, int32 b) {
 			return strcmp(styles.styles[a].name.c_str(), styles.styles[b].name.c_str()) < 0;
 		});
-		Row heading;
+		StyleRow heading;
 		heading.label = StyleTypeName(type);
 		heading.type = type;
 		heading.flags = 1;
 		rows.push_back(heading);
 		for (int32 index : named) {
-			Row row;
+			StyleRow row;
 			row.label = styles.styles[index].name;
 			row.type = type;
 			row.style = index;
-			for (const auto& applied : fSnapshot.selection.applied)
+			for (const auto& applied : snapshot.selection.applied)
 				if (applied.first == row.label)
 					row.flags |= applied.second ? 2 : 4;
 			if (row.label == bare) {
@@ -536,43 +536,55 @@ TDialogStylesEdit::GetStyles()
 			rows.push_back(row);
 		}
 	}
-	bool same = fStyles != NULL && rows.size() == size_t(fStyles->FullListCountItems());
+	return rows;
+}
+
+
+bool
+BuildStyleList(BOutlineListView* list, const std::vector<StyleRow>& rows,
+	std::map<std::string, bool>& expanded)
+{
+	bool same = rows.size() == size_t(list->FullListCountItems());
 	for (size_t i = 0; same && i < rows.size(); i++) {
-		TStyleListItem* item = dynamic_cast<TStyleListItem*>(fStyles->FullListItemAt(i));
+		TStyleListItem* item = dynamic_cast<TStyleListItem*>(list->FullListItemAt(i));
 		same = item != NULL && item->Label() == rows[i].label && item->Flags() == rows[i].flags;
 	}
-	std::vector<int32> oldStyles;
-	for (const Row& row : fRows)
-		oldStyles.push_back(row.style);
-	fRows = rows;
-	if (same || fStyles == NULL) {
-		// the same items, maybe other styles (indexes) behind them
-		return;
-	}
-	BMessage* select = fStyles->SelectionMessage() != NULL
-		? new BMessage(*fStyles->SelectionMessage()) : NULL;
-	fStyles->SetSelectionMessage(NULL);
+	if (same)
+		return false;
+	BMessage* select = list->SelectionMessage() != NULL
+		? new BMessage(*list->SelectionMessage()) : NULL;
+	list->SetSelectionMessage(NULL);
 	// the headings' open or closed (TStyleListView::ItemToggled)
-	for (int32 i = 0; i < fStyles->FullListCountItems(); i++) {
-		TStyleListItem* item = dynamic_cast<TStyleListItem*>(fStyles->FullListItemAt(i));
+	for (int32 i = 0; i < list->FullListCountItems(); i++) {
+		TStyleListItem* item = dynamic_cast<TStyleListItem*>(list->FullListItemAt(i));
 		if (item != NULL && (item->Flags() & 1))
-			fExpanded[item->Label()] = item->IsExpanded();
+			expanded[item->Label()] = item->IsExpanded();
 	}
-	while (fStyles->FullListCountItems() > 0) {
-		BListItem* item = fStyles->FullListItemAt(0);
-		fStyles->RemoveItem(item);
+	while (list->FullListCountItems() > 0) {
+		BListItem* item = list->FullListItemAt(0);
+		list->RemoveItem(item);
 		delete item;
 	}
-	for (const Row& row : fRows) {
+	for (const StyleRow& row : rows) {
 		// (AddItem with the level: AddUnder would put them in reverse)
 		if (row.style < 0) {
-			auto known = fExpanded.find(row.label);
-			bool expanded = known == fExpanded.end() || known->second;
-			fStyles->AddItem(new TStyleListItem(row.label, 0, expanded, row.flags));
+			auto known = expanded.find(row.label);
+			bool open = known == expanded.end() || known->second;
+			list->AddItem(new TStyleListItem(row.label, 0, open, row.flags));
 		} else
-			fStyles->AddItem(new TStyleListItem(row.label, 1, true, row.flags));
+			list->AddItem(new TStyleListItem(row.label, 1, true, row.flags));
 	}
-	fStyles->SetSelectionMessage(select);
+	list->SetSelectionMessage(select);
+	return true;
+}
+
+
+void
+TDialogStylesEdit::GetStyles()
+{
+	fRows = StyleRows(fSnapshot);
+	if (fStyles != NULL)
+		BuildStyleList(fStyles, fRows, fExpanded);
 }
 
 

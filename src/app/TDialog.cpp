@@ -315,13 +315,22 @@ TDialog::MakeControl(const ItemData& item)
 		}
 		case FourCC("BSLI"):
 		{
-			int32 minimum = item.values.size() > 0 ? item.values[0] : 0;
-			int32 maximum = item.values.size() > 1 ? item.values[1] : 100;
+			// TSliderEngineer: its width, minimum, maximum and hash marks;
+			// the limit labels
+			int32 minimum = item.values.size() > 1 ? item.values[1] : 0;
+			int32 maximum = item.values.size() > 2 ? item.values[2] : 100;
 			if (maximum <= minimum)
 				maximum = minimum + 100;
 			BSlider* slider = new BSlider("slider", label, ControlMessage(item),
 				minimum, maximum, B_HORIZONTAL);
-			if (item.strings.size() >= 2)
+			if (item.values.size() > 0 && item.values[0] > 0)
+				slider->SetExplicitMinSize(BSize(item.values[0], B_SIZE_UNSET));
+			if (item.values.size() > 3 && item.values[3] > 0) {
+				slider->SetHashMarks(B_HASH_MARKS_BOTTOM);
+				slider->SetHashMarkCount(item.values[3]);
+			}
+			if (item.strings.size() >= 2 && (item.strings[0].size() > 0
+					|| item.strings[1].size() > 0))
 				slider->SetLimitLabels(item.strings[0].c_str(), item.strings[1].c_str());
 			slider->SetEnabled(item.enabled);
 			view = slider;
@@ -394,6 +403,71 @@ TDialog::MakeControl(const ItemData& item)
 		}
 		case FourCC("IBUT"):
 		{
+			// TIconButton with a MICN (16 x 16): a button that sends its
+			// message when pressed and again while held (its still-down
+			// message)
+			if (item.values.size() >= 2 && uint32(item.values[0]) == FourCC("MICN")) {
+				class RepeatButton : public BControl {
+				public:
+					RepeatButton(BBitmap* icon, BMessage* message)
+						: BControl("iconbutton", NULL, message, B_WILL_DRAW),
+						fIcon(icon)
+					{
+						SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+						SetExplicitMinSize(BSize(19, 19));
+						SetExplicitMaxSize(BSize(19, 19));
+					}
+					~RepeatButton() { delete fIcon; }
+					virtual void Draw(BRect)
+					{
+						BRect r = Bounds();
+						bool down = Value() == B_CONTROL_ON;
+						rgb_color panel = ui_color(B_PANEL_BACKGROUND_COLOR);
+						SetHighColor(down ? tint_color(panel, B_DARKEN_2_TINT) : panel);
+						FillRect(r);
+						SetHighColor(tint_color(panel, down ? B_DARKEN_4_TINT
+							: B_LIGHTEN_MAX_TINT));
+						StrokeLine(r.LeftBottom(), r.LeftTop());
+						StrokeLine(r.RightTop());
+						SetHighColor(tint_color(panel, down ? B_LIGHTEN_MAX_TINT
+							: B_DARKEN_3_TINT));
+						StrokeLine(r.RightBottom());
+						StrokeLine(r.LeftBottom());
+						if (fIcon == NULL)
+							return;
+						SetDrawingMode(B_OP_OVER);
+						DrawBitmap(fIcon, BPoint(2 + (down ? 1 : 0), 2 + (down ? 1 : 0)));
+						SetDrawingMode(B_OP_COPY);
+					}
+					virtual void MouseDown(BPoint)
+					{
+						if (!IsEnabled())
+							return;
+						SetValue(B_CONTROL_ON);
+						Invoke();
+						// again every tenth of a second after a third, while
+						// the button is held over it
+						bigtime_t next = system_time() + 300000;
+						BPoint where;
+						uint32 buttons;
+						do {
+							snooze(20000);
+							GetMouse(&where, &buttons, false);
+							if (buttons != 0 && Bounds().Contains(where)
+									&& system_time() >= next) {
+								Invoke();
+								next = system_time() + 100000;
+							}
+						} while (buttons != 0);
+						SetValue(B_CONTROL_OFF);
+					}
+				private:
+					BBitmap* fIcon;
+				};
+				view = new RepeatButton(TMICNElement::LoadIcon(item.values[1], &Resources()),
+					ControlMessage(item));
+				break;
+			}
 			// TIconButton: a 32 x 32 icon (ICON) that stays down when
 			// chosen (the dialog sets which: SetCheckBoxItem)
 			const ResourceFile::Resource* r = item.values.size() >= 2

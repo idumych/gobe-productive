@@ -7,7 +7,7 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-64-77-0.svg" alt="Port progress: 64 of 77 features done, 13 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-66-77-0.svg" alt="Port progress: 66 of 77 features done, 11 left (see Features)" width="720"></p>
 
 Not everything is ported yet: image editing, slide shows, editing tables
 and charts, a drawing's views and layers, and a few dialogs are still to
@@ -202,8 +202,8 @@ menus, tear-off menus), against the port.
 | The ToolBar's part tool: text, spreadsheet, drawing, table and picture frames dragged out in a drawing | 0.2.0 |
 | The ToolBar's Bezier tool (a press a point, a drag its control points) and toolbar shapes (the original's shapes, chosen from its menu, dragged out) | 0.2.0 |
 | The Missing Fonts dialog: a document using fonts that aren't installed says which (BeOS's Bitstream fonts count as there when the Liberation fonts, which have their widths, are) | next |
-| Tear-off palettes: the FormatBar's menus dragged off into floating windows (Styles; Text Formatting from the font, size and face menus; Named Selections; Transparency; the inks into the Inks window) and the zoom dragged off into Scale | not yet |
-| The Status window: progress while a file is imported or exported | not yet |
+| Tear-off palettes: the FormatBar's menus dragged off into floating windows (Styles; Text Formatting from the font, size and face menus; Named Selections; Shape Transparency; each ink menu into the Inks window on its kind) and the zoom's slider dragged off into Scale | next |
+| The Status window: progress while a file is imported or exported, with Cancel | next |
 
 ### Word processor
 

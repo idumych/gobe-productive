@@ -36,6 +36,25 @@ struct StylesSnapshot {
 	SelectionStyles selection;
 };
 
+// a row of the styles lists (TStyleListItem): a kind's heading, or one of
+// its named styles
+struct StyleRow {
+	std::string label;
+	uint32 type = 0;
+	int32 style = -1;			// -1: a heading
+	uint32 flags = 0;			// TStyleListItem: 1 heading, 2 applied to
+								// part, 4 applied, 8 the active style
+};
+
+// TStyleListView::GetStyles: each of the active part's kinds with named
+// styles, under its heading, by name; the selection's marked
+std::vector<StyleRow> StyleRows(const StylesSnapshot& snapshot);
+// TStyleListView::BuildList: `list` shows `rows`, headings open or closed
+// as `expanded` remembers them (the list's own state kept there first);
+// false, and nothing done, if it shows them already
+bool BuildStyleList(BOutlineListView* list, const std::vector<StyleRow>& rows,
+	std::map<std::string, bool>& expanded);
+
 // TApp +0x188: the styles Edit > Copy Style keeps for Paste Style
 void SetStyleClipboard(const std::vector<StyleDefinition>& styles);
 std::vector<StyleDefinition> StyleClipboard();
@@ -71,13 +90,7 @@ protected:
 	virtual bool ItemHit(int32 index, BMessage* message);
 
 private:
-	struct Row {
-		std::string label;
-		uint32 type = 0;
-		int32 style = -1;			// -1: a heading
-		uint32 flags = 0;			// TStyleListItem: 1 heading, 2 applied to
-									// part, 4 applied, 8 the active style
-	};
+	typedef StyleRow Row;
 
 	// TDialogStylesEdit::UpdateContents
 	void Update(bool force);

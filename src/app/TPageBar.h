@@ -42,6 +42,14 @@ private:
 	BMessageRunner* fRepeat = NULL;
 };
 
+// TSliderWindow, TSliderView: the zoom's slider window, from a press held
+// on the percent, tracked until the button comes up
+class TSliderWindow {
+public:
+	// over the zoom whose top left is `origin` (screen)
+	static void Track(TScaleSlider* scale, BPoint origin);
+};
+
 class TPageBar : public BView {
 public:
 	TPageBar();

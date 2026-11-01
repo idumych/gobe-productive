@@ -36,6 +36,8 @@
 #include "TDialogNewDoc.h"
 #include "TDialogSplash.h"
 #include "TRecentDocs.h"
+#include "TPensWindow.h"
+#include "TTearOffs.h"
 #include "TTranslate.h"
 #include "TWindowArrange.h"
 
@@ -224,6 +226,22 @@ public:
 					return;
 				}
 				break;
+			// a FormatBar menu or the zoom torn off (TMenu::TrackTearOff):
+			// its floater at the drop point
+			// an ink menu torn off (TApp::MessageReceived 'sW00'): the Inks
+			// window on that kind, at the drop point
+			case 'sW00':
+				TPensWindow::Open(message->GetInt32("MajorType", 1),
+					message->GetInt32("MinorType", 3), message->GetPoint("DropPoint",
+						BPoint(-1, -1)));
+				return;
+			case 'sW02':
+			case 'sW04':
+			case 'sW05':
+			case 'sW06':
+			case 'sW07':
+				OpenTearOff(message->what, message->GetPoint("DropPoint", BPoint(100, 100)));
+				return;
 			// the Window menu (TDocWindow::MessageReceived; TILE with no
 			// "horizontal" is the grid)
 			case 'sMF9':

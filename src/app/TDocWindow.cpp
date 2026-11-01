@@ -35,6 +35,7 @@
 
 #include "DocWriter.h"
 #include "Document.h"
+#include "Names.h"
 #include "Editing.h"
 #include "Formats.h"
 #include "GobeResources.h"
@@ -63,6 +64,7 @@
 #include "TSharedDocument.h"
 #include "TLexiconDialogs.h"
 #include "TStylesEdit.h"
+#include "TTearOffs.h"
 #include "InlineParts.h"
 #include "Find.h"
 #include "TWPRuler.h"
@@ -145,8 +147,11 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	fSeenGeneration = fShared->generation;
 	sWindows.insert(sWindows.begin(), this);
 	// the floaters' subsets take the new window (TFloaterMgr 'sE05')
-	for (BWindow* floater : {(BWindow*)TDialogHistory::Open(),
-			(BWindow*)TDialogStylesEdit::Open(), (BWindow*)TDialogLayers::Open()}) {
+	std::vector<BWindow*> floaters = TearOffWindows();
+	for (BWindow* window : {(BWindow*)TDialogHistory::Open(),
+			(BWindow*)TDialogStylesEdit::Open(), (BWindow*)TDialogLayers::Open()})
+		floaters.push_back(window);
+	for (BWindow* floater : floaters) {
 		if (floater == NULL)
 			continue;
 		BMessage add('sE05');
@@ -521,6 +526,7 @@ TDocWindow::MessageReceived(BMessage* message)
 			TDialogHistory::Refresh();
 			TDialogStylesEdit::Refresh();
 			TDialogLayers::Refresh();
+			RefreshTearOffs();
 			return;
 		// another window of the document changed it (laid out anew in
 		// DispatchMessage) or its windows' titles changed
@@ -568,6 +574,9 @@ TDocWindow::MessageReceived(BMessage* message)
 		case 's003':
 			if (fPages != NULL)
 				fPages->SetZoom(message->GetFloat("scale", 1));
+			// (from the Scale floater: the zoom shows it too)
+			if (fScaleSlider != NULL)
+				fScaleSlider->SetScale(message->GetFloat("scale", 1), false);
 			return;
 		// Document > Page View (TDocWindow::SetPageView: the sheet's, saved
 		// with it; not a command)
@@ -1356,6 +1365,7 @@ TDocWindow::MessageReceived(BMessage* message)
 		fPages->Invalidate();
 		PostMessage(kMsgDocumentChanged);
 		TDialogLayers::Refresh();
+		RefreshTearOffs();
 		return;
 	}
 	if (message->what == 'sM24') {
@@ -1999,6 +2009,7 @@ TDocWindow::WindowActivated(bool active)
 		TDialogHistory::Refresh();
 		TDialogStylesEdit::Refresh();
 		TDialogLayers::Refresh();
+		RefreshTearOffs();
 	}
 }
 
@@ -2219,6 +2230,30 @@ TDocWindow::FindReplaceCommand(BMessage* message)
 	}
 	if (TDialogFindChange* dialog = TDialogFindChange::Open())
 		dialog->PostMessage('sD=L');
+}
+
+void
+TDocWindow::TearOffState(struct TearOffState& state) const
+{
+	if (fDocument == NULL || fPages == NULL)
+		return;
+	state.document = true;
+	state.names = SelectionNames(*fDocument);
+	ShapeStyle style;
+	if (fPages->SelectedShapeStyle(style)) {
+		state.shapes = true;
+		state.opacity = int32(std::lround(std::min(style.fillOpacity, style.penOpacity) * 100));
+	}
+	state.zoomable = true;
+	state.zoom = fPages->Zoom();
+	if (fPages->fCaret.active && fDocument->WordPart(fPages->fCaret.part) != NULL) {
+		TextStyle text = fPages->StyleAt(fPages->TextSelectionRange().first);
+		state.text = true;
+		state.family = text.family;
+		state.size = text.size;
+		state.faces = text.faceFlags;
+	}
+	GetStylesSnapshot(state.styles);
 }
 
 } // namespace gobe

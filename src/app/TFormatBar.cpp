@@ -1,5 +1,6 @@
 #include "TFormatBar.h"
 
+#include <Application.h>
 #include <MenuItem.h>
 #include <PopUpMenu.h>
 #include <Window.h>
@@ -96,6 +97,8 @@ public:
 		TFormatMenuElement('Font', rect, GobeResources::IndexString(5, 14).String())
 	{
 		tip = GobeResources::IndexString(4, 0).String();
+		// (TFontNameMenuElement: torn off, the Text Formatting floater)
+		tearOff = 'sW04';
 	}
 
 	virtual void Fill(BPopUpMenu* menu, TFormatBar* bar)
@@ -117,6 +120,7 @@ public:
 		TFormatMenuElement('Size', rect, GobeResources::IndexString(5, 15).String())
 	{
 		tip = GobeResources::IndexString(4, 1).String();
+		tearOff = 'sW04';
 	}
 
 	// TStyleManager::FixPropMenu(TSiz): the size the selection has
@@ -142,6 +146,7 @@ public:
 		TFormatMenuElement('Face', BRect(where, where), NULL, 0x15)
 	{
 		tip = GobeResources::IndexString(4, 2).String();
+		tearOff = 'sW04';
 	}
 
 	// TFontFaceMenuElement::FixMenu: the faces the text has
@@ -227,9 +232,24 @@ public:
 		ribbon->DrawElement(this, true);
 		ribbon->Sync();
 		BPoint at = ribbon->ConvertToScreen(BPoint(rect.left - 1, rect.top - 2));
-		BMenuItem* chosen = menu->Go(at, false, true, false);
+		// (each submenu tears off into the Inks window on its kind:
+		// TMICNMenuBarElement::AddMenu's 'sW00' with "MajorType" and
+		// "MinorType", the transparencies on the colours)
+		std::vector<BMenu*> submenus;
+		for (int32 i = 0; i < menu->CountItems(); i++)
+			submenus.push_back(menu->ItemAt(i)->Submenu());
+		BRect torn;
+		int32 tornIndex = -1;
+		BMenuItem* chosen = TrackTearOff(menu, ribbon, at, ribbon->ConvertToScreen(rect),
+			submenus, torn, tornIndex);
 		ribbon->DrawElement(this, false);
-		if (chosen != NULL && chosen->Message() != NULL)
+		if (torn.IsValid() && tornIndex >= 0) {
+			BMessage inks('sW00');
+			inks.AddInt32("MajorType", major);
+			inks.AddInt32("MinorType", tornIndex == 4 ? 3 : tornIndex == 3 ? 0 : tornIndex);
+			inks.AddPoint("DropPoint", torn.LeftTop());
+			be_app->PostMessage(&inks);
+		} else if (chosen != NULL && chosen->Message() != NULL)
 			ribbon->Send(chosen->Message());
 		else if (chosen == NULL && pens != NULL && pens->ReleasedOver())
 			TPensWindow::Open(major, 3);
@@ -277,6 +297,8 @@ public:
 		TFormatMenuElement('Styl', rect, GobeResources::IndexString(5, 16).String())
 	{
 		tip = GobeResources::IndexString(4, 9).String();
+		// (TStylesMenuElement: torn off, the Styles floater)
+		tearOff = 'sW02';
 	}
 
 	// TStylesMenuElement::FixMenu: MENU 100, then the named styles of the
@@ -344,6 +366,8 @@ public:
 		TFormatMenuElement('Name', BRect(where, where), NULL, 0x25)
 	{
 		tip = GobeResources::IndexString(4, 10).String();
+		// (TNamesMenuElement: torn off, the Named Selections floater)
+		tearOff = 'sW06';
 	}
 
 	// TNamesMenuElement::FixMenu: MENU 111 (Name Selection… with cells
@@ -459,6 +483,8 @@ TFormatBar::TFormatBar(TPageView* pages)
 			TFormatMenuElement('Tran', BRect(where, where), NULL, 0x20)
 		{
 			tip = GobeResources::IndexString(4, 11).String();
+			// (torn off, the Transparency floater)
+			tearOff = 'sW07';
 		}
 		// MENU 103's items sending 'sf0S' with their percent (Other… its
 		// 'sM0U', for the dialog)
