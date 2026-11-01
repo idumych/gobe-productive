@@ -422,9 +422,10 @@ public:
 			} else
 				ok = ImportFile(path.c_str(), kind, *doc, message, warning);
 			if (!ok) {
-				if (fRenderPath.empty())
+				// (an import cancelled in the Status window says nothing)
+				if (message.Length() > 0 && fRenderPath.empty())
 					(new BAlert("Open", message.String(), "OK"))->Go(NULL);
-				else
+				else if (message.Length() > 0)
 					fprintf(stderr, "error opening %s: %s\n", path.c_str(), message.String());
 				delete doc;
 				return;

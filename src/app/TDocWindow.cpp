@@ -855,7 +855,9 @@ TDocWindow::MessageReceived(BMessage* message)
 				SaveFormat format = ChosenFormat(fFormatField);
 				if (format != kSaveGobe) {
 					BString error;
-					if (!ExportFile(*fDocument, path.Path(), format, error))
+					// (nothing to say after Cancel in the Status window)
+					if (!ExportFile(*fDocument, path.Path(), format, error)
+							&& error.Length() > 0)
 						(new BAlert("Save", error.String(), "OK"))->Go(NULL);
 					return;
 				}

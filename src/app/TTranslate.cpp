@@ -30,6 +30,8 @@
 
 #include "Document.h"
 #include "GobeResources.h"
+#include "TStatusDialog.h"
+#include "Progress.h"
 #include "RTF.h"
 #include "SSSylk.h"
 #include "HTMLExport.h"
@@ -246,11 +248,64 @@ IdentifyFile(const char* path)
 }
 
 
+// the translator format an import reads (its name and MIME type, as the
+// Status window shows them: TImportTranslation::GetTranslatorID) and the
+// kind of document it makes
+static void
+ImportFormat(FileKind kind, const char*& name, const char*& type, const char*& factory)
+{
+	factory = "Word Processing";
+	switch (kind) {
+		case kRTFFile:
+			name = "Rich Text Format (RTF)";
+			type = "text/rtf";
+			break;
+		case kWordFile:
+			name = "Microsoft Word";
+			type = "application/msword";
+			break;
+		case kExcelFile:
+			name = "Microsoft Excel";
+			type = "application/vnd.ms-excel";
+			factory = "Spreadsheet";
+			break;
+		case kHTMLFile:
+			name = "HTML";
+			type = "text/html";
+			break;
+		case kSylkFile:
+			name = "SYLK";
+			type = "text/x-sylk";
+			factory = "Spreadsheet";
+			break;
+		case kTableFile:
+			name = "Plain Text";
+			type = "text/plain";
+			factory = "Spreadsheet";
+			break;
+		default:
+			name = "Plain Text";
+			type = "text/plain";
+			break;
+	}
+}
+
+
 bool
 ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BString& warning)
 {
 	std::string message, notice;
 	bool ok = false;
+	// TImportTranslation::SetUp: the Status window, its bar following the
+	// import
+	const char* formatName;
+	const char* formatType;
+	const char* factory;
+	ImportFormat(kind, formatName, formatType, factory);
+	TStatusDialog* status = new TStatusDialog(TStatusDialog::Title(true, factory,
+		BPath(path).Leaf()).String(), formatName, formatType);
+	status->RunDialog();
+	ProgressScope progress([status](float fraction) { return status->Update(fraction); });
 	if (kind == kRTFFile) {
 		ok = ImportRTF(path, doc, message, InstalledFonts(), &notice, ReadPicture);
 	} else if (kind == kWordFile) {
@@ -269,7 +324,12 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 		ReadTextAttributes(path, attributes);
 		ok = ImportText(path, doc, message, &attributes);
 	}
+	status->Finish();
 	BPath p(path);
+	if (!ok && message == kCancelledError) {
+		error = "";
+		return false;
+	}
 	if (!ok) {
 		// "Unable to import the file “%s”."
 		error.SetToFormat(GobeResources::IndexString(6, 17).String(), p.Leaf());
@@ -561,6 +621,29 @@ ExportFile(const Document& doc, const char* path, SaveFormat format, BString& er
 	size_t part = main >= 0 ? size_t(main) : 0;
 	std::string message;
 	bool ok = false;
+	// TExportTranslation: the Status window, "<kind>: exporting to
+	// “<file>”" with the translator's output format
+	static const struct {
+		SaveFormat format;
+		const char* name;
+	} kNames[] = {
+		{kSavePlainText, "Plain Text"}, {kSaveRTF, "RTF"}, {kSaveHTML, "HTML"},
+		{kSaveSYLK, "SYLK"}, {kSaveTabText, "Tab-delimited text"},
+		{kSaveCommaText, "Comma-delimited text"},
+		{kSaveSemicolonText, "Semicolon-delimited text"},
+		{kSaveExcel, "Microsoft Excel 97"}, {kSaveWord, "Microsoft Word"}
+	};
+	const char* formatName = "";
+	for (const auto& n : kNames)
+		if (n.format == format)
+			formatName = n.name;
+	const char* formatType = format == kSaveSYLK ? "text/x-sylk" : FormatType(format);
+	const char* factory = main >= 0 && doc.SpreadsheetPart(part) != nullptr
+		? "Spreadsheet" : "Word Processing";
+	TStatusDialog* status = new TStatusDialog(TStatusDialog::Title(false, factory,
+		BPath(path).Leaf()).String(), formatName, formatType != NULL ? formatType : "");
+	status->RunDialog();
+	ProgressScope progress([status](float fraction) { return status->Update(fraction); });
 	if (format == kSavePlainText) {
 		TextAttributes attributes;
 		ok = ExportText(doc, part, path, message, &attributes, &InstalledFonts());
@@ -581,6 +664,11 @@ ExportFile(const Document& doc, const char* path, SaveFormat format, BString& er
 			|| format == kSaveSemicolonText) {
 		ok = ExportTable(doc, part, path, format == kSaveTabText ? '\t'
 			: format == kSaveCommaText ? ',' : ';', message);
+	}
+	status->Finish();
+	if (!ok && message == kCancelledError) {
+		error = "";
+		return false;
 	}
 	if (!ok) {
 		// "Error writing file!"
