@@ -7,7 +7,6 @@ The original Gobe Productive 2.0 installer, from the tester's own copy
 `Install Gobe Productive` (10,366,125 bytes). Copy it to the guest:
 
 - Haiku: `scp "<installer>" haiku-b6-test:"/boot/home/Install Gobe Productive"`
-- V\OS: `scp "<installer>" vos-test:"/home/vos-live/Install Gobe Productive"`
 - Linux (Xvfb): copy it into the throwaway HOME as `$HOME_DIR/Install Gobe Productive`
 
 The first start unpacks it (OriginalImport) into the settings folder, and
@@ -17,7 +16,7 @@ the feature checks use the sample document `Samples/Resume` from it.
 
 Delete before launch:
 
-- Haiku, V\OS: `~/config/settings/Gobe Productive port`,
+- Haiku: `~/config/settings/Gobe Productive port`,
   `~/config/settings/Gobe Productive port settings`,
   `~/config/settings/Gobe Productive Recent Documents`
 - Linux: the throwaway HOME (`$HOME_DIR`)
@@ -29,7 +28,7 @@ original. Then:
     O="<settings>/Gobe Productive port/Original/Gobe Productive 2.0b2/Gobe Productive 2.0"
     cp "$O/Samples/Resume" "$HOME/resume-{p}"
 
-(`<settings>`: `~/config/settings` on Haiku and V\OS, `$HOME_DIR/.config/cosmoe` on Linux.)
+(`<settings>`: `~/config/settings` on Haiku, `$HOME_DIR/.config/cosmoe` on Linux.)
 
 ## Feature checks
 
@@ -43,7 +42,7 @@ PASS when: OCR of the window (`{p}-open.txt`) shows the resume's text:
 Steps: click just after "Pan" at the end of the name "Ernie G. Pan" at the
 top (a wide line: the columns below are one narrow text flow, where an
 extra line pushes the rest out of the frames); type ` hello from {p}`;
-save with Command+S (Alt+S on Haiku, Ctrl+S on V\OS and
+save with Command+S (Alt+S on Haiku, Ctrl+S on
 Linux); quit with Command+Q. Launch the app again with
 `"$HOME/resume-{p}"` (no GOBE_ORIGINAL: the unpacked original is
 remembered) and take a screenshot.
