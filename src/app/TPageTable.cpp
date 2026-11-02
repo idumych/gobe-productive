@@ -393,8 +393,10 @@ TPageView::TableKey(const char* bytes, bool shift)
 		TextPosition at;
 		fTableCells.active = false;
 		if (InlineSpecialOf(table, container, at)) {
+			// (TWPPart doesn't select the frame, TPart::SelectChildFrame:
+			// the text goes on with a caret, before the table)
 			fAnchor = {true, container, at.paragraph, at.offset};
-			fCaret = {true, container, at.paragraph, at.offset + 1};
+			fCaret = fAnchor;
 		} else {
 			fCaret.active = false;
 			fAnchor.active = false;
