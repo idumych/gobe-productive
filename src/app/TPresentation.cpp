@@ -816,6 +816,9 @@ namespace {
 
 class TSlideShowWindow;
 
+// the show running (TPartPR's ThePresentation)
+static BWindow* sShow = NULL;
+
 class TSlideView : public BView {
 public:
 	TSlideView(BRect frame, TSlideShowWindow* show)
@@ -953,6 +956,7 @@ public:
 		show.AddInt32("slide", fSlide);
 		show.AddInt32("layer", -1);
 		fWindow->PostMessage(&show);
+		sShow = NULL;
 		return true;
 	}
 
@@ -1116,7 +1120,11 @@ StartSlideShow(TDocWindow* window, Document* document, int32 slide)
 			|| document->slides.empty())
 		return;
 	slide = std::max<int32>(0, std::min<int32>(slide, int32(document->slides.size()) - 1));
+	// TPartPR 'PR01': one show at a time (ThePresentation)
+	if (sShow != NULL)
+		return;
 	TSlideShowWindow* show = new TSlideShowWindow(window, document, slide);
+	sShow = show;
 	show->Show();
 	show->Activate();
 }

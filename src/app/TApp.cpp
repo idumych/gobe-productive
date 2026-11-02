@@ -474,6 +474,9 @@ public:
 			TDocWindow* window = new TDocWindow(frame,
 				doc->path.empty() ? doc->name.c_str() : p.Leaf(), doc);
 			window->Show();
+			// TPartPR::FinishOpenDoc: Options > Auto-start starts the show
+			if (doc->presentationPart >= 0 && doc->presentation.autoStart)
+				window->PostMessage('PR01');
 			CheckFonts(*doc);
 			RunScriptIn(window);
 		} catch (const std::exception& e) {

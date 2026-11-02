@@ -740,8 +740,7 @@ TDocWindow::MessageReceived(BMessage* message)
 		// 'PR01': TPRWinHelper)
 		case 'PR01':
 			if (fDocument != NULL && fDocument->presentationPart >= 0)
-				StartSlideShow(this, fDocument, message->GetInt32("start_slide",
-					fDocument->currentSlide));
+				StartSlideShow(this, fDocument, message->GetInt32("start_slide", 0));
 			return;
 		// Presentation > Show Presentation Window… (TPartPR 'PR0D': opened,
 		// or brought to the front)
