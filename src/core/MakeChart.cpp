@@ -90,6 +90,8 @@ NiceNum(float x, bool round)
 void
 SetRange(ChartAxis& axis, float low, float high, int ticks)
 {
+	if (ticks < 0)
+		ticks = 5;
 	float range = NiceNum(high - low, false);
 	float step = NiceNum(ticks > 1 ? range / float(ticks - 1) : range, high - low > 1);
 	float niceLow = 0, niceHigh = 0;
@@ -103,7 +105,7 @@ SetRange(ChartAxis& axis, float low, float high, int ticks)
 	axis.values[3] = Bits(niceHigh);
 	axis.values[4] = Bits(range);
 	axis.values[5] = Bits(step);
-	axis.values[6] = uint32_t(ticks < 0 ? 5 : ticks);
+	axis.values[6] = uint32_t(ticks);
 }
 
 
@@ -122,9 +124,13 @@ ValueText(const SSValue& v)
 
 
 ChartData
-ChartDataOf(const Document& doc, size_t part, const SSRange& range)
+ChartDataOf(const Document& doc, size_t part, const SSRange& range, uint32_t mode,
+	bool* seriesInRows, std::string* label)
 {
 	ChartData d;
+	d.value40 = mode;
+	if (label != nullptr)
+		label->clear();
 	const SSPart* ss = doc.SpreadsheetPart(part);
 	if (ss == nullptr)
 		return d;
@@ -135,9 +141,13 @@ ChartDataOf(const Document& doc, size_t part, const SSRange& range)
 		return eval.Value(uint16_t(range.from.a + row), uint16_t(range.from.b + column));
 	};
 	auto number = [&](int row, int column) { return value(row, column).type == SSValue::kNumber; };
-	// CalcIsRowSeries (no preference): categories down the rows unless
-	// the range is wider than tall
-	bool rowSeries = columns <= rows;
+	// CalcIsRowSeries: by the preference, else the range's shape (series in
+	// rows unless it's taller than wide); rowSeries here is the other way:
+	// the categories down the rows
+	bool inRows = mode == 2 || (mode == 0 && rows <= columns) || (mode == 1 && columns < rows);
+	if (seriesInRows != nullptr)
+		*seriesInRows = inRows;
+	bool rowSeries = !inRows;
 	int textInColumn = 0, textInRow = 0;
 	for (int r = 0; r < rows; r++)
 		textInColumn += !number(r, 0);
@@ -152,6 +162,9 @@ ChartDataOf(const Document& doc, size_t part, const SSRange& range)
 	auto at = [&](int category, int s) {
 		return rowSeries ? value(category, s) : value(s, category);
 	};
+	// (the label: the corner's text when both names are there)
+	if (label != nullptr && categorySkip && seriesSkip)
+		*label = ValueText(value(0, 0));
 	if (categorySkip)
 		for (int s = seriesSkip; s < series; s++)
 			d.names2.push_back(ValueText(at(0, s)));
@@ -523,6 +536,187 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 		doc.factoriesChanged = true;
 	}
 	return int(chart);
+}
+
+
+bool
+ChartCells(const Document& doc, size_t chart, size_t& sheet, SSRange& range)
+{
+	const ChartPart* c = doc.Chart(chart);
+	if (c == nullptr || c->data.link >= doc.links.links.size())
+		return false;
+	const Link& link = doc.links.links[c->data.link];
+	if (link.sourcePart >= doc.tails.size() || doc.SpreadsheetPart(link.sourcePart) == nullptr)
+		return false;
+	const PartTail& tail = doc.tails[link.sourcePart];
+	if (link.reference >= tail.refs.size())
+		return false;
+	const Selection* selection = doc.selections.Find(tail.refs[link.reference].selection);
+	if (selection == nullptr || selection->ranges.empty())
+		return false;
+	const auto& r = selection->ranges[0];
+	sheet = link.sourcePart;
+	range.from = {r[0], r[1]};
+	range.to = {r[2], r[3]};
+	return true;
+}
+
+
+bool
+ChartSeriesInRows(const Document& doc, size_t chart)
+{
+	size_t sheet;
+	SSRange range;
+	const ChartPart* c = doc.Chart(chart);
+	if (c == nullptr || !ChartCells(doc, chart, sheet, range))
+		return false;
+	bool inRows = false;
+	ChartDataOf(doc, sheet, range, c->data.value40, &inRows);
+	return inRows;
+}
+
+
+std::string
+ChartLabel(const Document& doc, size_t chart)
+{
+	size_t sheet;
+	SSRange range;
+	std::string label;
+	const ChartPart* c = doc.Chart(chart);
+	if (c != nullptr && ChartCells(doc, chart, sheet, range))
+		ChartDataOf(doc, sheet, range, c->data.value40, nullptr, &label);
+	return label;
+}
+
+
+namespace {
+
+// the chart's piece of `kind`, nullptr if none (TChartPart::GetPiece)
+Shape*
+Piece(ChartPart& chart, uint32_t kind)
+{
+	for (GRLayer& layer : chart.graphics.layers)
+		for (Shape& s : layer.shapes)
+			if (s.kind == kind)
+				return &s;
+	return nullptr;
+}
+
+
+// the chart's frame's width (its first), 0 if it has none
+float
+ChartFrameWidth(const Document& doc, size_t chart)
+{
+	if (chart < doc.tails.size())
+		for (const Portal& portal : doc.tails[chart].portals)
+			for (const Frame& f : portal.frames)
+				return f.extent[0];
+	return 0;
+}
+
+} // namespace
+
+
+bool
+ShowChartPiece(Document& doc, size_t chart, uint32_t kind, bool show, const TextMeasure& measure)
+{
+	std::string label = kind == Sig("Titl") ? ChartLabel(doc, chart) : std::string();
+	float frameWidth = ChartFrameWidth(doc, chart);
+	ChartPart* c = doc.EditableChart(chart);
+	if (c == nullptr)
+		return false;
+	Shape* piece = Piece(*c, kind);
+	if (piece == nullptr) {
+		if (kind != Sig("Titl") || !show || label.empty() || c->graphics.layers.empty())
+			return false;
+		// TChartPart::InsertNewPiece: a title (its style the legend's), then
+		// TTitlePiece::SetText (fixup_text: the text's width and height in
+		// its font, 4 more each) and FixupPiecePositions (centered, 4 down)
+		Shape title;
+		title.kind = Sig("Titl");
+		const Shape* legend = Piece(*c, Sig("Lgnd"));
+		title.style = legend != nullptr ? legend->style : 0;
+		title.text = label;
+		float width = 0, height = 0;
+		if (measure)
+			measure(label, title.style, width, height);
+		title.size[0] = width + 4;
+		title.size[1] = height + 4;
+		title.origin[0] = frameWidth * 0.5f - title.size[0] * 0.5f;
+		title.origin[1] = 4;
+		title.radius[0] = 2;
+		title.radius[1] = height;
+		DocWriter w;
+		w.Sig(Sig("tlp+"));
+		w.String(label);
+		w.Point(title.radius);
+		w.Sig(Sig("tlp-"));
+		title.pieceData = w.Data();
+		title.pieceValue = 0;
+		c->graphics.layers[0].shapes.push_back(title);
+		piece = &c->graphics.layers[0].shapes.back();
+	}
+	if (((piece->pieceValue & 1) != 0) == show)
+		return false;
+	piece->pieceValue = show ? (piece->pieceValue | 1) : (piece->pieceValue & ~1u);
+	return true;
+}
+
+
+bool
+ToggleChartSeriesOrder(Document& doc, size_t chart)
+{
+	size_t sheet;
+	SSRange range;
+	const ChartPart* current = doc.Chart(chart);
+	if (current == nullptr || !ChartCells(doc, chart, sheet, range))
+		return false;
+	bool inRows = false;
+	ChartDataOf(doc, sheet, range, current->data.value40, &inRows);
+	ChartData data = ChartDataOf(doc, sheet, range, inRows ? 3 : 2);
+	data.link = current->data.link;
+	if (data.values[1] == 0)
+		return false;
+	// the series' styles: the ones they had, more as MakeChart makes them
+	std::vector<uint32_t> styles;
+	for (const ChartSeries& s : current->series)
+		styles.push_back(s.style);
+	uint32_t base = FindNamedStyle(doc.styles, "GR Default");
+	if (base >= doc.styles.styles.size())
+		base = FindNamedStyle(doc.styles, "Default");
+	for (uint32_t i = uint32_t(styles.size()); i < data.values[1]; i++) {
+		const uint8_t* color = kSeriesColors[i % 16];
+		uint32_t made = doc.NewStyle(Sig("Basi"), "", 0x20, base, {InkProperty("FCol",
+			color[0], color[1], color[2], 0), InkProperty("chSC", 0, 0, 0, 0xff),
+			ShortProperty("chSM", 0), ShortProperty("chSS", 6)});
+		doc.styles.styles[made].value4++;
+		styles.push_back(made);
+	}
+	ChartPart* c = doc.EditableChart(chart);
+	if (c == nullptr)
+		return false;
+	c->data = data;
+	c->series.clear();
+	for (uint32_t i = 0; i < data.values[1]; i++) {
+		ChartSeries s;
+		s.name = i < data.names2.size() ? data.names2[i] : "Series " + std::to_string(i + 1);
+		s.style = styles[i];
+		c->series.push_back(s);
+	}
+	float low = 0, high = 0;
+	for (float v : data.table[0]) {
+		low = std::min(low, v);
+		high = std::max(high, v);
+	}
+	SetRange(c->axes[0], 0, float(data.values[0]), int(data.values[0]));
+	SetRange(c->axes[1], low, high, -1);
+	c->sets.clear();
+	ChartSeriesSet set;
+	set.kind = c->seriesKind;
+	for (uint32_t i = 0; i < data.values[1]; i++)
+		set.series.push_back(i);
+	c->sets.push_back(set);
+	return true;
 }
 
 } // namespace gobe

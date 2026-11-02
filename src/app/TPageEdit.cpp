@@ -1616,6 +1616,9 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 
 	fUndo.Break();
 
+	// a chart's frame double-clicked: the chart entered (TChartPart)
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && ChartClick(where, clicks))
+		return;
 	// the selected frame's handles and edge, then the ToolBar's tools: a
 	// shape dragged out, a shape selected
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && FrameGrab(where))
@@ -2180,6 +2183,9 @@ TPageView::MessageReceived(BMessage* message)
 		return;
 	// the Table menu (TPageTable.cpp)
 	if (TableCommand(message))
+		return;
+	// the Chart menu (TPageChart.cpp)
+	if (ChartCommand(message))
 		return;
 	switch (message->what) {
 		case kMsgCellCommit:
@@ -6180,6 +6186,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sTB5': case 'sTB6': case 'sTB7': case 'sTB8': case 'sTB9':
 		case 'sTBA': case 'sTBB': case 'sTBC': case 'sTBD':
 		case 's00T':	// Make Chart
+		case 'sCHc': case 'sCHd': case 'sCHe': case 'sCH1': case 'sCH8':	// Chart
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange
 		case 'sM4A': case 'sM4B': case 'sM4C':
 		case 'sM44': case 'sM45': case 'sM48': case 'sM49': case 'sM4D': case 'sM4E': case 'sM4T':

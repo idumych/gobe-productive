@@ -174,6 +174,9 @@ struct Document {
 	const SSPart* SpreadsheetPart(size_t part) const;
 	const IMPart* ImagePart(size_t part) const;
 	const ChartPart* Chart(size_t part) const;
+	// a chart part to change (marked dirty: its chart section is written
+	// anew on save)
+	ChartPart* EditableChart(size_t part);
 	const TablePart* Table(size_t part) const;
 	// the table part whose cells' text is part `textPart`, -1 if none
 	int TableOfText(size_t textPart) const;

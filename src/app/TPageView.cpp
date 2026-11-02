@@ -16,6 +16,7 @@
 #include <time.h>
 
 #include <algorithm>
+#include <cstring>
 #include <map>
 #include <cstdint>
 
@@ -2144,6 +2145,9 @@ TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 		for (const Shape& s : layer.shapes) {
 			BRect sr(r.left + s.origin[0], r.top + s.origin[1],
 				r.left + s.origin[0] + s.size[0], r.top + s.origin[1] + s.size[1]);
+			// (a hidden piece isn't drawn: TChartPiece::Draw, +0x30 bit 0)
+			if ((s.kind == Sig("Lgnd") || s.kind == Sig("Titl")) && (s.pieceValue & 1) == 0)
+				continue;
 			if (s.kind == Sig("Rndr"))
 				plot = sr;
 			else if (s.kind == Sig("Lgnd")) {
@@ -2194,6 +2198,25 @@ TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 		}
 	high = ceilf(high / step) * step;
 	low = floorf(low / step) * step;
+	// a 2D chart's vertical axis (T2DXYAxisChart: TAxis's range and step,
+	// as the data ranged it or Axis… set it; its gridlines if it has them)
+	bool grid = true;
+	if (chart.chartType == Sig("2DSM")) {
+		const ChartAxis& axis = chart.axes[1];
+		auto value = [](uint32_t bits) {
+			float f;
+			memcpy(&f, &bits, sizeof f);
+			return f;
+		};
+		float axisLow = value(axis.values[2]), axisHigh = value(axis.values[3]);
+		float axisStep = value(axis.values[5]);
+		if (axisLow < axisHigh) {
+			low = axisLow;
+			high = axisHigh;
+			step = axisStep > 0 ? axisStep : (high - low) / 4;
+		}
+		grid = axis.flags[1];
+	}
 
 	BFont font(be_plain_font);
 	font.SetSize(9);
@@ -2221,7 +2244,8 @@ TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 	for (float v = low; v <= high + step / 2; v += step) {
 		float y = yFor(v);
 		SetHighColor(210, 210, 210);
-		StrokeLine(BPoint(area.left, y), BPoint(area.right, y));
+		if (grid)
+			StrokeLine(BPoint(area.left, y), BPoint(area.right, y));
 		if (depth > 0)
 			StrokeLine(BPoint(area.left, y), BPoint(area.left + depth, y - depth));
 		char label[32];

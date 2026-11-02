@@ -146,6 +146,7 @@ private:
 	class TToolBar* fToolBar = NULL;
 	bool fDrawingMenus = false;	// the part menu is MENU 50 (Arrange)
 	bool fTableMenus = false;	// Table (the Table part's MENU 100) before Format
+	bool fChartMenus = false;
 	void ShowActiveRibbon();
 	class TScaleSlider* fScaleSlider = NULL;
 	// the document's scroll view (TDocScrollView: the graphics rulers)

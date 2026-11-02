@@ -934,6 +934,18 @@ Document::EditableSpreadsheetPart(size_t part)
 }
 
 
+ChartPart*
+Document::EditableChart(size_t part)
+{
+	for (auto& [index, chart] : chartParts)
+		if (index == part) {
+			dirtyParts.insert(part);
+			return &chart;
+		}
+	return nullptr;
+}
+
+
 GRPart*
 Document::EditableGraphicsPart(size_t part)
 {
@@ -1020,6 +1032,24 @@ Document::Save(const std::string& to, std::string& error)
 				&& Table(part)->bodyEnd > Table(part)->bodyStart
 				&& Table(part)->bodyEnd <= record.size())
 			out = WriteTableRecord(*Table(part), record);
+		else if (dirtyParts.count(part) && Chart(part) != nullptr
+				&& Chart(part)->graphics.dataEnd > Chart(part)->graphics.dataStart
+				&& Chart(part)->graphics.dataEnd <= Chart(part)->sectionStart
+				&& Chart(part)->sectionEnd > Chart(part)->sectionStart
+				&& Chart(part)->sectionEnd <= record.size()) {
+			// TChartPart::Write: its drawing's data and its chart section
+			// anew, what's between and around them as read
+			const ChartPart* chart = Chart(part);
+			std::vector<uint8_t> data = WriteGRData(chart->graphics,
+				file.header.version.values[2], file.header.version.values[0]);
+			std::vector<uint8_t> section = WriteChartSection(*chart, file.header.version.values[2]);
+			out.assign(record.begin(), record.begin() + long(chart->graphics.dataStart));
+			out.insert(out.end(), data.begin(), data.end());
+			out.insert(out.end(), record.begin() + long(chart->graphics.dataEnd),
+				record.begin() + long(chart->sectionStart));
+			out.insert(out.end(), section.begin(), section.end());
+			out.insert(out.end(), record.begin() + long(chart->sectionEnd), record.end());
+		}
 		else if (dirtyParts.count(part) && GraphicsPart(part) != nullptr
 				&& GraphicsPart(part)->dataEnd > GraphicsPart(part)->dataStart
 				&& GraphicsPart(part)->dataEnd <= record.size()) {

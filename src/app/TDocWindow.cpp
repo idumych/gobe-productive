@@ -433,6 +433,9 @@ TDocWindow::InstallPartMenus()
 	if (fBar == NULL)
 		return;
 	bool sheet = fPages != NULL && fPages->fSelectedCell.active;
+	// TChartPart::InstallMenus: the drawing's Arrange, then Chart (MENU 300
+	// of the Chart part), a chart entered
+	bool chart = fPages != NULL && fPages->ActiveChartPart() >= 0;
 	// the drawing part's Arrange (MENU 50): shapes or a frame in a drawing
 	// selected, or a drawing document's drawing active
 	bool drawing = false;
@@ -448,17 +451,21 @@ TDocWindow::InstallPartMenus()
 	bool table = !sheet && fPages != NULL && fDocument != NULL && fPages->fCaret.active
 		&& fDocument->TableOfText(fPages->fCaret.part) >= 0;
 	if (!fPartMenus.empty() && sheet == fSheetMenus && drawing == fDrawingMenus
-			&& table == fTableMenus)
+			&& table == fTableMenus && chart == fChartMenus)
 		return;
 	fDrawingMenus = drawing;
 	fTableMenus = table;
+	fChartMenus = chart;
 	for (BMenu* menu : fPartMenus) {
 		fBar->RemoveItem(menu);
 		delete menu;
 	}
 	fPartMenus.clear();
 	fSheetMenus = sheet;
-	if (sheet) {
+	if (chart) {
+		fPartMenus.push_back(new TMenu(50));
+		fPartMenus.push_back(new TMenu(300, GobeResources::Part("Chart")));
+	} else if (sheet) {
 		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
 		fPartMenus.push_back(new TMenu(52, resources));
 		fPartMenus.push_back(new TMenu(53, resources));
@@ -2013,6 +2020,22 @@ TDocWindow::MenusBeginning()
 			item->SetEnabled(merge);
 		if (BMenuItem* item = KeyMenuBar()->FindItem('sTB1'))
 			item->SetEnabled(split);
+	}
+	// TChartPart::FixMenus
+	if (fChartMenus && fPages != NULL && KeyMenuBar() != NULL) {
+		bool inRows, titleEnabled, axis;
+		BString legend, title;
+		fPages->ChartMenuState(inRows, legend, title, titleEnabled, axis);
+		if (BMenuItem* item = KeyMenuBar()->FindItem('sCHc'))
+			item->SetMarked(inRows);
+		if (BMenuItem* item = KeyMenuBar()->FindItem('sCHd'))
+			item->SetLabel(legend.String());
+		if (BMenuItem* item = KeyMenuBar()->FindItem('sCHe')) {
+			item->SetLabel(title.String());
+			item->SetEnabled(titleEnabled);
+		}
+		if (BMenuItem* item = KeyMenuBar()->FindItem('sCH8'))
+			item->SetEnabled(axis);
 	}
 	// TPartGR::FixMenus: Arrange's ported items
 	if (fDrawingMenus && fPages != NULL)

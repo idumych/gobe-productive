@@ -395,6 +395,19 @@ public:
 	std::vector<std::vector<uint32_t>> SelectedCellStacks() const;
 private:
 	int FrameUnder(BPoint where) const;
+	// a chart frame entered (TChartPart active)
+	struct ActiveChart {
+		bool active = false;
+		size_t part = 0;
+	} fChart;
+	bool ChartClick(BPoint where, int32 clicks);
+	bool ChartCommand(BMessage* message);
+public:
+	// the chart part entered, -1 if none
+	int ActiveChartPart() const { return fChart.active ? int(fChart.part) : -1; }
+	void ChartMenuState(bool& seriesInRows, BString& legend, BString& title,
+		bool& titleEnabled, bool& axis) const;
+private:
 	void UpdateCursor(BPoint where);
 public:
 	void TableMenuState(bool& merge, bool& split) const;

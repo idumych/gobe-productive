@@ -6,6 +6,7 @@
 #define GOBE_CHART_PART_H
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -93,7 +94,36 @@ struct Document;
 // names (the first category's labels name the series, the first series'
 // the categories), the values cached series-major (0 for what isn't a
 // number); counts as TDataAccessor::Write writes them.
-ChartData ChartDataOf(const Document& doc, size_t part, const SSRange& range);
+// `mode` is the data's preference (TDataAccessor +0x40: 0 and 1 by the
+// range's shape, 2 series in rows, 3 in columns; CalcIsRowSeries), and
+// `seriesInRows` gets what it came to (+0x4d), `label` the data's label
+// (+0x14: the corner cell's text when it has both names, "No Data to
+// Chart", STR# 1 string 16, without values).
+ChartData ChartDataOf(const Document& doc, size_t part, const SSRange& range,
+	uint32_t mode = 0, bool* seriesInRows = nullptr, std::string* label = nullptr);
+
+// the cells chart part `chart` shows (its TLink: the spreadsheet part and
+// its reference's range); false if it has none
+bool ChartCells(const Document& doc, size_t chart, size_t& sheet, SSRange& range);
+// TDataAccessor's +0x4d and +0x14 for chart part `chart`, from its cells
+bool ChartSeriesInRows(const Document& doc, size_t chart);
+std::string ChartLabel(const Document& doc, size_t chart);
+
+// THideShowPieceCmd: the chart's piece of `kind` ('Lgnd', 'Titl') shown
+// or hidden (TChartPiece +0x30 bit 0); a title it doesn't have made first
+// (TChartPart::InsertNewPiece, TChartFrame::FixupPiecePositions: the
+// data's label, as wide as `measure` says plus 4, centered). False if
+// nothing changed.
+typedef std::function<void(const std::string& text, uint32_t style, float& width,
+	float& height)> TextMeasure;
+bool ShowChartPiece(Document& doc, size_t chart, uint32_t kind, bool show,
+	const TextMeasure& measure);
+
+// TToggleSeriesOrderCmd: the data taken the other way (+0x40 2 or 3) and
+// read again from the cells (TDataAccessor::DataChanged), the chart's
+// series following (their names; the styles they had, new ones as
+// MakeChart makes them). False if the chart has no cells.
+bool ToggleChartSeriesOrder(Document& doc, size_t chart);
 
 // Make Chart (the PartBar's button and the Options menu: 's00T' with Kind
 // 'chrt', TDocWindow::DoInsertFrame): a new chart part (TChartPart::
