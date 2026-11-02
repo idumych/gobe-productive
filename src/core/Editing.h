@@ -163,12 +163,14 @@ void SetCellStyle(StyleMgr& styles, uint32_t& style, uint32_t to);
 // Character properties (TFon, TSiz, TFac, TCol, ...) for the text in
 // [from, to), which may span paragraphs; runs are split at the ends and
 // merged again where neighbours end up alike. False if nothing changed.
+// With `reduce` (a format command's, TFormatCommand: TStyle::Reduce) the
+// styles keep no properties of their own that they inherit anyway.
 bool ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextPosition to,
-	const Property& property);
+	const Property& property, bool reduce = false);
 // Paragraph properties (PAlg, PLef, PInd, PRig, SpaB, SpaA, LSpa, PTab)
 // for paragraphs first..last.
 bool ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
-	const Property& property);
+	const Property& property, bool reduce = false);
 // Styles > New Style… (TNewStyleCommand, TStyleManager::NewStyle): a named
 // style of `type` ('Para', 'Basi') based on `base` (kNoPart for none), with
 // flags 0x822 like the documents' own; with `fromStyle` (not kNoPart) it

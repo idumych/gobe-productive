@@ -5800,7 +5800,7 @@ TPageView::ApplyCharacter(TextPosition from, TextPosition to, const Property& pr
 	uint32_t style = EditStyle();
 	if (style < fDocument.styles.styles.size())
 		return SetStyleProperty(fDocument, style, property);
-	return ApplyCharacterProperty(fDocument, fCaret.part, from, to, property);
+	return ApplyCharacterProperty(fDocument, fCaret.part, from, to, property, true);
 }
 
 
@@ -5810,7 +5810,7 @@ TPageView::ApplyParagraph(size_t first, size_t last, const Property& property)
 	uint32_t style = EditStyle();
 	if (style < fDocument.styles.styles.size())
 		return SetStyleProperty(fDocument, style, property);
-	return ApplyParagraphProperty(fDocument, fCaret.part, first, last, property);
+	return ApplyParagraphProperty(fDocument, fCaret.part, first, last, property, true);
 }
 
 

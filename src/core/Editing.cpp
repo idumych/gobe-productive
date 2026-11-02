@@ -1254,7 +1254,7 @@ SetCellStyle(StyleMgr& styles, uint32_t& style, uint32_t to)
 
 bool
 ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextPosition to,
-	const Property& property)
+	const Property& property, bool reduce)
 {
 	if (to.paragraph < from.paragraph
 			|| (to.paragraph == from.paragraph && to.offset < from.offset))
@@ -1288,6 +1288,8 @@ ApplyCharacterProperty(Document& doc, size_t part, TextPosition from, TextPositi
 			if (run.position < a || (run.position >= b && b < length))
 				continue;
 			uint32_t style = StyleWithProperty(styles, run.style, property);
+			if (reduce && style < styles.styles.size())
+				style = ReduceStyle(styles, style, UnionSet(styles, styles.styles[style]));
 			if (style != run.style) {
 				Retain(styles, style);
 				Release(styles, run.style);
@@ -1376,7 +1378,7 @@ ApplyCellProperty(Document& doc, size_t part, uint16_t row0, uint16_t column0,
 
 bool
 ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
-	const Property& property)
+	const Property& property, bool reduce)
 {
 	WPPart* wp = doc.EditableWordPart(part);
 	if (wp == nullptr || first >= wp->paragraphs.size())
@@ -1388,6 +1390,8 @@ ApplyParagraphProperty(Document& doc, size_t part, size_t first, size_t last,
 	for (size_t k = first; k <= last; k++) {
 		WPParagraph& p = wp->paragraphs[k];
 		uint32_t style = StyleWithProperty(doc.styles, p.parStyle, property);
+		if (reduce && style < doc.styles.styles.size())
+			style = ReduceStyle(doc.styles, style, UnionSet(doc.styles, doc.styles.styles[style]));
 		if (style != p.parStyle) {
 			Retain(doc.styles, style);
 			Release(doc.styles, p.parStyle);
