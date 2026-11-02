@@ -971,12 +971,19 @@ private:
 		return bitmap;
 	}
 
-	// the transitions' Go: a step a screen refresh, as many as the screen
-	// refreshes in a second, in 0.8 s
+	// the transitions' step (the Wipe's and Elevator's): the next screen
+	// retrace or, without one, 800000 / refresh rate microseconds after the
+	// last step
 	void Step()
 	{
 		fView->Sync();
-		snooze(bigtime_t(800000 / fRate));
+		if (BScreen().WaitForRetrace() == B_OK)
+			return;
+		bigtime_t next = fLastStep + 800000 / fRate;
+		bigtime_t now = system_time();
+		if (now < next)
+			snooze(next - now);
+		fLastStep = system_time();
 	}
 
 	void DrawPart(BBitmap* bitmap, BRect source)
@@ -1015,16 +1022,22 @@ private:
 			}
 			case 'Vene':
 			{
-				// VenetianTransition: ten blinds, each 2 pixels more a step
-				bool horizontal = (options & 1) != 0;
-				float blind = floorf((horizontal ? h : w) / 10);
-				for (float d = 0; d < blind; d += 2) {
-					for (int32 b = 0; b <= 10; b++) {
-						float at = b * blind + d;
-						DrawPart(to, horizontal ? BRect(0, at, w - 1, at + 1)
-							: BRect(at, 0, at + 1, h - 1));
+				// VenetianTransition::Go: ten blinds, each a 2-pixel strip
+				// further a pass, synced strip by strip with no wait; left
+				// to right, top down, right to left or bottom up (options 0
+				// to 3)
+				bool across = options == 1 || options == 3;
+				bool back = options == 2 || options == 3;
+				float size = across ? h : w;
+				float blind = size / 10;
+				int32 passes = int32(roundf(blind));
+				for (int32 d = 0; d <= passes; d += 2) {
+					for (int32 k = 0; k < 10; k++) {
+						float at = back ? size - 1 - d - k * blind - 2 : d + k * blind;
+						DrawPart(to, across ? BRect(0, at, w - 1, at + 2)
+							: BRect(at, 0, at + 2, h - 1));
+						fView->Sync();
 					}
-					Step();
 				}
 				break;
 			}
@@ -1059,6 +1072,7 @@ private:
 	float fZoom = 1;
 	BRect fArea;
 	int32 fRate = 60;
+	bigtime_t fLastStep = 0;
 	BBitmap* fShown = NULL;
 	TSlideView* fView = NULL;
 	bool fHidCursor = false;
