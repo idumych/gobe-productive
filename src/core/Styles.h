@@ -5,6 +5,7 @@
 #define GOBE_STYLES_H
 
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -109,6 +110,13 @@ bool FillPatternPixels(const Ink& ink, int& width, int& height, std::vector<uint
 
 bool ApplyShapeProperty(const Property& property, ShapeStyle& style);
 ShapeStyle ResolveShapeStyle(const StyleMgr& styles, uint32_t index);
+
+// The properties style `index` has, in TStyle::UpdateUnionSet's order: its
+// base's (links[0]), its parent's (the style applied, links[1]) and its
+// owner's (links[2]), each with what they have from theirs, then its own;
+// a later one of a kind overrides an earlier one.
+void ForEachStyleProperty(const StyleMgr& styles, uint32_t index,
+	const std::function<void(const Property&)>& apply);
 
 // Applies one property to `style`; returns false if the type isn't decoded
 // (or the payload doesn't match what the type should hold).

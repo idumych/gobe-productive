@@ -92,7 +92,9 @@ main(int argc, char** argv)
 		Check(s.pen.set && s.pen.color.b == 255 && s.pen.color.r == 0, "its pen blue");
 		Check(s.penSize == 3, "its pen 3 points: " + std::to_string(s.penSize));
 		Check(s.fillOpacity == 0.5f, "its fill at half opacity");
-		Check((again->values[3] & 2) != 0, "its border on (a pen given)");
+		// (the pen shows by itself: TFrame::Draw strokes a frame whose pen
+		// isn't transparent; the border flag is left as it was)
+		Check((again->values[3] & 2) == 0, "its border flag unchanged");
 		// the style it had is still what it was (others may use it)
 		ShapeStyle old = ResolveShapeStyle(back.styles, oldStyle);
 		Check(old.fill.color.r == before.fill.color.r && old.penSize == before.penSize

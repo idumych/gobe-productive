@@ -1,6 +1,7 @@
 #include "Styles.h"
 
 #include <algorithm>
+#include <functional>
 
 #include <zlib.h>
 
@@ -192,17 +193,9 @@ ShapeStyle
 ResolveShapeStyle(const StyleMgr& styles, uint32_t index)
 {
 	ShapeStyle style;
-	std::vector<const Style*> chain;
-	for (int depth = 0; index < styles.styles.size() && depth < 32; depth++) {
-		const Style& s = styles.styles[index];
-		chain.push_back(&s);
-		index = s.links[0];
-	}
-	for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-		for (uint32_t p : (*it)->props)
-			if (p < styles.properties.size())
-				ApplyShapeProperty(styles.properties[p], style);
-	}
+	ForEachStyleProperty(styles, index, [&](const Property& property) {
+		ApplyShapeProperty(property, style);
+	});
 	return style;
 }
 
@@ -287,30 +280,39 @@ ApplyProperty(const Property& property, TextStyle& style)
 
 namespace {
 
-// TStyle::UpdateUnionSet's order: the base's, the applied style's and the
-// owner's properties (each with what they inherit), then its own
 void
-ApplyStyleChain(const StyleMgr& styles, uint32_t index, TextStyle& style, int depth)
+StyleProperties(const StyleMgr& styles, uint32_t index,
+	const std::function<void(const Property&)>& apply, int depth)
 {
 	if (index >= styles.styles.size() || depth > 32)
 		return;
 	const Style& s = styles.styles[index];
 	for (uint32_t link : s.links)
 		if (link != index)
-			ApplyStyleChain(styles, link, style, depth + 1);
+			StyleProperties(styles, link, apply, depth + 1);
 	for (uint32_t p : s.props)
 		if (p < styles.properties.size())
-			ApplyProperty(styles.properties[p], style);
+			apply(styles.properties[p]);
 }
 
 } // namespace
+
+
+void
+ForEachStyleProperty(const StyleMgr& styles, uint32_t index,
+	const std::function<void(const Property&)>& apply)
+{
+	StyleProperties(styles, index, apply, 0);
+}
 
 
 TextStyle
 ResolveTextStyle(const StyleMgr& styles, uint32_t index)
 {
 	TextStyle style;
-	ApplyStyleChain(styles, index, style, 0);
+	ForEachStyleProperty(styles, index, [&](const Property& property) {
+		ApplyProperty(property, style);
+	});
 	return style;
 }
 

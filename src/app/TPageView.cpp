@@ -1462,12 +1462,14 @@ TPageView::RestoreInkLow()
 }
 
 
-// TFrame::Draw: a frame with its border on (flag 2: TFrame::SetBorder)
-// stroked with its pen (a hairline for size 0)
+// TFrame::Draw: a frame whose pen shows (TStyleID::PenTransparent not 0)
+// stroked with it (TShape::StrokeShape; a hairline for size 0), whether
+// its border is on or not (flag 2, TFrame::SetBorder, only puts a gray
+// line round a frame without a pen)
 void
 TPageView::DrawFrameBorder(const Document::PlacedFrame& f, BRect r)
 {
-	if (f.frame == NULL || !(f.frame->values[3] & 2))
+	if (f.frame == NULL)
 		return;
 	ShapeStyle style = ResolveShapeStyle(fDocument.styles, f.frame->style);
 	BGradient* gradient;

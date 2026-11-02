@@ -86,16 +86,9 @@ ApplyCellProperty(const Property& p, CellStyle& style)
 void
 ApplyStyle(const StyleMgr& styles, uint32_t index, CellStyle& style)
 {
-	std::vector<const Style*> chain;
-	for (int depth = 0; index < styles.styles.size() && depth < 32; depth++) {
-		const Style& s = styles.styles[index];
-		chain.push_back(&s);
-		index = s.links[0];
-	}
-	for (auto it = chain.rbegin(); it != chain.rend(); ++it)
-		for (uint32_t p : (*it)->props)
-			if (p < styles.properties.size())
-				ApplyCellProperty(styles.properties[p], style);
+	ForEachStyleProperty(styles, index, [&](const Property& property) {
+		ApplyCellProperty(property, style);
+	});
 }
 
 
@@ -400,18 +393,15 @@ CellHAlignProperty(int align)
 int
 StyleVerticalAlignment(const StyleMgr& styles, uint32_t style)
 {
-	for (int depth = 0; style < styles.styles.size() && depth < 32; depth++) {
-		const Style& s = styles.styles[style];
-		for (uint32_t p : s.props)
-			if (p < styles.properties.size() && styles.properties[p].type == Sig("VAln")
-					&& styles.properties[p].data.size() >= 2) {
-				DocArchive a(styles.properties[p].data);
-				a.SetVersions(2, 0, 0x1e);
-				return a.Int16();
-			}
-		style = s.links[0];
-	}
-	return 0;
+	int alignment = 0;
+	ForEachStyleProperty(styles, style, [&](const Property& property) {
+		if (property.type == Sig("VAln") && property.data.size() >= 2) {
+			DocArchive a(property.data);
+			a.SetVersions(2, 0, 0x1e);
+			alignment = a.Int16();
+		}
+	});
+	return alignment;
 }
 
 
