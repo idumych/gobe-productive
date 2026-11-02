@@ -41,7 +41,8 @@ CellText(const Document& doc, size_t table, size_t row, size_t column)
 	if (p < 0 || t == nullptr)
 		return "?";
 	std::string text = doc.WordPart(t->textPart)->paragraphs[size_t(p)].text;
-	if (!text.empty() && text.back() == '\n')
+	// (its last paragraph ends with the cell break, the others a line end)
+	if (!text.empty() && (text.back() == '\n' || text.back() == '\x05'))
 		text.pop_back();
 	return text;
 }

@@ -122,6 +122,21 @@ main()
 		Check(Near(left, 100) && Near(right, 200), "VirtualColumn (0,1): 100 to 200");
 	}
 
+	// ---- the cells' text by their breaks, the frames' ranges stale (as
+	// after typing, before the layout sets them) ----
+	{
+		Document typed;
+		size_t t2 = 0;
+		MakeDoc(typed, t2);
+		WPPart* wp = typed.EditableWordPart(typed.Table(t2)->textPart);
+		wp->paragraphs[0].text = "abc\x05";
+		TableEdit stale;
+		Check(LoadTableEdit(typed, t2, stale) && Text(stale, stale.Cell(0, 0)->id) == "abc\x05"
+			&& Text(stale, stale.Cell(0, 1)->id) == "\x05"
+			&& Text(stale, stale.Cell(2, 3)->id) == "\x05" && stale.trailer.size() == 1,
+			"cells' text by their breaks, ranges stale");
+	}
+
 	// ---- InsertRow before row 1 ----
 	edit.InsertRow(1);
 	Check(edit.rows.size() == 4, "InsertRow: 4 rows");

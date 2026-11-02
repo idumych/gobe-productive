@@ -525,7 +525,7 @@ TableText(const Document& doc, const uint32_t pointer[3])
 			if (cell == nullptr || cell->textStart >= all.size())
 				continue;
 			std::string t = all.substr(cell->textStart, cell->textLength);
-			while (!t.empty() && (t.back() == '\n' || t.back() == '\r'))
+			while (!t.empty() && (t.back() == '\n' || t.back() == '\r' || t.back() == 0x05))
 				t.pop_back();
 			for (char& ch : t)
 				if (ch == '\n' || ch == '\r' || ch == '\t')

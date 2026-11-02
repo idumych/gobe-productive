@@ -372,6 +372,8 @@ private:
 	bool TableCommand(BMessage* message);
 	std::vector<int> TableCellFrames(size_t& table, TableEdit& edit) const;
 	void VerticallyAlign(int align);
+	void SelectCellText(size_t table, const TableEdit& edit, int id);
+	bool TableKey(const char* bytes, bool shift);
 public:
 	void TableMenuState(bool& merge, bool& split) const;
 	int TableVerticalAlignment() const;

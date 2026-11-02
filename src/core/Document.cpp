@@ -951,6 +951,32 @@ Document::Save(const std::string& to, std::string& error)
 {
 	DocChanges changes;
 	std::map<size_t, uint32_t> textLength;
+	// tables' text: each cell's frame shows its text up to its cell break,
+	// in the frames' order (TWPFrame), as typing left it
+	for (const auto& [table, t] : tableParts) {
+		const WPPart* wp = WordPart(t.textPart);
+		if (wp == nullptr || t.textPart >= tails.size() || !dirtyParts.count(t.textPart))
+			continue;
+		size_t k = 0;
+		uint32_t at = 0;
+		for (Portal& portal : tails[t.textPart].portals) {
+			if (portal.part != uint32_t(table))
+				continue;
+			for (Frame& f : portal.frames) {
+				uint32_t start = at;
+				while (k < wp->paragraphs.size()) {
+					const std::string& text = wp->paragraphs[k++].text;
+					at += uint32_t(text.size());
+					if (!text.empty() && text.back() == '\x05')
+						break;
+				}
+				f.textStart = start;
+				f.textLength = at - start;
+			}
+		}
+		layoutRanges.insert(t.textPart);
+		dirtyTails.insert(t.textPart);
+	}
 	// spreadsheets: dependency tables (and possibly new links) first
 	bool linksChanged = this->linksChanged;
 	for (size_t part : dirtyParts)

@@ -308,6 +308,7 @@ MakeNewTable(size_t rows, size_t columns)
 	table.border = 1;
 	table.cells.assign(rows, std::vector<std::string>(columns));
 	table.cellBreaks = true;
+	table.newFrames = true;
 	return table;
 }
 
@@ -395,7 +396,7 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 	}
 	// a table made in Gobe: TTableFrame, the frames' style with an opaque
 	// pen (TStyleID::SetPenTransparent 1.0)
-	uint32_t tableStyle = table.cellBreaks
+	uint32_t tableStyle = table.newFrames
 		? StyleWithProperty(doc.styles, NewFrameStyle(doc), FloatProperty(Sig("PTra"), 1))
 		: DerivedStyle(doc.styles, frameStyle, {pen[0], pen[1], pen[2]});
 	Portal shown;
@@ -475,7 +476,7 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 	} else
 		InsertMultiline(*wp, {0, 0}, all);
 	// (TTable::SetUp: new frames, TFrame::TFrame's style)
-	uint32_t cellStyle = table.cellBreaks ? NewFrameStyle(doc) : frameStyle;
+	uint32_t cellStyle = table.newFrames ? NewFrameStyle(doc) : frameStyle;
 	// the cells' frames: inset 2 across and 1 down, their ranges
 	Portal cells;
 	cells.part = tablePart;

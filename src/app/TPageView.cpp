@@ -442,6 +442,7 @@ TPageView::LayoutText()
 			FrameGeometry geometry;
 			uint32_t from, to;
 			uint32_t style;		// its frame's (a table cell's: 'VAln')
+			uint32_t number;	// its frame's (TFrame +0x38)
 		};
 		std::vector<CellFlow> cellFlows;
 		for (const auto& f : fFrames) {
@@ -463,7 +464,8 @@ TPageView::LayoutText()
 				r.bottom = r.top + f.height;
 				g.rect = r;
 				cellFlows.push_back({f.part, g, f.frame->textStart,
-					f.frame->textStart + f.frame->textLength, f.frame->style});
+					f.frame->textStart + f.frame->textLength, f.frame->style,
+					f.frame->values[1]});
 				continue;
 			}
 			if (it == flows.end())
@@ -505,9 +507,41 @@ TPageView::LayoutText()
 				}
 			}
 		}
+		// a table's text flows through its cells' frames in their order,
+		// each to its cell break (TWPFrame), whatever ranges they had
+		std::map<std::pair<size_t, uint32_t>, std::pair<uint32_t, uint32_t>> cellRanges;
+		for (const CellFlow& cell : cellFlows) {
+			int table = fDocument.TableOfText(cell.part);
+			const WPPart* wp = fDocument.WordPart(cell.part);
+			if (table < 0 || wp == NULL || cellRanges.count({cell.part, 0xffffffff}))
+				continue;
+			cellRanges[{cell.part, 0xffffffff}] = {0, 0};
+			size_t k = 0;
+			uint32_t at = 0;
+			for (const Portal& portal : fDocument.tails[cell.part].portals) {
+				if (portal.part != uint32_t(table))
+					continue;
+				for (const gobe::Frame& f : portal.frames) {
+					uint32_t start = at;
+					while (k < wp->paragraphs.size()) {
+						const std::string& t = wp->paragraphs[k++].text;
+						at += uint32_t(t.size());
+						if (!t.empty() && t.back() == '\x05')
+							break;
+					}
+					cellRanges[{cell.part, f.values[1]}] = {start, at};
+				}
+			}
+		}
 		for (const CellFlow& cell : cellFlows) {
 			size_t mark = fLines.size();
-			LayoutPart(cell.part, {cell.geometry}, cell.from, cell.to);
+			uint32_t from = cell.from, to = cell.to;
+			auto range = cellRanges.find({cell.part, cell.number});
+			if (range != cellRanges.end()) {
+				from = range->second.first;
+				to = range->second.second;
+			}
+			LayoutPart(cell.part, {cell.geometry}, from, to);
 			// a table cell's text centered or at the bottom of its frame
 			// ('VAln': TWPFrame), as far from it as from the top
 			int align = StyleVerticalAlignment(fDocument.styles, cell.style);

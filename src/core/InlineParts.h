@@ -25,9 +25,14 @@ struct NewTable {
 	float inset = 1;
 	float border = 0;			// the table's pen (TTableImport: 0 transparent)
 	std::vector<std::vector<std::string>> cells;
-	// each cell's text ended by a cell break (0x05) rather than a line end,
-	// as a table made in Gobe has it (TTablePart::AddCellBreaks)
-	bool cellBreaks = false;
+	// each cell's text ended by a cell break (0x05), as the original's
+	// tables have it (TTablePart::AddCellBreaks, TTableImport::
+	// HandleTableCell)
+	bool cellBreaks = true;
+	// a table made by Insert Table: its frames TFrame::TFrame's style, its
+	// own frame that with an opaque pen (TTableFrame); else the container
+	// frame's style with the border as its pen (TTableImport)
+	bool newFrames = false;
 };
 
 // TFrame::TFrame: a new frame's style, based on "Default" with no fill, no

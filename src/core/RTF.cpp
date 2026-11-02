@@ -2095,6 +2095,9 @@ RTFWriter::Table(const uint32_t pointer[3])
 			borders += std::string(side) + buffer;
 	}
 	RTFWriter cells(fDoc, *text, fFonts);
+	std::string raw;
+	for (const WPParagraph& p : text->paragraphs)
+		raw += p.text;
 	for (const TableRow& row : table->rows) {
 		snprintf(buffer, sizeof buffer, "\\trowd\\trgaph%d",
 			int(std::nearbyint(table->value20 * 20)));
@@ -2110,6 +2113,9 @@ RTFWriter::Table(const uint32_t pointer[3])
 			const Frame* f = FrameAt(fDoc, c.frame);
 			size_t from = f != nullptr ? f->textStart : 0;
 			size_t to = f != nullptr ? f->textStart + f->textLength : 0;
+			// the cell's break (0x05) ends it: \cell
+			if (to > from && to <= raw.size() && raw[to - 1] == 0x05)
+				to--;
 			cells.fOut.clear();
 			cells.fFont = fFont;
 			cells.Body(from, to, true);

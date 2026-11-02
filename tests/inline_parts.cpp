@@ -39,7 +39,8 @@ CellText(const Document& doc, size_t table, size_t row, size_t column)
 	if (p < 0 || t == nullptr)
 		return "?";
 	std::string text = doc.WordPart(t->textPart)->paragraphs[size_t(p)].text;
-	if (!text.empty() && text.back() == '\n')
+	// (its last paragraph ends with the cell break, the others a line end)
+	if (!text.empty() && (text.back() == '\n' || text.back() == '\x05'))
 		text.pop_back();
 	return text;
 }
@@ -88,9 +89,12 @@ main(int argc, char** argv)
 			&& last->extent[0] == 146 && last->extent[1] == 32 && last->container == size_t(t),
 			"the last cell's frame, inset 2 and 1");
 		const WPPart* cells = doc.WordPart(text);
-		Check(last != nullptr && cells != nullptr && cells->paragraphs.size() == 5
-			&& last->textLength == cells->paragraphs[3].text.size() + cells->paragraphs[4].text.size(),
-			"the last cell's two paragraphs");
+		// (each cell's text ends with its break, an empty paragraph after
+		// the last, as the original's tables have it)
+		Check(last != nullptr && cells != nullptr && cells->paragraphs.size() == 6
+			&& last->textLength == cells->paragraphs[3].text.size() + cells->paragraphs[4].text.size()
+			&& cells->paragraphs[4].text.back() == '\x05' && cells->paragraphs[5].text.empty(),
+			"the last cell's two paragraphs, its break, the end");
 	}
 	TextPosition after = InsertInlineFrame(doc, main, {0, 17}, size_t(t));
 	Check(after.paragraph == 0 && after.offset == 18, "the table's frame in the text");

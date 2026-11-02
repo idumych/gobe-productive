@@ -391,7 +391,7 @@ WriteWord(const Document& doc, size_t part, const WPPart& wp, Output& o)
 		std::string text = p.text;
 		// the paragraph's own end (its LF) isn't part of the runs
 		size_t end = text.size();
-		while (end > 0 && (text[end - 1] == '\n' || text[end - 1] == 0x0c || text[end - 1] == 0x02
+		while (end > 0 && (text[end - 1] == '\n' || text[end - 1] == 0x0c || text[end - 1] == 0x05 || text[end - 1] == 0x02
 				|| text[end - 1] == 0x03 || text[end - 1] == 0x0b))
 			end--;
 		std::string open, close;

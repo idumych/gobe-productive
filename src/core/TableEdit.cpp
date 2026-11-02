@@ -983,12 +983,6 @@ LoadTableEdit(const Document& doc, size_t table, TableEdit& edit)
 	edit.size[0] = t->size[0];
 	edit.size[1] = t->size[1];
 	edit.gutter = t->value20;
-	std::vector<uint32_t> starts;
-	uint32_t at = 0;
-	for (const WPParagraph& p : wp->paragraphs) {
-		starts.push_back(at);
-		at += uint32_t(p.text.size());
-	}
 	// the cells; their frames by number
 	std::vector<std::pair<uint32_t, int>> byFrame;
 	for (const TableRow& row : t->rows) {
@@ -1016,21 +1010,25 @@ LoadTableEdit(const Document& doc, size_t table, TableEdit& edit)
 		}
 		edit.rows.push_back(r);
 	}
-	// the frames' order, each cell's paragraphs, what follows them
-	uint32_t cellsEnd = 0;
+	// the frames' order; the text flows through them, each frame to its
+	// cell break (TWPFrame; their stored ranges may be stale after typing);
+	// what follows the cells
 	for (const Frame& f : portal->frames)
 		for (const auto& [number, id] : byFrame)
-			if (number == f.values[1]) {
+			if (number == f.values[1])
 				edit.frameOrder.push_back(id);
-				std::vector<WPParagraph>& text = edit.texts[size_t(id)].paragraphs;
-				for (size_t k = 0; k < starts.size(); k++)
-					if (starts[k] >= f.textStart && starts[k] < f.textStart + f.textLength)
-						text.push_back(wp->paragraphs[k]);
-				cellsEnd = std::max(cellsEnd, f.textStart + f.textLength);
-			}
-	for (size_t k = 0; k < starts.size(); k++)
-		if (starts[k] >= cellsEnd)
-			edit.trailer.push_back(wp->paragraphs[k]);
+	size_t k = 0;
+	for (int id : edit.frameOrder) {
+		std::vector<WPParagraph>& text = edit.texts[size_t(id)].paragraphs;
+		while (k < wp->paragraphs.size()) {
+			text.push_back(wp->paragraphs[k++]);
+			const std::string& t = text.back().text;
+			if (!t.empty() && t.back() == '\x05')
+				break;
+		}
+	}
+	for (; k < wp->paragraphs.size(); k++)
+		edit.trailer.push_back(wp->paragraphs[k]);
 	edit.RecalcColumnEndTable();
 	return !edit.rows.empty();
 }

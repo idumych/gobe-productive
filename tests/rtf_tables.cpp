@@ -81,7 +81,7 @@ CellText(const Document& doc, size_t table, size_t r, size_t c)
 	if (f == nullptr || f->textStart > all.size())
 		return "?";
 	std::string s = all.substr(f->textStart, f->textLength);
-	while (!s.empty() && s.back() == '\n')
+	while (!s.empty() && (s.back() == '\n' || s.back() == 0x05))
 		s.pop_back();
 	for (char& ch : s)
 		if (ch == '\n')

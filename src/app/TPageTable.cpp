@@ -318,6 +318,181 @@ TPageView::VerticallyAlign(int align)
 }
 
 
+// the cell's text, all of it but its break, selected (empty: the caret at
+// its start)
+void
+TPageView::SelectCellText(size_t table, const TableEdit& edit, int id)
+{
+	size_t text = fDocument.Table(table)->textPart;
+	size_t first = TableEditParagraph(edit, id);
+	const std::vector<WPParagraph>& paragraphs = edit.texts[size_t(id)].paragraphs;
+	size_t last = first + (paragraphs.empty() ? 0 : paragraphs.size() - 1);
+	size_t end = paragraphs.empty() ? 0 : EditableLength(paragraphs.back());
+	fAnchor = {true, text, first, 0};
+	fCaret = {true, text, last, end};
+	fTableCells.active = false;
+}
+
+
+// TTablePart::KeyDown: Tab to the next cell (a row more after the last),
+// its text selected; Escape out of the table (TFrame::ActivateParent, the
+// table's frame selected); Up and Down from a cell's first or last line to
+// the cell above or below; a key typed on cells selected types over the
+// first one's text (CheckForPare); Backspace and Delete empty them all.
+// True if the key was the table's.
+bool
+TPageView::TableKey(const char* bytes, bool shift)
+{
+	size_t table;
+	TableEdit edit;
+	int row, column;
+	if (!InsertLocation(table, edit, row, column))
+		return false;
+	const TablePart* t = fDocument.Table(table);
+	char key = bytes[0];
+	if (key == B_TAB && !shift) {
+		const TableEditCell* next = NULL;
+		if (fTableCells.active && fTableCells.table == table)
+			next = edit.Cell(row, column);
+		else {
+			// TTable::FindNextCell
+			int r = row, c = column + 1;
+			while (r < int(edit.rows.size()) && c >= int(edit.rows[size_t(r)].cells.size())) {
+				r++;
+				c = 0;
+			}
+			if (r < int(edit.rows.size()))
+				next = edit.Cell(r, c);
+			else {
+				// the last cell: Insert Row at the end (TInsertRowCommand)
+				fUndo.BeginDocument(fDocument, "Insert Row", CurrentViewState());
+				edit.InsertRow(int(edit.rows.size()));
+				std::string error;
+				if (!StoreTableEdit(fDocument, table, edit, error)) {
+					beep();
+					return true;
+				}
+				LoadTable(table, edit);
+				next = edit.Cell(row + 1, 0);
+				GeometryChanged();
+				if (Window() != NULL)
+					Window()->PostMessage(kMsgDocumentChanged);
+			}
+		}
+		if (next != NULL)
+			SelectCellText(table, edit, next->id);
+		Invalidate();
+		return true;
+	}
+	if (key == B_ESCAPE) {
+		size_t container;
+		TextPosition at;
+		fTableCells.active = false;
+		if (InlineSpecialOf(table, container, at)) {
+			fAnchor = {true, container, at.paragraph, at.offset};
+			fCaret = {true, container, at.paragraph, at.offset + 1};
+		} else {
+			fCaret.active = false;
+			fAnchor.active = false;
+			fFrame.active = true;
+			fFrame.pointer[0] = uint32_t(table);
+			fFrame.pointer[1] = fFrame.pointer[2] = 0;
+		}
+		Invalidate();
+		return true;
+	}
+	if ((key == B_UP_ARROW || key == B_DOWN_ARROW) && shift && fTableCells.active)
+		return true;
+	if ((key == B_UP_ARROW || key == B_DOWN_ARROW) && !shift) {
+		size_t index;
+		float x;
+		if (!CaretLine(fCaret, index, x))
+			return false;
+		const Line& line = fLines[index];
+		// another line of the same cell: the text's own move
+		bool up = key == B_UP_ARROW;
+		for (size_t k = 0; k < fLines.size(); k++) {
+			const Line& other = fLines[k];
+			if (k == index || other.part != line.part || other.textFrame != line.textFrame)
+				continue;
+			if (up ? other.frame.top < line.frame.top : other.frame.top > line.frame.top)
+				return false;
+		}
+		const TableEditCell* cell = edit.Cell(row, column);
+		if (cell == NULL)
+			return true;
+		// TWPFrame::CharToPixel: where the caret is across its frame
+		float pixel = std::max(1.0f, (x - line.textFrame.left) / fZoom);
+		TableEditCell* target = edit.FindCell(cell->x + pixel,
+			up ? cell->y - 1 : cell->y + cell->height + 1);
+		if (target == NULL)
+			return true;
+		float across = std::max(0.0f, pixel - (target->x - cell->x));
+		// its last line (Up) or first (Down), there
+		size_t first = TableEditParagraph(edit, target->id);
+		size_t last = first + edit.texts[size_t(target->id)].paragraphs.size() - 1;
+		const Line* to = NULL;
+		for (const Line& candidate : fLines) {
+			if (candidate.part != t->textPart || candidate.paragraph < first
+					|| candidate.paragraph > last)
+				continue;
+			if (to == NULL || (up ? candidate.frame.top > to->frame.top
+					: candidate.frame.top < to->frame.top))
+				to = &candidate;
+		}
+		fTableCells.active = false;
+		Caret caret;
+		if (to != NULL && HitText(BPoint(to->textFrame.left + across * fZoom,
+				(to->frame.top + to->frame.bottom) / 2), caret) && caret.part == t->textPart) {
+			fCaret = caret;
+			fAnchor = caret;
+		} else
+			SelectCellText(table, edit, target->id);
+		fAnchor = fCaret;
+		Invalidate();
+		return true;
+	}
+	if (!fTableCells.active || fTableCells.table != table)
+		return false;
+	if (key == B_BACKSPACE || key == B_DELETE) {
+		// the selected cells' text gone, their breaks kept
+		fUndo.BeginDocument(fDocument, key == B_BACKSPACE ? "Backspace" : "Delete",
+			CurrentViewState());
+		for (const TableEditCell* c : edit.Selected(fTableCells.selection)) {
+			std::vector<WPParagraph>& text = edit.texts[size_t(c->id)].paragraphs;
+			if (text.empty())
+				continue;
+			WPParagraph kept = text.front();
+			kept.text = "\x05";
+			kept.misc.clear();
+			if (kept.runs.size() > 1)
+				kept.runs.resize(1);
+			text = {kept};
+		}
+		std::string error;
+		if (!StoreTableEdit(fDocument, table, edit, error)) {
+			beep();
+			return true;
+		}
+		const TableEditCell* first = edit.Cell(row, column);
+		fTableCells.active = false;
+		if (first != NULL)
+			fCaret = fAnchor = {true, t->textPart, TableEditParagraph(edit, first->id), 0};
+		GeometryChanged();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return true;
+	}
+	if ((unsigned char)key >= 0x20 && key != B_DELETE) {
+		// (CheckForPare: the first cell's text, typed over)
+		if (const TableEditCell* first = edit.Cell(row, column))
+			SelectCellText(table, edit, first->id);
+		return false;
+	}
+	return false;
+}
+
+
 bool
 TPageView::TableCommand(BMessage* message)
 {

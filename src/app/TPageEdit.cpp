@@ -1917,7 +1917,12 @@ TPageView::KeyDown(const char* bytes, int32 count)
 	if (!fCaret.active && DrawingKey(bytes, count))
 		return;
 	if (fCaret.active) {
-		// (typing leaves a selection of cells for the caret's place)
+		// in a table: its keys first (TTablePart::KeyDown)
+		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
+		if (fDocument.TableOfText(fCaret.part) >= 0 && TableKey(bytes, shift)) {
+			ScrollCaretIntoView();
+			return;
+		}
 		if (fTableCells.active) {
 			fTableCells.active = false;
 			Invalidate();
@@ -5667,15 +5672,21 @@ TPageView::RulerFrame(BRect& text, BRect& page) const
 		return false;
 	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
 	text.Set(f->x + dx, f->y + dy, f->x + dx + f->width, f->y + dy + f->height);
-	// (the port's padding: the text's edges)
 	text.InsetBy(kTextPad, 0);
 	page = text;
+	// the page it's on (a frame in another one, a table's cell: the page
+	// that holds it), the ruler's numbers from its edge
 	int pagePart = fDocument.PagePart();
-	for (const auto& p : fFrames)
-		if (int(p.part) == pagePart && p.index == f->page) {
-			page.Set(p.x + dx, p.y + dy, p.x + dx + p.width, p.y + dy + p.height);
+	BPoint middle((text.left + text.right) / 2, (text.top + text.bottom) / 2);
+	for (const auto& p : fFrames) {
+		if (int(p.part) != pagePart)
+			continue;
+		BRect r(p.x + dx, p.y + dy, p.x + dx + p.width, p.y + dy + p.height);
+		if (p.index == f->page || (f->page < 0 && r.Contains(middle))) {
+			page = r;
 			break;
 		}
+	}
 	return true;
 }
 
