@@ -582,6 +582,7 @@ TFormatBar::Update()
 	bool hasFill = false;
 	rgb_color fill = kPanel;
 	if (cells) {
+		name = CellSelectionStyles(doc.styles, fPages->SelectedCellStacks()).active;
 		font = cell.text.family;
 		size = std::to_string(int(roundf(cell.text.size)));
 		hasInk = true;

@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 #include "DocSections.h"
 #include "Editing.h"
@@ -46,6 +47,10 @@ SelectionStyles TextSelectionStyles(const StyleMgr& styles, const WPPart& part,
 // frame's with the text's current properties (all but its fill and pen)
 // added as its own: the frame style's applied or named style, "+"
 SelectionStyles TableCellStyles(const StyleMgr& styles, uint32_t frameStyle);
+// TSSSelectionStyleIterator: each selected cell's stack (the part's style,
+// its column's, its row's, its own)
+SelectionStyles CellSelectionStyles(const StyleMgr& styles,
+	const std::vector<std::vector<uint32_t>>& stacks);
 
 } // namespace gobe
 

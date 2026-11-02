@@ -5934,6 +5934,44 @@ TPageView::ActiveCellStyle(CellStyle& style) const
 }
 
 
+// TSSSelectionStyleIterator: the selected cells' style stacks (the part's
+// style, the column's, the row's, the cell's), the active cell's first
+std::vector<std::vector<uint32_t>>
+TPageView::SelectedCellStacks() const
+{
+	std::vector<std::vector<uint32_t>> stacks;
+	if (!fSelectedCell.active || fCaret.active)
+		return stacks;
+	const SSPart* ss = fDocument.SpreadsheetPart(fSelectedCell.part);
+	if (ss == NULL)
+		return stacks;
+	auto stackOf = [&](int row, int column) {
+		std::vector<uint32_t> stack = {ss->style};
+		if (const SSHeader* h = ss->Column(uint16_t(column)))
+			stack.push_back(h->cell.style);
+		if (const SSHeader* h = ss->Row(uint16_t(row)))
+			stack.push_back(h->cell.style);
+		if (const SSCell* cell = ss->Cell(uint16_t(row), uint16_t(column)))
+			stack.push_back(cell->style);
+		return stack;
+	};
+	stacks.push_back(stackOf(fSelectedCell.row, fSelectedCell.column));
+	int r0 = std::min(fSelectedCell.row, fSelectedCell.anchorRow);
+	int r1 = std::max(fSelectedCell.row, fSelectedCell.anchorRow);
+	int c0 = std::min(fSelectedCell.column, fSelectedCell.anchorColumn);
+	int c1 = std::max(fSelectedCell.column, fSelectedCell.anchorColumn);
+	// (a whole sheet's worth isn't walked: the cells that have something,
+	// and the rest alike)
+	for (int r = r0; r <= r1 && stacks.size() < 4096; r++)
+		for (int c = c0; c <= c1 && stacks.size() < 4096; c++)
+			if ((r != fSelectedCell.row || c != fSelectedCell.column)
+					&& (ss->Cell(uint16_t(r), uint16_t(c)) != NULL || ss->Row(uint16_t(r)) != NULL
+						|| ss->Column(uint16_t(c)) != NULL))
+				stacks.push_back(stackOf(r, c));
+	return stacks;
+}
+
+
 bool
 TPageView::FormatCells(const Property& property, const char* label)
 {

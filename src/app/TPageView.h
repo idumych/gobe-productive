@@ -390,6 +390,10 @@ private:
 	// default, 3 the I-beam, 4 the hand, else a CURS/MICN id
 	int TextCursor(BPoint where) const;
 	int DrawingCursor(BPoint where) const;
+	void SelectSavedCells();
+public:
+	std::vector<std::vector<uint32_t>> SelectedCellStacks() const;
+private:
 	int FrameUnder(BPoint where) const;
 	void UpdateCursor(BPoint where);
 public:

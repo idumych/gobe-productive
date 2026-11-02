@@ -74,6 +74,40 @@ TPageView::TPageView(Document& document, UndoStack& undo)
 		fCaret = {true, size_t(main), at.paragraph, at.offset};
 		fAnchor = fCaret;
 	}
+	SelectSavedCells();
+}
+
+
+// a spreadsheet document opens with its sheet's selection (TSSSelection:
+// the active cell and its range; a new one's A1) selected
+void
+TPageView::SelectSavedCells()
+{
+	int main = fDocument.MainPart();
+	const SSPart* ss = main >= 0 ? fDocument.SpreadsheetPart(size_t(main)) : NULL;
+	if (ss == NULL)
+		return;
+	const Selection* selection = fDocument.selections.Find(ss->header.selection);
+	int row = 0, column = 0, anchorRow = 0, anchorColumn = 0;
+	if (selection != NULL && selection->hasCell) {
+		row = anchorRow = selection->cell[0];
+		column = anchorColumn = selection->cell[1];
+		if (!selection->ranges.empty()) {
+			const auto& r = selection->ranges[0];
+			anchorRow = r[0];
+			anchorColumn = r[1];
+			row = r[2];
+			column = r[3];
+		}
+	}
+	fSelectedCell.active = true;
+	fSelectedCell.part = size_t(main);
+	fSelectedCell.kind = SelectionKind::cells;
+	fSelectedCell.extra.clear();
+	fSelectedCell.row = row;
+	fSelectedCell.column = column;
+	fSelectedCell.anchorRow = anchorRow;
+	fSelectedCell.anchorColumn = anchorColumn;
 }
 
 
@@ -235,6 +269,7 @@ TPageView::SheetShown()
 		fCaret = {true, size_t(main), 0, 0};
 		fAnchor = fCaret;
 	}
+	SelectSavedCells();
 	fBook->Reset();
 	Rebuild();
 	InvalidateLayout();

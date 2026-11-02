@@ -397,6 +397,10 @@ TableCellStyles(const StyleMgr& styles, uint32_t frameStyle)
 }
 
 
+SelectionStyles StacksStyles(const StyleMgr& styles,
+	const std::vector<std::vector<uint32_t>>& stacks, bool paragraph);
+
+
 SelectionStyles
 TextSelectionStyles(const StyleMgr& styles, const WPPart& part, TextPosition from,
 	TextPosition to)
@@ -436,6 +440,24 @@ TextSelectionStyles(const StyleMgr& styles, const WPPart& part, TextPosition fro
 				runAt(part.paragraphs[from.paragraph], from.offset)});
 	}
 
+	return StacksStyles(styles, stacks, true);
+}
+
+
+SelectionStyles
+CellSelectionStyles(const StyleMgr& styles, const std::vector<std::vector<uint32_t>>& stacks)
+{
+	return StacksStyles(styles, stacks, false);
+}
+
+
+// TStyleManager::GetActiveStyle over each position's style stack (the
+// bottom one a paragraph's with `paragraph`: its paragraph properties
+// count, the others' character ones)
+SelectionStyles
+StacksStyles(const StyleMgr& styles, const std::vector<std::vector<uint32_t>>& stacks,
+	bool paragraph)
+{
 	SelectionStyles result;
 	std::vector<std::string> common;
 	bool differ = false;
@@ -451,6 +473,13 @@ TextSelectionStyles(const StyleMgr& styles, const WPPart& part, TextPosition fro
 		for (uint32_t style : stacks[i]) {
 			if (!Valid(styles, style))
 				continue;
+			if (!paragraph) {
+				for (const Property& p : CharacterFormat(styles, style))
+					format.push_back(p);
+				for (const Property& p : ParagraphFormat(styles, style))
+					format.push_back(p);
+				continue;
+			}
 			for (const Property& p : style == stacks[i][0] ? ParagraphFormat(styles, style)
 					: CharacterFormat(styles, style))
 				format.push_back(p);
