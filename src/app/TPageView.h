@@ -28,6 +28,7 @@
 #include "SSStyle.h"
 #include "StyleEdit.h"
 #include "Styles.h"
+#include "TableEdit.h"
 #include "TextWrap.h"
 #include "Undo.h"
 
@@ -354,6 +355,28 @@ private:
 	void TextWrapCommand(BMessage* message);
 	void InsertPartFrame(uint32_t kind);
 	void InsertTable(BMessage* message);
+
+	// tables (TPageTable.cpp)
+	bool LoadTable(size_t table, TableEdit& edit) const;
+	bool CaretCell(size_t& table, TableEdit& edit, int& row, int& column) const;
+	bool InsertLocation(size_t& table, TableEdit& edit, int& row, int& column) const;
+	void SetTableCells(size_t table, const TableEdit& edit, const TableSelection& selection);
+	void TableDragBegan();
+	bool TableDragMoved(const Caret& at);
+	void DrawTableSelection(float dx, float dy);
+	bool TableCommand(BMessage* message);
+public:
+	void TableMenuState(bool& merge, bool& split) const;
+private:
+	struct TableCells {
+		bool active = false;
+		size_t table = 0;
+		TableSelection selection;
+	} fTableCells;
+	struct TableDrag {
+		bool active = false;
+		int row = 0, column = 0;
+	} fTableDrag;
 	ShapeDrag fShapeDrag;
 	int fShapeMode = 0;			// what a handle does: 0 resize, 1 rotate, 2 reshape
 	int32 fToolShape = 0;		// the TOOS tool's shape (a POLY resource)

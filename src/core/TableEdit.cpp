@@ -35,15 +35,11 @@ FilterCellBreaks(std::vector<WPParagraph>& paragraphs)
 {
 	for (int i = int(paragraphs.size()) - 2; i >= 0; i--) {
 		if (EndsWithBreak(paragraphs[size_t(i)]) && paragraphs[size_t(i) + 1].text == "\x05") {
-			// (its break deleted: it joins the next paragraph)
-			WPPart part;
-			part.paragraphs = paragraphs;
-			TextPosition from = {size_t(i) + 1, 0}, to = {size_t(i) + 1, 1};
-			TextPosition result;
-			if (size_t(i) + 2 < paragraphs.size() && DeleteRange(part, from, to, result))
-				paragraphs = part.paragraphs;
-			else
-				paragraphs.erase(paragraphs.begin() + i + 1);
+			// (its break deleted: the empty paragraph joins the next, which
+			// takes its paragraph style)
+			if (size_t(i) + 2 < paragraphs.size())
+				paragraphs[size_t(i) + 2].parStyle = paragraphs[size_t(i) + 1].parStyle;
+			paragraphs.erase(paragraphs.begin() + i + 1);
 		}
 	}
 	for (size_t i = 0; i + 1 < paragraphs.size(); i++)

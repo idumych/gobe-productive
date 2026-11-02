@@ -2518,8 +2518,10 @@ void
 TPageView::DrawLines(BRect updateRect, float dx, float dy)
 {
 	// the selection highlight goes under the text
-	if (!IsPrinting())
+	if (!IsPrinting()) {
 		DrawSelection();
+		DrawTableSelection(dx, dy);
+	}
 	SetDrawingMode(B_OP_OVER);
 	for (const Line& line : fLines) {
 		if (line.angle == 0 && !line.frame.Intersects(updateRect))

@@ -464,7 +464,7 @@ TPageView::DrawSelection()
 void
 TPageView::DrawCaret()
 {
-	if (!fCaret.active || !IsFocus())
+	if (!fCaret.active || !IsFocus() || fTableCells.active)
 		return;
 	TextPosition from, to;
 	if (TextSelection(from, to))
@@ -1626,6 +1626,8 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	}
 	if (HitText(where, caret)) {
 		fSelectedCell.active = false;
+		fTableCells.active = false;
+		fTableDrag.active = false;
 		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
 		if (shift && fCaret.active && caret.part == fCaret.part) {
 			fCaret = caret;
@@ -1658,6 +1660,7 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 			fCaret = caret;
 			fAnchor = caret;
 			fDragging = true;
+			TableDragBegan();
 			if (Window() != NULL)
 				SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
 		}
@@ -1665,6 +1668,7 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		return;
 	}
 	bool hadFocus = fCaret.active || fSelectedCell.active;
+	fTableCells.active = false;
 	fCaret.active = false;
 	fAnchor.active = false;
 	fSelectedCell.active = false;
@@ -1692,7 +1696,9 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 	if (fDragging) {
 		Caret c;
 		if (HitText(where, c) && c.part == fCaret.part) {
-			fCaret = c;
+			// (into another of a table's cells: those cells selected)
+			if (!TableDragMoved(c))
+				fCaret = c;
 			Invalidate();
 		}
 	}
@@ -1769,6 +1775,7 @@ TPageView::MouseUp(BPoint where)
 		return;
 	}
 	fDragging = false;
+	fTableDrag.active = false;
 	fDraggingCells = false;
 	fDraggingHeadings = false;
 	if (fResizing.active) {
@@ -1789,6 +1796,11 @@ TPageView::KeyDown(const char* bytes, int32 count)
 	if (!fCaret.active && DrawingKey(bytes, count))
 		return;
 	if (fCaret.active) {
+		// (typing leaves a selection of cells for the caret's place)
+		if (fTableCells.active) {
+			fTableCells.active = false;
+			Invalidate();
+		}
 		EditText(bytes, count);
 		return;
 	}
@@ -1949,6 +1961,9 @@ TPageView::MessageReceived(BMessage* message)
 		return;
 	// part frames: the part tool's kind, the Frame menu (TPageFrames.cpp)
 	if (FrameCommand(message))
+		return;
+	// the Table menu (TPageTable.cpp)
+	if (TableCommand(message))
 		return;
 	switch (message->what) {
 		case kMsgCellCommit:
@@ -5896,6 +5911,9 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM75': case 'sM76': case 'sM77': case 'sM79':
 		case 'sM7A':
 		case 'sM73': case 'sM74':
+		case 'sTB0': case 'sTB1': case 'sTB2': case 'sTB3': case 'sTB4':	// Table
+		case 'sTB5': case 'sTB6': case 'sTB7': case 'sTB8': case 'sTB9':
+		case 'sTBA':
 		case 's00T':	// Make Chart
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange
 		case 'sM4A': case 'sM4B': case 'sM4C':

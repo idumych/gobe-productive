@@ -215,6 +215,12 @@ main()
 		CheckLocations(edit, "MergeCells");
 	}
 	Fresh(edit, doc, table);
+	edit.texts[0].paragraphs[0].text = "ab\x05";
+	edit.texts[5].paragraphs[0].text = "cd\x05";
+	edit.MergeCells(edit.SelectionOf(0, 0, 1, 1));
+	Check(Text(edit, edit.Cell(0, 0)->id) == "ab\ncd\x05", "MergeCells: empty cells between "
+		"left out, got \"" + Text(edit, edit.Cell(0, 0)->id) + "\"");
+	Fresh(edit, doc, table);
 	edit.MergeCells(edit.SelectionOf(0, 0, 0, 3));
 	Check(Text(edit, edit.Cell(0, 0)->id) == "\x05" && edit.rows[0].cells.size() == 1,
 		"MergeCells: empty cells, one break");

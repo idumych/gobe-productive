@@ -2005,6 +2005,15 @@ TDocWindow::MenusBeginning()
 {
 	InstallPartMenus();
 	BWindow::MenusBeginning();
+	// TTablePart::FixMenus: Merge Cells and Split Cell
+	if (fTableMenus && fPages != NULL && KeyMenuBar() != NULL) {
+		bool merge, split;
+		fPages->TableMenuState(merge, split);
+		if (BMenuItem* item = KeyMenuBar()->FindItem('sTB0'))
+			item->SetEnabled(merge);
+		if (BMenuItem* item = KeyMenuBar()->FindItem('sTB1'))
+			item->SetEnabled(split);
+	}
 	// TPartGR::FixMenus: Arrange's ported items
 	if (fDrawingMenus && fPages != NULL)
 		for (BMenu* menu : fPartMenus)
