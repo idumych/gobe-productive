@@ -10,6 +10,7 @@
 #include <string>
 #include <vector>
 
+#include "DocSections.h"
 #include "GRPart.h"
 #include "SSPart.h"
 
@@ -151,6 +152,22 @@ void ChartSeriesChanged(ChartPart& chart);
 // data's nice range
 void ChartAxisRange(const ChartAxis& axis, float& low, float& high);
 float ChartAxisStep(const ChartAxis& axis);
+
+// T2DXYAxisChart::FindMinMax: the vertical axis from the values (and 0)
+// and a stacked area set's sums, the horizontal from the categories
+void ChartFindMinMax(ChartPart& chart);
+
+// TFormatSeriesCmd: series `series`' style with `property` (its fill
+// 'FCol', its symbol 'chSM', its symbol's color 'chSC', ...)
+bool FormatChartSeries(Document& doc, size_t chart, size_t series, const Property& property);
+// TSetSeriesTypeCmd (T2DXYAxisChart::ChangeSeriesType): the series taken
+// from its set (a set left empty dropped) into a set of `type` (bar 0, line
+// 1, area 2, stacked area 3), the first of that type or a new one (an area
+// set has one series)
+bool ChangeChartSeriesType(Document& doc, size_t chart, uint32_t series, uint32_t type);
+// TChangeSeriesLayerCmd (ChangeSeriesSetOrder): the series' set a place
+// later (`direction` > 0: drawn over the next) or earlier; false at an end
+bool ChangeChartSeriesOrder(Document& doc, size_t chart, uint32_t series, int direction);
 
 // the chart's type as the Chart Type dialog shows it: its major (Bar, Pie,
 // Line/Area, XY) and minor type (TChartPart +0xb4, +0xb8)

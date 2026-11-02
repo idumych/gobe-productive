@@ -67,6 +67,10 @@ BMenu* ColorSetMenu(const BMessage& model, const SetMgr* doc = NULL);
 // NULL if the set can't be read.
 BMenu* InkSetMenu(uint32 type, const BMessage& model, const SetMgr* doc = NULL);
 
+// the ink a FormatBar command chose: "ink" (an ink set's pattern or
+// gradient, its bytes) or "color" (a color set's), as `type`'s property
+bool InkFromMessage(BMessage* message, uint32_t type, Property& property);
+
 // TInkMenuItem: a cell of an ink set's matrix menu (a color, a pattern
 // in its two colors, a gradient)
 class TInkMenuItem : public BMenuItem {

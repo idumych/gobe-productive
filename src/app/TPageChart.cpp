@@ -5,6 +5,8 @@
 #include "TPageView.h"
 
 #include <Beep.h>
+#include <MenuItem.h>
+#include <PopUpMenu.h>
 #include <Region.h>
 #include <algorithm>
 #include <cstring>
@@ -14,8 +16,10 @@
 
 #include "ChartPart.h"
 #include "DocArchive.h"
+#include "DocWriter.h"
 #include "GobeResources.h"
 #include "TChartDialogs.h"
+#include "TInkMenus.h"
 #include "Styles.h"
 #include "TDocView.h"
 
@@ -33,13 +37,6 @@ ChartPiece(const ChartPart& chart, uint32_t kind)
 			if (s.kind == kind)
 				return &s;
 	return NULL;
-}
-
-
-Shape*
-ChartPiece(ChartPart& chart, uint32_t kind)
-{
-	return const_cast<Shape*>(ChartPiece(const_cast<const ChartPart&>(chart), kind));
 }
 
 
@@ -101,6 +98,44 @@ const float kSquare[5][2] = {{0, 0}, {1, 0}, {1, 1}, {0, 1}, {0, 0}};
 const float kTriangle[4][2] = {{0.5f, 0}, {1, 1}, {0, 1}, {0.5f, 0}};
 const float kDiamond[5][2] = {{0.5f, 0}, {1, 0.5f}, {0.5f, 1}, {0, 0.5f}, {0.5f, 0}};
 
+
+// TLegendSymbolMenuItem: a symbol type, 8 by 8, drawn as the legend's
+class SymbolMenuItem : public BMenuItem {
+public:
+	SymbolMenuItem(BMessage* message, int type)
+		:
+		BMenuItem("", message),
+		fType(type)
+	{
+	}
+
+	virtual void GetContentSize(float* width, float* height)
+	{
+		*width = 8;
+		*height = 8;
+	}
+
+	virtual void DrawContent()
+	{
+		BMenu* menu = Menu();
+		BPoint at = menu->PenLocation();
+		BRect box(at.x, at.y, at.x + 8, at.y + 8);
+		const float (*shape)[2] = fType <= 2 ? kSquare : fType <= 4 ? kTriangle : kDiamond;
+		int count = fType <= 2 ? 5 : fType <= 4 ? 4 : 5;
+		std::vector<BPoint> corners;
+		for (int k = 0; k < count; k++)
+			corners.push_back(BPoint(box.left + shape[k][0] * box.Width(),
+				box.top + shape[k][1] * box.Height()));
+		menu->SetHighColor(0, 0, 0);
+		if (fType % 2 == 1)
+			menu->FillPolygon(corners.data(), int32(corners.size()));
+		else
+			menu->StrokePolygon(corners.data(), int32(corners.size()), false);
+	}
+
+private:
+	int fType;
+};
 
 rgb_color
 InkColor(const Color& c, float opacity)
@@ -440,6 +475,111 @@ TPageView::DrawChart2D(const ChartPart& chart, BRect r)
 }
 
 
+// TChartPart::SetUpContextMenu with a chart entered: over a legend's
+// series box, the series' items first (TChartLegendSeries::SetupContextMenu:
+// Data Color; for a 2D chart Legend Symbols and Symbol Color; for one with
+// axes Display As and Bring Forward, Send Backward); the drawing's without
+// Show Grid ('sM4D'); then the chart's (TChart::SetupPopupMenu: Chart
+// Type…, Axis… with axes)
+void
+TPageView::AddChartContextItems(BPopUpMenu* menu, BPoint where)
+{
+	const ChartPart* chart = fChart.active ? fDocument.Chart(fChart.part) : NULL;
+	if (chart == NULL)
+		return;
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	BPoint origin;
+	for (const Document::PlacedFrame& f : fFrames)
+		if (f.part == fChart.part)
+			origin = BPoint(f.x + dx, f.y + dy);
+	BPoint at = where - origin;
+	// TChartLegend::SetUpContextMenu: the series whose box is under it
+	int32 series = -1;
+	for (const GRLayer& layer : chart->graphics.layers)
+		for (const Shape& legend : layer.shapes) {
+			if (legend.kind != Sig("Lgnd") || (legend.pieceValue & 1) == 0)
+				continue;
+			for (size_t i = 0; i < chart->series.size(); i++) {
+				BRect box(legend.origin[0] + chart->legendRect[0] + 5,
+					legend.origin[1] + chart->legendRect[1] + 4 + 12 * float(i), 0, 0);
+				box.right = box.left + 10;
+				box.bottom = box.top + 10;
+				if (box.Contains(at))
+					series = int32(i);
+			}
+		}
+	if (BMenuItem* grid = menu->FindItem('sM4D')) {
+		menu->RemoveItem(grid);
+		delete grid;
+	}
+	int32 index = 0;
+	auto insert = [&](BMenuItem* item) {
+		// (a submenu's items sent to the window too)
+		if (BMenu* sub = item->Submenu())
+			sub->SetTargetForItems(Window());
+		menu->AddItem(item, index++);
+	};
+	if (series >= 0) {
+		BMessage model('sf03');
+		model.AddInt32("series", series);
+		BMenu* color = ColorSetMenu(model, &fDocument.inkSets);
+		if (color != NULL) {
+			BMenuItem* item = new BMenuItem(color);
+			item->SetLabel(ChartString(1, 7).String());
+			insert(item);
+		}
+		if (chart->chartType == Sig("2DSM") || chart->chartType == Sig("2DXY")) {
+			// TLegendSymbolsMenu ("Legend Symbols"): None, the six symbols
+			BMenu* symbols = new BMenu("Legend Symbols");
+			BMessage* none = new BMessage('sCH2');
+			none->AddInt32("series", series);
+			none->AddInt32("SymbolKind", 0);
+			symbols->AddItem(new BMenuItem(ChartString(1, 11).String(), none));
+			symbols->AddSeparatorItem();
+			for (int32 type = 1; type < 7; type++) {
+				BMessage* pick = new BMessage('sCH2');
+				pick->AddInt32("series", series);
+				pick->AddInt32("SymbolKind", type);
+				symbols->AddItem(new SymbolMenuItem(pick, type));
+			}
+			insert(new BMenuItem(symbols));
+			BMessage symbolModel('sCH6');
+			symbolModel.AddInt32("series", series);
+			BMenu* symbolColor = ColorSetMenu(symbolModel, &fDocument.inkSets);
+			if (symbolColor != NULL) {
+				BMenuItem* item = new BMenuItem(symbolColor);
+				item->SetLabel(ChartString(1, 13).String());
+				insert(item);
+			}
+		}
+		if (chart->chartType == Sig("2DSM")) {
+			// Display As: T2DXYAxisChart's series types (the Chart part's
+			// STR# 2)
+			BMenu* types = new BMenu(ChartString(1, 8).String());
+			for (int32 type = 0; type < 4; type++) {
+				BMessage* message = new BMessage('sCH5');
+				message->AddInt32("series", series);
+				message->AddInt32("series_type", type);
+				types->AddItem(new BMenuItem(ChartString(2, type).String(), message));
+			}
+			insert(new BMenuItem(types));
+			for (uint32 what : {'sCHa', 'sCHb'}) {
+				BMessage* message = new BMessage(what);
+				message->AddInt32("series", series);
+				insert(new BMenuItem(ChartString(1, what == 'sCHa' ? 9 : 10).String(), message));
+			}
+		}
+	}
+	if (menu->CountItems() > 0)
+		menu->AddSeparatorItem();
+	menu->AddItem(new BMenuItem(ChartString(1, 5).String(), new BMessage('sCH1')));
+	BMenuItem* axis = new BMenuItem(ChartString(1, 6).String(), new BMessage('sCH8'));
+	axis->SetEnabled(chart->chartType == Sig("2DSM"));
+	menu->AddItem(axis);
+	menu->SetTargetForItems(Window());
+}
+
+
 // a double click in a chart's frame enters it (the chart part active);
 // a click outside the chart entered leaves it
 bool
@@ -521,7 +661,10 @@ bool
 TPageView::ChartCommand(BMessage* message)
 {
 	uint32 what = message->what;
-	if (what != 'sCHc' && what != 'sCHd' && what != 'sCHe' && what != 'sCH1' && what != 'sCH8')
+	bool series = message->HasInt32("series");
+	if (what != 'sCHc' && what != 'sCHd' && what != 'sCHe' && what != 'sCH1' && what != 'sCH8'
+			&& what != 'sCH2' && what != 'sCH5' && what != 'sCH6' && what != 'sCHa'
+			&& what != 'sCHb' && !(what == 'sf03' && series))
 		return false;
 	if (!fChart.active || fDocument.Chart(fChart.part) == NULL) {
 		beep();
@@ -536,7 +679,44 @@ TPageView::ChartCommand(BMessage* message)
 		width = font.StringWidth(text.c_str());
 		height = fh.ascent + fh.descent;
 	};
-	if (what == 'sCHd' || what == 'sCHe') {
+	if (series) {
+		int32 index = message->GetInt32("series", -1);
+		if (what == 'sCH5' || what == 'sCHa' || what == 'sCHb') {
+			// TSetSeriesTypeCmd ("Change Series Type"), TChangeSeriesLayerCmd
+			// ("Change Series Order")
+			fUndo.BeginDocument(fDocument, ChartString(3, what == 'sCH5' ? 4 : 5).String(),
+				CurrentViewState());
+			bool done = what == 'sCH5'
+				? ChangeChartSeriesType(fDocument, fChart.part, uint32(index),
+					uint32(message->GetInt32("series_type", 0)))
+				: ChangeChartSeriesOrder(fDocument, fChart.part, uint32(index),
+					what == 'sCHa' ? 1 : -1);
+			if (!done) {
+				beep();
+				return true;
+			}
+		} else {
+			// TFormatSeriesCmd: the series' fill ('sf03'), symbol ('sCH2':
+			// TPropSymbolType) or symbol color ('sCH6': TPropSymbolColor)
+			Property property;
+			if (what == 'sCH2') {
+				property.type = Sig("chSM");
+				DocWriter w;
+				w.UInt16(uint16(message->GetInt32("SymbolKind", 0)));
+				property.data = w.Data();
+			} else if (!InkFromMessage(message, what == 'sCH6' ? Sig("chSC") : Sig("FCol"),
+					property)) {
+				beep();
+				return true;
+			}
+			fUndo.BeginDocument(fDocument, std::string(GobeResources::IndexString(5, 5).String())
+				+ GobeResources::IndexString(11, 0).String(), CurrentViewState());
+			if (!FormatChartSeries(fDocument, fChart.part, size_t(index), property)) {
+				beep();
+				return true;
+			}
+		}
+	} else if (what == 'sCHd' || what == 'sCHe') {
 		// THideShowPieceCmd: the piece shown or hidden ("Show Piece",
 		// "Hide Piece", by what it will be)
 		uint32_t kind = what == 'sCHd' ? Sig("Lgnd") : Sig("Titl");

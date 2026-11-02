@@ -198,6 +198,9 @@ main()
 				const ChartPart* x = xyBack.Chart(chart);
 				Check(x != nullptr && x->chartType == Sig("2DXY") && x->xyMinor == 0
 					&& x->xyStyled == 1 && x->partValues[0] == 3, "read back: XY scatter");
+				Check(x != nullptr && !x->series.empty()
+					&& x->series[0].style < xyBack.styles.styles.size(),
+					"read back: the XY series' style saved");
 				// a piece moved as a drawing's shape (TChartPart is a
 				// TPartGR): the chart's drawing is its graphics part
 				GRPart* gr = xyBack.EditableGraphicsPart(chart);
@@ -222,6 +225,36 @@ main()
 				Check(bars != nullptr && bars->chartType == Sig("2DSM") && bars->data.value44 == 0
 					&& bars->SeriesCount() == 3 && bars->series.size() == 3,
 					"bars again: three series");
+
+				// the legend's context menu: series 1 as a line (a set of
+				// its own after the bars'), then drawn under them (its set
+				// first); series 0's fill blue; a series last can't go later
+				Check(ChangeChartSeriesType(xyBack, chart, 1, 1), "series 1 a line");
+				const ChartPart* t = xyBack.Chart(chart);
+				Check(t != nullptr && t->sets.size() == 2
+					&& t->sets[0].series == std::vector<uint32_t>({0, 2})
+					&& t->sets[1].kind == 1 && t->sets[1].series == std::vector<uint32_t>({1}),
+					"series 1 a line: its own set after the bars");
+				Check(ChangeChartSeriesOrder(xyBack, chart, 1, -1), "the line's set earlier");
+				t = xyBack.Chart(chart);
+				Check(t != nullptr && t->sets[0].kind == 1 && t->sets[1].kind == 0,
+					"the line's set first");
+				Check(!ChangeChartSeriesOrder(xyBack, chart, 0, 1), "the bars' set last already");
+				Check(ChangeChartSeriesType(xyBack, chart, 1, 0), "series 1 a bar again");
+				t = xyBack.Chart(chart);
+				Check(t != nullptr && t->sets.size() == 1
+					&& t->sets[0].series == std::vector<uint32_t>({0, 2, 1}),
+					"a bar again: in the bars' set, its line set gone");
+				Check(FormatChartSeries(xyBack, chart, 0, InkProperty(Sig("FCol"), [] {
+						Ink ink;
+						ink.set = true;
+						ink.color.b = 255;
+						return ink;
+					}())), "series 0 blue");
+				t = xyBack.Chart(chart);
+				ShapeStyle blue = ResolveShapeStyle(xyBack.styles, t->series[0].style);
+				Check(blue.fill.set && blue.fill.color.b == 255 && blue.fill.color.r == 0,
+					"series 0's fill blue");
 			}
 		}
 	}

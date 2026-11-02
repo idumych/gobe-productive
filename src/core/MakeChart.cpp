@@ -794,6 +794,7 @@ StyleXYSeries(Document& doc, ChartPart& chart)
 			style = made;
 		}
 		chart.series[i].style = style;
+		doc.stylesChanged = true;
 	}
 	chart.xyStyled = uint32_t(chart.series.size());
 }
@@ -911,6 +912,15 @@ ChartSeriesChanged(ChartPart& chart)
 			chart.sets.back().series.push_back(uint32_t(s));
 		}
 	}
+	ChartFindMinMax(chart);
+}
+
+
+void
+ChartFindMinMax(ChartPart& chart)
+{
+	if (chart.chartType != Sig("2DSM"))
+		return;
 	// FindMinMax: the values from 0, a stacked set's sums; the categories
 	float low = 0, high = 0;
 	for (size_t c = 0; c < chart.Categories(); c++)
@@ -954,6 +964,82 @@ ChartAxisStep(const ChartAxis& axis)
 		return step;
 	return NiceNum(0.25f * NiceNum(AsFloat(axis.values[1]) - AsFloat(axis.values[0]), false),
 		true);
+}
+
+
+bool
+FormatChartSeries(Document& doc, size_t chart, size_t series, const Property& property)
+{
+	ChartPart* c = doc.EditableChart(chart);
+	if (c == nullptr || series >= c->series.size())
+		return false;
+	uint32_t style = c->series[series].style;
+	uint32_t made = StyleWithProperty(doc.styles, style, property);
+	if (made == style)
+		return true;
+	doc.styles.styles[made].value4++;
+	if (style < doc.styles.styles.size() && doc.styles.styles[style].value4 > 1)
+		doc.styles.styles[style].value4--;
+	c->series[series].style = made;
+	doc.stylesChanged = true;
+	return true;
+}
+
+
+bool
+ChangeChartSeriesType(Document& doc, size_t chart, uint32_t series, uint32_t type)
+{
+	ChartPart* c = doc.EditableChart(chart);
+	if (c == nullptr || c->chartType != Sig("2DSM") || type > 3 || series >= c->SeriesCount())
+		return false;
+	for (size_t i = 0; i < c->sets.size(); i++) {
+		std::vector<uint32_t>& list = c->sets[i].series;
+		auto at = std::find(list.begin(), list.end(), series);
+		if (at == list.end())
+			continue;
+		list.erase(at);
+		if (list.empty()) {
+			c->sets.erase(c->sets.begin() + long(i));
+			i--;
+		}
+	}
+	// (an area set holds one series)
+	bool added = false;
+	for (ChartSeriesSet& set : c->sets)
+		if (set.kind == type && type != 2) {
+			set.series.push_back(series);
+			added = true;
+			break;
+		}
+	if (!added) {
+		ChartSeriesSet set;
+		set.kind = type;
+		set.series.push_back(series);
+		c->sets.push_back(set);
+	}
+	ChartFindMinMax(*c);
+	return true;
+}
+
+
+bool
+ChangeChartSeriesOrder(Document& doc, size_t chart, uint32_t series, int direction)
+{
+	const ChartPart* current = doc.Chart(chart);
+	if (current == nullptr || current->chartType != Sig("2DSM"))
+		return false;
+	for (size_t i = 0; i < current->sets.size(); i++) {
+		const std::vector<uint32_t>& list = current->sets[i].series;
+		if (std::find(list.begin(), list.end(), series) == list.end())
+			continue;
+		size_t to = direction > 0 ? i + 1 : i - 1;
+		if ((direction > 0 && i + 1 >= current->sets.size()) || (direction <= 0 && i == 0))
+			return false;
+		ChartPart* c = doc.EditableChart(chart);
+		std::swap(c->sets[i], c->sets[to]);
+		return true;
+	}
+	return false;
 }
 
 

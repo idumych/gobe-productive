@@ -1708,6 +1708,8 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) != 0) {
 		// a drawing's (TPartGR::SetUpContextMenu)
 		if (BPopUpMenu* menu = DrawingContextMenu(where)) {
+			if (fChart.active)
+				AddChartContextItems(menu, where);
 			if (Window() != NULL) {
 				BPoint screen = ConvertToScreen(BPoint(where.x * fZoom, where.y * fZoom));
 				menu->Go(screen, true, false, BRect(screen.x - 5, screen.y - 5, screen.x + 5,
@@ -2174,6 +2176,9 @@ TPageView::KeyDown(const char* bytes, int32 count)
 void
 TPageView::MessageReceived(BMessage* message)
 {
+	// a chart's series (the legend's context menu)
+	if (message->HasInt32("series") && ChartCommand(message))
+		return;
 	// the drawing part's commands for the selected shapes (Arrange, the
 	// FormatBar's fill and pen)
 	if (ShapeCommand(message))
@@ -6215,6 +6220,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sTBA': case 'sTBB': case 'sTBC': case 'sTBD':
 		case 's00T':	// Make Chart
 		case 'sCHc': case 'sCHd': case 'sCHe': case 'sCH1': case 'sCH8':	// Chart
+		case 'sCH2': case 'sCH5': case 'sCH6': case 'sCHa': case 'sCHb':
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange
 		case 'sM4A': case 'sM4B': case 'sM4C':
 		case 'sM44': case 'sM45': case 'sM48': case 'sM49': case 'sM4D': case 'sM4E': case 'sM4T':

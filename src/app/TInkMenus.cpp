@@ -491,4 +491,34 @@ AddPenTypeItems(BMenu* menu, const std::vector<PenType>& pens, const PenType* ma
 	}
 }
 
+// the ink a FormatBar command chose: "ink" (an ink set's pattern or
+// gradient, its bytes) or "color" (a color set's), as `type`'s property
+bool
+InkFromMessage(BMessage* message, uint32_t type, Property& property)
+{
+	const void* data;
+	ssize_t size;
+	Ink ink;
+	if (message->FindData("ink", B_RAW_TYPE, &data, &size) == B_OK && size > 0) {
+		std::vector<uint8_t> bytes((const uint8*)data, (const uint8*)data + size);
+		try {
+			DocArchive a(bytes);
+			ReadInk(a, ink);
+		} catch (const ArchiveError&) {
+			return false;
+		}
+	} else if (message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) == B_OK && size >= 4) {
+		const rgb_color* c = (const rgb_color*)data;
+		ink.set = true;
+		ink.color.r = c->red;
+		ink.color.g = c->green;
+		ink.color.b = c->blue;
+		ink.color.a = 255;
+	} else
+		return false;
+	property = InkProperty(type, ink);
+	return true;
+}
+
+
 } // namespace gobe

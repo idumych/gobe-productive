@@ -576,6 +576,8 @@ private:
 	// a 2D chart with axes (T2DXYAxisChart): its pieces as TChartPiece::
 	// Draw draws them
 	void DrawChart2D(const ChartPart& chart, BRect rect);
+	// TChartPart::SetUpContextMenu's items, a chart entered
+	void AddChartContextItems(class BPopUpMenu* menu, BPoint where);
 	void DrawTable(const Document::PlacedFrame& frame, BRect rect);
 	void FillInk(BRect rect, const Ink& ink, float opacity, BRect inkRect);
 	const CellStyle& SpreadsheetStyle(const std::vector<uint32_t>& stack);
