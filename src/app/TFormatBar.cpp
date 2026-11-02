@@ -315,7 +315,11 @@ public:
 		uint32_t paragraph = 0;
 		bool text = CaretStyles(pages, style, paragraph);
 		std::vector<std::pair<std::string, bool>> applied;
-		if (text && pages->EditStyle() >= doc.styles.styles.size()) {
+		uint32_t frameStyle;
+		if (text && pages->EditStyle() >= doc.styles.styles.size()
+				&& pages->CaretCellFrameStyle(frameStyle))
+			applied = TableCellStyles(doc.styles, frameStyle).applied;
+		else if (text && pages->EditStyle() >= doc.styles.styles.size()) {
 			if (const WPPart* wp = doc.WordPart(pages->fCaret.part)) {
 				auto range = pages->TextSelectionRange();
 				applied = TextSelectionStyles(doc.styles, *wp, range.first, range.second).applied;
@@ -565,6 +569,8 @@ TFormatBar::Update()
 		uint32_t edit = fPages->EditStyle();
 		if (edit < doc.styles.styles.size())
 			name = doc.styles.styles[edit].name;
+		else if (uint32_t frameStyle; fPages->CaretCellFrameStyle(frameStyle))
+			name = TableCellStyles(doc.styles, frameStyle).active;
 		else if (const WPPart* wp = doc.WordPart(fPages->fCaret.part)) {
 			auto range = fPages->TextSelectionRange();
 			name = TextSelectionStyles(doc.styles, *wp, range.first, range.second).active;

@@ -122,8 +122,8 @@ PortalStart(DocWriter& w, uint32_t shownIn, uint32_t flags)
 
 // the styles (see StyleMgr below)
 enum {
-	kDefaultStyle, kTextBackgroundStyle, kRunStyle, kFrameStyle, kTextFrameStyle,
-	kDocumentStyle, kGRDefaultStyle, kBodyStyle, kWPDefaultStyle, kParagraphStyle
+	kDefaultStyle, kTextBackgroundStyle, kUnusedRunStyle, kFrameStyle, kTextFrameStyle,
+	kDocumentStyle, kRunStyle, kGRDefaultStyle, kBodyStyle, kWPDefaultStyle, kParagraphStyle
 };
 
 
@@ -307,21 +307,25 @@ StyleSection()
 		s.props = std::move(props);
 		styles.styles.push_back(std::move(s));
 	};
-	// (users: child styles, paragraphs, runs, frames, TDoc +0x6c)
-	style("Basi", "Default", 0x912, 2, none, none, {arrows, fill, fillOpaque, pen, penType,
+	// (users: child styles, paragraphs, runs, frames, TDoc +0x6c; as a new
+	// document the original saves has them)
+	style("Basi", "Default", 0x912, 4, none, none, {arrows, fill, fillOpaque, pen, penType,
 		penSize, penOpaque, textColor, face, font, size});
 	style("Basi", "Text Background", 0x822, 1, none, none,
 		{fill, fillClear, pen, penNone, penClear});
-	style("Basi", "", 0x20, 1, none, none, {});						// the run
-	style("Basi", "", 0x20, 3, none, none,
-		{fill, fillClear, pen, penNone, penClear, textColor});		// frames
-	style("Basi", "", 0x20, 1, none, kTextBackgroundStyle, {textColor});	// the text frame
+	// TWPPart::TWPPart's run style, left unused when its paragraph based a
+	// copy on its own style (TParagraph::FixCharacterStyles)
+	style("Basi", "", 0x20, 0, none, none, {});
+	// TFrame::TFrame: the frames' (based on Default, no fill, no pen)
+	style("Basi", "", 0x20, 3, kDefaultStyle, none, {fillClear, penNone, penClear});
+	style("Basi", "", 0x20, 1, kDefaultStyle, kTextBackgroundStyle, {});	// the text frame
 	style("Basi", "", 0x20, 1, kGRDefaultStyle, none, {});			// TDoc +0x6c
+	style("Basi", "", 0x20, 1, kParagraphStyle, none, {});			// the run
 	style("GRFX", "GR Default", 0x822, 1, kDefaultStyle, none, {});
 	style("Para", "Body", 0x822, 1, kWPDefaultStyle, none, {});
 	style("Para", "WP Default", 0x912, 1, kDefaultStyle, none, {lineSpacing, align, first,
 		label, left, right, after, before});
-	style("Para", "", 0x20, 1, kBodyStyle, none, {});				// the paragraph
+	style("Para", "", 0x20, 2, kBodyStyle, none, {});				// the paragraph
 	// property lists in TPropsTable's order, and the union sets
 	for (Style& s : styles.styles)
 		s.props = [&]() {
@@ -666,8 +670,26 @@ AddWordStyles(StyleMgr& styles, uint32_t base)
 		add("SpaB", "0100000000")}, true);
 	uint32_t body = style("Para", "Body", 0x822, wpDefault, {}, true);
 	WordStyles ids;
-	ids.paragraph = style("Para", "", 0x20, body, {}, false);
-	ids.run = style("Basi", "", 0x20, kNoPart, {}, false);
+	// (TStyleManager::NewStyle gives an identical unnamed style there is)
+	auto unnamed = [&](uint32_t type, uint32_t parent) {
+		for (size_t i = 0; i < styles.styles.size(); i++) {
+			const Style& u = styles.styles[i];
+			if (u.name.empty() && u.value10 == type && u.links[0] == parent
+					&& u.links[1] == kNoPart && u.props.empty())
+				return uint32_t(i);
+		}
+		return uint32_t(kNoPart);
+	};
+	ids.paragraph = unnamed(Code("Para"), body);
+	if (ids.paragraph == kNoPart)
+		ids.paragraph = style("Para", "", 0x20, body, {}, false);
+	// its run's style, new with no parent, then based on the paragraph's
+	// (TParagraph::FixCharacterStyles; the first stays, unused)
+	if (unnamed(Code("Basi"), kNoPart) == kNoPart)
+		style("Basi", "", 0x20, kNoPart, {}, false);
+	ids.run = unnamed(Code("Basi"), ids.paragraph);
+	if (ids.run == kNoPart)
+		ids.run = style("Basi", "", 0x20, ids.paragraph, {}, false);
 	styles.styles[ids.paragraph].value4++;
 	styles.styles[ids.run].value4++;
 	for (int pass = 0; pass < 3; pass++)

@@ -223,6 +223,28 @@ TPageView::TableCellFrames(size_t& table, TableEdit& edit) const
 }
 
 
+bool
+TPageView::CaretCellFrameStyle(uint32_t& style) const
+{
+	// TTablePartStyleIterator: the frame of the cell the caret's in (the
+	// first selected)
+	size_t table;
+	TableEdit edit;
+	std::vector<int> numbers = TableCellFrames(table, edit);
+	const TablePart* t = fDocument.Table(table);
+	if (numbers.empty() || t == NULL)
+		return false;
+	for (const Portal& portal : fDocument.tails[t->textPart].portals)
+		if (portal.part == table)
+			for (const gobe::Frame& f : portal.frames)
+				if (int(f.values[1]) == numbers.front()) {
+					style = f.style;
+					return true;
+				}
+	return false;
+}
+
+
 int
 TPageView::TableVerticalAlignment() const
 {

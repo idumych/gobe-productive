@@ -42,6 +42,10 @@ struct SelectionStyles {
 };
 SelectionStyles TextSelectionStyles(const StyleMgr& styles, const WPPart& part,
 	TextPosition from, TextPosition to);
+// TTablePartStyleIterator: in a table's cells the style is the cell's
+// frame's with the text's current properties (all but its fill and pen)
+// added as its own: the frame style's applied or named style, "+"
+SelectionStyles TableCellStyles(const StyleMgr& styles, uint32_t frameStyle);
 
 } // namespace gobe
 

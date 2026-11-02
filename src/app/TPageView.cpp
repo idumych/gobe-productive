@@ -1991,12 +1991,13 @@ TPageView::DrawTable(const Document::PlacedFrame& f, BRect r)
 				FillInk(cellRect(c), style.fill, style.fillOpacity, cellRect(c));
 		}
 	ShapeStyle grid = ResolveShapeStyle(fDocument.styles, f.frame->style);
+	// (a pen of size 0 a pixel wide, as BeOS draws it)
 	auto stroke = [&](const ShapeStyle& style, BRect cr) {
-		if (!style.pen.set || style.penOpacity <= 0 || style.penSize <= 0)
+		if (!style.pen.set || style.penOpacity <= 0)
 			return;
 		SetDrawingMode(style.penOpacity >= 0.999f ? B_OP_COPY : B_OP_ALPHA);
 		SetHighColor(ToColor(style.pen.color, style.penOpacity));
-		SetPenSize(style.penSize);
+		SetPenSize(std::max(1.0f, style.penSize));
 		StrokeRect(cr);
 	};
 	for (const TableRow& row : table.rows)

@@ -186,9 +186,28 @@ main(int argc, char** argv)
 		TextStyle t = ResolveTextStyle(styles, p.parStyle);
 		Check(t.family == "Dutch801 Rm BT" && t.size == 12 && t.lineSpacing == 1
 			&& t.alignment == 0, "Body: Dutch801 Rm BT 12, single spaced, left");
+		// (as a new document the original saves has it: TParagraph::
+		// FixCharacterStyles bases the run's style on the paragraph's)
 		const Style& run = styles.styles[p.runs[0].style];
-		Check(run.value10 == Sig("Basi") && run.links[0] == 0xffffffff && run.props.empty(),
-			"run style: new, no parent");
+		Check(run.value10 == Sig("Basi") && run.links[0] == p.parStyle && run.props.empty(),
+			"run style based on the paragraph's");
+		// TFrame::TFrame: the frames' style based on Default, no fill, no
+		// pen, pen size 0; the text frame's based on Default with Text
+		// Background applied
+		bool framesOk = true, textFrameOk = false;
+		for (size_t part = 0; part < doc.tails.size(); part++)
+			for (const Portal& portal : doc.tails[part].portals)
+				for (const Frame& f : portal.frames) {
+					const Style& fs = styles.styles[f.style];
+					if (part == 0)
+						textFrameOk = fs.links[0] == named["Default"]
+							&& fs.links[1] == named["Text Background"] && fs.props.empty();
+					else
+						framesOk = framesOk && fs.links[0] == named["Default"]
+							&& fs.links[1] == 0xffffffff && fs.props.size() == 3;
+				}
+		Check(framesOk, "frames' style: Default, no fill, no pen");
+		Check(textFrameOk, "text frame's style: Default, Text Background applied");
 		Check(doc.wordParts[0].second.sections.size() == 1
 			&& doc.wordParts[0].second.sections[0].columns.size() == 1, "one section, one column");
 	}

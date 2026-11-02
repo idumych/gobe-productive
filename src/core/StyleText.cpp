@@ -372,6 +372,32 @@ MarkStyles(const StyleMgr& styles, uint32_t style, std::vector<bool>& marked)
 
 
 SelectionStyles
+TableCellStyles(const StyleMgr& styles, uint32_t frameStyle)
+{
+	SelectionStyles result;
+	std::vector<std::string> names, applied;
+	AddStyleNames(styles, frameStyle, names);
+	AddAppliedStyleNames(styles, frameStyle, applied);
+	for (const std::string& name : applied)
+		result.applied.emplace_back(name, false);
+	result.active = "Default";
+	if (!applied.empty())
+		result.active = applied.back();
+	else if (!names.empty())
+		result.active = names.back();
+	// (TStyleID::AddProperties: the text's properties its own)
+	result.active += "+";
+	std::vector<bool> marked(styles.styles.size(), false);
+	MarkStyles(styles, frameStyle, marked);
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (marked[i] && styles.styles[i].name.empty())
+			result.incremental.insert(result.incremental.end(), styles.styles[i].props.begin(),
+				styles.styles[i].props.end());
+	return result;
+}
+
+
+SelectionStyles
 TextSelectionStyles(const StyleMgr& styles, const WPPart& part, TextPosition from,
 	TextPosition to)
 {

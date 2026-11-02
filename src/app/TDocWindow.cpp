@@ -2372,7 +2372,12 @@ TDocWindow::GetStylesSnapshot(StylesSnapshot& snapshot) const
 		from = range.first;
 		to = range.second;
 	}
-	snapshot.selection = TextSelectionStyles(snapshot.styles, *wp, from, to);
+	// (in a table's cells: TTablePartStyleIterator)
+	uint32_t frameStyle;
+	if (fPages->CaretCellFrameStyle(frameStyle))
+		snapshot.selection = TableCellStyles(snapshot.styles, frameStyle);
+	else
+		snapshot.selection = TextSelectionStyles(snapshot.styles, *wp, from, to);
 	// (CreateActivePartStyleIterator: while a style is being edited, it)
 	uint32_t edit = fPages->EditStyle();
 	if (edit < snapshot.styles.styles.size()) {

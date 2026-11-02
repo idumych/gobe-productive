@@ -375,6 +375,7 @@ private:
 public:
 	void TableMenuState(bool& merge, bool& split) const;
 	int TableVerticalAlignment() const;
+	bool CaretCellFrameStyle(uint32_t& style) const;
 private:
 	struct TableCells {
 		bool active = false;

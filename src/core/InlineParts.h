@@ -30,6 +30,10 @@ struct NewTable {
 	bool cellBreaks = false;
 };
 
+// TFrame::TFrame: a new frame's style, based on "Default" with no fill, no
+// pen and pen size 0 (an identical unnamed style there is, else a new one)
+uint32_t NewFrameStyle(Document& doc);
+
 // TTablePart::TTablePart(TDoc*, rows, columns): `rows` by `columns` empty
 // cells, the columns 400 points across between them, the rows 17 points
 // high (TTable::TTable), the cell gutter 1, the cells' text cell breaks

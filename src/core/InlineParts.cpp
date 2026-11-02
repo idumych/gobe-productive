@@ -11,6 +11,7 @@
 #include "BlankParts.h"
 #include "DocWriter.h"
 #include "Document.h"
+#include "Editing.h"
 #include "GRPart.h"
 #include "SSPart.h"
 #include "PartTail.h"
@@ -238,6 +239,51 @@ DerivedStyle(StyleMgr& styles, uint32_t base, const std::vector<Property>& prope
 }
 
 
+// a style property: its type and the bytes of a float
+Property
+FloatProperty(uint32_t type, float value)
+{
+	DocWriter w;
+	w.Float(value);
+	return Property{type, w.Data()};
+}
+
+} // namespace
+
+
+uint32_t
+NewFrameStyle(Document& doc)
+{
+	// TFrame::TFrame: TStyleManager::NewStyle('Basi', no pen, no fill, pen
+	// size 0, based on "Default"), an identical unnamed one if there is
+	std::vector<Property> props = {FloatProperty(Sig("FTra"), 0), FloatProperty(Sig("PENz"), 0),
+		FloatProperty(Sig("PTra"), 0)};
+	uint32_t base = 0;
+	for (size_t i = 0; i < doc.styles.styles.size(); i++)
+		if (doc.styles.styles[i].name == "Default" && doc.styles.styles[i].value10 == Sig("Basi"))
+			base = uint32_t(i);
+	for (size_t i = 0; i < doc.styles.styles.size(); i++) {
+		const Style& s = doc.styles.styles[i];
+		if (!s.name.empty() || s.value10 != Sig("Basi") || s.links[0] != base
+				|| s.links[1] != kNone || s.props.size() != props.size())
+			continue;
+		bool same = true;
+		for (size_t k = 0; k < props.size() && same; k++) {
+			const Property& p = doc.styles.properties[s.props[k]];
+			same = std::any_of(props.begin(), props.end(), [&](const Property& q) {
+				return q.type == p.type && q.data == p.data;
+			});
+		}
+		if (same)
+			return uint32_t(i);
+	}
+	doc.stylesChanged = true;
+	return DerivedStyle(doc.styles, base, props);
+}
+
+
+namespace {
+
 uint32_t
 DefaultStyle(const Document& doc)
 {
@@ -347,7 +393,11 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 		pen[1].data = size.Data();
 		pen[2].data = opacity.Data();
 	}
-	uint32_t tableStyle = DerivedStyle(doc.styles, frameStyle, {pen[0], pen[1], pen[2]});
+	// a table made in Gobe: TTableFrame, the frames' style with an opaque
+	// pen (TStyleID::SetPenTransparent 1.0)
+	uint32_t tableStyle = table.cellBreaks
+		? StyleWithProperty(doc.styles, NewFrameStyle(doc), FloatProperty(Sig("PTra"), 1))
+		: DerivedStyle(doc.styles, frameStyle, {pen[0], pen[1], pen[2]});
 	Portal shown;
 	shown.part = uint32_t(container);
 	shown.values[2] = 1;
@@ -424,6 +474,8 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 			}
 	} else
 		InsertMultiline(*wp, {0, 0}, all);
+	// (TTable::SetUp: new frames, TFrame::TFrame's style)
+	uint32_t cellStyle = table.cellBreaks ? NewFrameStyle(doc) : frameStyle;
 	// the cells' frames: inset 2 across and 1 down, their ranges
 	Portal cells;
 	cells.part = tablePart;
@@ -454,7 +506,7 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 			float across = table.inset + 1, down = table.inset;
 			Frame f = MakeFrame(text, tablePart, x + across, y + down,
 				std::max(1.0f, table.columns[c] - 2 * across),
-				std::max(1.0f, table.rows[r] - 2 * down), frameStyle, 72, raw.Data());
+				std::max(1.0f, table.rows[r] - 2 * down), cellStyle, 72, raw.Data());
 			f.values[1] = uint32_t(r * columns + c);
 			f.textStart = at;
 			f.textLength = length;
