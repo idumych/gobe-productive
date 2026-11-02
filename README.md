@@ -7,7 +7,7 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-72-77-0.svg" alt="Port progress: 72 of 77 features done, 5 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-73-78-0.svg" alt="Port progress: 73 of 78 features done, 5 left (see Features)" width="720"></p>
 
 Not everything is ported yet: image editing, editing charts and a few
 dialogs are still to come. The bar counts the [features](#features) by state.
@@ -278,6 +278,7 @@ sizes, headings and options are saved with the document.
 |---|---|
 | The Table menu: Merge Cells, Split Cell…, Select Row, Select Column, Insert and Delete Row and Column, Distribute Rows and Columns Evenly, Cell Gutter…, and the cells' vertical alignment (top, center, bottom); cells selected by dragging across them | next |
 | Insert Table… and the table's options (Cell Gutter…) | next |
+| Editing a table: Tab and the arrows from cell to cell, rows growing and shrinking with their text, cells copied, cut and pasted (into the table or as a table of their own), rows and columns resized by dragging their edges with the original's pointers, the whole table by its frame's handle | next |
 
 ### Charts
 
