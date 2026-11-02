@@ -7,9 +7,9 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-66-77-0.svg" alt="Port progress: 66 of 77 features done, 11 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-70-77-0.svg" alt="Port progress: 70 of 77 features done, 7 left (see Features)" width="720"></p>
 
-Not everything is ported yet: image editing, slide shows, editing tables
+Not everything is ported yet: image editing, editing tables
 and charts, a drawing's views and layers, and a few dialogs are still to
 come. The bar counts the [features](#features) by state.
 
@@ -49,8 +49,9 @@ text and cells.
 
 **Presentations.** File > New makes a presentation the way the original
 did, and the original's presentations open and show their slides in the
-document. Not yet: the slide show itself, New Slide…, Duplicate Slide and
-transitions.
+document. The Presentation window adds, names and orders slides and
+their layers; Start shows them full screen with their transitions, as
+the original does.
 
 
 **Inks and pens.** The original's colours, patterns, gradients and
@@ -267,10 +268,10 @@ sizes, headings and options are saved with the document.
 
 | Feature | State |
 |---|---|
-| Slide shows: Start Presentation…, the presentation window (Show Presentation Window…), its Settings… (Auto-start, Cursor) | not yet |
-| New Slide…, Duplicate Slide, slide names and moving between slides | not yet |
-| Slide transitions | not yet |
-| A presentation's layers: New Layer…, Rename Layer… | not yet |
+| Slide shows: Start Presentation…, the Presentation window (Show Presentation Window…: Start, Start Here, the slides and their layers, dragged into place), its Options (Auto-start, Cursor); full screen with the cursor hidden, the original's keys | next |
+| New Slide…, Duplicate Slide…, Rename Slide…, Delete Slide, and moving between slides | next |
+| Slide transitions (Jump, Wipe, Venetian Blinds, Elevator Doors) and their Settings… | next |
+| A presentation's layers: New Layer…, Duplicate Layer…, Rename Layer…, Delete Layer, a slide's layers from its pop-up | next |
 
 ### Tables
 
