@@ -1783,7 +1783,8 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	}
 	// (TTablePart::Click: a row's or column's edge in the table being
 	// edited dragged)
-	if ((buttons & B_PRIMARY_MOUSE_BUTTON) != 0 && clicks == 1 && TableResizeBegan(where))
+	if ((buttons & B_PRIMARY_MOUSE_BUTTON) != 0 && clicks == 1
+			&& (FrameHandleBegan(where) || TableResizeBegan(where)))
 		return;
 	if (HitText(where, caret)) {
 		fSelectedCell.active = false;
@@ -1870,7 +1871,7 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 		BView::MouseMoved(where, transit, dragMessage);
 		return;
 	}
-	if (TableResizeMoved(where)) {
+	if (TableResizeMoved(where) || FrameHandleMoved(where)) {
 		BView::MouseMoved(where, transit, dragMessage);
 		return;
 	}
@@ -1966,6 +1967,7 @@ TPageView::MouseUp(BPoint where)
 	fDragging = false;
 	fTableDrag.active = false;
 	fTableResize.active = false;
+	fFrameHandle.active = false;
 	fDraggingCells = false;
 	fDraggingHeadings = false;
 	if (fResizing.active) {

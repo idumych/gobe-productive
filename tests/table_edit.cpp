@@ -152,6 +152,24 @@ main()
 			&& edit.FindPreviousColumnStart(0) == -1, "the column before an edge");
 	}
 
+	// ---- TTable::ScaleToSize ----
+	{
+		Document scaled;
+		size_t t4 = 0;
+		TableEdit g;
+		if (Fresh(g, scaled, t4)) {
+			g.ScaleToSize(500, 102);
+			Check(Near(g.size[0], 500) && Near(g.size[1], 102), "scaled to 500 by 102");
+			Check(Near(g.Cell(0, 1)->x, 125) && Near(g.Cell(0, 1)->width, 125)
+				&& Near(g.Cell(2, 0)->y, 68) && Near(g.rows[1].height, 34)
+				&& Near(g.rows[1].height2, 34), "columns 125 wide, rows 34 high");
+			g.ScaleToSize(40, 20);
+			Check(Near(g.Cell(0, 1)->x, 20) && Near(g.Cell(0, 3)->width, 20) && Near(g.size[0], 80),
+				"no column narrower than 20, the rest moved right: 80 wide");
+			Check(Near(g.rows[0].height, 17) && Near(g.size[1], 51), "no row lower than 17");
+		}
+	}
+
 	// ---- TCell::Grow: a row as high as its cells' text, no lower than
 	// the height it was given ----
 	{

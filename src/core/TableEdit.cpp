@@ -449,6 +449,52 @@ TableEdit::Grow(const TableEditCell& cell)
 
 
 void
+TableEdit::ScaleToSize(float width, float height)
+{
+	if (!(size[0] > 0) || !(size[1] > 0))
+		RecalcSize();
+	if (!(size[0] > 0) || !(size[1] > 0))
+		return;
+	float sx = width / size[0], sy = height / size[1];
+	RecalcColumnEndTable();
+	float y = 0;
+	for (TableEditRow& row : rows) {
+		float rowHeight = 0, extra = 0, start = 0, cellEnd = 0;
+		size_t i = 0;
+		for (size_t k = 0; k < columnEnds.size() && i < row.cells.size(); k++) {
+			float end = columnEnds[k];
+			TableEditCell& c = row.cells[i];
+			// (TCell::SetPosition) the cell starting at this column moved
+			if (Eq(c.x, start)) {
+				cellEnd = c.x + c.width;
+				c.x = sx * c.x + extra;
+				c.y = y;
+			}
+			float scaled = sx * (end - start);
+			extra += std::max(scaled, 20.0f) - scaled;
+			// (TCell::SetSize) the cell ending at this column sized
+			if (Eq(cellEnd, end)) {
+				c.width = std::max(20.0f, (cellEnd * sx + extra) - c.x);
+				c.height = std::max(17.0f, std::max(sy * c.height, float(c.rowSpan) * 17));
+				if (c.rowSpan == 1)
+					rowHeight = std::max(rowHeight, c.height);
+				i++;
+			}
+			start = end;
+		}
+		row.height = rowHeight;
+		row.height2 = rowHeight;
+		y += rowHeight;
+		for (TableEditCell& c : row.cells)
+			if (c.rowSpan == 1)
+				c.height = rowHeight;
+	}
+	RecalcSize();
+	RecutAll(true, false);
+}
+
+
+void
 TableEdit::RemoveEmptyRows()
 {
 	bool removed = false;

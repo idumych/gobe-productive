@@ -9,6 +9,7 @@
 #include <Window.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 
 #include "GobeResources.h"
@@ -684,6 +685,55 @@ TPageView::TableResizeMoved(BPoint where)
 	}
 	std::string error;
 	if (!StoreTableEdit(fDocument, fTableResize.table, edit, error))
+		return true;
+	GeometryChanged();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
+}
+
+
+bool
+TPageView::FrameHandleBegan(BPoint where)
+{
+	const Document::PlacedFrame* selected = NULL;
+	if (!SelectedInlineFrame(selected) || fDocument.Table(selected->part) == NULL)
+		return false;
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	BRect r(selected->x + dx, selected->y + dy, selected->x + dx + selected->width,
+		selected->y + dy + selected->height);
+	if (!BRect(r.right - 5, r.bottom - 5, r.right, r.bottom).Contains(where))
+		return false;
+	fUndo.BeginDocument(fDocument, GobeResources::IndexString(3, 41).String(),
+		CurrentViewState());
+	fFrameHandle.active = true;
+	fFrameHandle.table = selected->part;
+	fFrameHandle.start = where;
+	fFrameHandle.width = selected->width;
+	fFrameHandle.height = selected->height;
+	if (Window() != NULL)
+		SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+	return true;
+}
+
+
+bool
+TPageView::FrameHandleMoved(BPoint where)
+{
+	if (!fFrameHandle.active)
+		return false;
+	// the table scaled to the frame's new size from the size it has now
+	// (TTableFrame::SetSize at each step), and the frame as big as it then
+	float width = fFrameHandle.width + (where.x - fFrameHandle.start.x);
+	float height = fFrameHandle.height + (where.y - fFrameHandle.start.y);
+	TableEdit edit;
+	if (width <= 0 || height <= 0 || !LoadTable(fFrameHandle.table, edit))
+		return true;
+	if (fabsf(width - edit.size[0]) < 0.01f && fabsf(height - edit.size[1]) < 0.01f)
+		return true;
+	edit.ScaleToSize(width, height);
+	std::string error;
+	if (!StoreTableEdit(fDocument, fFrameHandle.table, edit, error))
 		return true;
 	GeometryChanged();
 	if (Window() != NULL)

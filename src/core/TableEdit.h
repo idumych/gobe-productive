@@ -111,6 +111,11 @@ struct TableEdit {
 	void ChangeRowHeight(int row, float height, float height2, bool adjust);
 	void ChangeColumnWidth(float columnEnd, float delta);
 	void RecutAll(bool propagate, bool changed);
+	// TTable::ScaleToSize (TTableFrame::SetSize, its frame resized): the
+	// columns and rows scaled to make the table `width` by `height`, no
+	// column narrower than 20 (what that adds moves the rest right), no cell
+	// lower than 17 a row it spans
+	void ScaleToSize(float width, float height);
 	// TTable::RemoveEmptyRows
 	void RemoveEmptyRows();
 	// TCell::Grow (TTablePart::GrowChildFrame, its frame grown to its

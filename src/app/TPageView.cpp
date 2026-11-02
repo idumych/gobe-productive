@@ -548,6 +548,8 @@ TPageView::LayoutText()
 			if (cell.grows)
 				unbounded.rect.bottom = unbounded.rect.top + 1e6f;
 			LayoutPart(cell.part, {unbounded}, from, to);
+			for (size_t k = mark; k < fLines.size(); k++)
+				fLines[k].textFrame = cell.geometry.rect;
 			// a table cell's text centered or at the bottom of its frame
 			// ('VAln': TWPFrame), as far from it as from the top
 			int align = StyleVerticalAlignment(fDocument.styles, cell.style);

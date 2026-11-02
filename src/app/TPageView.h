@@ -381,6 +381,10 @@ private:
 	bool ActiveTable(size_t& table, BPoint& origin) const;
 	bool TableResizeBegan(BPoint where);
 	bool TableResizeMoved(BPoint where);
+	// a selected table frame's handle dragged (TFrameResizeCommand,
+	// TTableFrame::SetSize, TTable::ScaleToSize)
+	bool FrameHandleBegan(BPoint where);
+	bool FrameHandleMoved(BPoint where);
 	// the pointer (TFrame::GetCursor and its kin) over `where`: 0 the
 	// default, 3 the I-beam, 4 the hand, else a CURS/MICN id
 	int TextCursor(BPoint where) const;
@@ -413,6 +417,12 @@ private:
 		float minimum = 0;		// as far left as it goes
 		bool changed = false;
 	} fTableResize;
+	struct FrameHandle {
+		bool active = false;
+		size_t table = 0;
+		BPoint start;			// where the drag began
+		float width = 0, height = 0;	// the frame's size then
+	} fFrameHandle;
 	ShapeDrag fShapeDrag;
 	int fShapeMode = 0;			// what a handle does: 0 resize, 1 rotate, 2 reshape
 	int32 fToolShape = 0;		// the TOOS tool's shape (a POLY resource)
