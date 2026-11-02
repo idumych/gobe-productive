@@ -137,6 +137,31 @@ main()
 			"cells' text by their breaks, ranges stale");
 	}
 
+	// ---- TCell::Grow: a row as high as its cells' text, no lower than
+	// the height it was given ----
+	{
+		Document grown;
+		size_t t3 = 0;
+		TableEdit g;
+		if (Fresh(g, grown, t3)) {
+			float heights[12] = {15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15, 15};
+			g.textHeight = [&heights](int id) { return heights[id]; };
+			heights[g.Cell(0, 0)->id] = 45;
+			Check(g.Grow(*g.Cell(0, 0)) && Near(g.rows[0].height, 47) && Near(g.rows[0].height2, 17)
+				&& Near(g.Cell(0, 3)->height, 47), "three lines: row 0 47 high, given 17");
+			Check(Near(g.Cell(1, 0)->y, 47) && Near(g.Cell(2, 2)->y, 64) && Near(g.size[1], 81),
+				"the rows below moved down, the table 81 high");
+			Check(!g.Grow(*g.Cell(0, 0)), "grown already: nothing changes");
+			heights[g.Cell(0, 0)->id] = 15;
+			heights[g.Cell(0, 2)->id] = 30;
+			Check(g.Grow(*g.Cell(0, 0)) && Near(g.rows[0].height, 32),
+				"one line: as high as the row's tallest cell, 32");
+			heights[g.Cell(0, 2)->id] = 15;
+			Check(g.Grow(*g.Cell(0, 2)) && Near(g.rows[0].height, 17) && Near(g.size[1], 51),
+				"back to the height it was given, 17");
+		}
+	}
+
 	// ---- InsertRow before row 1 ----
 	edit.InsertRow(1);
 	Check(edit.rows.size() == 4, "InsertRow: 4 rows");

@@ -443,6 +443,7 @@ TPageView::LayoutText()
 			uint32_t from, to;
 			uint32_t style;		// its frame's (a table cell's: 'VAln')
 			uint32_t number;	// its frame's (TFrame +0x38)
+			bool grows;			// its frame's flag 8
 		};
 		std::vector<CellFlow> cellFlows;
 		for (const auto& f : fFrames) {
@@ -465,7 +466,7 @@ TPageView::LayoutText()
 				g.rect = r;
 				cellFlows.push_back({f.part, g, f.frame->textStart,
 					f.frame->textStart + f.frame->textLength, f.frame->style,
-					f.frame->values[1]});
+					f.frame->values[1], (f.frame->values[3] & 8) != 0});
 				continue;
 			}
 			if (it == flows.end())
@@ -541,7 +542,12 @@ TPageView::LayoutText()
 				from = range->second.first;
 				to = range->second.second;
 			}
-			LayoutPart(cell.part, {cell.geometry}, from, to);
+			// (TWPPart::MaxChildFrameRect: a growing cell's text laid out
+			// past its frame, which then grows to it)
+			FrameGeometry unbounded = cell.geometry;
+			if (cell.grows)
+				unbounded.rect.bottom = unbounded.rect.top + 1e6f;
+			LayoutPart(cell.part, {unbounded}, from, to);
 			// a table cell's text centered or at the bottom of its frame
 			// ('VAln': TWPFrame), as far from it as from the top
 			int align = StyleVerticalAlignment(fDocument.styles, cell.style);
@@ -617,6 +623,29 @@ TPageView::LayoutText()
 								fDocument.dirtyTails.insert(p);
 				resized = true;
 			}
+		}
+		// an edited table's cells grow and shrink with their text (TCell::Grow)
+		std::vector<size_t> editedTables;
+		for (const auto& [index, table] : fDocument.tableParts)
+			if (fDocument.dirtyParts.count(table.textPart))
+				editedTables.push_back(index);
+		for (size_t index : editedTables) {
+			TableEdit edit;
+			if (!LoadTable(index, edit))
+				continue;
+			bool grown = false;
+			for (int pass = 0; pass < 4; pass++) {
+				bool any = false;
+				for (int id : edit.frameOrder)
+					if (const TableEditCell* c = edit.CellWithId(id))
+						any |= edit.Grow(*c);
+				if (!any)
+					break;
+				grown = true;
+			}
+			std::string error;
+			if (grown && StoreTableEdit(fDocument, index, edit, error))
+				resized = true;
 		}
 		// the header and footer, once edited, are as high as their text
 		for (int which = 0; which < 2; which++) {

@@ -391,6 +391,27 @@ TableEdit::RecutAll(bool propagate, bool changed)
 }
 
 
+bool
+TableEdit::Grow(const TableEditCell& cell)
+{
+	// TCell::AdjustSize: the frame's size as the cell's, at least 17 high
+	float height = std::max(MinimumHeight(cell), 17.0f);
+	int last = cell.row + cell.rowSpan - 1;
+	if (last < 0 || size_t(last) >= rows.size())
+		return false;
+	for (int r = cell.row; r < last; r++)
+		height -= rows[size_t(r)].height;
+	TableEditRow& row = rows[size_t(last)];
+	if (Lt(height, row.height2))
+		height = row.height2;
+	if (Eq(height, row.height))
+		return false;
+	ChangeRowHeight(last, height, row.height2, true);
+	RecalcSize();
+	return true;
+}
+
+
 void
 TableEdit::RemoveEmptyRows()
 {

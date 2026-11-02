@@ -104,6 +104,10 @@ struct TableEdit {
 	void RecutAll(bool propagate, bool changed);
 	// TTable::RemoveEmptyRows
 	void RemoveEmptyRows();
+	// TCell::Grow (TTablePart::GrowChildFrame, its frame grown to its
+	// text): the cell's last row as high as the cell's text needs, no less
+	// than the height that row was given; false if nothing changed
+	bool Grow(const TableEditCell& cell);
 
 	// the selection's cells (TRow::AddToSelection), in the rows' order
 	std::vector<const TableEditCell*> Selected(const TableSelection& selection) const;

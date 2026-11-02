@@ -33,8 +33,8 @@ TPageView::LoadTable(size_t table, TableEdit& edit) const
 				continue;
 			if (!any || line.frame.top < top)
 				top = line.frame.top;
-			if (!any || line.frame.bottom + 1 > bottom)
-				bottom = line.frame.bottom + 1;
+			if (!any || line.frame.bottom > bottom)
+				bottom = line.frame.bottom;
 			any = true;
 		}
 		return any ? (bottom - top) / fZoom : 15;
