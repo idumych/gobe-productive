@@ -3778,7 +3778,35 @@ TPageView::MessageReceived(BMessage* message)
 						fUndo.BeginDocument(fDocument, IndexString(GobeResources::Part("Spreadsheet"),
 							1501, 15), CurrentViewState());
 						std::string error;
-						if (MakeChart(fDocument, fSelectedCell.part, range, error) < 0) {
+						// (the legend's names and the title in their fonts;
+						// the frame in the middle of what the window shows,
+						// in the sheet's drawing)
+						auto measure = [this](const std::string& text, uint32_t style,
+								float& width, float& height) {
+							BFont font = TDocView::MapFont(ResolveTextStyle(fDocument.styles, style));
+							font_height fh;
+							font.GetHeight(&fh);
+							width = font.StringWidth(text.c_str());
+							height = fh.ascent + fh.descent;
+						};
+						float center[2];
+						const float* centerOf = NULL;
+						size_t drawing = SIZE_MAX;
+						for (const LeafSheet& leaf : fDocument.sheets.sheets)
+							if (leaf.mainPart == fSelectedCell.part)
+								drawing = leaf.graphicsPart;
+						BRect visible = Bounds();
+						for (const Document::PlacedFrame& f : fFrames)
+							if (f.part == drawing && f.frame != NULL) {
+								center[0] = (visible.left + visible.right) / 2 / fZoom
+									+ fBounds.left - fMargin - f.x;
+								center[1] = (visible.top + visible.bottom) / 2 / fZoom
+									+ fBounds.top - fMargin - f.y;
+								centerOf = center;
+								break;
+							}
+						if (MakeChart(fDocument, fSelectedCell.part, range, error, measure,
+								centerOf) < 0) {
 							fprintf(stderr, "Make Chart: %s\n", error.c_str());
 							beep();
 							return;

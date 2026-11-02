@@ -189,7 +189,9 @@ ChartDataOf(const Document& doc, size_t part, const SSRange& range, uint32_t mod
 
 
 int
-MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
+MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error,
+	const std::function<void(const std::string&, uint32_t, float&, float&)>& measure,
+	const float* center)
 {
 	const SSPart* ss = doc.SpreadsheetPart(part);
 	if (ss == nullptr || part >= doc.tails.size() || !doc.tailRead[part]) {
@@ -207,7 +209,8 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 		error = "the sheet has no drawing";
 		return -1;
 	}
-	ChartData data = ChartDataOf(doc, part, range);
+	std::string label;
+	ChartData data = ChartDataOf(doc, part, range, 0, nullptr, &label);
 	if (data.values[0] == 0 || data.values[1] == 0) {
 		error = "no values to chart";
 		return -1;
@@ -311,7 +314,7 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 	// over its frame from the corner, so the headings, when shown, come
 	// before the cells: the row headings' 36 points and the column
 	// headings' row, as TSSFrame draws them.
-	float width = 320, height = 200;
+	float width = 400, height = 200;
 	uint16_t last = range.to.b, lastRow = range.to.a;
 	for (const SSCell& c : ss->cells)
 		if (c.id.b != 0xffff && c.id.a != 0xffff) {
@@ -353,6 +356,10 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 				}
 	}
 
+	if (center != nullptr) {
+		origin[0] = center[0] - width / 2;
+		origin[1] = center[1] - height / 2;
+	}
 	// TChartPart(TDoc*): TPartGR with a 32767-point drawing, the pieces
 	// 'Rndr' (T3DRenderer: the camera, one light at (0, 0, 0.5)) and
 	// 'Lgnd'; their places as TChartFrame::SetDefaultRenderPiecePos puts
@@ -364,10 +371,19 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 	float legendHeight = float(series * 12 + 4);
 	Shape legend;
 	legend.kind = Sig("Lgnd");
-	legend.size[0] = 106;
+	// (TLegendPiece::FixSize: the widest series name, 21 more)
+	float widest = 0;
+	for (uint32_t i = 0; i < series && measure; i++) {
+		std::string name = i < data.names2.size() ? data.names2[i]
+			: "Series " + std::to_string(i + 1);
+		float w = 0, h = 0;
+		measure(name, legendStyle, w, h);
+		widest = std::max(widest, w);
+	}
+	legend.size[0] = widest + 21;
 	legend.size[1] = legendHeight;
-	legend.origin[0] = width - legend.size[0] - 13;
-	legend.origin[1] = std::max(5.0f, (height - legendHeight) / 2);
+	legend.origin[0] = 5;
+	legend.origin[1] = 5;
 	legend.style = legendStyle;
 	legend.pieceValue = 1;
 	{
@@ -378,10 +394,13 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 	}
 	Shape plot;
 	plot.kind = Sig("Rndr");
-	plot.origin[0] = 12;
-	plot.origin[1] = 10;
-	plot.size[0] = legend.origin[0] - 6 - plot.origin[0];
-	plot.size[1] = height - 20;
+	// (SetDefaultRenderPiecePos: right of the legend as it was, empty: 5
+	// plus 21, its right side rounded out, 12 on; 12 from the right, 6 from
+	// the top and bottom)
+	plot.origin[0] = 39;
+	plot.origin[1] = 6;
+	plot.size[0] = width - 12 - plot.origin[0];
+	plot.size[1] = height - 12;
 	plot.style = renderStyle;
 	plot.pieceValue = 1;
 	{
@@ -401,6 +420,30 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error)
 	GRLayer layer;
 	layer.name = "Layer 1";
 	layer.shapes = {plot, legend};
+	if (!label.empty()) {
+		// FixupPiecePositions: the label a title (TTitlePiece::fixup_text)
+		Shape title;
+		title.kind = Sig("Titl");
+		title.style = legendStyle;
+		title.text = label;
+		float w = 0, h = 0;
+		if (measure)
+			measure(label, legendStyle, w, h);
+		title.size[0] = w + 4;
+		title.size[1] = h + 4;
+		title.origin[0] = width * 0.5f - title.size[0] * 0.5f;
+		title.origin[1] = 4;
+		title.radius[0] = 2;
+		title.radius[1] = h;
+		title.pieceValue = 1;
+		DocWriter w2;
+		w2.Sig(Sig("tlp+"));
+		w2.String(label);
+		w2.Point(title.radius);
+		w2.Sig(Sig("tlp-"));
+		title.pieceData = w2.Data();
+		layer.shapes.push_back(title);
+	}
 	gr.layers.push_back(layer);
 	GRView view;
 	view.name = "View 1";

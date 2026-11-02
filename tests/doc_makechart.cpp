@@ -110,7 +110,7 @@ MakeAndReopen(Document& doc, size_t part, const SSRange& range, const std::strin
 			drawing = sheet.graphicsPart;
 	const Frame* frame = back.FrameOf(uint32_t(chart), 0);
 	Check(frame != nullptr && frame->container == drawing && frame->part == uint32_t(chart)
-		&& frame->extent[0] == 320 && frame->extent[1] == 200, what + ": its frame");
+		&& frame->extent[0] == 400 && frame->extent[1] == 200, what + ": its frame");
 	bool shape = false;
 	for (const auto& [index, gr] : back.graphicsParts)
 		if (index == drawing)
@@ -149,27 +149,66 @@ main(int argc, char** argv)
 	MakeAndReopen(doc, part, Range(0, 0, 3, 2), "labelled", 3, 2, {"Q1", "Q2", "Q3"},
 		{"North", "South"}, {10, 15, 7, 20, 5, 9.5f});
 	{
-		// placed right of the last column with anything in it: past the
-		// row headings (36 points: the sheet's drawing starts at the
-		// frame's corner) and the columns, level with the range's first
-		// row below the column headings
-		const SSPart* sheet = doc.SpreadsheetPart(part);
-		float right = 36 + 20;
-		for (uint16_t c = 0; c <= 2; c++)
-			right += sheet->ColumnWidth(c);
+		// placed in the middle of what the window shows (TPartGR::
+		// InsertChildFrame): 400 by 200 round the point given
+		Document centered;
+		Check(CreateBlankSpreadsheet(centered, error), "a sheet for a centered chart " + error);
+		size_t sp = centered.spreadsheetParts.empty() ? 0 : centered.spreadsheetParts[0].first;
+		SSPart* cs = centered.EditableSpreadsheetPart(sp);
+		for (uint16_t r = 0; r < 4; r++)
+			for (uint16_t c = 0; c < 3; c++)
+				Set(*cs, r, c, cells[r][c]);
+		const float center[2] = {300, 250};
+		int made = MakeChart(centered, sp, Range(0, 0, 3, 2), error, nullptr, center);
 		const Frame* placed = nullptr;
-		for (size_t p = 0; p < doc.tails.size(); p++)
-			if (doc.tailRead[p])
-				for (const Portal& portal : doc.tails[p].portals)
+		for (size_t p = 0; p < centered.tails.size(); p++)
+			if (centered.tailRead[p])
+				for (const Portal& portal : centered.tails[p].portals)
 					for (const Frame& f : portal.frames)
-						if (!doc.chartParts.empty() && f.part == doc.chartParts.back().first)
+						if (made >= 0 && f.part == uint32_t(made))
 							placed = &f;
-		Check(sheet->options[3] && sheet->options[4] && placed != nullptr
-			&& std::fabs(placed->origin[0] - right) < 0.5f
-			&& std::fabs(placed->origin[1] - sheet->defaultHeight) < 0.5f,
-			"the chart right of the cells, past the headings: "
+		Check(placed != nullptr && std::fabs(placed->origin[0] - 100) < 0.5f
+			&& std::fabs(placed->origin[1] - 150) < 0.5f,
+			"the chart round the point given: "
 			+ (placed == nullptr ? std::string("none") : std::to_string(placed->origin[0]) + ","
-			+ std::to_string(placed->origin[1])) + " for " + std::to_string(right));
+			+ std::to_string(placed->origin[1])));
+		// its pieces where the original puts them (the legend's and
+		// title's widths measured: 6 a character, 12 high)
+		Document measured;
+		Check(CreateBlankSpreadsheet(measured, error), "a sheet for a measured chart " + error);
+		SSPart* ms = measured.EditableSpreadsheetPart(sp);
+		const char* named[4][3] = {
+			{"Year", "North", "South"}, {"Q1", "10", "20"}, {"Q2", "15", "5"}, {"Q3", "7", "9.5"}};
+		for (uint16_t r = 0; r < 4; r++)
+			for (uint16_t c = 0; c < 3; c++)
+				Set(*ms, r, c, named[r][c]);
+		auto measure = [](const std::string& text, uint32_t, float& width, float& height) {
+			width = 6.0f * float(text.size());
+			height = 12;
+		};
+		int chart = MakeChart(measured, sp, Range(0, 0, 3, 2), error, measure, center);
+		const ChartPart* c = chart >= 0 ? measured.Chart(size_t(chart)) : nullptr;
+		const Shape* plot = nullptr;
+		const Shape* legend = nullptr;
+		const Shape* title = nullptr;
+		if (c != nullptr)
+			for (const Shape& shape : c->graphics.layers[0].shapes) {
+				if (shape.kind == Sig("Rndr"))
+					plot = &shape;
+				else if (shape.kind == Sig("Lgnd"))
+					legend = &shape;
+				else if (shape.kind == Sig("Titl"))
+					title = &shape;
+			}
+		Check(plot != nullptr && plot->origin[0] == 39 && plot->origin[1] == 6
+			&& plot->size[0] == 349 && plot->size[1] == 188, "the plot at 39, 6, 349 by 188");
+		Check(legend != nullptr && legend->origin[0] == 5 && legend->origin[1] == 5
+			&& legend->size[0] == 6 * 5 + 21 && legend->size[1] == 2 * 12 + 4,
+			"the legend at 5, 5, its widest name and 21 across, 12 a series and 4 down");
+		Check(title != nullptr && title->text == "Year" && (title->pieceValue & 1) != 0
+			&& title->size[0] == 6 * 4 + 4 && title->size[1] == 16
+			&& title->origin[0] == 200 - 14 && title->origin[1] == 4,
+			"the corner cell a title, centered, 4 down");
 	}
 
 	{

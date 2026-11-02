@@ -130,11 +130,19 @@ bool ToggleChartSeriesOrder(Document& doc, size_t chart);
 // TChartPart(TDoc*): a 2D bar chart, T2DXYAxisChart kind 0, its pieces,
 // styles, axes ranged by T2DXYAxisChart::FindMinMax) of `range`'s values,
 // linked to the cells (an unnamed reference in the spreadsheet, a TLink),
-// framed in the sheet's drawing right of the last column with anything in
-// it, level with the cells (320 x 200: the port's place and size),
-// which gets a FRAM shape for it. The chart part's index, or -1 with
-// `error`.
-int MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error);
+// framed in the sheet's drawing (400 by 200, TChartPart::DefaultFrameRect)
+// in the middle of what the window shows (`center`, the drawing's point
+// there; without it, right of the last column with anything in it, level
+// with the cells), which gets a FRAM shape for it. Its pieces where the
+// original puts them: the legend at 5, 5, as wide as its widest series name
+// (`measure`) and 21 more (TLegendPiece::FixSize), the plot 12 right of the
+// legend as it was before it had series and 12 from the frame's right, 6
+// from its top and bottom (TChartFrame::SetDefaultRenderPiecePos), the data's
+// label as a title (TChartFrame::FixupPiecePositions: centered, 4 down, its
+// text's size and 4 more). The chart part's index, or -1 with `error`.
+int MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error,
+	const std::function<void(const std::string&, uint32_t, float&, float&)>& measure = nullptr,
+	const float* center = nullptr);
 
 } // namespace gobe
 
