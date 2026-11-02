@@ -975,14 +975,20 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 				return w;
 			};
 			float ascent = 0, descent = 0, leading = 0;
+			float frameAscent = 0;		// the frames shown in it (TMiscFrameInfo)
 			// Line metrics as with the BeOS Bitstream fonts Gobe documents
 			// were laid out with (about 1.2 x size). Haiku's Noto fonts are
 			// taller (~1.36), which would push text out of its frames.
+			// TParagraph::GetHeights: the runs' fonts' heights, the largest
 			auto measure = [&](const BFont& f, float size = 0) {
-				if (size <= 0)
-					size = f.Size();
-				ascent = std::max(ascent, size * 0.95f);
-				descent = std::max(descent, size * 0.25f);
+				BFont sized(f);
+				if (size > 0)
+					sized.SetSize(size);
+				font_height fh;
+				sized.GetHeight(&fh);
+				ascent = std::max(ascent, fh.ascent);
+				descent = std::max(descent, fh.descent);
+				leading = std::max(leading, fh.leading);
 			};
 			bool forced = false;
 			while (t < tokens.size()) {
@@ -1006,7 +1012,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 					placed.push_back({t, x});
 					x += ww;
 					measure(tk.font, tk.size);
-					ascent = std::max(ascent, inner->extent[1]);
+					frameAscent = std::max(frameAscent, inner->extent[1]);
 					t++;
 					continue;
 				}
@@ -1068,19 +1074,31 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 			if (placed.empty())
 				measure(lineFont);
 			// TParagraph line spacing (LSpa): a multiple adds leading, an
-			// exact height splits into ascent/descent
-			if (parStyle.lineSpacingMultiple)
+			// exact height splits into ascent/descent; each rounded (Round:
+			// floor(x + 0.5)); then the frames in the line raise its ascent
+			auto round = [](float v) { return floorf(v + 0.5f); };
+			if (parStyle.lineSpacingMultiple) {
 				leading = std::max(leading, (parStyle.lineSpacing - 1) * ascent);
-			else if (parStyle.lineSpacing > 0) {
+				ascent = round(ascent);
+				descent = round(descent);
+				leading = round(leading);
+			} else if (parStyle.lineSpacing > 0) {
 				float v = parStyle.lineSpacing;
-				if (ascent + descent <= v)
-					ascent = v - descent;
-				else {
-					ascent = roundf(v * 0.66f);
-					descent = v - ascent;
+				if (ascent + descent <= v) {
+					descent = round(descent);
+					ascent = round(v - descent);
+				} else {
+					ascent = round(v * 0.66f);
+					descent = round(v - ascent);
 				}
 				leading = 0;
+			} else {
+				ascent = round(ascent);
+				descent = round(descent);
+				leading = round(leading);
 			}
+			if (frameAscent > 0)
+				ascent = round(std::max(ascent, frameAscent));
 			// TWPFrame: space before goes above the paragraph's first
 			// line, space after below its last; in lines, the value times
 			// that line's ascent + descent

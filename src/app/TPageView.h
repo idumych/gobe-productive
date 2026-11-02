@@ -416,8 +416,9 @@ private:
 	FrameRef fFrameOnly;
 	gobe::Frame fBrowseFrame;		// its frame for the main text
 	BRect fDrawBounds;				// what Draw shows, in the document's coordinates
-	// the port's room between a frame's edges and its text
-	static constexpr float kTextPad = 2;
+	// room between a frame's edges and its text: none, as in the original
+	// (TWPFrame lays the text out from its left edge)
+	static constexpr float kTextPad = 0;
 	bool Paginate(const LayoutResult& main);
 	// styles resolved during a layout (LayoutText starts afresh)
 	const std::pair<TextStyle, BFont>& CachedStyle(uint32_t style);

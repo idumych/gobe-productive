@@ -585,11 +585,11 @@ TPageView::DrawCaret()
 	float x;
 	if (!CaretLine(fCaret, index, x))
 		return;
+	// the line's height (a frame in it: as high as it, as the original's)
 	const Line& line = fLines[index];
-	float size = line.pieces.empty() ? 12 : line.pieces[0].font.Size();
 	SetHighColor(0, 0, 0);
 	SetPenSize(1);
-	StrokeLine(BPoint(x, line.baseline - size * 0.95f), BPoint(x, line.baseline + size * 0.25f));
+	StrokeLine(BPoint(x, line.frame.top), BPoint(x, line.frame.bottom - 1));
 }
 
 
