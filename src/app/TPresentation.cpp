@@ -936,7 +936,7 @@ public:
 		// the slide left's transition, going on to the next; any other
 		// change a jump
 		if (to == fSlide + 1)
-			Transit(fShown, next, fDocument->slides[size_t(fSlide)].transition,
+			Transit(next, fDocument->slides[size_t(fSlide)].transition,
 				fDocument->slides[size_t(fSlide)].options);
 		delete fShown;
 		fShown = next;
@@ -987,7 +987,7 @@ private:
 		fView->DrawBitmap(bitmap, source, source.OffsetByCopy(fArea.LeftTop()));
 	}
 
-	void Transit(BBitmap* from, BBitmap* to, uint32 type, uint32 options)
+	void Transit(BBitmap* to, uint32 type, uint32 options)
 	{
 		if (!LockLooper())
 			return;
@@ -1030,31 +1030,21 @@ private:
 			}
 			case 'Elev':
 			{
-				// ElevatorTransition: two halves, top and bottom (bit 0
-				// off) or left and right; opening (bit 1), the old slide's
-				// part, closing, the new one's coming in
+				// ElevatorTransition::Go: two strips of the new slide a
+				// step, top and bottom (bit 0 off) or left and right; from
+				// the edges in (closing) or, bit 1, from the middle out
 				bool vertical = (options & 1) != 0, opening = (options & 2) != 0;
-				float half = (vertical ? w : h) / 2;
-				for (int32 i = 1; i <= fRate; i++) {
-					float d = half * i / fRate;
-					BBitmap* moving = opening ? from : to;
-					if (opening)
-						DrawPart(to, r);
-					BRect first = vertical ? BRect(0, 0, half - 1, h - 1)
-						: BRect(0, 0, w - 1, half - 1);
-					BRect second = vertical ? BRect(half, 0, w - 1, h - 1)
-						: BRect(0, half, w - 1, h - 1);
-					float shift = opening ? d : half - d;
-					BPoint out1 = vertical ? BPoint(-shift, 0) : BPoint(0, -shift);
-					BPoint out2 = vertical ? BPoint(shift, 0) : BPoint(0, shift);
-					BRect target1 = first.OffsetByCopy(out1) & r;
-					BRect target2 = second.OffsetByCopy(out2) & r;
-					if (target1.IsValid())
-						fView->DrawBitmap(moving, target1.OffsetByCopy(-out1.x, -out1.y),
-							target1.OffsetByCopy(fArea.LeftTop()));
-					if (target2.IsValid())
-						fView->DrawBitmap(moving, target2.OffsetByCopy(-out2.x, -out2.y),
-							target2.OffsetByCopy(fArea.LeftTop()));
+				float size = vertical ? w : h, half = size / 2;
+				for (int32 i = 0; i < fRate; i++) {
+					float a = floorf(half * i / fRate), b = floorf(half * (i + 1) / fRate);
+					float s1, e1, s2, e2;
+					if (opening) {
+						s1 = half - b; e1 = half - a; s2 = half + a; e2 = half + b;
+					} else {
+						s1 = a; e1 = b; s2 = size - b; e2 = size - a;
+					}
+					DrawPart(to, vertical ? BRect(s1, 0, e1, h - 1) : BRect(0, s1, w - 1, e1));
+					DrawPart(to, vertical ? BRect(s2, 0, e2, h - 1) : BRect(0, s2, w - 1, e2));
 					Step();
 				}
 				break;
