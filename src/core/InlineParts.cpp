@@ -860,16 +860,9 @@ AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind, cons
 		error = "too small";
 		return -1;
 	}
-	// the drawing's frames' style with an opaque white background (the
-	// port's: the text under a frame isn't wrapped around it)
-	Ink white;
-	white.set = true;
-	white.color = {255, 255, 255, 255};
-	white.low = {255, 255, 255, 255};
-	DocWriter opaque;
-	opaque.Float(1);
-	uint32_t frameStyle = DerivedStyle(doc.styles, FrameStyle(doc, drawing),
-		{Property{Sig("BCol"), InkBytes(white)}, Property{Sig("BTra"), opaque.Data()}});
+	// (TFrame::TFrame: a new frame's style, no fill and no pen; a table's
+	// its TTableFrame's, as AddTablePart makes it)
+	uint32_t frameStyle = NewFrameStyle(doc);
 	doc.stylesChanged = true;
 	int made = -1;
 	if (kind == Sig("TBLE")) {
