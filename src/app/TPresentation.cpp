@@ -676,8 +676,10 @@ TDialogPRNavigate::Init()
 		// (CLST params: 10 rows, of the list's font)
 		font_height height;
 		font.GetHeight(&height);
-		float row = ceilf(height.ascent + height.descent + height.leading) + 2;
-		BSize size(155, 10 * row + 4);
+		// (BListItem::Update's height)
+		float row = ceilf(height.ascent + height.descent + height.leading);
+		// (the width TDialog gave the CLST: 20 digits)
+		BSize size(scroll->ExplicitMinSize().width, 10 * row + 4);
 		scroll->SetExplicitMinSize(size);
 		scroll->SetExplicitPreferredSize(size);
 		scroll->SetExplicitMaxSize(BSize(B_SIZE_UNLIMITED, size.height));
@@ -690,7 +692,31 @@ TDialogPRNavigate::Init()
 		// (BScrollView::SetTarget adds it as a child)
 		scroll->SetTarget(fList);
 	}
+	// the original's floater: 6 pixels round the list and between it and
+	// the buttons, 11 below them, the buttons 8 in from the right
+	if (BView* top = FindView("TDialogView")) {
+		if (BGroupLayout* root = dynamic_cast<BGroupLayout*>(top->GetLayout())) {
+			root->SetInsets(6, 6, 6, 11);
+			root->SetSpacing(6);
+			if (BGroupLayout* buttons = dynamic_cast<BGroupLayout*>(
+					root->ItemAt(root->CountItems() - 1)))
+				buttons->SetInsets(0, 0, 8, 0);
+		}
+	}
 	Update();
+}
+
+
+// InitPostRecalc: at the screen's top right, 5 pixels in, 50 down
+void
+TDialogPRNavigate::Show()
+{
+	if (IsHidden() && !fPlaced) {
+		fPlaced = true;
+		BRect screen = BScreen(this).Frame();
+		MoveTo(screen.right - Bounds().Width() - 5, 50);
+	}
+	TDialog::Show();
 }
 
 

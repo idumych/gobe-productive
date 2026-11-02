@@ -599,13 +599,32 @@ TDialog::MessageReceived(BMessage* message)
 }
 
 
+// every layout in `layout`, nested or in a view, forgets its sizes
+static void
+InvalidateLayouts(BLayout* layout)
+{
+	if (layout == NULL)
+		return;
+	layout->InvalidateLayout();
+	for (int32 i = 0; BLayoutItem* item = layout->ItemAt(i); i++) {
+		if (BLayout* nested = dynamic_cast<BLayout*>(item))
+			InvalidateLayouts(nested);
+		else if (item->View() != NULL)
+			InvalidateLayouts(item->View()->GetLayout());
+	}
+}
+
+
 void
 TDialog::RunDialog()
 {
 	if (Lock()) {
 		Init();
 		// as large as the items want (the window isn't resizable); Init may
-		// have changed sizes inside nested group layouts
+		// have changed sizes inside nested group layouts, which keep the
+		// sizes they cached (a view's InvalidateLayout() doesn't reach them
+		// before its own sizes were asked for)
+		InvalidateLayouts(GetLayout());
 		ResizeToPreferred();
 		CenterOnScreen();
 		Unlock();

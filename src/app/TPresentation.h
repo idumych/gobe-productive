@@ -143,6 +143,7 @@ public:
 
 	virtual void MessageReceived(BMessage* message);
 	virtual void MenusBeginning();
+	virtual void Show();
 
 protected:
 	virtual void Init();
@@ -164,6 +165,7 @@ private:
 	TMenu* fOptions = NULL;
 	PresentationState fState;
 	bool fUpdating = false;
+	bool fPlaced = false;
 };
 
 class TDocWindow;
