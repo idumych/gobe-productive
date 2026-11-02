@@ -139,7 +139,7 @@ WordPart()
 // 12) when `main`
 std::vector<uint8_t>
 GraphicsPart(uint32_t self = kGraphicsPart, uint32_t page = kPagePart, bool main = false,
-	uint32_t id = 2)
+	uint32_t id = 2, uint32_t frameStyle = kFrameStyle)
 {
 	// TPartGR: the grid, the drawing's size, one empty layer "Layer 1", one
 	// view "View 1" showing it (as in the documents). A drawing document's
@@ -169,7 +169,7 @@ GraphicsPart(uint32_t self = kGraphicsPart, uint32_t page = kPagePart, bool main
 	w.Sig(Sig("vew-"));
 	w.Sig(Sig("GraP"));
 	PortalStart(w, page, main ? 12 : 4);
-	WriteFrame(w, kPrintable, kTextWidth, kTextHeight, kFrameStyle, self, page);
+	WriteFrame(w, kPrintable, kTextWidth, kTextHeight, frameStyle, self, page);
 	float drawing[4] = {0, 0, kTextWidth, kTextHeight};
 	w.Rect(drawing);		// TFrameGR
 	w.Sig(Sig("FraM"));
@@ -181,7 +181,8 @@ GraphicsPart(uint32_t self = kGraphicsPart, uint32_t page = kPagePart, bool main
 
 
 std::vector<uint8_t>
-RootPart(uint32_t self = kRootPart, uint32_t page = kPagePart, uint32_t id = 3)
+RootPart(uint32_t self = kRootPart, uint32_t page = kPagePart, uint32_t id = 3,
+	uint32_t frameStyle = kFrameStyle)
 {
 	DocWriter w;
 	WritePartHeader(w, Sig("PROT"), 0, id, 0xffffffff);
@@ -193,7 +194,7 @@ RootPart(uint32_t self = kRootPart, uint32_t page = kPagePart, uint32_t id = 3)
 	PortalStart(w, 0xffffffff, 0);
 	const float origin[2] = {0, 0};
 	// the window's view (as the documents have it)
-	WriteFrame(w, origin, 609, 416, kFrameStyle, self, 0xffffffff);
+	WriteFrame(w, origin, 609, 416, frameStyle, self, 0xffffffff);
 	w.Float(0);				// TPagedRootFrame: a point
 	w.Float(-0.0f);
 	w.Sig(Sig("FraM"));
@@ -217,14 +218,14 @@ FramePtr(DocWriter& w, uint32_t part, uint32_t portal, uint32_t frame)
 // no separate sheet drawing
 std::vector<uint8_t>
 PagePart(uint32_t self = kPagePart, uint32_t root = kRootPart, uint32_t drawing = 0xffffffff,
-	uint32_t id = 4)
+	uint32_t id = 4, uint32_t frameStyle = kFrameStyle)
 {
 	DocWriter w;
 	WritePartHeader(w, Sig("PAGE"), 0, id, 0xffffffff);
 	w.UInt32(0);			// TPagePart
 	PortalStart(w, root, 0);
 	const float origin[2] = {0, 0};
-	WriteFrame(w, origin, kPaper[2], kPaper[3], kFrameStyle, self, root);
+	WriteFrame(w, origin, kPaper[2], kPaper[3], frameStyle, self, root);
 	// TPageFrame: the frames on the page: header, footer (none), the
 	// sheet's drawing, the text (or a drawing sheet's drawing)
 	w.UInt32(4);
@@ -272,7 +273,7 @@ StyleSection()
 	uint32_t fill = add("FCol", white);
 	uint32_t fillOpaque = add("FTra", "3f800000");
 	uint32_t pen = add("PCol", black);
-	uint32_t penType = add("PEN ", "ffffffff4e4f524d0000000800044e6f6e650001");
+	uint32_t penType = add("PEN ", "ffffffff4e4f524d0000000b000744656661756c740001");	// the "Default" pen
 	uint32_t penSize = add("PENz", "3f800000");
 	uint32_t penOpaque = add("PTra", "3f800000");
 	uint32_t textColor = add("TCol", black);
@@ -433,8 +434,8 @@ enum { kSheetPart = 0, kSheetGraphicsPart = 1, kBrowseRootPart = 2 };
 
 // the styles of the spreadsheet document (see SheetStyleSection)
 enum {
-	kSSBaseStyle, kSSFrameStyle, kSSDocumentStyle, kSSGRDefaultStyle, kSSDefaultStyle,
-	kGridStyle, kHeaderStyle, kColumnStyle, kRowStyle, kLockStyle
+	kSSBaseStyle, kSSFrameStyle, kSSDocumentStyle, kSSGRDefaultStyle, kColumnStyle,
+	kGridStyle, kHeaderStyle, kLockStyle, kRowStyle, kSSDefaultStyle
 };
 
 // the window's view, which the root frame and the sheet's frames fill
@@ -744,24 +745,30 @@ AddSheetStyles(StyleMgr& styles, uint32_t base)
 		return uint32_t(styles.styles.size() - 1);
 	};
 	const char* black = "01000000ff77747700ffffffffffffffff";
-	const char* pen = "ffffffff4e4f524d0000000800044e6f6e650001";
+	const char* pen = "ffffffff4e4f524d0000000e000a4e6f726d616c2050656e0001";	// "Normal Pen"
 	SheetStyles ids;
-	// TPartSSFactory::AddPartStyles: "SS Default" (General, left, bottom,
-	// 10 points, a clear fill)
+	// TPartSSFactory::AddPartStyles and TSSDisplayManager's, as a new
+	// spreadsheet has them, in the style table's order (by name): column
+	// and row based on the header (gray, centered, Swis721 at 10, opaque),
+	// the grid (a light gray half-point line), lock (red, patterned) and
+	// "SS Default" (General, left, bottom, 10 points, a clear fill)
+	ids.column = style("ColumnStyle", 0x822, kNoPart, {});
+	ids.grid = style("GridStyle", 0x822, kNoPart, {add("PCol", "01c8c8c8ff77747700ffffffffffffffff"),
+		add("PEN ", pen), add("PENz", "3f000000"), add("PTra", "3f800000")});
+	ids.header = style("HeaderStyle", 0x822, kNoPart, {
+		add("FCol", "01d8d8d8ff77747700ffffffffffffffff"), add("FTra", "3f800000"),
+		add("HAln", "0002"), add("PCol", black), add("PEN ", pen), add("PENz", "00000000"),
+		add("PTra", "3f800000"), add("TCol", black), add("TFac", "0000000101"),
+		add("TFon", "000a5377697337323120425400000000"), add("TSiz", "000a")});	// Swis721 BT
+	ids.lock = style("LockStyle", 0x822, kNoPart, {add("FCol", "01ff0000ff777477008800220088002200")});
+	ids.row = style("RowStyle", 0x822, ids.header, {});
 	ids.ssDefault = style("SS Default", 0x912, base, {add("FTra", "00000000"), add("HAln", "0000"),
 		add("SSNm", "000747656e6572616c00"), add("TSiz", "000a"), add("VAln", "0003")});
-	// TSSDisplayManager: the grid (a light gray hairline), header (gray,
-	// centered, the plain font at 10), column and row (based on the header)
-	// and lock (red, patterned) styles, as StockPrice has them
-	ids.grid = style("GridStyle", 0x822, kNoPart, {add("PCol", "01c8c8c8ff77747700ffffffffffffffff"),
-		add("PEN ", pen), add("PENz", "00000000"), add("PTra", "3f800000")});
-	ids.header = style("HeaderStyle", 0x822, kNoPart, {
-		add("FCol", "01d8d8d8ff77747700ffffffffffffffff"), add("HAln", "0002"), add("PCol", black),
-		add("PEN ", pen), add("PENz", "00000000"), add("PTra", "3f800000"),
-		add("TFon", "000a5377697337323120425400000000"), add("TSiz", "000a")});	// Swis721 BT
-	ids.column = style("ColumnStyle", 0x822, ids.header, {});
-	ids.row = style("RowStyle", 0x822, ids.header, {});
-	ids.lock = style("LockStyle", 0x822, kNoPart, {add("FCol", "01ff0000ff777477008800220088002200")});
+	// (the column style made before the header: its parent now)
+	if (styles.styles[ids.column].links[0] == kNoPart && styles.styles[ids.column].name == "ColumnStyle") {
+		styles.styles[ids.column].links[0] = ids.header;
+		styles.styles[ids.header].value4++;
+	}
 	// the new part's uses: its style, its display manager's
 	for (uint32_t s : {ids.ssDefault, ids.grid, ids.header, ids.column, ids.row, ids.lock})
 		styles.styles[s].value4++;
@@ -793,8 +800,40 @@ BrowseRootPart()
 }
 
 
+// TDoc::TDoc's styles: "Default", the frames' style, the document's style
+// based on "GR Default", "GR Default" (a drawing's, a presentation's and,
+// before its own, a spreadsheet's; `frameUsers` the frames that use it)
+StyleMgr BaseStyles(uint32_t frameUsers);
+
+
+// a new drawing's or presentation's styles: TDoc::TDoc's alone
+std::vector<uint8_t>
+DrawingStyleSection()
+{
+	StyleMgr styles = BaseStyles(2);
+	for (int pass = 0; pass < 3; pass++)
+		for (Style& s : styles.styles)
+			s.props2 = StyleUnionSet(styles, s);
+	styles.afterSection = kSSDocumentStyle;
+	return WriteStyleMgr(styles);
+}
+
+
 std::vector<uint8_t>
 SheetStyleSection()
+{
+	StyleMgr styles = BaseStyles(3);
+	AddSheetStyles(styles, kSSBaseStyle);
+	for (int pass = 0; pass < 3; pass++)
+		for (Style& s : styles.styles)
+			s.props2 = StyleUnionSet(styles, s);
+	styles.afterSection = kSSDocumentStyle;
+	return WriteStyleMgr(styles);
+}
+
+
+StyleMgr
+BaseStyles(uint32_t frameUsers)
 {
 	// TDoc::TDoc: "Default", "GR Default" and the document's style based on
 	// it; the frames' style; then the spreadsheet's (AddSheetStyles).
@@ -810,7 +849,7 @@ SheetStyleSection()
 	uint32_t fill = add("FCol", white);
 	uint32_t fillOpaque = add("FTra", "3f800000");
 	uint32_t penColor = add("PCol", black);
-	uint32_t penType = add("PEN ", "ffffffff4e4f524d0000000800044e6f6e650001");
+	uint32_t penType = add("PEN ", "ffffffff4e4f524d0000000b000744656661756c740001");	// the "Default" pen
 	uint32_t penSize = add("PENz", "3f800000");
 	uint32_t penOpaque = add("PTra", "3f800000");
 	uint32_t textColor = add("TCol", black);
@@ -841,19 +880,14 @@ SheetStyleSection()
 	// "SS Default" under "Default")
 	style("Basi", "Default", 0x912, 2, none, {arrows, fill, fillOpaque, penColor, penType,
 		penSize, penOpaque, textColor, face, font, size});
-	style("Basi", "", 0x20, 3, kSSBaseStyle, {fillClear, penNone, penClear});	// frames
+	style("Basi", "", 0x20, frameUsers, kSSBaseStyle, {fillClear, penNone, penClear});	// frames
 	style("Basi", "", 0x20, 1, kSSGRDefaultStyle, {});					// TDoc +0x6c
 	style("GRFX", "GR Default", 0x822, 1, kSSBaseStyle, {});
 	for (Style& s : styles.styles)
 		std::stable_sort(s.props.begin(), s.props.end(), [&](uint32_t a, uint32_t b) {
 			return styles.properties[a].type < styles.properties[b].type;
 		});
-	AddSheetStyles(styles, kSSBaseStyle);
-	for (int pass = 0; pass < 3; pass++)
-		for (Style& s : styles.styles)
-			s.props2 = StyleUnionSet(styles, s);
-	styles.afterSection = kSSDocumentStyle;
-	return WriteStyleMgr(styles);
+	return styles;
 }
 
 
@@ -976,10 +1010,11 @@ DrawingPartSection()
 {
 	PartMgr mgr;
 	mgr.parts.push_back({Sig("GRFX"), 0,
-		GraphicsPart(kDrawingPart, kDrawingPagePart, true, 1)});
-	mgr.parts.push_back({Sig("PROT"), 0, RootPart(kDrawingRootPart, kDrawingPagePart, 2)});
+		GraphicsPart(kDrawingPart, kDrawingPagePart, true, 1, kSSFrameStyle)});
+	mgr.parts.push_back({Sig("PROT"), 0,
+		RootPart(kDrawingRootPart, kDrawingPagePart, 2, kSSFrameStyle)});
 	mgr.parts.push_back({Sig("PAGE"), 0,
-		PagePart(kDrawingPagePart, kDrawingRootPart, kDrawingPart, 3)});
+		PagePart(kDrawingPagePart, kDrawingRootPart, kDrawingPart, 3, kSSFrameStyle)});
 	return WritePartMgrFromRecords(mgr);
 }
 
@@ -1087,7 +1122,7 @@ PresentationPart(float width, float height)
 	w.Sig(Sig("prp-"));
 	PortalStart(w, kPresentationRootPart, 12);
 	const float origin[2] = {0, 0};
-	WriteFrame(w, origin, kViewWidth, kViewHeight, kFrameStyle, kPresentationPart,
+	WriteFrame(w, origin, kViewWidth, kViewHeight, kSSFrameStyle, kPresentationPart,
 		kPresentationRootPart);
 	float shown[4] = {0, 0, kViewWidth, kViewHeight};
 	w.Rect(shown);			// TFrameGR
@@ -1107,7 +1142,7 @@ PresentationRootPart()
 	w.UInt32(0);			// TRootPart: the sheet
 	PortalStart(w, 0xffffffff, 0);
 	const float origin[2] = {0, 0};
-	WriteFrame(w, origin, kViewWidth, kViewHeight, kFrameStyle, kPresentationRootPart,
+	WriteFrame(w, origin, kViewWidth, kViewHeight, kSSFrameStyle, kPresentationRootPart,
 		0xffffffff);
 	// TBrowseRootFrame: no sheet frame or graphics frame of its own (the
 	// presentation's frame is in its portal)
@@ -1244,7 +1279,7 @@ CreateBlankDrawing(Document& doc, std::string& error)
 		{"Document Misc", Hex("00000001000000000000000000000000000000000000000000000000")},
 		{"SetMgr", Hex("5345544d0000000000000000000000005365744d")},
 		{"PenMgr", Hex("50454e4d0000000601000000000050656e4d")},
-		{"StyleMgr", StyleSection()},
+		{"StyleMgr", DrawingStyleSection()},
 		{"SheetMgr", DrawingSheetSection()},
 		{"SelectionMgr", DrawingSelectionSection()},
 		{"LinksMgr", Hex("4c494e4b00000000004c696e4b")},
@@ -1270,7 +1305,7 @@ CreateBlankPresentation(Document& doc, std::string& error, float width, float he
 		{"Document Misc", Hex("00000001000000000000000000000000000000000000000000000000")},
 		{"SetMgr", Hex("5345544d0000000000000000000000005365744d")},
 		{"PenMgr", Hex("50454e4d0000000601000000000050656e4d")},
-		{"StyleMgr", StyleSection()},
+		{"StyleMgr", DrawingStyleSection()},
 		{"SheetMgr", PresentationSheetSection()},
 		{"SelectionMgr", PresentationSelectionSection()},
 		{"LinksMgr", Hex("4c494e4b00000000004c696e4b")},
