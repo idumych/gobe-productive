@@ -658,24 +658,30 @@ TDocWindow::PresentationCommand(BMessage* message)
 			return true;
 		case 'PR0E':	// a slide or a layer moved (dropped in the list)
 		{
+			// TPRMoveSlideCommand, TPRMoveLayerCommand: "slide" and
+			// "layer" 1 the place it was dropped before
 			int32 toSlide = message->GetInt32("slide", 1, -1);
 			int32 toLayer = message->GetInt32("layer", 1, -1);
-			if (layer < 0 && toSlide >= 0) {
-				begin(9);
-				if (doc.MoveSlide(size_t(slide), size_t(toSlide)))
-					doc.SetCurrentSlide(size_t(toSlide));
-			} else if (layer >= 0 && toSlide == slide && toLayer >= 0) {
-				begin(10);
-				doc.MoveSlideLayer(size_t(slide), size_t(layer), size_t(toLayer));
-			} else if (layer >= 0 && toSlide >= 0) {
-				// dropped on another slide: shared there (TPRInsertLayerCommand)
-				int part = doc.SlideLayerPart(size_t(slide), size_t(layer));
-				begin(6);
-				if (part >= 0 && doc.SlideAddLayer(size_t(toSlide), size_t(part),
-						toLayer < 0 ? size_t(-1) : size_t(toLayer)))
-					doc.SetCurrentSlide(size_t(toSlide));
-			} else
+			if (toSlide < 0)
 				return true;
+			if (layer < 0) {
+				if (toSlide == slide)
+					return true;
+				size_t to = size_t(toSlide > slide ? toSlide - 1 : toSlide);
+				begin(9);
+				if (doc.MoveSlide(size_t(slide), to))
+					doc.SetCurrentSlide(to);
+			} else {
+				// (a layer stays in its slide)
+				if (toSlide != slide || toLayer < 0) {
+					beep();
+					return true;
+				}
+				size_t to = size_t(toLayer > layer ? toLayer - 1 : toLayer);
+				begin(10);
+				if (doc.MoveSlideLayer(size_t(slide), size_t(layer), to))
+					doc.ActivateSlideLayer(size_t(slide), int(to));
+			}
 			done();
 			return true;
 		}

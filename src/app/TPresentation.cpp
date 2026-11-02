@@ -435,6 +435,190 @@ public:
 		}
 		BOutlineListView::MouseDown(where);
 	}
+
+	// TDialogPRNavigate::SlideDragProc: a selected row dragged, 'PR0E'
+	// with its slide and layer (-1 for a slide)
+	virtual bool InitiateDrag(BPoint where, int32 index, bool wasSelected)
+	{
+		if (!wasSelected)
+			return false;
+		PresListItem* item = dynamic_cast<PresListItem*>(
+			FullListItemAt(FullListCurrentSelection()));
+		if (item == NULL)
+			return false;
+		BMessage drag('PR0E');
+		drag.AddInt32("slide", item->Slide());
+		drag.AddInt32("layer", item->Layer());
+		DragMessage(&drag, ItemFrame(index));
+		return true;
+	}
+
+	// TDialogPRNavigate::SlideMouseMoved: the line where the dragged row
+	// would go; out of the list, scrolled while the button is down
+	virtual void MouseMoved(BPoint where, uint32 transit, const BMessage* drag)
+	{
+		if (drag == NULL || drag->what != 'PR0E') {
+			BOutlineListView::MouseMoved(where, transit, drag);
+			return;
+		}
+		if (transit == B_EXITED_VIEW) {
+			ShowInsertion(-1);
+			AutoScroll();
+			return;
+		}
+		int32 at = -1;
+		ShowInsertion(Target(where, drag, at) ? at : -1);
+	}
+
+	virtual void MessageReceived(BMessage* message)
+	{
+		if (message->what != 'PR0E' || !message->WasDropped()) {
+			BOutlineListView::MessageReceived(message);
+			return;
+		}
+		ShowInsertion(-1);
+		BPoint where = ConvertFromScreen(message->DropPoint());
+		int32 at = -1;
+		int32 selected = CurrentSelection();
+		if (!Target(where, message, at) || at == selected || at == selected + 1 || at < 0)
+			return;
+		int32 layer = message->GetInt32("layer", -1);
+		int32 toSlide, toLayer;
+		if (at < CountItems()) {
+			PresListItem* item = dynamic_cast<PresListItem*>(ItemAt(at));
+			PresListItem* before = dynamic_cast<PresListItem*>(ItemAt(at - 1));
+			if (item == NULL)
+				return;
+			if (layer < 0 || item->Layer() >= 0 || before == NULL) {
+				toSlide = item->Slide();
+				toLayer = item->Layer();
+			} else {
+				// a layer before a slide's row: at the end of the slide above
+				toLayer = before->Layer() + 1;
+				toSlide = item->Slide() - 1;
+			}
+		} else {
+			PresListItem* last = dynamic_cast<PresListItem*>(
+				FullListItemAt(FullListCountItems() - 1));
+			if (last == NULL)
+				return;
+			toSlide = layer < 0 ? last->Slide() + 1 : last->Slide();
+			toLayer = layer < 0 ? -1 : last->Layer() + 1;
+		}
+		BMessage move('PR0E');
+		move.AddInt32("slide", message->GetInt32("slide", 0));
+		move.AddInt32("layer", layer);
+		move.AddInt32("slide", toSlide);
+		move.AddInt32("layer", toLayer);
+		move.AddBool("dropped", true);
+		if (sNavigate != NULL)
+			sNavigate->Send(&move);
+	}
+
+private:
+	// TDialogPRNavigate::GetInsertionLoc: the row before which `where`
+	// puts the dragged one (the next in a row's lower half), the count
+	// below the last, -1 elsewhere
+	int32 InsertionAt(BPoint where)
+	{
+		int32 index = IndexOf(where);
+		int32 count = CountItems();
+		if (index < 0) {
+			if (count > 0 && where.y > ItemFrame(count - 1).bottom)
+				return count;
+			if (count > 0 && where.y < ItemFrame(0).top)
+				return 0;
+			return -1;
+		}
+		BRect lower = ItemFrame(index);
+		lower.top = (lower.top + lower.bottom) / 2;
+		return lower.Contains(where) ? index + 1 : index;
+	}
+
+	// SlideMouseMoved's test: a slide goes between slides, not where it
+	// is; a layer anywhere but the top or where it is
+	bool Target(BPoint where, const BMessage* drag, int32& at)
+	{
+		at = InsertionAt(where);
+		if (at < 0 || sNavigate == NULL)
+			return false;
+		int32 slide = drag->GetInt32("slide", 0), layer = drag->GetInt32("layer", -1);
+		PresListItem* item = dynamic_cast<PresListItem*>(ItemAt(at));
+		int32 itemSlide = item != NULL ? item->Slide()
+			: int32(sNavigate->fState.slides.size());
+		int32 itemLayer = item != NULL ? item->Layer() : -1;
+		if (layer < 0)
+			return itemLayer < 0 && itemSlide != slide && itemSlide != slide + 1;
+		return at != 0 && (itemSlide != slide
+			|| (itemLayer != layer && itemLayer != layer + 1));
+	}
+
+	// TDialogPRNavigate::DrawListInsertion: an inverted 2-pixel line on
+	// top of the row (below the last)
+	void DrawInsertion(int32 at)
+	{
+		int32 count = CountItems();
+		if (at < 0 || count == 0)
+			return;
+		BRect frame = ItemFrame(std::min(at, count - 1));
+		float y = at < count ? frame.top : frame.bottom;
+		drawing_mode mode = DrawingMode();
+		float pen = PenSize();
+		SetDrawingMode(B_OP_INVERT);
+		SetPenSize(2);
+		StrokeLine(BPoint(frame.left, y), BPoint(frame.right, y));
+		SetDrawingMode(mode);
+		SetPenSize(pen);
+	}
+
+	void ShowInsertion(int32 at)
+	{
+		if (at == fInsertion)
+			return;
+		DrawInsertion(fInsertion);
+		fInsertion = at;
+		DrawInsertion(fInsertion);
+	}
+
+	// SlideMouseMoved, leaving the list: a row further a step while the
+	// pointer is above or below it, at once 60 pixels out, every 80 ms 20
+	// out, every 250 ms nearer; until the button is up or it's back
+	void AutoScroll()
+	{
+		BScrollView* scroll = dynamic_cast<BScrollView*>(Parent());
+		BScrollBar* bar = scroll != NULL ? scroll->ScrollBar(B_VERTICAL) : NULL;
+		if (bar == NULL || CountItems() == 0)
+			return;
+		float row = ItemFrame(0).Height() + 1;
+		bigtime_t last = system_time();
+		for (;;) {
+			BRect visible = Bounds().InsetByCopy(0, 2);
+			snooze(10000);
+			BPoint where;
+			uint32 buttons;
+			GetMouse(&where, &buttons, true);
+			bigtime_t now = system_time();
+			bool slow = now - last > 250000, fast = now - last > 80000;
+			float value = bar->Value();
+			if (where.y < visible.top) {
+				float out = visible.top - where.y;
+				if (out > 60 || (out > 20 && fast) || slow) {
+					bar->SetValue(value - row);
+					last = now;
+				}
+			} else if (where.y > visible.bottom) {
+				float out = where.y - visible.bottom;
+				if (out > 60 || (out > 20 && fast) || slow) {
+					bar->SetValue(value + row);
+					last = now;
+				}
+			}
+			if (buttons == 0 || Bounds().InsetByCopy(0, 2).Contains(where))
+				break;
+		}
+	}
+
+	int32 fInsertion = -1;
 };
 
 
