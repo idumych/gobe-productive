@@ -677,6 +677,42 @@ main(int argc, char** argv)
 		Check(reloaded.Chart(6) != nullptr && reloaded.WordPart(1) != nullptr,
 			"TheWidget: its chart and text still read");
 	}
+	// ---- Reshape with Option (TGRBezigon::Reshape): a point put in on
+	// an edge, a control point put back, one pulled out of a point ----
+	{
+		Shape path;
+		path.kind = Sig("BEZI");
+		path.origin[0] = 10;
+		path.origin[1] = 20;
+		path.paths.resize(1);
+		Vertex a{}, b{};
+		b.point[0] = 100;
+		a.flags = b.flags = 2;
+		path.paths[0].vertices = {a, b};
+		auto near = [](float x, float y) { return std::fabs(x - y) < 0.01f; };
+		Check(PathEdgeAt(path, 60, 21, 3) == 0 && PathEdgeAt(path, 60, 30, 3) == -1,
+			"an open path's edge within 3, not 10 away");
+		Check(InsertPathVertex(path, 60, 21, 3) == 1 && path.paths[0].vertices.size() == 3,
+			"a point put in after the first");
+		const std::vector<Vertex>& v = path.paths[0].vertices;
+		Check(near(v[1].point[0], 50) && near(v[1].point[1], 0)
+			&& near(v[1].control1[0], -25) && near(v[1].control2[0], 25) && v[1].flags == 0,
+			"where the click was, the curve split there (de Casteljau)");
+		Check(v[0].flags == 0 && v[2].flags == 0, "the points either side made corners");
+		Check(PathEdgeAt(path, 10, 20, 3) == -1, "a point isn't an edge");
+		RetractControlPoint(path, 1 * 2 + 1);
+		Check(near(v[1].control2[0], 0) && near(v[1].control2[1], 0) && near(v[1].control1[0], -25),
+			"a control point put back on its point");
+		Check(PulledControlPoint(path, 1) == 3, "the control after pulled out (the one before is out)");
+		Check(PulledControlPoint(path, 0) == 1, "an open path's first point: the one after");
+		path.paths[0].vertices[1].control2[0] = 30;
+		Check(PulledControlPoint(path, 1) == -1, "both out: the point itself moves");
+		path.paths[0].vertices[2].control1[0] = 0;
+		path.paths[0].vertices[2].flags = 2;
+		Check(PulledControlPoint(path, 2) == 4 && path.paths[0].vertices[2].flags == 0,
+			"the one before while it's on the point, the point a corner");
+	}
+
 	printf("draw_shapes: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed ? 1 : 0;
 }

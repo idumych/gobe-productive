@@ -294,6 +294,7 @@ private:
 	// the drawing tools (TPageDraw.cpp): a shape dragged out, moved or
 	// resized, the shape selected
 	struct ShapeDrag {
+		int pulled = -1;		// mode 8: the point the control was pulled from
 		int mode = 0;			// 1 creating, 2 moving, 3 resizing, 4 rotating,
 								// 5 reshaping (a point), 6 a rubber band, 7 a
 								// Bezier point's control pulled, 8 a control

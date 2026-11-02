@@ -454,7 +454,7 @@ HitGroup(const Document& doc, size_t part, float x, float y, size_t& layer, size
 // a shape (1103), the system's pointer elsewhere; rotating: the rotating
 // pointer on a handle (1106), the hand on a shape, else 1101; reshaping:
 // 1102 off the shapes, the cross on one that has no points, the hand on
-// it or its own pointer (1109) once it's selected, the arrow on one of
+// it or, with Option on its edge, its own pointer (1109), the arrow on one of
 // its points (1105), with Option the cross, or on a control point of a
 // path of more than two points 1107. -1 if not over a drawing, 0 the
 // system's pointer.
@@ -500,7 +500,6 @@ TPageView::DrawingCursor(BPoint where) const
 		if (handle)
 			shape = s;
 	}
-	bool selected = handle;
 	if (shape == NULL) {
 		size_t layer, index, groupLayer, groupIndex;
 		bool hit = HitShape(*fDocument.GraphicsPart(part), px, py, kTolerance,
@@ -511,10 +510,8 @@ TPageView::DrawingCursor(BPoint where) const
 			index = groupIndex;
 			hit = true;
 		}
-		if (hit) {
+		if (hit)
 			shape = ShapeAt(fDocument, part, layer, index);
-			selected = ShapeSelected(part, layer, index);
-		}
 	}
 	if (shape != NULL && ShapeLocked(*shape))
 		return 1108;
@@ -527,8 +524,10 @@ TPageView::DrawingCursor(BPoint where) const
 			std::vector<DrawPoint> points = ShapeVertices(*shape);
 			if (points.empty())
 				return 1100;
+			// (WantsNonHandleReshape: Option, not Shift, on the path's edge)
 			if (!handle)
-				return selected ? 1109 : 1103;
+				return (modifiers() & (B_OPTION_KEY | B_SHIFT_KEY)) == B_OPTION_KEY
+					&& PathEdgeAt(*shape, px, py, kTolerance) >= 0 ? 1109 : 1103;
 			if ((modifiers() & B_OPTION_KEY) == 0)
 				return 1105;
 			return control && points.size() > 2 ? 1107 : 1100;
@@ -630,6 +629,38 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 		int vertex = editable && fShapeMode == 2 && control < 0
 			? HitVertex(*s, px, py, kHandle + 1) : -1;
 		int handle = editable && fShapeMode != 2 ? HitHandle(*s, px, py, kHandle + 1) : -1;
+		// (TGRBezigon::Reshape with Option, without Shift: a control point
+		// put back on its point, a control point pulled out of a point, a
+		// point put in on an edge)
+		bool option = (modifiers() & B_OPTION_KEY) != 0;
+		if (editable && fShapeMode == 2 && option) {
+			if (control >= 0 || (vertex < 0 && PathEdgeAt(*s, px, py, kTolerance) >= 0)) {
+				fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, 14).String(),
+					CurrentViewState());
+				GRPart* gr = fDocument.EditableGraphicsPart(part);
+				Shape& shape = gr->layers[fShapes[0].layer].shapes[fShapes[0].index];
+				if (control >= 0)
+					RetractControlPoint(shape, control);
+				else
+					InsertPathVertex(shape, px, py, kTolerance);
+				Invalidate();
+				if (Window() != NULL)
+					Window()->PostMessage(kMsgDocumentChanged);
+				return true;
+			}
+			if (vertex >= 0) {
+				Shape copy = *s;
+				int pulled = PulledControlPoint(copy, vertex);
+				if (pulled >= 0) {
+					startDrag(8);
+					fShapeDrag.handle = pulled;
+					fShapeDrag.pulled = vertex;
+					ShapeBounds(*s, fShapeDrag.bounds);
+					fShapeDrag.angle = s->angle;
+					return true;
+				}
+			}
+		}
 		if (control >= 0 || vertex >= 0 || handle >= 0) {
 			startDrag(control >= 0 ? 8 : vertex >= 0 ? 5 : fShapeMode == 1 ? 4 : 3);
 			fShapeDrag.handle = control >= 0 ? control : vertex >= 0 ? vertex : handle;
@@ -902,8 +933,11 @@ TPageView::DrawingUp(BPoint where)
 			float turn = AngleAround(s, drag.now[0], drag.now[1])
 				- AngleAround(s, drag.start[0], drag.start[1]);
 			s.angle = std::fmod(std::round(drag.angle + turn) + 720.0f, 360.0f);
-		} else if (drag.mode == 8)
+		} else if (drag.mode == 8) {
+			if (drag.pulled >= 0)
+				PulledControlPoint(s, drag.pulled);
 			MoveControlPoint(s, drag.handle, drag.now[0], drag.now[1]);
+		}
 		else
 			MoveVertex(s, drag.handle, drag.now[0], drag.now[1]);
 	}

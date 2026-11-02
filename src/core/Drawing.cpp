@@ -528,6 +528,160 @@ MoveControlPoint(Shape& shape, int handle, float x, float y)
 }
 
 
+namespace {
+
+// a path's segment i (vertex i to the next): its four Bezier points
+// (drawing coordinates)
+bool
+Segment(const Shape& shape, size_t i, DrawPoint b[4])
+{
+	const std::vector<Vertex>& v = shape.paths[0].vertices;
+	size_t j = i + 1;
+	if (j == v.size()) {
+		if (!shape.paths[0].closed)
+			return false;
+		j = 0;
+	}
+	float ox = shape.origin[0], oy = shape.origin[1];
+	b[0] = {ox + v[i].point[0], oy + v[i].point[1]};
+	b[1] = {b[0][0] + v[i].control2[0], b[0][1] + v[i].control2[1]};
+	b[3] = {ox + v[j].point[0], oy + v[j].point[1]};
+	b[2] = {b[3][0] + v[j].control1[0], b[3][1] + v[j].control1[1]};
+	return true;
+}
+
+
+DrawPoint
+Lerp(const DrawPoint& a, const DrawPoint& b, float t)
+{
+	return {a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t};
+}
+
+
+DrawPoint
+BezierAt(const DrawPoint b[4], float t)
+{
+	DrawPoint ab = Lerp(b[0], b[1], t), bc = Lerp(b[1], b[2], t), cd = Lerp(b[2], b[3], t);
+	return Lerp(Lerp(ab, bc, t), Lerp(bc, cd, t), t);
+}
+
+} // namespace
+
+
+int
+PathEdgeAt(const Shape& shape, float x, float y, float tolerance, float* at)
+{
+	if (shape.kind != Sig("BEZI") || shape.paths.empty() || shape.paths[0].vertices.size() < 2)
+		return -1;
+	int best = -1;
+	float bestDistance = tolerance, bestT = 0;
+	for (size_t i = 0; i < shape.paths[0].vertices.size(); i++) {
+		DrawPoint b[4];
+		if (!Segment(shape, i, b))
+			continue;
+		// (TBezier::Search: the nearest point, sampled and then narrowed)
+		const int kSteps = 64;
+		float t0 = 0, d0 = 1e30f;
+		for (int k = 0; k <= kSteps; k++) {
+			float t = float(k) / kSteps;
+			DrawPoint p = BezierAt(b, t);
+			float d = std::hypot(p[0] - x, p[1] - y);
+			if (d < d0) {
+				d0 = d;
+				t0 = t;
+			}
+		}
+		float step = 1.0f / kSteps;
+		for (int round = 0; round < 12; round++) {
+			step /= 2;
+			for (float t : {t0 - step, t0 + step}) {
+				if (t < 0 || t > 1)
+					continue;
+				DrawPoint p = BezierAt(b, t);
+				float d = std::hypot(p[0] - x, p[1] - y);
+				if (d < d0) {
+					d0 = d;
+					t0 = t;
+				}
+			}
+		}
+		if (d0 <= bestDistance && t0 > 0 && t0 < 1) {
+			bestDistance = d0;
+			best = int(i);
+			bestT = t0;
+		}
+	}
+	if (at != nullptr)
+		*at = bestT;
+	return best;
+}
+
+
+int
+InsertPathVertex(Shape& shape, float x, float y, float tolerance)
+{
+	float t;
+	int i = PathEdgeAt(shape, x, y, tolerance, &t);
+	if (i < 0)
+		return -1;
+	std::vector<Vertex>& v = shape.paths[0].vertices;
+	size_t j = size_t(i) + 1 == v.size() ? 0 : size_t(i) + 1;
+	DrawPoint b[4];
+	Segment(shape, size_t(i), b);
+	// (de Casteljau: the two halves' control points)
+	DrawPoint ab = Lerp(b[0], b[1], t), bc = Lerp(b[1], b[2], t), cd = Lerp(b[2], b[3], t);
+	DrawPoint abc = Lerp(ab, bc, t), bcd = Lerp(bc, cd, t), at = Lerp(abc, bcd, t);
+	Vertex made{};
+	made.point[0] = at[0] - shape.origin[0];
+	made.point[1] = at[1] - shape.origin[1];
+	made.control1[0] = abc[0] - at[0];
+	made.control1[1] = abc[1] - at[1];
+	made.control2[0] = bcd[0] - at[0];
+	made.control2[1] = bcd[1] - at[1];
+	made.flags = 0;
+	v[size_t(i)].control2[0] = ab[0] - b[0][0];
+	v[size_t(i)].control2[1] = ab[1] - b[0][1];
+	v[j].control1[0] = cd[0] - b[3][0];
+	v[j].control1[1] = cd[1] - b[3][1];
+	v[size_t(i)].flags &= uint8_t(~6);
+	v[j].flags &= uint8_t(~6);
+	v.insert(v.begin() + i + 1, made);
+	return i + 1;
+}
+
+
+void
+RetractControlPoint(Shape& shape, int handle)
+{
+	if (shape.kind != Sig("BEZI") || shape.paths.empty() || handle < 0
+			|| size_t(handle / 2) >= shape.paths[0].vertices.size())
+		return;
+	Vertex& v = shape.paths[0].vertices[size_t(handle / 2)];
+	float* control = handle % 2 == 0 ? v.control1 : v.control2;
+	control[0] = control[1] = 0;
+}
+
+
+int
+PulledControlPoint(Shape& shape, int vertex)
+{
+	if (shape.kind != Sig("BEZI") || shape.paths.empty() || vertex < 0
+			|| size_t(vertex) >= shape.paths[0].vertices.size())
+		return -1;
+	Vertex& v = shape.paths[0].vertices[size_t(vertex)];
+	auto onPoint = [](const float c[2]) { return std::fabs(c[0]) < 2 && std::fabs(c[1]) < 2; };
+	bool first = vertex == 0 && !shape.paths[0].closed;
+	int handle;
+	if ((!onPoint(v.control1) && (v.flags & 1) == 0) || first)
+		handle = onPoint(v.control2) || ((v.flags & 1) != 0 && vertex == 0) ? vertex * 2 + 1 : -1;
+	else
+		handle = vertex * 2;
+	if (handle >= 0)
+		v.flags &= uint8_t(~6);
+	return handle;
+}
+
+
 void
 AlignShapes(std::vector<Shape*>& shapes, int alignX, int alignY)
 {

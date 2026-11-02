@@ -120,6 +120,19 @@ std::vector<std::pair<int, DrawPoint>> ControlPoints(const Shape& shape);
 int HitControlPoint(const Shape& shape, float x, float y, float tolerance);
 void MoveControlPoint(Shape& shape, int handle, float x, float y);
 
+// TGRBezigon::Reshape with Option: on a path's edge within `tolerance`
+// of the point (edge_intersect, TBezier::Search) a point put in where it
+// is, the curve split there and the points either side made corners; its
+// index, -1 if the point isn't on an edge (WantsNonHandleReshape)
+int PathEdgeAt(const Shape& shape, float x, float y, float tolerance, float* t = nullptr);
+int InsertPathVertex(Shape& shape, float x, float y, float tolerance);
+// on a control point: it put back on its point
+void RetractControlPoint(Shape& shape, int handle);
+// on a point: the control point a drag from it pulls out (the one before
+// while it's on the point, else the one after while that is; -1 if both
+// are out: the point itself moves), the point made a corner
+int PulledControlPoint(Shape& shape, int vertex);
+
 // Arrange > Lock, Unlock (TLockShapesCommand): TShape +0x24's 0x20; a
 // locked shape isn't moved, resized, reshaped or deleted
 const uint32_t kShapeLocked = 0x20;
