@@ -240,7 +240,9 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error,
 		FloatProperty("PTra", 1)});
 	uint32_t axisStyles[2] = {style(base, {}), style(base, {})};
 	uint32_t renderStyle = style(base, {FloatProperty("PTra", 0)});
-	uint32_t legendStyle = style(base, {ShortProperty("TSiz", 10)});
+	// (the legend's and the title's: the axes' one, TStyleManager::
+	// NewStyle finding it)
+	uint32_t legendStyle = style(base, {});
 	std::vector<uint32_t> seriesStyles;
 	for (uint32_t i = 0; i < series; i++) {
 		const uint8_t* c = kSeriesColors[i % 16];

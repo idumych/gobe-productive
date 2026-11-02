@@ -375,6 +375,29 @@ uint32_t
 Document::NewStyle(uint32_t type, const std::string& name, uint32_t flags, uint32_t parent,
 	const std::vector<Property>& properties)
 {
+	// TStyleManager::NewStylePtr: an unnamed style (flag 2 off) like one the
+	// document has (FindStylePtr, TStyle::operator<: its type, base, parent
+	// and properties) is that one
+	if (name.empty() && (flags & 2) == 0) {
+		std::vector<std::pair<uint32_t, std::vector<uint8_t>>> wanted;
+		for (const Property& p : properties)
+			wanted.emplace_back(p.type, p.data);
+		std::sort(wanted.begin(), wanted.end());
+		for (size_t i = 0; i < styles.styles.size(); i++) {
+			const Style& e = styles.styles[i];
+			if (e.value4 == 0 || e.value10 != type || !e.name.empty() || (e.value8 & 2) != 0
+					|| e.links[0] != parent || e.links[1] != kNoPart
+					|| e.props.size() != wanted.size())
+				continue;
+			std::vector<std::pair<uint32_t, std::vector<uint8_t>>> has;
+			for (uint32_t p : e.props)
+				if (p < styles.properties.size())
+					has.emplace_back(styles.properties[p].type, styles.properties[p].data);
+			std::sort(has.begin(), has.end());
+			if (has == wanted)
+				return uint32_t(i);
+		}
+	}
 	Style s;
 	s.id = Sig("STYL");
 	s.value4 = 1;		// the manager

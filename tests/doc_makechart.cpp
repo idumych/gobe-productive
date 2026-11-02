@@ -209,6 +209,13 @@ main(int argc, char** argv)
 			&& title->size[0] == 6 * 4 + 4 && title->size[1] == 16
 			&& title->origin[0] == 200 - 14 && title->origin[1] == 4,
 			"the corner cell a title, centered, 4 down");
+		// (as the original's charts have them: TStyleManager::NewStyle finds
+		// the style the axes made for the legend and the title; the plot's
+		// own, its pen transparent)
+		Check(c != nullptr && legend != nullptr && title != nullptr && plot != nullptr
+			&& legend->style == c->axes[0].style && title->style == c->axes[0].style
+			&& c->axes[1].style == c->axes[0].style && plot->style != legend->style,
+			"one style for the axes, the legend and the title; the plot's its own");
 	}
 
 	{
