@@ -34,7 +34,7 @@ public:
 	void TypeSpacing(const char* text);
 
 private:
-	void Build(bool text, uint16 kind);
+	void Build(bool text, uint16 kind, bool table = false);
 	// TPartSS::AddPartBarElements
 	void BuildSheet();
 	// TPartSS::PartBarUpdateContents
@@ -49,6 +49,7 @@ private:
 	size_t fShapeCount = size_t(-1);
 	TSpacingEdit* fSpacing = NULL;
 	bool fText = false;
+	bool fTable = false;		// the caret in a table's cells: its elements after
 	uint16 fKind = 0;
 	// what Update last showed
 	int32 fAlignment = -2;

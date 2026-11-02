@@ -70,6 +70,7 @@ CheckTable(const Document& doc, size_t part, const std::string& when)
 	}
 	const WPPart* wp = doc.WordPart(table->textPart);
 	Check(wp != nullptr && wp->paragraphs.size() == 13, when + ": 12 cells + 1 paragraphs");
+	Check(wp != nullptr && wp->version98 == 2, when + ": the text part's +0x98 2");
 	if (wp != nullptr)
 		for (size_t p = 0; p < wp->paragraphs.size(); p++)
 			Check(wp->paragraphs[p].text == (p < 12 ? std::string("\x05") : std::string()),

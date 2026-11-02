@@ -397,6 +397,24 @@ CellHAlignProperty(int align)
 }
 
 
+int
+StyleVerticalAlignment(const StyleMgr& styles, uint32_t style)
+{
+	for (int depth = 0; style < styles.styles.size() && depth < 32; depth++) {
+		const Style& s = styles.styles[style];
+		for (uint32_t p : s.props)
+			if (p < styles.properties.size() && styles.properties[p].type == Sig("VAln")
+					&& styles.properties[p].data.size() >= 2) {
+				DocArchive a(styles.properties[p].data);
+				a.SetVersions(2, 0, 0x1e);
+				return a.Int16();
+			}
+		style = s.links[0];
+	}
+	return 0;
+}
+
+
 Property
 CellVAlignProperty(int align)
 {

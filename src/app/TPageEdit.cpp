@@ -5913,7 +5913,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sM73': case 'sM74':
 		case 'sTB0': case 'sTB1': case 'sTB2': case 'sTB3': case 'sTB4':	// Table
 		case 'sTB5': case 'sTB6': case 'sTB7': case 'sTB8': case 'sTB9':
-		case 'sTBA':
+		case 'sTBA': case 'sTBB': case 'sTBC': case 'sTBD':
 		case 's00T':	// Make Chart
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange
 		case 'sM4A': case 'sM4B': case 'sM4C':

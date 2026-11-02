@@ -52,6 +52,9 @@ int CellHAlign(const CellStyle& style, const SSValue& value);
 Property NumberFormatProperty(const std::string& format);	// 'SSNm'
 Property CellHAlignProperty(int align);		// 'HAln'
 Property CellVAlignProperty(int align);		// 'VAln'
+// the vertical alignment a style has, its own or a parent's 'VAln' (1 top,
+// 2 center, 3 bottom), 0 for none (TStyleID::GetProperty)
+int StyleVerticalAlignment(const StyleMgr& styles, uint32_t style);
 Property CellWrapProperty(bool wrap);		// 'ClWp'
 Property CellFillProperty(Color color);		// 'FCol', solid ink
 Property FillTransparencyProperty(float opacity);	// 'FTra', 0 to 1

@@ -441,6 +441,7 @@ TPageView::LayoutText()
 			size_t part;
 			FrameGeometry geometry;
 			uint32_t from, to;
+			uint32_t style;		// its frame's (a table cell's: 'VAln')
 		};
 		std::vector<CellFlow> cellFlows;
 		for (const auto& f : fFrames) {
@@ -462,7 +463,7 @@ TPageView::LayoutText()
 				r.bottom = r.top + f.height;
 				g.rect = r;
 				cellFlows.push_back({f.part, g, f.frame->textStart,
-					f.frame->textStart + f.frame->textLength});
+					f.frame->textStart + f.frame->textLength, f.frame->style});
 				continue;
 			}
 			if (it == flows.end())
@@ -504,8 +505,30 @@ TPageView::LayoutText()
 				}
 			}
 		}
-		for (const CellFlow& cell : cellFlows)
+		for (const CellFlow& cell : cellFlows) {
+			size_t mark = fLines.size();
 			LayoutPart(cell.part, {cell.geometry}, cell.from, cell.to);
+			// a table cell's text centered or at the bottom of its frame
+			// ('VAln': TWPFrame), as far from it as from the top
+			int align = StyleVerticalAlignment(fDocument.styles, cell.style);
+			if ((align != 2 && align != 3) || mark == fLines.size())
+				continue;
+			float top = fLines[mark].frame.top, bottom = fLines[mark].frame.bottom;
+			for (size_t k = mark; k < fLines.size(); k++) {
+				top = std::min(top, fLines[k].frame.top);
+				bottom = std::max(bottom, fLines[k].frame.bottom);
+			}
+			const BRect& rect = cell.geometry.rect;
+			float room = (rect.bottom - (top - rect.top)) - bottom;
+			float dy = align == 2 ? floorf(room / 2) : room;
+			if (dy <= 0)
+				continue;
+			for (size_t k = mark; k < fLines.size(); k++) {
+				fLines[k].frame.OffsetBy(0, dy);
+				fLines[k].baseline += dy;
+				fLines[k].center.y += dy;
+			}
+		}
 		// the frames in the text where the lines put them (relative to their
 		// text's first frame); the frames placed again if one moved
 		bool movedInline = false;

@@ -203,6 +203,100 @@ TPageView::TableMenuState(bool& merge, bool& split) const
 }
 
 
+std::vector<int>
+TPageView::TableCellFrames(size_t& table, TableEdit& edit) const
+{
+	// TTablePart::GetSelectedFrames: the selected cells', else the caret's
+	std::vector<int> numbers;
+	int row, column;
+	if (!CaretCell(table, edit, row, column))
+		return numbers;
+	std::vector<const TableEditCell*> cells;
+	if (fTableCells.active && fTableCells.table == table)
+		cells = edit.Selected(fTableCells.selection);
+	else if (const TableEditCell* c = edit.Cell(row, column))
+		cells.push_back(c);
+	for (size_t k = 0; k < edit.frameOrder.size(); k++)
+		for (const TableEditCell* c : cells)
+			if (c->id == edit.frameOrder[k])
+				numbers.push_back(int(k));
+	return numbers;
+}
+
+
+int
+TPageView::TableVerticalAlignment() const
+{
+	// TVertAlignMenuElement::FixMenu: what the cells' frames all have (-1
+	// mixed), Align Top with none
+	size_t table;
+	TableEdit edit;
+	std::vector<int> numbers = TableCellFrames(table, edit);
+	const TablePart* t = fDocument.Table(table);
+	if (numbers.empty() || t == NULL)
+		return 1;
+	int seen = 0;
+	for (const Portal& portal : fDocument.tails[t->textPart].portals) {
+		if (portal.part != table)
+			continue;
+		for (const gobe::Frame& f : portal.frames) {
+			if (std::find(numbers.begin(), numbers.end(), int(f.values[1])) == numbers.end())
+				continue;
+			int align = StyleVerticalAlignment(fDocument.styles, f.style);
+			if (align == 0)
+				align = 1;
+			if (seen != 0 && seen != align)
+				return -1;
+			seen = align;
+		}
+	}
+	return seen != 0 ? seen : 1;
+}
+
+
+// the Table part bar's vertical alignment ('sTBB' top, 'sTBC' center,
+// 'sTBD' bottom; TTablePartFormatCommand, TPropVAlign): 'VAln' in the
+// cells' frames' styles
+void
+TPageView::VerticallyAlign(int align)
+{
+	size_t table;
+	TableEdit edit;
+	std::vector<int> numbers = TableCellFrames(table, edit);
+	const TablePart* t = fDocument.Table(table);
+	if (numbers.empty() || t == NULL) {
+		beep();
+		return;
+	}
+	// (TFormatCommand::CommandName: "Set " and the property's name)
+	std::string name = std::string(GobeResources::IndexString(5, 5).String())
+		+ GobeResources::IndexString(11, 25).String();
+	fUndo.BeginDocument(fDocument, name, CurrentViewState());
+	bool changed = false;
+	for (Portal& portal : fDocument.tails[t->textPart].portals) {
+		if (portal.part != table)
+			continue;
+		for (gobe::Frame& f : portal.frames) {
+			if (std::find(numbers.begin(), numbers.end(), int(f.values[1])) == numbers.end())
+				continue;
+			uint32_t style = StyleWithProperty(fDocument.styles, f.style, CellVAlignProperty(align));
+			if (style != f.style) {
+				f.style = style;
+				changed = true;
+			}
+		}
+	}
+	if (!changed)
+		return;
+	fDocument.stylesChanged = true;
+	fDocument.dirtyTails.insert(t->textPart);
+	GeometryChanged();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	Invalidate();
+}
+
+
 bool
 TPageView::TableCommand(BMessage* message)
 {
@@ -218,6 +312,9 @@ TPageView::TableCommand(BMessage* message)
 		case 'sTB7': name = "Distribute Columns"; break;
 		case 'sTB8': case 'sTB9': break;
 		case 'sTBA': name = "Set Cell Gutter"; break;
+		case 'sTBB': case 'sTBC': case 'sTBD':
+			VerticallyAlign(message->what == 'sTBB' ? 1 : message->what == 'sTBC' ? 2 : 3);
+			return true;
 		default:
 			return false;
 	}

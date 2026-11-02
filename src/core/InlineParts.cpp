@@ -373,6 +373,16 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 	// the text part: a paragraph per cell, then the cells' paragraphs
 	doc.parts.parts.push_back({Sig("WORD"), 0, WordPartRecord(id + 1, textSelection,
 		wordStyles.paragraph, wordStyles.run, false, 0)});
+	{
+		// (TTablePart::TTablePart: the text part's +0x98, after 'wp++', is 2)
+		std::vector<uint8_t>& data = doc.parts.parts.back().data;
+		DocWriter sig, two;
+		sig.Sig(Sig("wp++"));
+		two.UInt16(2);
+		auto at = std::search(data.begin(), data.end(), sig.Data().begin(), sig.Data().end());
+		if (at != data.end() && at + 4 + 2 <= data.end())
+			std::copy(two.Data().begin(), two.Data().end(), at + 4);
+	}
 	doc.tails.resize(doc.parts.parts.size());
 	doc.tailRead.resize(doc.parts.parts.size(), false);
 	try {

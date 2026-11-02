@@ -165,6 +165,43 @@ private:
 };
 
 
+const ResourceFile&
+TableResources()
+{
+	return GobeResources::Part("Table");
+}
+
+
+// TVertAlignMenuElement (a TMICNMenuElement, MICN 104 of the Table part):
+// MENU 200 (Align Top, Center, Bottom: 'sTBB' to 'sTBD'), FixMenu marking
+// what the cells have (Align Top for none)
+class TTableVAlignElement : public TMenuElement {
+public:
+	TTableVAlignElement(BRect rect, TPageView* pages)
+		:
+		TMenuElement('tb01', rect, NULL, TMICNElement::LoadIcon(104, &TableResources())),
+		fPages(pages)
+	{
+		tip = IndexString(TableResources(), 100, 0);
+	}
+
+	virtual void FillMenu(BPopUpMenu* menu, TRibbon* ribbon)
+	{
+		TMenu source(200, TableResources());
+		int32 align = fPages->TableVerticalAlignment();
+		int32 index = 0;
+		while (source.CountItems() > 0) {
+			BMenuItem* item = source.RemoveItem((int32)0);
+			item->SetMarked(++index == align);
+			menu->AddItem(item);
+		}
+	}
+
+private:
+	TPageView* fPages;
+};
+
+
 // TArrowsMenu (a TMICNMenuElement, MICN 0x1c): the arrows of the
 // selected lines and paths as line samples, sending 'sf0F' with the
 // value (STR# 11, 20-23: none, at the start, at the end, both ends)
@@ -380,7 +417,7 @@ TPartBar::TPartBar(TPageView* pages)
 // TPartBar::LoadAllElements (the part's icon at 5, 4) and TWPPart::
 // AddPartBarElements
 void
-TPartBar::Build(bool text, uint16 kind)
+TPartBar::Build(bool text, uint16 kind, bool table)
 {
 	RemoveAllElements();
 	if (fSpacing != NULL) {
@@ -389,13 +426,15 @@ TPartBar::Build(bool text, uint16 kind)
 		fSpacing = NULL;
 	}
 	fText = text;
+	fTable = table;
 	fSheet = false;
 	fDrawing = false;
 	fKind = kind;
 	fAlignment = -2;
 	fLineSpacing = -1;
 	fColumns = -1;
-	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4), text ? PartIcon('WORD') : NULL);
+	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4),
+		text ? PartIcon(table ? 'TBLE' : 'WORD') : NULL);
 	part->tip = GobeResources::IndexString(4, 23).String();
 	AddElement(part);
 	if (!text)
@@ -455,6 +494,24 @@ TPartBar::Build(bool text, uint16 kind)
 	button = new TMICNButtonElement('INVS', r.LeftTop(), 0x4b9, new BMessage('sM5J'));
 	button->tip = tip(17);
 	AddElement(button);
+	if (!table)
+		return;
+
+	// TTablePart::AddPartBarElements: the vertical alignment, Insert
+	// Column, Insert Row, Merge Cells and Split Cell (MICN 100-103, the
+	// tips STR# 100 of the Table part)
+	BRect menu(r.right + 12, 2, r.right + 12 + 25, 21);
+	AddElement(new TTableVAlignElement(menu, fPages));
+	static const uint32 kCommands[4] = {'sTB3', 'sTB2', 'sTB0', 'sTB1'};
+	static const float kAfter[4] = {26, 22, 26, 22};
+	BPoint at(menu.left, 2);
+	for (int32 i = 0; i < 4; i++) {
+		at.x += kAfter[i];
+		button = new TMICNButtonElement('tb02' + i, at,
+			TMICNElement::LoadIcon(100 + i, &TableResources()), new BMessage(kCommands[i]));
+		button->tip = IndexString(TableResources(), 100, i + 1);
+		AddElement(button);
+	}
 }
 
 
@@ -607,10 +664,18 @@ TPartBar::Update()
 		return;
 	}
 	uint16 kind = text ? wp->version98 : 0;
-	if (text != fText || kind != fKind || fSheet || fDrawing)
-		Build(text, kind);
+	bool table = text && doc.TableOfText(fPages->fCaret.part) >= 0;
+	if (text != fText || kind != fKind || table != fTable || fSheet || fDrawing)
+		Build(text, kind, table);
 	if (!text)
 		return;
+	if (table) {
+		// TTablePart::PartBarUpdateContents: Merge Cells and Split Cell
+		bool merge, split;
+		fPages->TableMenuState(merge, split);
+		SetEnabled('tb04', merge);
+		SetEnabled('tb05', split);
+	}
 
 	auto range = fPages->TextSelectionRange();
 	size_t first = std::min(range.first.paragraph, wp->paragraphs.size() - 1);

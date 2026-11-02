@@ -365,8 +365,11 @@ private:
 	bool TableDragMoved(const Caret& at);
 	void DrawTableSelection(float dx, float dy);
 	bool TableCommand(BMessage* message);
+	std::vector<int> TableCellFrames(size_t& table, TableEdit& edit) const;
+	void VerticallyAlign(int align);
 public:
 	void TableMenuState(bool& merge, bool& split) const;
+	int TableVerticalAlignment() const;
 private:
 	struct TableCells {
 		bool active = false;
