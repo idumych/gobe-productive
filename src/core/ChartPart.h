@@ -64,6 +64,11 @@ struct ChartPart {
 	ChartAxis axes[2];
 	uint32_t seriesKind = 0;
 	std::vector<ChartSeriesSet> sets;
+	// T2DXYChart ('2DXY'): the axes above (T2DXAxis, T2DVerticalAxis), its
+	// minor type (scatter 0, line 1) and how many series it gave their
+	// symbols (field 0x7c)
+	uint32_t xyMinor = 0;
+	uint32_t xyStyled = 0;
 	// other chart types: what their Write adds after TChart's, as written
 	std::vector<uint8_t> chartBody;
 	// TChartPart::Write's last two u32 (format >= 0x11)
@@ -71,10 +76,17 @@ struct ChartPart {
 	// where 'cht+' (after the graphics) starts and the closing 'cht-' ends
 	size_t sectionStart = 0, sectionEnd = 0;
 
-	// the cached value of series s at category c (data is series-major)
+	// the cached value of physical series s (a column or row of the
+	// cells) at category c (data is series-major)
 	float Value(size_t s, size_t c) const;
 	size_t Categories() const { return data.values[0]; }
-	size_t SeriesCount() const { return data.values[1]; }
+	// TDataAccessor::CalcLogicalSeries: the chart's series by its data's
+	// format (+0x44): each a physical series (0), an x and a y one (1:
+	// T2DXYChart), or y ones sharing the first's x (2)
+	size_t SeriesCount() const;
+	// GetPhysicalSeries: the physical series of series s's value `which`
+	// (0 x, 1 y)
+	size_t PhysicalSeries(size_t s, int which) const;
 };
 
 // `a` is positioned at the part record; reads the graphics and the chart
@@ -123,7 +135,7 @@ bool ShowChartPiece(Document& doc, size_t chart, uint32_t kind, bool show,
 // read again from the cells (TDataAccessor::DataChanged), the chart's
 // series following (their names; the styles they had, new ones as
 // MakeChart makes them). False if the chart has no cells.
-bool ToggleChartSeriesOrder(Document& doc, size_t chart);
+bool ToggleChartSeriesOrder(Document& doc, size_t chart, const TextMeasure& measure = nullptr);
 
 // T2DXYAxisChart::DataChanged: series past the data's taken out of their
 // sets (a set left empty dropped), those in no set added to the last (an
@@ -144,12 +156,29 @@ float ChartAxisStep(const ChartAxis& axis);
 // Line/Area, XY) and minor type (TChartPart +0xb4, +0xb8)
 void ChartTypeOf(const ChartPart& chart, uint32_t& major, uint32_t& minor);
 
+// TDataAccessor::SetDataFormat, CalcLogicalSeries: the data's format
+// (+0x44) and its counts of series and of values a point
+void SetChartDataFormat(ChartData& data, uint32_t format);
+// TChart::DataChanged: the legend's series as many as the data's, named
+// from it, keeping their styles (more as MakeChart makes them)
+void SyncChartSeries(Document& doc, ChartPart& chart);
+// T2DXYChart::SetLegendAttributes for the series not given theirs yet: a
+// scatter chart's a symbol and color each, no line; a line chart's a line
+void StyleXYSeries(Document& doc, ChartPart& chart);
+
 // TChangeChartTypeCmd::Perform: the chart made again as the type (major,
-// minor) from what it shows (its legend; new axes; its series sets made
-// for the type) and its camera placed. The types with axes in 2D so far:
-// bar (0, 0), line, area, stacked area (2, 0 to 2); false for the others
-// or a chart that isn't one of them.
-bool ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor);
+// minor) from what it shows (its legend; new axes; its series sets or
+// symbols made for the type; its data read in the type's format) and its
+// camera placed. The 2D types so far: bar (0, 0), line, area, stacked
+// area (2, 0 to 2), XY scatter and line (3, 0 and 1); false for the
+// others or a chart that isn't 2D.
+bool ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor,
+	const TextMeasure& measure = nullptr);
+
+// TLegendPiece::FixSize (TChartPart::DataChanged): the legend as many
+// series high (TChartLegend: 12 each, 4 more) and its widest series' name
+// (each in its series' style) 21 wider; without `measure`, only its height
+void FixChartLegend(ChartPart& chart, const TextMeasure& measure);
 
 // Make Chart (the PartBar's button and the Options menu: 's00T' with Kind
 // 'chrt', TDocWindow::DoInsertFrame): a new chart part (TChartPart::

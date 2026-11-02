@@ -2139,7 +2139,7 @@ void
 TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 {
 	const ChartPart& chart = *fDocument.Chart(f.part);
-	if (chart.chartType == Sig("2DSM")) {
+	if (chart.chartType == Sig("2DSM") || chart.chartType == Sig("2DXY")) {
 		DrawChart2D(chart, r);
 		return;
 	}

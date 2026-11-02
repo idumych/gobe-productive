@@ -257,7 +257,7 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error,
 	std::vector<uint32_t> seriesStyles;
 	for (uint32_t i = 0; i < series; i++) {
 		const uint8_t* c = kSeriesColors[i % 16];
-		seriesStyles.push_back(style(base, {InkProperty("FCol", c[0], c[1], c[2], 0),
+		seriesStyles.push_back(style(base, {InkProperty("FCol", c[0], c[1], c[2], 0xff),
 			InkProperty("chSC", 0, 0, 0, 0xff), ShortProperty("chSM", 0),
 			ShortProperty("chSS", 6)}));
 	}
@@ -730,8 +730,77 @@ ShowChartPiece(Document& doc, size_t chart, uint32_t kind, bool show, const Text
 }
 
 
+void
+SetChartDataFormat(ChartData& data, uint32_t format)
+{
+	data.value44 = format;
+	uint32_t physical = data.values[1];
+	data.values[2] = format == 1 ? physical / 2 : format == 2 ? (physical > 0 ? physical - 1 : 0)
+		: physical;
+	data.values[3] = format == 0 ? 1 : 2;
+}
+
+
+void
+SyncChartSeries(Document& doc, ChartPart& chart)
+{
+	// the series' styles: the ones they had, more as MakeChart makes them
+	size_t count = chart.SeriesCount();
+	uint32_t base = FindNamedStyle(doc.styles, "GR Default");
+	if (base >= doc.styles.styles.size())
+		base = FindNamedStyle(doc.styles, "Default");
+	std::vector<ChartSeries> series;
+	for (size_t i = 0; i < count; i++) {
+		ChartSeries s;
+		s.name = i < chart.data.names2.size() ? chart.data.names2[i]
+			: "Series " + std::to_string(i + 1);
+		if (i < chart.series.size())
+			s.style = chart.series[i].style;
+		else {
+			const uint8_t* color = kSeriesColors[i % 16];
+			s.style = doc.NewStyle(Sig("Basi"), "", 0x20, base, {InkProperty("FCol",
+				color[0], color[1], color[2], 0xff), InkProperty("chSC", 0, 0, 0, 0xff),
+				ShortProperty("chSM", 0), ShortProperty("chSS", 6)});
+			doc.styles.styles[s.style].value4++;
+		}
+		series.push_back(s);
+	}
+	chart.series = series;
+}
+
+
+void
+StyleXYSeries(Document& doc, ChartPart& chart)
+{
+	// T2DXYChart::SetLegendAttributes: a scatter chart's series each a
+	// symbol of its own ((s + 1) mod 7), in its default color, without a
+	// line (PTra 0); a line chart's with a line (PTra 1)
+	for (size_t i = chart.xyStyled; i < chart.series.size(); i++) {
+		std::vector<Property> properties;
+		if (chart.xyMinor == 0) {
+			const uint8_t* color = kSeriesColors[i % 16];
+			properties = {ShortProperty("chSM", uint16_t((i + 1) % 7)),
+				InkProperty("chSC", color[0], color[1], color[2], 0xff), FloatProperty("PTra", 0)};
+		} else
+			properties = {FloatProperty("PTra", 1)};
+		uint32_t style = chart.series[i].style;
+		for (const Property& property : properties) {
+			uint32_t made = StyleWithProperty(doc.styles, style, property);
+			if (made == style)
+				continue;
+			doc.styles.styles[made].value4++;
+			if (style < doc.styles.styles.size() && doc.styles.styles[style].value4 > 1)
+				doc.styles.styles[style].value4--;
+			style = made;
+		}
+		chart.series[i].style = style;
+	}
+	chart.xyStyled = uint32_t(chart.series.size());
+}
+
+
 bool
-ToggleChartSeriesOrder(Document& doc, size_t chart)
+ToggleChartSeriesOrder(Document& doc, size_t chart, const TextMeasure& measure)
 {
 	size_t sheet;
 	SSRange range;
@@ -744,40 +813,61 @@ ToggleChartSeriesOrder(Document& doc, size_t chart)
 	data.link = current->data.link;
 	if (data.values[1] == 0)
 		return false;
-	// the series' styles: the ones they had, more as MakeChart makes them
-	std::vector<uint32_t> styles;
-	for (const ChartSeries& s : current->series)
-		styles.push_back(s.style);
-	uint32_t base = FindNamedStyle(doc.styles, "GR Default");
-	if (base >= doc.styles.styles.size())
-		base = FindNamedStyle(doc.styles, "Default");
-	for (uint32_t i = uint32_t(styles.size()); i < data.values[1]; i++) {
-		const uint8_t* color = kSeriesColors[i % 16];
-		uint32_t made = doc.NewStyle(Sig("Basi"), "", 0x20, base, {InkProperty("FCol",
-			color[0], color[1], color[2], 0), InkProperty("chSC", 0, 0, 0, 0xff),
-			ShortProperty("chSM", 0), ShortProperty("chSS", 6)});
-		doc.styles.styles[made].value4++;
-		styles.push_back(made);
-	}
+	uint32_t format = current->data.value44;
 	ChartPart* c = doc.EditableChart(chart);
 	if (c == nullptr)
 		return false;
 	c->data = data;
-	c->series.clear();
-	for (uint32_t i = 0; i < data.values[1]; i++) {
-		ChartSeries s;
-		s.name = i < data.names2.size() ? data.names2[i] : "Series " + std::to_string(i + 1);
-		s.style = styles[i];
-		c->series.push_back(s);
-	}
+	SetChartDataFormat(c->data, format);
+	SyncChartSeries(doc, *c);
+	if (c->chartType == Sig("2DXY"))
+		StyleXYSeries(doc, *c);
 	ChartSeriesChanged(*c);
+	FixChartLegend(*c, measure);
 	return true;
+}
+
+
+void
+FixChartLegend(ChartPart& chart, const TextMeasure& measure)
+{
+	chart.legendRect[3] = chart.legendRect[1] + float(chart.series.size() * 12 + 4);
+	for (GRLayer& layer : chart.graphics.layers)
+		for (Shape& legend : layer.shapes) {
+			if (legend.kind != Sig("Lgnd"))
+				continue;
+			if (measure) {
+				float widest = 0;
+				for (const ChartSeries& s : chart.series) {
+					float w = 0, h = 0;
+					measure(s.name, s.style, w, h);
+					widest = std::max(widest, w);
+				}
+				legend.size[0] = widest + 10 + 11;
+			}
+			legend.size[1] = chart.legendRect[3] - chart.legendRect[1];
+		}
 }
 
 
 void
 ChartSeriesChanged(ChartPart& chart)
 {
+	if (chart.chartType == Sig("2DXY")) {
+		// T2DXYChart::FindMinMax: the x values' range and the y values'
+		// (TDataAccessor::FindMinMax: each from 0)
+		float range[2][2] = {{0, 0}, {0, 0}};
+		for (size_t c = 0; c < chart.Categories(); c++)
+			for (size_t s = 0; s < chart.SeriesCount(); s++)
+				for (int which = 0; which < 2; which++) {
+					float v = chart.Value(chart.PhysicalSeries(s, which), c);
+					range[which][0] = std::min(range[which][0], v);
+					range[which][1] = std::max(range[which][1], v);
+				}
+		SetRange(chart.axes[0], range[0][0], range[0][1], -1);
+		SetRange(chart.axes[1], range[1][0], range[1][1], -1);
+		return;
+	}
 	if (chart.chartType != Sig("2DSM"))
 		return;
 	int32_t count = int32_t(chart.SeriesCount());
@@ -876,26 +966,33 @@ ChartTypeOf(const ChartPart& chart, uint32_t& major, uint32_t& minor)
 
 
 bool
-ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor)
+ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor,
+	const TextMeasure& measure)
 {
 	// T2DXYAxisChart's kinds: bar (0, 0), line, area and stacked area
-	// (2, 0 to 2)
+	// (2, 0 to 2); T2DXYChart: scatter and line (3, 0 and 1)
 	int32_t kind = -1;
+	bool xy = false;
 	if (major == 0 && minor == 0)
 		kind = 0;
 	else if (major == 2 && minor <= 2)
 		kind = int32_t(minor) + 1;
-	if (kind < 0)
+	else if (major == 3 && minor <= 1)
+		xy = true;
+	if (kind < 0 && !xy)
 		return false;
+	size_t sheet = 0;
+	SSRange range;
+	bool cells = ChartCells(doc, chart, sheet, range);
 	ChartPart* c = doc.EditableChart(chart);
-	if (c == nullptr || c->chartType != Sig("2DSM"))
+	if (c == nullptr || (c->chartType != Sig("2DSM") && c->chartType != Sig("2DXY")))
 		return false;
 	c->partValues[0] = major;
 	c->partValues[1] = minor;
-	// T2DXYAxisChart(TChart const&, ...): the legend kept (its series'
-	// styles copied: the same ones), new axes (TAxis: a style each on "GR
-	// Default", by its data, the horizontal without gridlines), no sets;
-	// Init makes them
+	// T2DXYAxisChart(TChart const&, ...), T2DXYChart(TChart const&, ...):
+	// the legend kept (its series' styles copied: the same ones), new axes
+	// (TAxis: a style each on "GR Default", by its data; T2DXYAxisChart's
+	// horizontal one without gridlines), no sets
 	uint32_t base = FindNamedStyle(doc.styles, "GR Default");
 	if (base >= doc.styles.styles.size())
 		base = FindNamedStyle(doc.styles, "Default");
@@ -906,13 +1003,41 @@ ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor)
 		axis.style = doc.NewStyle(Sig("Basi"), "", 0x20, base, {});
 		doc.styles.styles[axis.style].value4++;
 	}
-	c->axes[0].flags[1] = false;
 	c->chartValue8 = 0;
 	c->surfaceLabels.clear();
-	c->chartFlags = 0x8002;
-	c->seriesKind = uint32_t(kind);
 	c->sets.clear();
+	c->seriesKind = 0;
+	c->xyMinor = 0;
+	c->xyStyled = 0;
+	if (xy) {
+		c->chartType = Sig("2DXY");
+		c->chartFlags = 2;
+		c->xyMinor = minor;
+	} else {
+		c->chartType = Sig("2DSM");
+		c->axes[0].flags[1] = false;
+		c->chartFlags = 0x8002;
+		c->seriesKind = uint32_t(kind);
+	}
+	// TChartPart::SetNewChartPtr: a series direction taken from the cells'
+	// shape now taken from the chart (its flags' bit 2), the data read
+	// again; the chart's data format (TDataAccessor::SetDataFormat: an XY
+	// chart's series in pairs, x and y)
+	if (c->data.value40 < 2) {
+		uint32_t mode = (c->chartFlags >> 2) & 1;
+		if (mode != c->data.value40 && cells) {
+			ChartData data = ChartDataOf(doc, sheet, range, mode);
+			data.link = c->data.link;
+			c->data = data;
+		}
+		c->data.value40 = mode;
+	}
+	SetChartDataFormat(c->data, xy ? 1 : 0);
+	SyncChartSeries(doc, *c);
+	if (xy)
+		StyleXYSeries(doc, *c);
 	ChartSeriesChanged(*c);
+	FixChartLegend(*c, measure);
 	// PositionCamera: the 2D charts' camera
 	for (GRLayer& layer : c->graphics.layers)
 		for (Shape& shape : layer.shapes) {

@@ -11,6 +11,7 @@
 #include "ChartPart.h"
 #include "Document.h"
 #include "Editing.h"
+#include "Styles.h"
 
 using namespace gobe;
 
@@ -164,6 +165,45 @@ main()
 			Check(high == 13, "read back: the vertical axis to the largest sum");
 			Check(s != nullptr && s->partValues[0] == 2 && s->partValues[1] == 2,
 				"read back: its type");
+
+			// XY scatter (T2DXYChart, its data in pairs: Apples x, Pears y,
+			// Plums left over: one series), each series a symbol, no line;
+			// then bars again (one value a point, three series)
+			Check(ChangeChartType(stacked, chart, 3, 0), "XY scatter");
+			const ChartPart* xy = stacked.Chart(chart);
+			Check(xy != nullptr && xy->chartType == Sig("2DXY") && xy->data.value44 == 1
+				&& xy->SeriesCount() == 1 && xy->series.size() == 1 && xy->xyMinor == 0
+				&& xy->xyStyled == 1, "XY: one series of x and y");
+			if (xy != nullptr && !xy->series.empty()) {
+				ShapeStyle st = ResolveShapeStyle(stacked.styles, xy->series[0].style);
+				Check(st.penOpacity == 0, "XY scatter: no line (PTra 0)");
+				bool symbol = false;
+				ForEachStyleProperty(stacked.styles, xy->series[0].style, [&](const Property& p) {
+					if (p.type == Sig("chSM") && p.data.size() >= 2)
+						symbol = p.data[0] == 0 && p.data[1] == 1;
+				});
+				Check(symbol, "XY scatter: the first series' symbol 1");
+			}
+			float xHigh = 0, yHigh = 0;
+			if (xy != nullptr) {
+				memcpy(&xHigh, &xy->axes[0].values[1], sizeof xHigh);
+				memcpy(&yHigh, &xy->axes[1].values[1], sizeof yHigh);
+			}
+			Check(xHigh == 7 && yHigh == 5, "XY: the axes from the x (Apples) and y (Pears) values");
+			const Shape* xyLegend = xy != nullptr ? Piece(*xy, Sig("Lgnd")) : nullptr;
+			Check(xyLegend != nullptr && xyLegend->size[1] == 12 + 4,
+				"XY: the legend one series high (TLegendPiece::FixSize)");
+			Document xyBack;
+			if (Reopen(stacked, xyBack, "doc_chartsave_5.gobe")) {
+				const ChartPart* x = xyBack.Chart(chart);
+				Check(x != nullptr && x->chartType == Sig("2DXY") && x->xyMinor == 0
+					&& x->xyStyled == 1 && x->partValues[0] == 3, "read back: XY scatter");
+				Check(ChangeChartType(xyBack, chart, 0, 0), "bars again");
+				const ChartPart* bars = xyBack.Chart(chart);
+				Check(bars != nullptr && bars->chartType == Sig("2DSM") && bars->data.value44 == 0
+					&& bars->SeriesCount() == 3 && bars->series.size() == 3,
+					"bars again: three series");
+			}
 		}
 	}
 

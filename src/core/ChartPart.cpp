@@ -121,6 +121,23 @@ ReadChartPart(DocArchive& a, ChartPart& out)
 		}
 		if (a.Position() + values != end)
 			throw ArchiveError("2DSM chart's end", a.Position());
+	} else if (out.chartType == Sig("2DXY")) {
+		// T2DXYChart::Write: the axes, its minor type, the series styled
+		for (ChartAxis& axis : out.axes) {
+			a.CheckSig(Sig("axi+"));
+			for (uint32_t& v : axis.values)
+				v = a.UInt32();
+			axis.style = a.UInt32();
+			axis.flags[0] = a.Bool();
+			axis.flags[1] = a.Bool();
+			a.CheckSig(Sig("axi-"));
+		}
+		if (a.FileFormatVersion() >= 0x13) {
+			out.xyMinor = a.UInt32();
+			out.xyStyled = a.UInt32();
+		}
+		if (a.Position() + values != end)
+			throw ArchiveError("2DXY chart's end", a.Position());
 	} else {
 		if (end < a.Position() + values)
 			throw ArchiveError("chart body", a.Position());
@@ -208,6 +225,20 @@ WriteChartSection(const ChartPart& part, int fileFormat)
 			for (uint32_t s : set.series)
 				w.UInt32(s);
 		}
+	} else if (part.chartType == Sig("2DXY")) {
+		for (const ChartAxis& axis : part.axes) {
+			w.Sig(Sig("axi+"));
+			for (uint32_t v : axis.values)
+				w.UInt32(v);
+			w.UInt32(axis.style);
+			w.Bool(axis.flags[0]);
+			w.Bool(axis.flags[1]);
+			w.Sig(Sig("axi-"));
+		}
+		if (fileFormat >= 0x13) {
+			w.UInt32(part.xyMinor);
+			w.UInt32(part.xyStyled);
+		}
 	} else
 		w.Bytes(part.chartBody);
 	if (fileFormat >= 0x11) {
@@ -216,6 +247,35 @@ WriteChartSection(const ChartPart& part, int fileFormat)
 	}
 	w.Sig(Sig("cht-"));
 	return w.Data();
+}
+
+
+size_t
+ChartPart::SeriesCount() const
+{
+	size_t physical = data.values[1];
+	switch (data.value44) {
+		case 1:
+			return physical / 2;
+		case 2:
+			return physical > 0 ? physical - 1 : 0;
+		default:
+			return physical;
+	}
+}
+
+
+size_t
+ChartPart::PhysicalSeries(size_t s, int which) const
+{
+	switch (data.value44) {
+		case 1:
+			return s * 2 + size_t(which);
+		case 2:
+			return which != 0 ? s + 1 : 0;
+		default:
+			return s;
+	}
 }
 
 
