@@ -4,6 +4,8 @@
 
 #include <Bitmap.h>
 
+#include <algorithm>
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -31,6 +33,7 @@
 
 #include "GobeResources.h"
 #include "TIconButton.h"
+#include "TIconStringItem.h"
 #include "TRibbon.h"
 #include "TMenu.h"
 
@@ -151,9 +154,17 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int3
 	for (const ItemData* entry : order) {
 		const ItemData& item = *entry;
 		if (item.type == FourCC("GRUP") || item.type == FourCC("FGRP")) {
+			// (ItemGroup::Recalc: an item at the last one's right or bottom
+			// edge plus its spacing; a group of icon buttons, theirs, 0:
+			// one's edge on the last one's)
+			float spacing = item.spacing > 0 ? item.spacing : B_USE_SMALL_SPACING;
+			bool iconButtons = item.spacing == 0 && !item.children.empty();
+			for (const ItemData& child : item.children)
+				iconButtons &= child.type == FourCC("IBUT") && child.values.size() > 2;
+			if (iconButtons)
+				spacing = item.children[0].values[2] - 1;
 			BGroupLayout* inner = new BGroupLayout(
-				item.vertical ? B_VERTICAL : B_HORIZONTAL,
-				item.spacing > 0 ? item.spacing : B_USE_SMALL_SPACING);
+				item.vertical ? B_VERTICAL : B_HORIZONTAL, spacing);
 			if (item.type == FourCC("FGRP"))
 				inner->SetInsets(item.insets[0], item.insets[1], item.insets[0],
 					item.insets[1]);
@@ -322,6 +333,8 @@ TDialog::MakeControl(const ItemData& item)
 				float width = 170;
 				if (item.values[1] > 0)
 					width = item.values[1] * be_plain_font->StringWidth("0") + 10 + (v ? 15 : 0);
+				else
+					fNameWidthLists.push_back(view);
 				BSize size(width, item.values[0] * 17 + 4);
 				view->SetExplicitMinSize(size);
 				view->SetExplicitPreferredSize(size);
@@ -576,6 +589,26 @@ TDialog::RunDialog()
 {
 	if (Lock()) {
 		Init();
+		// a list without a width in digits as wide as its widest item
+		// (ListEngineer::Recalc: its text, 25 more by an icon; 10 at the
+		// least), 10 more and the scroll bar's 15
+		for (BView* view : fNameWidthLists) {
+			BScrollView* scroll = dynamic_cast<BScrollView*>(view);
+			BListView* list = scroll != NULL ? dynamic_cast<BListView*>(scroll->Target()) : NULL;
+			if (list == NULL || list->IsEmpty())
+				continue;
+			float width = 10;
+			for (int32 i = 0; BListItem* item = list->ItemAt(i); i++) {
+				if (BStringItem* text = dynamic_cast<BStringItem*>(item))
+					width = std::max(width, list->StringWidth(text->Text()));
+				else if (TIconStringItem* icon = dynamic_cast<TIconStringItem*>(item))
+					width = std::max(width, list->StringWidth(icon->Name().c_str()) + 25);
+			}
+			width += 10 + (scroll->ScrollBar(B_VERTICAL) != NULL ? 15 : 0);
+			BSize size(width, view->ExplicitPreferredSize().height);
+			view->SetExplicitMinSize(size);
+			view->SetExplicitPreferredSize(size);
+		}
 		// as large as the items want (the window isn't resizable); Init may
 		// have changed sizes inside nested group layouts, which keep the
 		// sizes they cached (a view's InvalidateLayout() doesn't reach them

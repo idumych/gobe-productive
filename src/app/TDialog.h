@@ -8,6 +8,7 @@
 #define GOBE_TDIALOG_H
 
 #include <map>
+#include <vector>
 
 #include <String.h>
 #include <Window.h>
@@ -91,7 +92,8 @@ private:
 	uint32 fCommand;
 	BHandler* fTarget;
 	std::map<int32, BView*> fItems;
-	std::map<int32, std::vector<int32>> fRadios;	// box index: its radios, in order
+	std::map<int32, std::vector<int32>> fRadios;
+	std::vector<BView*> fNameWidthLists;	// LIST items sized by their items	// box index: its radios, in order
 	// the item set's
 	int32 fBuildingSet = -1;
 	std::map<int32, BView*> fSetItems;
