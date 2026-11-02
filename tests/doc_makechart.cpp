@@ -8,6 +8,7 @@
 // Arguments: documents (LoanCalculator is used if given).
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string>
 
 #include "ChartPart.h"
@@ -200,8 +201,11 @@ main(int argc, char** argv)
 				else if (shape.kind == Sig("Titl"))
 					title = &shape;
 			}
-		Check(plot != nullptr && plot->origin[0] == 39 && plot->origin[1] == 6
-			&& plot->size[0] == 349 && plot->size[1] == 188, "the plot at 39, 6, 349 by 188");
+		// (the original's: a legend 27.37 wide, the plot at 39; 60.89 wide,
+		// at 72, 316 across)
+		Check(plot != nullptr && plot->origin[0] == 63 && plot->origin[1] == 6
+			&& plot->size[0] == 325 && plot->size[1] == 188,
+			"the plot 12 right of the legend (51 + 12), 6 down, to 12 from the right and bottom");
 		Check(legend != nullptr && legend->origin[0] == 5 && legend->origin[1] == 5
 			&& legend->size[0] == 6 * 5 + 21 && legend->size[1] == 2 * 12 + 4,
 			"the legend at 5, 5, its widest name and 21 across, 12 a series and 4 down");
@@ -311,6 +315,47 @@ main(int argc, char** argv)
 			&& inside->origin[0] + inside->extent[0] <= drawingFrame->extent[0]
 			&& inside->origin[1] + inside->extent[1] <= drawingFrame->extent[1],
 			"StockPrice: the chart within the drawing's frame: " + (inside == nullptr ? std::string("none") : std::to_string(inside->origin[0]) + "," + std::to_string(inside->origin[1]) + " " + std::to_string(inside->extent[0]) + "x" + std::to_string(inside->extent[1])) + (drawingFrame == nullptr ? " no drawing" : " in " + std::to_string(drawingFrame->extent[0]) + "x" + std::to_string(drawingFrame->extent[1])));
+	}
+	{
+		// one number (as the original makes a chart of a cell holding 1):
+		// "Series 1", one category; the horizontal axis's step over no
+		// steps none, its nice range 0 to 0; the vertical one 0 to 1 by
+		// 0.5; the plot 12 right of the legend
+		Document one;
+		Check(CreateBlankSpreadsheet(one, error), "a blank for one number " + error);
+		size_t onePart = one.spreadsheetParts.empty() ? 0 : one.spreadsheetParts[0].first;
+		if (SSPart* os = one.EditableSpreadsheetPart(onePart))
+			Set(*os, 6, 2, "1");
+		auto measure = [](const std::string& text, uint32_t, float& width, float& height) {
+			width = 6.0f * float(text.size());
+			height = 12;
+		};
+		int made = MakeChart(one, onePart, Range(6, 2, 6, 2), error, measure);
+		const ChartPart* c = made >= 0 ? one.Chart(size_t(made)) : nullptr;
+		auto f = [](uint32_t bits) {
+			float v;
+			memcpy(&v, &bits, sizeof v);
+			return v;
+		};
+		Check(c != nullptr && c->series.size() == 1 && c->series[0].name == "Series 1",
+			"one number: Series 1");
+		Check(c != nullptr && f(c->axes[0].values[0]) == 0 && f(c->axes[0].values[1]) == 1
+			&& f(c->axes[0].values[2]) == 0 && f(c->axes[0].values[3]) == 0
+			&& f(c->axes[0].values[4]) == 1 && f(c->axes[0].values[5]) == 0
+			&& c->axes[0].values[6] == 1, "one number: the horizontal axis as the original's");
+		Check(c != nullptr && f(c->axes[1].values[2]) == 0 && f(c->axes[1].values[3]) == 1
+			&& f(c->axes[1].values[5]) == 0.5f && c->axes[1].values[6] == 5,
+			"one number: the vertical axis 0 to 1 by 0.5");
+		const Shape* plot = nullptr;
+		if (c != nullptr)
+			for (const GRLayer& layer : c->graphics.layers)
+				for (const Shape& shape : layer.shapes)
+					if (shape.kind == Sig("Rndr"))
+						plot = &shape;
+		Check(plot != nullptr && plot->origin[0] == 6 * 8 + 21 + 12
+			&& plot->size[0] == 388 - (6 * 8 + 21 + 12), "one number: the plot right of the legend: "
+			+ (plot == nullptr ? std::string("none") : std::to_string(plot->origin[0]) + " "
+				+ std::to_string(plot->size[0])));
 	}
 	printf("doc_makechart: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed ? 1 : 0;

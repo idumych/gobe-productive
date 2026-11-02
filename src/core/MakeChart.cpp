@@ -80,7 +80,9 @@ AsFloat(uint32_t bits)
 float
 NiceNum(float x, bool round)
 {
-	if (!(x > 0))
+	// (none for an infinite one: a range over no steps, SetRange's one
+	// tick)
+	if (!(x > 0) || std::isinf(x))
 		return 0;
 	double exponent = std::floor(std::log10(double(x)));
 	double fraction = double(x) / std::pow(10.0, exponent);
@@ -108,7 +110,7 @@ SetRange(ChartAxis& axis, float low, float high, int ticks)
 	if (!axis.flags[0])
 		return;
 	float range = NiceNum(high - low, false);
-	float step = NiceNum(ticks > 1 ? range / float(ticks - 1) : range, high - low > 1);
+	float step = NiceNum(range / float(ticks - 1), high - low > 1);
 	float niceLow = 0, niceHigh = 0;
 	if (step > 0) {
 		niceLow = float(std::floor(low / step)) * step;
@@ -408,13 +410,21 @@ MakeChart(Document& doc, size_t part, const SSRange& range, std::string& error,
 	}
 	Shape plot;
 	plot.kind = Sig("Rndr");
-	// (SetDefaultRenderPiecePos: right of the legend as it was, empty: 5
-	// plus 21, its right side rounded out, 12 on; 12 from the right, 6 from
-	// the top and bottom)
-	plot.origin[0] = 39;
-	plot.origin[1] = 6;
-	plot.size[0] = width - 12 - plot.origin[0];
-	plot.size[1] = height - 12;
+	// (SetDefaultRenderPiecePos: 12 more than the legend is wide, to 12 from
+	// the right, 6 from the top and bottom (a frame over 15 high); its
+	// sides made whole, outwards: TRect::MakeIntSides)
+	float left = legend.size[0] + 12, right = width - 12;
+	if (right <= left)
+		right = left + right + 1;
+	float top = 0, bottom = height;
+	if (bottom - top > 15) {
+		top += 6;
+		bottom -= 6;
+	}
+	plot.origin[0] = std::floor(left);
+	plot.origin[1] = std::floor(top);
+	plot.size[0] = std::ceil(right) - plot.origin[0];
+	plot.size[1] = std::ceil(bottom) - plot.origin[1];
 	plot.style = renderStyle;
 	plot.pieceValue = 1;
 	{
