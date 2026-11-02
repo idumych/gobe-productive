@@ -385,6 +385,30 @@ main(int argc, char** argv)
 					path + std::string(": RemoveSlide(0) with one slide left false"));
 			}
 
+			// ---- 9b. NewSlideLayer: a slide chosen (-1), first; a layer
+			// chosen, right after it (TPartPR: its index + 1); active ----
+			{
+				Document doc;
+				Check(LoadDocument(path, doc, error),
+					path + std::string(": fresh load for NewSlideLayer: ") + error);
+				size_t before = doc.SlideLayers(0).size();
+				size_t first = doc.PresentationGraphics()->layers.size();
+				Check(doc.NewSlideLayer(0, size_t(-1), "First"),
+					path + std::string(": NewSlideLayer(0, -1)"));
+				Check(doc.SlideLayers(0).size() == before + 1
+					&& doc.SlideLayerPart(0, 0) == int(first),
+					path + std::string(": a slide chosen: the new layer first"));
+				Check(doc.NewSlideLayer(0, 0, "Second"),
+					path + std::string(": NewSlideLayer(0, 0)"));
+				Check(doc.SlideLayerPart(0, 1) == int(first + 1),
+					path + std::string(": layer 0 chosen: the new layer at 1"));
+				const GRPart* gr = doc.PresentationGraphics();
+				const GRView& view = gr->views[doc.slides[0].view];
+				std::vector<size_t> infos = doc.SlideLayers(0);
+				Check(view.layers[infos[1]].flags[0] && !view.layers[infos[0]].flags[0],
+					path + std::string(": the new layer alone shown"));
+			}
+
 			// ---- 10. WritePresentationBlock ----
 			{
 				Document doc;

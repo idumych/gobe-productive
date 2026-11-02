@@ -439,13 +439,16 @@ Document::DuplicateSlide(size_t source, const std::string& name, bool duplicateL
 bool
 Document::NewSlideLayer(size_t slide, size_t after, const std::string& name)
 {
-	// TPRNewLayerCommand: after the layer chosen (or last), the active one
+	// TPRNewLayerCommand: after the layer chosen (TPartPR passes its index
+	// + 1; a slide chosen, -1: the first), the active one
 	if (slide >= slides.size() || name.empty())
 		return false;
+	size_t count = SlideLayers(slide).size();
 	size_t layer = AddPresentationLayer(name);
-	size_t position = after < SlideLayers(slide).size() ? after + 1 : size_t(-1);
+	size_t position = after == size_t(-1) ? 0 : std::min(after + 1, count);
 	SlideAddLayer(slide, layer, position);
 	SetCurrentSlide(slide);
+	ActivateSlideLayer(slide, int(position));
 	return true;
 }
 
