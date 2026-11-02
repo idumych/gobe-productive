@@ -5,6 +5,7 @@
 #include <Application.h>
 #include <MenuItem.h>
 #include <PopUpMenu.h>
+#include <Region.h>
 #include <Window.h>
 
 #include <algorithm>
@@ -259,6 +260,58 @@ TRibbon::Draw(BRect updateRect)
 	BRect bounds = Bounds();
 	SetHighColor(kShadow);
 	StrokeLine(BPoint(bounds.left, bounds.bottom), BPoint(bounds.right, bounds.bottom));
+}
+
+
+TTextIndicatorElement::TTextIndicatorElement(uint32 id, BRect rect, const std::string& text)
+	:
+	TRibbonElement(id, rect),
+	text(text)
+{
+}
+
+
+void
+TTextIndicatorElement::Draw(BView* view, bool)
+{
+	BRect r = rect;
+	view->SetHighColor(0xd8, 0xd8, 0xd8);
+	view->FillRect(r);
+	// TIndicatorElement::DrawFrame
+	view->SetHighColor(255, 255, 255);
+	view->StrokeLine(BPoint(r.left, r.bottom), BPoint(r.right, r.bottom));
+	view->StrokeLine(BPoint(r.right, r.top), BPoint(r.right, r.bottom));
+	view->SetHighColor(0, 0, 0);
+	view->StrokeLine(BPoint(r.left, r.top), BPoint(r.right - 1, r.top));
+	view->StrokeLine(BPoint(r.left, r.top), BPoint(r.left, r.bottom - 1));
+	// TTextIndicatorElement::Draw: black on the panel, at most 10 points,
+	// inside the frame
+	BFont font(be_plain_font);
+	font.SetSize(std::min(font.Size(), 10.0f));
+	view->PushState();
+	view->SetFont(&font);
+	view->SetLowColor(0xd8, 0xd8, 0xd8);
+	BRegion clip(r.InsetByCopy(2, 2));
+	view->ConstrainClippingRegion(&clip);
+	view->DrawString(text.c_str(), BPoint(r.left + 5, r.bottom - 4));
+	view->PopState();
+}
+
+
+TSeparatorElement::TSeparatorElement(uint32 id)
+	:
+	TRibbonElement(id, BRect(0, 0, 0, 0))
+{
+}
+
+
+void
+TSeparatorElement::Draw(BView* view, bool)
+{
+	BRect bounds = view->Bounds();
+	view->SetHighColor(0xa0, 0xa0, 0xa0);
+	if (id == 'BSep')
+		view->StrokeLine(BPoint(bounds.left, bounds.bottom), BPoint(10000, bounds.bottom));
 }
 
 

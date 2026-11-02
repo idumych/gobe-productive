@@ -52,6 +52,7 @@
 #include "TGRRuler.h"
 #include "TEntryBar.h"
 #include "TPageBar.h"
+#include "TChartRibbon.h"
 #include "TPartBar.h"
 #include "TInkMenus.h"
 #include "TSpellBar.h"
@@ -214,6 +215,9 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			if (text || cells || drawing) {
 				fPartBar = new TPartBar(pages);
 				pages->fPartBar = fPartBar;
+				// (TChartPart::ActivePartRibbon: a chart entered)
+				fChartRibbon = new TChartRibbon();
+				fChartRibbon->Hide();
 			}
 			if (text) {
 				fRuler = new TWPRuler(pages);
@@ -301,6 +305,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			bars.Add(fRuler);
 		if (fEntryBar != NULL)
 			bars.Add(fEntryBar);
+		if (fChartRibbon != NULL)
+			bars.Add(fChartRibbon);
 		if (fSheetBar != NULL)
 			bars.Add(fSheetBar);
 		bars.Add(desk);
@@ -1988,12 +1994,14 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 // TNormalDocWinHelper::SetupMenus: Insert Header/Footer read Remove
 // Header/Footer when the document has one (STR# 3, 22-25)
 // TDocWindow: the active part's ribbon under the PartBar while the PartBar
-// shows: the EntryBar with cells selected, else the text ruler
+// shows: the chart's with a chart entered, the EntryBar with cells
+// selected, else the text ruler
 void
 TDocWindow::ShowActiveRibbon()
 {
 	bool ribbons = fPartBar != NULL && !fPartBar->IsHidden();
-	bool cells = fPages != NULL && fPages->fSelectedCell.active;
+	bool chart = fPages != NULL && fPages->ActiveChartPart() >= 0;
+	bool cells = !chart && fPages != NULL && fPages->fSelectedCell.active;
 	auto show = [](BView* view, bool on) {
 		if (view == NULL || on == !view->IsHidden())
 			return;
@@ -2002,8 +2010,11 @@ TDocWindow::ShowActiveRibbon()
 		else
 			view->Hide();
 	};
+	show(fChartRibbon, ribbons && chart);
 	show(fEntryBar, ribbons && cells);
-	show(fRuler, ribbons && !(cells && fEntryBar != NULL));
+	show(fRuler, ribbons && !chart && !(cells && fEntryBar != NULL));
+	if (fPartBar != NULL)
+		fPartBar->Update();
 }
 
 

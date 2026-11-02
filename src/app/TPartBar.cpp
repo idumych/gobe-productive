@@ -69,38 +69,13 @@ SheetResources()
 
 // TNameIndicator (a TTextIndicatorElement): the selection's name in a
 // sunken frame; a double click is Go To Cell… ('sM77')
-class TCellAddressElement : public TRibbonElement {
+class TCellAddressElement : public TTextIndicatorElement {
 public:
 	TCellAddressElement(BRect rect)
 		:
-		TRibbonElement('ADDR', rect)
+		TTextIndicatorElement('ADDR', rect)
 	{
 		tip = IndexString(SheetResources(), 1507, 0);
-	}
-
-	virtual void Draw(BView* view, bool down)
-	{
-		BRect r = rect;
-		view->SetHighColor(0xd8, 0xd8, 0xd8);
-		view->FillRect(r);
-		// TIndicatorElement::DrawFrame
-		view->SetHighColor(255, 255, 255);
-		view->StrokeLine(BPoint(r.left, r.bottom), BPoint(r.right, r.bottom));
-		view->StrokeLine(BPoint(r.right, r.top), BPoint(r.right, r.bottom));
-		view->SetHighColor(0, 0, 0);
-		view->StrokeLine(BPoint(r.left, r.top), BPoint(r.right - 1, r.top));
-		view->StrokeLine(BPoint(r.left, r.top), BPoint(r.left, r.bottom - 1));
-		// TTextIndicatorElement::Draw: black on the panel, at most 10
-		// points, inside the frame
-		BFont font(be_plain_font);
-		font.SetSize(std::min(font.Size(), 10.0f));
-		view->PushState();
-		view->SetFont(&font);
-		view->SetLowColor(0xd8, 0xd8, 0xd8);
-		BRegion clip(r.InsetByCopy(2, 2));
-		view->ConstrainClippingRegion(&clip);
-		view->DrawString(text.c_str(), BPoint(r.left + 5, r.bottom - 4));
-		view->PopState();
 	}
 
 	virtual bool Clickable() const { return true; }
@@ -116,8 +91,6 @@ public:
 		}
 		return true;
 	}
-
-	std::string text;
 };
 
 
@@ -566,7 +539,7 @@ TPartBar::BuildSheet()
 // 0x127) and the arrows ('GRAR'), each group 15 after the last; the tips
 // STR# 1103, 7-16
 void
-TPartBar::BuildDrawing()
+TPartBar::BuildDrawing(uint32 kind)
 {
 	RemoveAllElements();
 	if (fSpacing != NULL) {
@@ -577,8 +550,9 @@ TPartBar::BuildDrawing()
 	fText = false;
 	fSheet = false;
 	fDrawing = true;
+	fDrawingKind = kind;
 	fShapeCount = size_t(-1);
-	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4), PartIcon('GRFX'));
+	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4), PartIcon(kind));
 	part->tip = GobeResources::IndexString(4, 23).String();
 	AddElement(part);
 	auto tip = [](int32 index) { return std::string(GobeResources::IndexString(1103, index).String()); };
@@ -595,10 +569,15 @@ TPartBar::BuildDrawing()
 		}
 		at.x += 15;
 	}
-	TMICNButtonElement* wrap = new TMICNButtonElement('GRTW', at, 0x127, new BMessage('sf0U'));
-	wrap->tip = tip(15);
-	AddElement(wrap);
-	at.x += 22 + 15;
+	// Text Wrap with the part's GRConfigFlags bit 0 (a chart's clears it)
+	if (kind != 'chrt') {
+		TMICNButtonElement* wrap = new TMICNButtonElement('GRTW', at, 0x127,
+			new BMessage('sf0U'));
+		wrap->tip = tip(15);
+		AddElement(wrap);
+		at.x += 22;
+	}
+	at.x += 15;
 	TArrowsElement* arrows = new TArrowsElement(BRect(at, at + BPoint(19, 19)), fPages);
 	arrows->tip = tip(16);
 	AddElement(arrows);
@@ -645,6 +624,13 @@ void
 TPartBar::Update()
 {
 	const Document& doc = fPages->Doc();
+	// a chart entered: its drawing's (TChartPart is a TPartGR)
+	if (fPages->ActiveChartPart() >= 0) {
+		if (!fDrawing || fDrawingKind != 'chrt')
+			BuildDrawing('chrt');
+		UpdateDrawing();
+		return;
+	}
 	if (fPages->fSelectedCell.active && doc.SpreadsheetPart(fPages->fSelectedCell.part) != NULL) {
 		if (!fSheet)
 			BuildSheet();
@@ -658,8 +644,8 @@ TPartBar::Update()
 	if (!text && (fPages->ShapesSelected()
 			|| (main >= 0 && (doc.parts.parts[size_t(main)].kind == Sig("GRFX")
 				|| doc.parts.parts[size_t(main)].kind == Sig("PRES"))))) {
-		if (!fDrawing)
-			BuildDrawing();
+		if (!fDrawing || fDrawingKind != 'GRFX')
+			BuildDrawing('GRFX');
 		UpdateDrawing();
 		return;
 	}

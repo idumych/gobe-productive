@@ -40,6 +40,27 @@ public:
 	std::string tip;
 };
 
+// TIndicatorElement and TTextIndicatorElement: a sunken field on the
+// panel (DrawFrame: white right and bottom, black left and top) showing
+// a line of black text, at most 10 points, inside it
+class TTextIndicatorElement : public TRibbonElement {
+public:
+	TTextIndicatorElement(uint32 id, BRect rect, const std::string& text = "");
+
+	virtual void Draw(BView* view, bool down);
+
+	std::string text;
+};
+
+// TSeparatorElement: a line across the ribbon ('BSep': gray along its
+// bottom)
+class TSeparatorElement : public TRibbonElement {
+public:
+	TSeparatorElement(uint32 id);
+
+	virtual void Draw(BView* view, bool down);
+};
+
 // TMICNElement: a 16 x 16 icon (MICN, the BeOS palette)
 class TMICNElement : public TRibbonElement {
 public:

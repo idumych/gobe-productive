@@ -142,6 +142,7 @@ private:
 	class TFormatBar* fFormatBar = NULL;
 	class TSpellBar* fSpellBar = NULL;
 	class TEntryBar* fEntryBar = NULL;
+	class TChartRibbon* fChartRibbon = NULL;
 	class TSheetBar* fSheetBar = NULL;
 	class TToolBar* fToolBar = NULL;
 	bool fDrawingMenus = false;	// the part menu is MENU 50 (Arrange)

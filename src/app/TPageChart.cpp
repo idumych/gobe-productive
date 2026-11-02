@@ -459,6 +459,8 @@ TPageView::ChartClick(BPoint where, int32 clicks)
 	if (fChart.active && (hit == NULL || hit->part != fChart.part)) {
 		fChart.active = false;
 		Invalidate();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgActiveRibbon);
 	}
 	if (hit == NULL)
 		return false;
@@ -475,7 +477,7 @@ TPageView::ChartClick(BPoint where, int32 clicks)
 	fFrame = FrameRef();
 	Invalidate();
 	if (Window() != NULL)
-		Window()->PostMessage(kMsgDocumentChanged);
+		Window()->PostMessage(kMsgActiveRibbon);
 	return true;
 }
 
