@@ -356,6 +356,11 @@ private:
 	void InsertPartFrame(uint32_t kind);
 	void InsertTable(BMessage* message);
 
+	// frames shown in text (TPageEdit.cpp)
+	bool InlineSpecialOf(size_t part, size_t& text, TextPosition& at) const;
+	bool InlineFrameClick(BPoint where, size_t hit, Caret& select) const;
+	bool SelectedInlineFrame(const Document::PlacedFrame*& frame) const;
+
 	// tables (TPageTable.cpp)
 	bool LoadTable(size_t table, TableEdit& edit) const;
 	bool CaretCell(size_t& table, TableEdit& edit, int& row, int& column) const;

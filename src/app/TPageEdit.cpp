@@ -432,12 +432,125 @@ TPageView::SelectAllText()
 }
 
 
+// the FRAM special (TMiscFrameInfo) showing part `part` inline in a text
+// part: that part and the special's position
+bool
+TPageView::InlineSpecialOf(size_t part, size_t& text, TextPosition& at) const
+{
+	for (const auto& [index, wp] : fDocument.wordParts)
+		for (size_t p = 0; p < wp.paragraphs.size(); p++)
+			for (const WPMiscInfo& m : wp.paragraphs[p].misc)
+				if (m.kind == Sig("FRAM") && m.frame[0] == part) {
+					text = index;
+					at = {p, m.position};
+					return true;
+				}
+	return false;
+}
+
+
+// TWPClickHandler with a frame in the text clicked (the frames from the part
+// clicked out to the document's, those shown inline): the text part the
+// click goes to and the frame's character there, else false (the click goes
+// where it is). A frame inline in the active text is selected (its
+// character) by the first click; clicked again while selected, the click
+// goes through to it (TContentClick::ClickThru).
+bool
+TPageView::InlineFrameClick(BPoint where, size_t hit, Caret& select) const
+{
+	struct Candidate {
+		size_t text;
+		TextPosition at;
+	};
+	std::vector<Candidate> chain;
+	size_t current = hit;
+	for (int depth = 0; depth < 8; depth++) {
+		const Document::PlacedFrame* placed = NULL;
+		for (const Document::PlacedFrame& f : fFrames) {
+			if (f.part != current || f.frame == NULL)
+				continue;
+			float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+			if (BRect(f.x + dx, f.y + dy, f.x + dx + f.width, f.y + dy + f.height).Contains(where))
+				placed = &f;
+		}
+		if (placed == NULL || placed->frame->container >= fDocument.parts.parts.size())
+			break;
+		size_t container = placed->frame->container;
+		if (fDocument.WordPart(container) != NULL) {
+			size_t text;
+			TextPosition at;
+			if (InlineSpecialOf(current, text, at) && text == container)
+				chain.push_back({text, at});
+		}
+		current = container;
+	}
+	if (chain.empty() || (fCaret.active && fCaret.part == hit))
+		return false;
+	for (const Candidate& c : chain) {
+		if (!fCaret.active || fCaret.part != c.text)
+			continue;
+		TextPosition from, to;
+		bool selected = TextSelection(from, to) && from.paragraph == c.at.paragraph
+			&& to.paragraph == c.at.paragraph && from.offset == c.at.offset
+			&& to.offset == c.at.offset + 1;
+		if (selected)
+			return false;
+		select = {true, c.text, c.at.paragraph, c.at.offset};
+		return true;
+	}
+	const Candidate& outer = chain.back();
+	select = {true, outer.text, outer.at.paragraph, outer.at.offset};
+	return true;
+}
+
+
+// a text selection of one inline frame's character: the frame and the
+// selected text's position in fFrames, else false
+bool
+TPageView::SelectedInlineFrame(const Document::PlacedFrame*& frame) const
+{
+	TextPosition from, to;
+	if (!fCaret.active || !TextSelection(from, to) || from.paragraph != to.paragraph
+			|| to.offset != from.offset + 1)
+		return false;
+	const WPPart* wp = fDocument.WordPart(fCaret.part);
+	if (wp == NULL || from.paragraph >= wp->paragraphs.size())
+		return false;
+	for (const WPMiscInfo& m : wp->paragraphs[from.paragraph].misc)
+		if (m.kind == Sig("FRAM") && m.position == from.offset) {
+			for (const Document::PlacedFrame& f : fFrames)
+				if (f.part == m.frame[0] && f.frame != NULL && f.frame->container == fCaret.part) {
+					frame = &f;
+					return true;
+				}
+		}
+	return false;
+}
+
+
 void
 TPageView::DrawSelection()
 {
 	TextPosition from, to;
 	if (!fCaret.active || !TextSelection(from, to))
 		return;
+	// an inline frame selected: its outline (B_MIXED_COLORS) and the handle
+	// at its bottom right, 5 by 5 inside it
+	const Document::PlacedFrame* inline_ = NULL;
+	if (SelectedInlineFrame(inline_)) {
+		float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+		BRect r(inline_->x + dx, inline_->y + dy, inline_->x + dx + inline_->width,
+			inline_->y + dy + inline_->height);
+		PushState();
+		SetDrawingMode(B_OP_COPY);
+		SetHighColor(0, 0, 0);
+		SetLowColor(255, 255, 255);
+		SetPenSize(1);
+		StrokeRect(r, B_MIXED_COLORS);
+		FillRect(BRect(r.right - 5, r.bottom - 5, r.right - 1, r.bottom - 1));
+		PopState();
+		return;
+	}
 	for (size_t i = 0; i < fLines.size(); i++) {
 		const Line& line = fLines[i];
 		if (line.part != fCaret.part || line.angle != 0
@@ -453,8 +566,7 @@ TPageView::DrawSelection()
 		float x0 = OffsetX(i, spanStart);
 		float x1 = extendRight ? line.frame.right : OffsetX(i, spanEnd);
 		PushState();
-		SetDrawingMode(B_OP_COPY);
-		SetHighColor(180, 205, 255);
+		SetDrawingMode(B_OP_INVERT);
 		FillRect(BRect(x0, line.frame.top, x1, line.frame.bottom));
 		PopState();
 	}
@@ -1628,6 +1740,15 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		fSelectedCell.active = false;
 		fTableCells.active = false;
 		fTableDrag.active = false;
+		// a frame in the text not entered yet: selected by this click
+		Caret frameChar;
+		if (clicks == 1 && InlineFrameClick(where, caret.part, frameChar)) {
+			fAnchor = frameChar;
+			fCaret = frameChar;
+			fCaret.offset++;
+			Invalidate();
+			return;
+		}
 		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
 		if (shift && fCaret.active && caret.part == fCaret.part) {
 			fCaret = caret;

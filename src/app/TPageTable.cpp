@@ -171,9 +171,8 @@ TPageView::DrawTableSelection(float dx, float dy)
 			if (c->id == edit.frameOrder[k])
 				numbers.push_back(uint32_t(k));
 	PushState();
-	SetDrawingMode(B_OP_COPY);
-	// (the text selection's colour)
-	SetHighColor(180, 205, 255);
+	// (inverted, as the text selection)
+	SetDrawingMode(B_OP_INVERT);
 	for (const Document::PlacedFrame& f : fFrames) {
 		if (f.part != t->textPart || f.frame == NULL || f.frame->container != fTableCells.table
 				|| std::find(numbers.begin(), numbers.end(), f.frame->values[1]) == numbers.end())

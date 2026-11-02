@@ -2540,11 +2540,6 @@ TPageView::DrawFrame(const Document::PlacedFrame& f, BRect r, uint32_t kind, flo
 void
 TPageView::DrawLines(BRect updateRect, float dx, float dy)
 {
-	// the selection highlight goes under the text
-	if (!IsPrinting()) {
-		DrawSelection();
-		DrawTableSelection(dx, dy);
-	}
 	SetDrawingMode(B_OP_OVER);
 	for (const Line& line : fLines) {
 		if (line.angle == 0 && !line.frame.Intersects(updateRect))
@@ -2575,6 +2570,11 @@ TPageView::DrawLines(BRect updateRect, float dx, float dy)
 		if ((fDocument.documentFlags & 4) && !IsPrinting())
 			DrawInvisibles(size_t(&line - &fLines[0]));
 		PopState();
+	}
+	// the selection inverted over the text (TWPPart's highlight)
+	if (!IsPrinting()) {
+		DrawSelection();
+		DrawTableSelection(dx, dy);
 	}
 	for (const Rule& rule : fRules) {
 		PushState();
