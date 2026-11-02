@@ -7,7 +7,7 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-73-78-0.svg" alt="Port progress: 73 of 78 features done, 5 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-73-78-1.svg" alt="Port progress: 73 of 78 features done, 5 left (see Features)" width="720"></p>
 
 Not everything is ported yet: image editing, editing charts and a few
 dialogs are still to come. The bar counts the [features](#features) by state.
@@ -284,7 +284,7 @@ sizes, headings and options are saved with the document.
 
 | Feature | State |
 |---|---|
-| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… and Axis… (axis options) | not yet |
+| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… and Axis… (axis options); 2D charts drawn as the original draws them (so far Chart Type makes the 2D bar, line, area and stacked area charts, not yet the 3D, pie and XY ones) | in progress |
 
 ### Image processing
 
