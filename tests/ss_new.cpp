@@ -208,6 +208,23 @@ main(int argc, char** argv)
 	}
 	remove(path.c_str());
 
+	// ---- Format: bold on, then off again (TFormatCommand, TStyle::Reduce:
+	// what the cell gets from the sheet anyway isn't its own) ----
+	{
+		Document doc;
+		std::string error;
+		Check(CreateBlankSpreadsheet(doc, error), "a new spreadsheet " + error);
+		Check(ApplyCellProperty(doc, 0, 0, 0, 0, 0, TextFaceProperty(2)), "A1 bold");
+		const SSPart* ss = doc.SpreadsheetPart(0);
+		const SSCell* a1 = ss != nullptr ? ss->Cell(0, 0) : nullptr;
+		Check(a1 != nullptr && a1->style < doc.styles.styles.size()
+			&& !doc.styles.styles[a1->style].props.empty(), "a style of its own");
+		Check(ApplyCellProperty(doc, 0, 0, 0, 0, 0, TextFaceProperty(1)), "A1 plain again");
+		a1 = doc.SpreadsheetPart(0)->Cell(0, 0);
+		Check(a1 != nullptr && a1->style >= doc.styles.styles.size(),
+			"nothing of its own left: no style");
+	}
+
 	printf("ss_new ok %d, failed %d\n", sOk, sFailed);
 	return sFailed > 0 || sOk == 0;
 }

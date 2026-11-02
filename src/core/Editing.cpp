@@ -1092,6 +1092,44 @@ PropsSorted(const StyleMgr& styles, const std::vector<uint32_t>& props)
 }
 
 
+// TStyle::Reduce (TFormatCommand, after a change): the style without its
+// own properties that are what it gets anyway (in `inherited`: one that
+// replaces it, of equal value); the same style if none are, 0xffffffff for an
+// unnamed one with nothing left and nothing to come from
+uint32_t
+ReduceStyle(StyleMgr& styles, uint32_t index, const std::vector<uint32_t>& inherited)
+{
+	if (index >= styles.styles.size() || !styles.styles[index].name.empty())
+		return index;
+	Style style = styles.styles[index];
+	size_t before = style.props.size();
+	style.props.erase(std::remove_if(style.props.begin(), style.props.end(), [&](uint32_t p) {
+			if (p >= styles.properties.size())
+				return false;
+			for (uint32_t q : inherited)
+				if (q < styles.properties.size()
+						&& Replaces(styles.properties[p], styles.properties[q])
+						&& styles.properties[p].data == styles.properties[q].data)
+					return true;
+			return false;
+		}), style.props.end());
+	if (style.props.size() == before)
+		return index;
+	bool linked = false;
+	for (uint32_t link : style.links)
+		linked = linked || link < styles.styles.size();
+	if (style.props.empty() && !linked)
+		return 0xffffffff;
+	for (size_t i = 0; i < styles.styles.size(); i++)
+		if (SameStyle(styles.styles[i], style))
+			return uint32_t(i);
+	style.value4 = 1;
+	Retain(styles, style.links[0]);
+	styles.styles.push_back(style);
+	return uint32_t(styles.styles.size() - 1);
+}
+
+
 uint32_t
 StyleWithProperty(StyleMgr& styles, uint32_t base, const Property& property)
 {
@@ -1301,6 +1339,20 @@ ApplyCellProperty(Document& doc, size_t part, uint16_t row0, uint16_t column0,
 				it = ss->cells.insert(at, cell);
 			}
 			uint32_t style = StyleWithProperty(styles, it->style, property);
+			// (TStyle::Reduce against what the cell gets from the sheet,
+			// its column and its row)
+			std::vector<uint32_t> inherited;
+			std::vector<uint32_t> below = {ss->style};
+			if (const SSHeader* h = ss->Column(column))
+				below.push_back(h->cell.style);
+			if (const SSHeader* h = ss->Row(row))
+				below.push_back(h->cell.style);
+			for (uint32_t b : below)
+				if (b < styles.styles.size()) {
+					AppendProperties(styles, inherited, styles.styles[b].props2);
+					AppendProperties(styles, inherited, styles.styles[b].props);
+				}
+			style = ReduceStyle(styles, style, inherited);
 			if (style != it->style) {
 				Retain(styles, style);
 				Release(styles, it->style);
