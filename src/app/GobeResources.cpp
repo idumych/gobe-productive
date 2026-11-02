@@ -241,16 +241,18 @@ GobeResources::IndexString(int32 id, int32 index)
 
 
 const BCursor*
-GobeResources::Cursor(int32 id)
+GobeResources::Cursor(int32 id, const ResourceFile* file)
 {
-	static std::map<int32, BCursor*> sCursors;
-	auto found = sCursors.find(id);
+	if (file == NULL)
+		file = &sFile;
+	static std::map<std::pair<const ResourceFile*, int32>, BCursor*> sCursors;
+	auto found = sCursors.find({file, id});
 	if (found != sCursors.end())
 		return found->second;
-	BCursor*& cursor = sCursors[id];
+	BCursor*& cursor = sCursors[{file, id}];
 	cursor = NULL;
-	const ResourceFile::Resource* hot = sFile.Find('CURS', id);
-	const ResourceFile::Resource* picture = sFile.Find('MICN', id);
+	const ResourceFile::Resource* hot = file->Find('CURS', id);
+	const ResourceFile::Resource* picture = file->Find('MICN', id);
 	if (picture == NULL || picture->data.size() != 256)
 		return NULL;
 	// (TCursor: size 16, depth 1, the hot spot's y then x, the picture's

@@ -606,7 +606,8 @@ private:
 		std::vector<std::pair<int, int>> lines;	// the columns (rows) sized
 		float start = 0, offset = 0, size = 0;
 	} fResizing;
-	int fCursorShown = 0;	// 0 the default, 1 resizing columns, 2 rows, else TextCursor's
+	int fCursorShown = 0;	// 0 the default, 1, 2 and 5 the spreadsheet's (resizing columns,
+							// rows; over cells), else TextCursor's
 	bool fScriptShift = false;		// RunScript: shift held
 	bool fScriptCommand = false;	// RunScript: Command held
 	uint32 fScriptModifiers = 0;	// RunScript: Command, Option, Control held

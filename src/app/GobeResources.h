@@ -42,8 +42,9 @@ public:
 	// TCursor(id, resources), kept as TPartFactory::GetCursor keeps them:
 	// the hot spot from CURS `id`, the picture from MICN `id` (16 x 16,
 	// black where it's 0 or any color but '?' and transparent, white where
-	// it's '?'); NULL if there's no such cursor
-	static const BCursor* Cursor(int32 id);
+	// it's '?'); NULL if there's no such cursor. From `file` (a part's
+	// resources: Part()) or the binary's.
+	static const BCursor* Cursor(int32 id, const ResourceFile* file = NULL);
 };
 
 // a URL in the program for its kind (`mime`: "text/html", "text/x-email");

@@ -1890,12 +1890,20 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 		bool columns;
 		int index;
 		float start, offset;
-		int shown = HitResize(where, part, columns, index, start, offset) ? (columns ? 1 : 2) : 0;
+		// (TSSFrame::GetCursor: the spreadsheet's own pointers, TPartSSFactory:
+		// CURS 1001 on a column heading's edge, 1002 on a row's, else 1000)
+		BRect sheet;
+		int shown = HitResize(where, part, columns, index, start, offset) ? (columns ? 1 : 2)
+			: SheetFrameAt(where, sheet) != NULL ? 5 : 0;
 		if (shown == 0)
 			shown = TextCursor(where);
 		if (shown != fCursorShown) {
 			fCursorShown = shown;
-			const BCursor* gobe = shown > 4 ? GobeResources::Cursor(shown) : NULL;
+			const BCursor* gobe = shown > 5 ? GobeResources::Cursor(shown)
+				: shown == 1 || shown == 2 || shown == 5
+					? GobeResources::Cursor(shown == 1 ? 1001 : shown == 2 ? 1002 : 1000,
+						&GobeResources::Part("Spreadsheet"))
+				: NULL;
 			if (gobe != NULL)
 				SetViewCursor(gobe);
 			else {
