@@ -1,5 +1,7 @@
 #include "TDialog.h"
 
+#include <Screen.h>
+
 #include <Bitmap.h>
 
 #include <stdio.h>
@@ -85,7 +87,18 @@ TDialog::TDialog(int32 dialogId, int32 itemsId, uint32 command, BHandler* target
 			fprintf(stderr, "TDialog: Item %d did not parse completely\n", (int)itemsId);
 		AddItems(root, list.items);
 	}
-	CenterOnScreen();
+	OurCenterWindow();
+}
+
+
+// OurCenterWindow (TDialog::SetUpWindow): halfway across the screen, a
+// third of the way down the room it leaves
+void
+TDialog::OurCenterWindow()
+{
+	BRect screen = BScreen(this).Frame();
+	BRect bounds = Bounds();
+	MoveTo((screen.Width() - bounds.Width()) * 0.5f, (screen.Height() - bounds.Height()) / 3);
 }
 
 
@@ -627,7 +640,7 @@ TDialog::RunDialog()
 		// before its own sizes were asked for)
 		InvalidateLayouts(GetLayout());
 		ResizeToPreferred();
-		CenterOnScreen();
+		OurCenterWindow();
 		Unlock();
 	}
 	Show();

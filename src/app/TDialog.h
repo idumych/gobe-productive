@@ -38,6 +38,8 @@ public:
 
 	// TDialog::Run: Init, then show
 	void RunDialog();
+	// OurCenterWindow: where the original puts its dialogs
+	void OurCenterWindow();
 
 protected:
 	// TDialog::Init: fill in the controls (the window is locked)
