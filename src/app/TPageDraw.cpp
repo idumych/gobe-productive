@@ -447,6 +447,98 @@ HitGroup(const Document& doc, size_t part, float x, float y, size_t& layer, size
 }
 
 
+// TFrameGR::GetCursor: in a drawing, the drawing tools' cross (CURS 1100);
+// with the arrow, by what's under it and what a handle does
+// (TPartGRFactory::CursorPtr, 1100 to 1109): a locked shape's lock (1108);
+// resizing: the cross on a selected shape's handle, the hand to move it on
+// a shape (1103), the system's pointer elsewhere; rotating: the rotating
+// pointer on a handle (1106), the hand on a shape, else 1101; reshaping:
+// 1102 off the shapes, the cross on one that has no points, the hand on
+// it or its own pointer (1109) once it's selected, the arrow on one of
+// its points (1105), with Option the cross, or on a control point of a
+// path of more than two points 1107. -1 if not over a drawing, 0 the
+// system's pointer.
+int
+TPageView::DrawingCursor(BPoint where) const
+{
+	size_t part;
+	float x, y;
+	if (!DrawingAt(where, part, x, y))
+		return -1;
+	// (the drawing worked in: the document's, or the one with shapes
+	// selected; text being edited in it keeps its own pointer)
+	int main = fDocument.MainPart();
+	if ((main < 0 || size_t(main) != part) && (fShapes.empty() || fShapes[0].part != part)
+			&& !(fFrame.active && FrameAt(fDocument, fFrame.pointer) != NULL
+				&& FrameAt(fDocument, fFrame.pointer)->container == part))
+		return -1;
+	if (fCaret.active)
+		for (const Line& line : fLines)
+			if (line.part == fCaret.part && line.angle == 0 && line.textFrame.Contains(where))
+				return -1;
+	if (fTool != kToolArrow)
+		return 1100;
+	// a frame in it is one of its shapes: its handles, its edge; inside
+	// it, its own pointer
+	int frame = FrameUnder(where);
+	if (frame == 3)
+		return -1;
+	if (frame == 1)
+		return fShapeMode == 1 ? 1106 : 1100;
+	if (frame == 2)
+		return fShapeMode == 2 ? 1100 : 1103;
+	float px = where.x - x, py = where.y - y;
+	const Shape* shape = NULL;
+	bool handle = false, control = false;
+	if (fShapes.size() == 1 && part == fShapes[0].part) {
+		const Shape* s = ShapeAt(fDocument, part, fShapes[0].layer, fShapes[0].index);
+		if (s != NULL && fShapeMode == 2) {
+			control = HitControlPoint(*s, px, py, kHandle + 1) >= 0;
+			handle = control || HitVertex(*s, px, py, kHandle + 1) >= 0;
+		} else if (s != NULL)
+			handle = HitHandle(*s, px, py, kHandle + 1) >= 0;
+		if (handle)
+			shape = s;
+	}
+	bool selected = handle;
+	if (shape == NULL) {
+		size_t layer, index, groupLayer, groupIndex;
+		bool hit = HitShape(*fDocument.GraphicsPart(part), px, py, kTolerance,
+			HiddenLayers(fDocument, part), layer, index);
+		if (HitGroup(fDocument, part, px, py, groupLayer, groupIndex)
+				&& (!hit || groupLayer > layer || (groupLayer == layer && groupIndex > index))) {
+			layer = groupLayer;
+			index = groupIndex;
+			hit = true;
+		}
+		if (hit) {
+			shape = ShapeAt(fDocument, part, layer, index);
+			selected = ShapeSelected(part, layer, index);
+		}
+	}
+	if (shape != NULL && ShapeLocked(*shape))
+		return 1108;
+	switch (fShapeMode) {
+		case 1:
+			return shape == NULL ? 1101 : handle ? 1106 : 1103;
+		case 2: {
+			if (shape == NULL)
+				return 1102;
+			std::vector<DrawPoint> points = ShapeVertices(*shape);
+			if (points.empty())
+				return 1100;
+			if (!handle)
+				return selected ? 1109 : 1103;
+			if ((modifiers() & B_OPTION_KEY) == 0)
+				return 1105;
+			return control && points.size() > 2 ? 1107 : 1100;
+		}
+		default:
+			return shape == NULL ? 0 : handle ? 1100 : 1103;
+	}
+}
+
+
 bool
 TPageView::DrawingClick(BPoint where, int32 clicks)
 {

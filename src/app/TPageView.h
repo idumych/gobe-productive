@@ -388,6 +388,9 @@ private:
 	// the pointer (TFrame::GetCursor and its kin) over `where`: 0 the
 	// default, 3 the I-beam, 4 the hand, else a CURS/MICN id
 	int TextCursor(BPoint where) const;
+	int DrawingCursor(BPoint where) const;
+	int FrameUnder(BPoint where) const;
+	void UpdateCursor(BPoint where);
 public:
 	void TableMenuState(bool& merge, bool& split) const;
 	bool HasTableCells() const { return fTableCells.active; }

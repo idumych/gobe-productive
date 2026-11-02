@@ -129,6 +129,33 @@ TPageView::FrameGrab(BPoint where)
 }
 
 
+// what of a frame in a drawing is under `where`: 1 a handle of the selected
+// frame, 2 a frame's edge (where FrameClick takes it), 3 inside one, 0 none
+int
+TPageView::FrameUnder(BPoint where) const
+{
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	const gobe::Frame* selected = fFrame.active ? FrameAt(fDocument, fFrame.pointer) : NULL;
+	int under = 0;
+	for (const Document::PlacedFrame& f : fFrames) {
+		if (f.frame == NULL || !IsDrawingPart(fDocument, f.frame->container))
+			continue;
+		BRect r(f.x + dx, f.y + dy, f.x + dx + f.width, f.y + dy + f.height);
+		if (f.frame == selected)
+			for (int i = 0; i < 8; i++) {
+				BPoint h = HandleAt(r, i);
+				if (std::fabs(where.x - h.x) <= kEdge && std::fabs(where.y - h.y) <= kEdge)
+					return 1;
+			}
+		BRect outer = r.InsetByCopy(-kEdge, -kEdge), inner = r.InsetByCopy(kEdge, kEdge);
+		if (!outer.Contains(where))
+			continue;
+		under = std::max(under, inner.IsValid() && inner.Contains(where) ? 3 : 2);
+	}
+	return under;
+}
+
+
 // the arrow on a frame's edge (within kEdge of it) in a drawing: the
 // frame selected (TFrame::Select), the topmost
 bool

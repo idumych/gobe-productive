@@ -1857,12 +1857,53 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 }
 
 
+// the pointer for where it is (TDocView::AdjustCursor, the frames'
+// GetCursor): a heading's edge, the spreadsheet's, a drawing's, the text's
+void
+TPageView::UpdateCursor(BPoint where)
+{
+	if (!fResizing.active && !fDraggingCells && !fDraggingHeadings && !fDragging
+			&& !fTableResize.active && !fFrameHandle.active && fShapeDrag.mode == 0) {
+		size_t part;
+		bool columns;
+		int index;
+		float start, offset;
+		// (TSSFrame::GetCursor: the spreadsheet's own pointers, TPartSSFactory:
+		// CURS 1001 on a column heading's edge, 1002 on a row's, else 1000)
+		BRect sheet;
+		int shown = HitResize(where, part, columns, index, start, offset) ? (columns ? 1 : 2)
+			: SheetFrameAt(where, sheet) != NULL ? 5 : 0;
+		if (shown == 0) {
+			int drawing = DrawingCursor(where);
+			shown = drawing >= 0 ? drawing : TextCursor(where);
+		}
+		if (shown != fCursorShown) {
+			fCursorShown = shown;
+			const BCursor* gobe = shown > 5 ? GobeResources::Cursor(shown)
+				: shown == 1 || shown == 2 || shown == 5
+					? GobeResources::Cursor(shown == 1 ? 1001 : shown == 2 ? 1002 : 1000,
+						&GobeResources::Part("Spreadsheet"))
+				: NULL;
+			if (gobe != NULL)
+				SetViewCursor(gobe);
+			else {
+				BCursor cursor(shown == 1 ? B_CURSOR_ID_RESIZE_EAST_WEST
+					: shown == 2 ? B_CURSOR_ID_RESIZE_NORTH_SOUTH
+					: shown == 3 ? B_CURSOR_ID_I_BEAM : B_CURSOR_ID_SYSTEM_DEFAULT);
+				SetViewCursor(&cursor);
+			}
+		}
+	}
+}
+
+
 void
 TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 {
 	// (the document's coordinates; the mouse's are the zoomed view's)
 	where.x /= fZoom;
 	where.y /= fZoom;
+	UpdateCursor(where);
 	if (DrawingMoved(where)) {
 		BView::MouseMoved(where, transit, dragMessage);
 		return;
@@ -1882,36 +1923,6 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 			if (!TableDragMoved(c))
 				fCaret = c;
 			Invalidate();
-		}
-	}
-	// over a heading's edge: the resizing cursor
-	if (!fResizing.active && !fDraggingCells && !fDraggingHeadings && !fDragging) {
-		size_t part;
-		bool columns;
-		int index;
-		float start, offset;
-		// (TSSFrame::GetCursor: the spreadsheet's own pointers, TPartSSFactory:
-		// CURS 1001 on a column heading's edge, 1002 on a row's, else 1000)
-		BRect sheet;
-		int shown = HitResize(where, part, columns, index, start, offset) ? (columns ? 1 : 2)
-			: SheetFrameAt(where, sheet) != NULL ? 5 : 0;
-		if (shown == 0)
-			shown = TextCursor(where);
-		if (shown != fCursorShown) {
-			fCursorShown = shown;
-			const BCursor* gobe = shown > 5 ? GobeResources::Cursor(shown)
-				: shown == 1 || shown == 2 || shown == 5
-					? GobeResources::Cursor(shown == 1 ? 1001 : shown == 2 ? 1002 : 1000,
-						&GobeResources::Part("Spreadsheet"))
-				: NULL;
-			if (gobe != NULL)
-				SetViewCursor(gobe);
-			else {
-				BCursor cursor(shown == 1 ? B_CURSOR_ID_RESIZE_EAST_WEST
-					: shown == 2 ? B_CURSOR_ID_RESIZE_NORTH_SOUTH
-					: shown == 3 ? B_CURSOR_ID_I_BEAM : B_CURSOR_ID_SYSTEM_DEFAULT);
-				SetViewCursor(&cursor);
-			}
 		}
 	}
 	if (fResizing.active) {
