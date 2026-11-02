@@ -1800,7 +1800,14 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		}
 		bool shift = (modifiers() & B_SHIFT_KEY) != 0 || fScriptShift;
 		if (shift && fCaret.active && caret.part == fCaret.part) {
-			fCaret = caret;
+			// (in a table, into another cell: the cells from the anchor's to
+			// this one's selected, as dragging there does)
+			Caret clicked = caret;
+			fCaret = fAnchor;
+			TableDragBegan();
+			if (!TableDragMoved(clicked))
+				fCaret = clicked;
+			fTableDrag.active = false;
 		} else if (clicks == 2) {
 			// TWPClickHandler: a word (TWPPart::WordBounds), the line
 			// (LogicalLineBounds), the paragraph (ParBounds)
