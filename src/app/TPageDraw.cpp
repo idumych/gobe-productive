@@ -621,7 +621,8 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 	};
 	// one selected shape's handles first: resizing, rotating or a point
 	// reshaped
-	if (fShapes.size() == 1 && inDrawing && part == fShapes[0].part && !shift) {
+	if (fShapes.size() == 1 && inDrawing && part == fShapes[0].part
+			&& (!shift || fShapeMode == 2)) {
 		const Shape* s = ShapeAt(fDocument, part, fShapes[0].layer, fShapes[0].index);
 		float px = where.x - x, py = where.y - y;
 		bool editable = s != nullptr && !ShapeLocked(*s) && s->kind != Sig("FRAM");
@@ -661,6 +662,18 @@ TPageView::DrawingClick(BPoint where, int32 clicks)
 				}
 			}
 		}
+		// (Reshape: the point clicked selected, TGRBezigon's SelectVertex;
+		// with Shift added to or taken from the selection, not dragged)
+		if (vertex >= 0 && s->kind == Sig("BEZI")) {
+			GRPart* gr = const_cast<GRPart*>(fDocument.GraphicsPart(part));
+			SelectVertex(gr->layers[fShapes[0].layer].shapes[fShapes[0].index], vertex, shift);
+			if (shift) {
+				Invalidate();
+				return true;
+			}
+		}
+		if (shift && fShapeMode == 2)
+			control = vertex = -1;
 		if (control >= 0 || vertex >= 0 || handle >= 0) {
 			startDrag(control >= 0 ? 8 : vertex >= 0 ? 5 : fShapeMode == 1 ? 4 : 3);
 			fShapeDrag.handle = control >= 0 ? control : vertex >= 0 ? vertex : handle;
@@ -938,6 +951,8 @@ TPageView::DrawingUp(BPoint where)
 				PulledControlPoint(s, drag.pulled);
 			MoveControlPoint(s, drag.handle, drag.now[0], drag.now[1]);
 		}
+		else if (s.kind == Sig("BEZI"))
+			OffsetSelectedVertices(s, drag.now[0] - drag.start[0], drag.now[1] - drag.start[1]);
 		else
 			MoveVertex(s, drag.handle, drag.now[0], drag.now[1]);
 	}
@@ -971,11 +986,24 @@ TPageView::DrawingKey(const char* bytes, int32 count)
 		return a.layer != b.layer ? a.layer > b.layer : a.index > b.index;
 	});
 	bool groups = false;
+	std::vector<ShapeRef> kept;		// (their selected points deleted)
 	for (const ShapeRef& ref : doomed) {
 		if (gr == nullptr || ref.layer >= gr->layers.size()
 				|| ref.index >= gr->layers[ref.layer].shapes.size()
 				|| ShapeLocked(gr->layers[ref.layer].shapes[ref.index]))
 			continue;
+		// (TDeleteShapesCommand, GetDeleteMode: in Reshape, a path's
+		// selected points go, or nothing if it would be left under 3)
+		if (fShapeMode == 2) {
+			Shape& shape = gr->layers[ref.layer].shapes[ref.index];
+			int mode = DeleteMode(shape);
+			if (mode == 1) {
+				DeleteSelectedVertices(shape);
+				kept.push_back(ref);
+			}
+			if (mode != 0)
+				continue;
+		}
 		size_t group;
 		std::string error;
 		if (IsGroupShape(fDocument, gr->layers[ref.layer].shapes[ref.index], group)) {
@@ -996,7 +1024,7 @@ TPageView::DrawingKey(const char* bytes, int32 count)
 	}
 	if (groups)
 		GeometryChanged();
-	fShapes.clear();
+	fShapes = kept;
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);
@@ -1610,19 +1638,37 @@ TPageView::DrawShapeSelection(float dx, float dy)
 				BPoint(fShapeDrag.now[0] + ox, fShapeDrag.now[1] + oy), B_MIXED_COLORS);
 		}
 		if (fShapeMode == 2 && fShapes.size() == 1 && !ShapeLocked(*s) && s->kind != Sig("FRAM")) {
-			// Reshape: the points (open squares), a curve's control points
-			// (round, joined to their point)
-			for (const DrawPoint& p : ShapeVertices(*s))
-				StrokeRect(BRect(p[0] + ox - kHandle, p[1] + oy - kHandle, p[0] + ox + kHandle,
-					p[1] + oy + kHandle));
-			const std::vector<Vertex>& vertices = s->paths.empty()
-				? std::vector<Vertex>() : s->paths[0].vertices;
+			// Reshape (TGRBezigon::DrawHandle): a point without control
+			// points square, with them round, filled once selected; a
+			// selected point's control points open squares joined to it
+			const std::vector<Vertex>& vertices = s->kind == Sig("BEZI") && !s->paths.empty()
+				? s->paths[0].vertices : std::vector<Vertex>();
+			std::vector<DrawPoint> points = ShapeVertices(*s);
+			for (size_t i = 0; i < points.size(); i++) {
+				BRect h(points[i][0] + ox - kHandle, points[i][1] + oy - kHandle,
+					points[i][0] + ox + kHandle, points[i][1] + oy + kHandle);
+				bool curved = false, selected = false;
+				if (i < vertices.size()) {
+					const Vertex& v = vertices[i];
+					curved = v.control1[0] != 0 || v.control1[1] != 0 || v.control2[0] != 0
+						|| v.control2[1] != 0;
+					selected = (v.flags & 4) != 0;
+				}
+				SetHighColor(255, 255, 255);
+				if (!selected)
+					curved ? FillEllipse(h) : FillRect(h);
+				SetHighColor(0, 0, 0);
+				if (selected)
+					curved ? FillEllipse(h) : FillRect(h);
+				else
+					curved ? StrokeEllipse(h) : StrokeRect(h);
+			}
 			for (const auto& [handle, p] : ControlPoints(*s)) {
 				const Vertex& v = vertices[size_t(handle / 2)];
 				BPoint from(s->origin[0] + v.point[0] + ox, s->origin[1] + v.point[1] + oy);
 				BPoint c(p[0] + ox, p[1] + oy);
-				StrokeLine(from, c, B_MIXED_COLORS);
-				FillEllipse(BRect(c.x - kHandle, c.y - kHandle, c.x + kHandle, c.y + kHandle));
+				StrokeLine(from, c);
+				StrokeRect(BRect(c.x - kHandle, c.y - kHandle, c.x + kHandle, c.y + kHandle));
 			}
 			continue;
 		}

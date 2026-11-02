@@ -423,30 +423,11 @@ HitVertex(const Shape& shape, float x, float y, float tolerance)
 }
 
 
+// TShape::Recalc: a path's box around its points again (the control
+// points are offsets: they move with theirs)
 void
-MoveVertex(Shape& shape, int vertex, float x, float y)
+RecalcPath(Shape& shape)
 {
-	if (shape.kind == Sig("LINE")) {
-		if (vertex == 0) {
-			float endX = shape.origin[0] + shape.size[0], endY = shape.origin[1] + shape.size[1];
-			shape.origin[0] = x;
-			shape.origin[1] = y;
-			shape.size[0] = endX - x;
-			shape.size[1] = endY - y;
-		} else if (vertex == 1) {
-			shape.size[0] = x - shape.origin[0];
-			shape.size[1] = y - shape.origin[1];
-		}
-		return;
-	}
-	if (shape.kind != Sig("BEZI") || shape.paths.empty() || vertex < 0
-			|| size_t(vertex) >= shape.paths[0].vertices.size())
-		return;
-	Vertex& v = shape.paths[0].vertices[size_t(vertex)];
-	v.point[0] = x - shape.origin[0];
-	v.point[1] = y - shape.origin[1];
-	// TShape::Recalc: the box around the points again (the control
-	// points are offsets: they move with theirs)
 	float left = 0, top = 0, right = 0, bottom = 0;
 	bool first = true;
 	for (const BezierPath& p : shape.paths)
@@ -473,6 +454,32 @@ MoveVertex(Shape& shape, int vertex, float x, float y)
 }
 
 
+void
+MoveVertex(Shape& shape, int vertex, float x, float y)
+{
+	if (shape.kind == Sig("LINE")) {
+		if (vertex == 0) {
+			float endX = shape.origin[0] + shape.size[0], endY = shape.origin[1] + shape.size[1];
+			shape.origin[0] = x;
+			shape.origin[1] = y;
+			shape.size[0] = endX - x;
+			shape.size[1] = endY - y;
+		} else if (vertex == 1) {
+			shape.size[0] = x - shape.origin[0];
+			shape.size[1] = y - shape.origin[1];
+		}
+		return;
+	}
+	if (shape.kind != Sig("BEZI") || shape.paths.empty() || vertex < 0
+			|| size_t(vertex) >= shape.paths[0].vertices.size())
+		return;
+	Vertex& v = shape.paths[0].vertices[size_t(vertex)];
+	v.point[0] = x - shape.origin[0];
+	v.point[1] = y - shape.origin[1];
+	RecalcPath(shape);
+}
+
+
 
 std::vector<std::pair<int, DrawPoint>>
 ControlPoints(const Shape& shape)
@@ -482,6 +489,9 @@ ControlPoints(const Shape& shape)
 		return points;
 	const std::vector<Vertex>& v = shape.paths[0].vertices;
 	for (size_t i = 0; i < v.size(); i++) {
+		// (TGRBezigon::DrawHandle: a selected point's, unless it has flag 1)
+		if ((v[i].flags & 4) == 0 || (v[i].flags & 1) != 0)
+			continue;
 		float px = shape.origin[0] + v[i].point[0], py = shape.origin[1] + v[i].point[1];
 		if (v[i].control1[0] != 0 || v[i].control1[1] != 0)
 			points.push_back({int(i * 2), {px + v[i].control1[0], py + v[i].control1[1]}});
@@ -643,8 +653,11 @@ InsertPathVertex(Shape& shape, float x, float y, float tolerance)
 	v[size_t(i)].control2[1] = ab[1] - b[0][1];
 	v[j].control1[0] = cd[0] - b[3][0];
 	v[j].control1[1] = cd[1] - b[3][1];
-	v[size_t(i)].flags &= uint8_t(~6);
-	v[j].flags &= uint8_t(~6);
+	// (the points' selection, 4, cleared; either side made corners, 1 and 2)
+	for (Vertex& each : v)
+		each.flags &= uint8_t(~4);
+	v[size_t(i)].flags &= uint8_t(~3);
+	v[j].flags &= uint8_t(~3);
 	v.insert(v.begin() + i + 1, made);
 	return i + 1;
 }
@@ -677,8 +690,73 @@ PulledControlPoint(Shape& shape, int vertex)
 	else
 		handle = vertex * 2;
 	if (handle >= 0)
-		v.flags &= uint8_t(~6);
+		v.flags &= uint8_t(~3);
 	return handle;
+}
+
+
+void
+SelectVertex(Shape& shape, int vertex, bool extend)
+{
+	if (shape.kind != Sig("BEZI") || shape.paths.empty() || vertex < 0
+			|| size_t(vertex) >= shape.paths[0].vertices.size())
+		return;
+	std::vector<Vertex>& v = shape.paths[0].vertices;
+	if (extend) {
+		v[size_t(vertex)].flags ^= 4;
+		return;
+	}
+	if ((v[size_t(vertex)].flags & 4) != 0)
+		return;
+	for (Vertex& w : v)
+		w.flags &= uint8_t(~4);
+	v[size_t(vertex)].flags |= 4;
+}
+
+
+void
+OffsetSelectedVertices(Shape& shape, float dx, float dy)
+{
+	if (shape.kind != Sig("BEZI"))
+		return;
+	for (BezierPath& p : shape.paths)
+		for (Vertex& v : p.vertices)
+			if ((v.flags & 4) != 0) {
+				v.point[0] += dx;
+				v.point[1] += dy;
+			}
+	RecalcPath(shape);
+}
+
+
+int
+DeleteMode(const Shape& shape)
+{
+	if (ShapeLocked(shape))
+		return 2;
+	if (shape.kind != Sig("BEZI") || shape.paths.empty())
+		return 0;
+	size_t selected = 0, count = 0;
+	for (const BezierPath& p : shape.paths)
+		for (const Vertex& v : p.vertices) {
+			count++;
+			selected += (v.flags & 4) != 0;
+		}
+	if (selected == 0 || selected == count)
+		return 0;
+	return count < 3 ? 2 : 1;
+}
+
+
+void
+DeleteSelectedVertices(Shape& shape)
+{
+	if (shape.kind != Sig("BEZI"))
+		return;
+	for (BezierPath& p : shape.paths)
+		p.vertices.erase(std::remove_if(p.vertices.begin(), p.vertices.end(),
+			[](const Vertex& v) { return (v.flags & 4) != 0; }), p.vertices.end());
+	RecalcPath(shape);
 }
 
 

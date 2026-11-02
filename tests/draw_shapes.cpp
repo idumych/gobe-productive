@@ -378,7 +378,9 @@ main(int argc, char** argv)
 	{
 		Document curves;
 		Check(CreateBlankDrawing(curves, error), "a drawing for curves " + error);
-		Vertex a{{10, 10}, {0, 0}, {20, 0}, 4}, b{{60, 40}, {-10, -10}, {10, 10}, 2};
+		// (both selected, 4: only a selected point's control points show,
+		// TGRBezigon::DrawHandle)
+		Vertex a{{10, 10}, {0, 0}, {20, 0}, 4}, b{{60, 40}, {-10, -10}, {10, 10}, 2 | 4};
 		Check(AddBezierShape(curves, 0, 0, {a, b}) == 0, "a Bezier path");
 		Shape& sh = curves.EditableGraphicsPart(0)->layers[0].shapes[0];
 		Check(sh.origin[0] == 10 && sh.size[0] == 50 && !sh.paths[0].closed
@@ -711,6 +713,47 @@ main(int argc, char** argv)
 		path.paths[0].vertices[2].flags = 2;
 		Check(PulledControlPoint(path, 2) == 4 && path.paths[0].vertices[2].flags == 0,
 			"the one before while it's on the point, the point a corner");
+	}
+
+	// ---- Reshape's selected points ----
+	{
+		Shape path;
+		path.kind = Sig("BEZI");
+		path.paths.resize(1);
+		Vertex p0{}, p1{}, p2{}, p3{};
+		p1.point[0] = 10;
+		p2.point[0] = 10;
+		p2.point[1] = 10;
+		p3.point[1] = 10;
+		p1.control2[0] = 5;
+		path.paths[0].vertices = {p0, p1, p2, p3};
+		const std::vector<Vertex>& v = path.paths[0].vertices;
+		Check(ControlPoints(path).empty(), "no point selected: no control points shown");
+		SelectVertex(path, 1, false);
+		Check((v[1].flags & 4) && ControlPoints(path).size() == 1, "point 1 selected, its control shown");
+		SelectVertex(path, 2, true);
+		SelectVertex(path, 3, true);
+		SelectVertex(path, 3, true);
+		Check((v[1].flags & 4) && (v[2].flags & 4) && !(v[3].flags & 4), "Shift adds and takes away");
+		SelectVertex(path, 1, false);
+		Check((v[2].flags & 4), "a click on a selected point keeps the others");
+		SelectVertex(path, 0, false);
+		Check((v[0].flags & 4) && !(v[1].flags & 4) && !(v[2].flags & 4), "else it alone");
+		SelectVertex(path, 1, true);
+		OffsetSelectedVertices(path, 5, 5);
+		// (points 0 and 1 to (5, 5) and (15, 5): the box from (0, 5))
+		Check(path.origin[0] == 0 && path.origin[1] == 5 && v[0].point[0] == 5 && v[0].point[1] == 0
+			&& v[2].point[0] == 10 && v[2].point[1] == 5,
+			"the selected points moved together, the box after them");
+		Check(DeleteMode(path) == 1, "some points selected: they go");
+		DeleteSelectedVertices(path);
+		Check(v.size() == 2 && path.size[0] == 10, "two points left");
+		SelectVertex(path, 0, false);
+		Check(DeleteMode(path) == 2, "a path under 3 points: nothing goes");
+		SelectVertex(path, 1, true);
+		Check(DeleteMode(path) == 0, "all selected: the shape goes");
+		path.values[0] |= kShapeLocked;
+		Check(DeleteMode(path) == 2, "a locked shape: nothing");
 	}
 
 	printf("draw_shapes: ok %d, failed %d\n", sOk, sFailed);

@@ -111,7 +111,22 @@ void MoveVertex(Shape& shape, int vertex, float x, float y);
 // the points Reshape shows (drawing coordinates)
 std::vector<DrawPoint> ShapeVertices(const Shape& shape);
 
-// a curve's control points (Reshape): a path vertex's control points
+// TShape::Recalc: a path's box around its points again
+void RecalcPath(Shape& shape);
+
+// Reshape's selected points (a path vertex's flag 4, TGRBezigon):
+// SelectVertex, a click on one (with Shift added to or taken from the
+// selection; else it alone selected unless it already is); the selected
+// points moved together (TPartGR::OffsetSelectionVertexs); Clear, by
+// TGRBezigon::GetDeleteMode: 0 the shape goes (no points selected, or
+// all), 1 the selected points go, 2 nothing (a locked shape, a path that
+// would be left under 3 points)
+void SelectVertex(Shape& shape, int vertex, bool extend);
+void OffsetSelectedVertices(Shape& shape, float dx, float dy);
+int DeleteMode(const Shape& shape);
+void DeleteSelectedVertices(Shape& shape);
+
+// a curve's control points (Reshape): a selected path vertex's control points
 // that aren't on it (TVertex: offsets from the point), as handles numbered
 // vertex * 2 (the one before) and vertex * 2 + 1 (the one after); their
 // positions (drawing coordinates), the one within `tolerance` (-1 none),
