@@ -49,7 +49,7 @@ else
   ifneq ($(wildcard $(COSMOE_ROOT)/include/os/app/Application.h),)
     # Plain Linux with Cosmoe (the Haiku API as a library on X11/Wayland)
     PLATFORM    := Cosmoe
-    COSMOE_DIRS := config os os/app os/game os/interface os/kernel os/locale \
+    COSMOE_DIRS := config os os/add-ons/graphics os/app os/game os/interface os/kernel os/locale \
                    os/media os/net os/storage os/support os/translation \
                    os/be_apps/Tracker private/interface private/shared \
                    private/support posix

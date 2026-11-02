@@ -101,6 +101,9 @@ public:
 	// the slide shown or its layers switched (TPartPR::SetCurrentSlide,
 	// ActivateLayer): laid out and drawn again, the document not changed
 	void SlideShownChanged();
+	// TDocBitmap: part `part`'s frame (the first placed) drawn at `zoom`
+	// into a bitmap of its own (the slide show's slides); NULL if none
+	static BBitmap* RenderFrame(Document& document, size_t part, float zoom);
 	// TPartGR::ValidateSelection: the shapes selected on layers that can't
 	// be clicked any more (hidden, not editable) deselected; all of them
 	// with `all` (a layer added or deleted)

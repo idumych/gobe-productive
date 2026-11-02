@@ -11,6 +11,8 @@
 #include <OutlineListView.h>
 #include <PopUpMenu.h>
 #include <RadioButton.h>
+#include <Bitmap.h>
+#include <Screen.h>
 #include <ScrollView.h>
 
 #include <cmath>
@@ -21,6 +23,7 @@
 #include "ResourceFile.h"
 #include "TDocWindow.h"
 #include "TMenu.h"
+#include "TPageView.h"
 
 namespace gobe {
 
@@ -804,6 +807,314 @@ TDialogPRNavigate::ItemHit(int32 index, BMessage* message)
 		return true;
 	}
 	return TDialog::ItemHit(index, message);
+}
+
+// #pragma mark - the slide show
+
+
+namespace {
+
+class TSlideShowWindow;
+
+class TSlideView : public BView {
+public:
+	TSlideView(BRect frame, TSlideShowWindow* show)
+		:
+		BView(frame, "slide", B_FOLLOW_ALL, B_WILL_DRAW),
+		fShow(show)
+	{
+		SetViewColor(B_TRANSPARENT_COLOR);
+	}
+
+	virtual void Draw(BRect update);
+	virtual void KeyDown(const char* bytes, int32 count);
+	virtual void MouseDown(BPoint where);
+
+private:
+	TSlideShowWindow* fShow;
+};
+
+
+class TSlideShowWindow : public BWindow {
+public:
+	TSlideShowWindow(TDocWindow* window, Document* document, int32 slide)
+		:
+		BWindow(BScreen().Frame(), "Presentation", B_NO_BORDER_WINDOW_LOOK,
+			B_FLOATING_ALL_WINDOW_FEEL, B_NOT_MOVABLE | B_NOT_RESIZABLE | B_NOT_ZOOMABLE
+				| B_NOT_MINIMIZABLE | B_ASYNCHRONOUS_CONTROLS),
+		fWindow(window),
+		fDocument(document),
+		fSlide(slide)
+	{
+		BRect screen = BScreen().Frame();
+		// TPRWinHelper::FinishDocWindow: the slide as large as the screen
+		// allows, in the middle, black round it
+		float width = 640, height = 480;
+		if (const GRPart* gr = fDocument->PresentationGraphics()) {
+			width = std::max(1.0f, gr->size[0]);
+			height = std::max(1.0f, gr->size[1]);
+		}
+		fZoom = std::min((screen.Width() + 1) / width, (screen.Height() + 1) / height);
+		float w = floorf(width * fZoom), h = floorf(height * fZoom);
+		fArea.Set(floorf((screen.Width() + 1 - w) / 2), floorf((screen.Height() + 1 - h) / 2), 0, 0);
+		fArea.right = fArea.left + w - 1;
+		fArea.bottom = fArea.top + h - 1;
+		fView = new TSlideView(Bounds(), this);
+		AddChild(fView);
+		fView->MakeFocus();
+		{
+			BScreen display(this);
+			display_mode mode;
+			if (display.GetMode(&mode) == B_OK && mode.timing.pixel_clock > 0
+					&& mode.timing.h_total > 0 && mode.timing.v_total > 0)
+				fRate = int32(mode.timing.pixel_clock * 1000.0
+					/ (mode.timing.h_total * mode.timing.v_total) + 0.5);
+			if (fRate < 20 || fRate > 240)
+				fRate = 60;
+		}
+		fShown = Render(fSlide);
+		if (!fDocument->presentation.cursor) {
+			be_app->HideCursor();
+			fHidCursor = true;
+		}
+	}
+
+	virtual ~TSlideShowWindow()
+	{
+		delete fShown;
+	}
+
+	BBitmap* Shown() const { return fShown; }
+	BRect Area() const { return fArea; }
+
+	// TPRWinHelper::HandleKey
+	void Key(char key, uint32 modifiers)
+	{
+		int32 count = int32(fDocument->slides.size());
+		int32 to = fSlide;
+		switch (key) {
+			case B_HOME:
+			case B_UP_ARROW:
+				to = 0;
+				break;
+			case B_END:
+			case B_DOWN_ARROW:
+				to = count - 1;
+				break;
+			case B_BACKSPACE:
+			case B_PAGE_UP:
+			case B_LEFT_ARROW:
+				to--;
+				break;
+			case B_TAB:
+			case B_PAGE_DOWN:
+			case B_RIGHT_ARROW:
+			case B_SPACE:
+				to++;
+				break;
+			case '.':
+				if ((modifiers & B_COMMAND_KEY) == 0)
+					return;
+				// fall through
+			case B_ESCAPE:
+			case 'Q':
+			case 'q':
+				PostMessage(B_QUIT_REQUESTED);
+				return;
+			case 'R':
+			case 'r':
+				fView->Invalidate();
+				return;
+			default:
+				return;
+		}
+		if (to == fSlide || to < 0 || to >= count)
+			return;
+		BBitmap* next = Render(to);
+		if (next == NULL)
+			return;
+		// the slide left's transition, going on to the next; any other
+		// change a jump
+		if (to == fSlide + 1)
+			Transit(fShown, next, fDocument->slides[size_t(fSlide)].transition,
+				fDocument->slides[size_t(fSlide)].options);
+		delete fShown;
+		fShown = next;
+		fSlide = to;
+		fView->Invalidate();
+	}
+
+	virtual bool QuitRequested()
+	{
+		// back in the window on the slide the show ended on
+		if (fHidCursor)
+			be_app->ShowCursor();
+		BMessage show('PR0H');
+		show.AddInt32("slide", fSlide);
+		show.AddInt32("layer", -1);
+		fWindow->PostMessage(&show);
+		return true;
+	}
+
+private:
+	// TDocBitmap: the slide at the show's zoom, drawn with the document's
+	// window locked
+	BBitmap* Render(int32 slide)
+	{
+		BBitmap* bitmap = NULL;
+		if (fWindow->LockWithTimeout(2000000) == B_OK) {
+			fDocument->ActivateSlideLayer(size_t(slide), -1);
+			bitmap = TPageView::RenderFrame(*fDocument, size_t(fDocument->presentationPart),
+				fZoom);
+			fWindow->Unlock();
+		}
+		return bitmap;
+	}
+
+	// the transitions' Go: a step a screen refresh, as many as the screen
+	// refreshes in a second, in 0.8 s
+	void Step()
+	{
+		fView->Sync();
+		snooze(bigtime_t(800000 / fRate));
+	}
+
+	void DrawPart(BBitmap* bitmap, BRect source)
+	{
+		source = source & bitmap->Bounds();
+		if (!source.IsValid())
+			return;
+		fView->DrawBitmap(bitmap, source, source.OffsetByCopy(fArea.LeftTop()));
+	}
+
+	void Transit(BBitmap* from, BBitmap* to, uint32 type, uint32 options)
+	{
+		if (!LockLooper())
+			return;
+		BRect r = to->Bounds();
+		float w = r.Width() + 1, h = r.Height() + 1;
+		switch (type) {
+			case 'Wipe':
+			{
+				// WipeTransition: a strip the new slide grows by, from the
+				// side the options name (left, top, right, bottom)
+				for (int32 i = 0; i < fRate; i++) {
+					float a = floorf(i * (options % 2 == 0 ? w : h) / fRate);
+					float b = floorf((i + 1) * (options % 2 == 0 ? w : h) / fRate);
+					BRect strip;
+					switch (options) {
+						case 0: strip.Set(a, 0, b, h - 1); break;
+						case 1: strip.Set(0, a, w - 1, b); break;
+						case 2: strip.Set(w - 1 - b, 0, w - 1 - a, h - 1); break;
+						default: strip.Set(0, h - 1 - b, w - 1, h - 1 - a); break;
+					}
+					DrawPart(to, strip);
+					Step();
+				}
+				break;
+			}
+			case 'Vene':
+			{
+				// VenetianTransition: ten blinds, each 2 pixels more a step
+				bool horizontal = (options & 1) != 0;
+				float blind = floorf((horizontal ? h : w) / 10);
+				for (float d = 0; d < blind; d += 2) {
+					for (int32 b = 0; b <= 10; b++) {
+						float at = b * blind + d;
+						DrawPart(to, horizontal ? BRect(0, at, w - 1, at + 1)
+							: BRect(at, 0, at + 1, h - 1));
+					}
+					Step();
+				}
+				break;
+			}
+			case 'Elev':
+			{
+				// ElevatorTransition: two halves, top and bottom (bit 0
+				// off) or left and right; opening (bit 1), the old slide's
+				// part, closing, the new one's coming in
+				bool vertical = (options & 1) != 0, opening = (options & 2) != 0;
+				float half = (vertical ? w : h) / 2;
+				for (int32 i = 1; i <= fRate; i++) {
+					float d = half * i / fRate;
+					BBitmap* moving = opening ? from : to;
+					if (opening)
+						DrawPart(to, r);
+					BRect first = vertical ? BRect(0, 0, half - 1, h - 1)
+						: BRect(0, 0, w - 1, half - 1);
+					BRect second = vertical ? BRect(half, 0, w - 1, h - 1)
+						: BRect(0, half, w - 1, h - 1);
+					float shift = opening ? d : half - d;
+					BPoint out1 = vertical ? BPoint(-shift, 0) : BPoint(0, -shift);
+					BPoint out2 = vertical ? BPoint(shift, 0) : BPoint(0, shift);
+					BRect target1 = first.OffsetByCopy(out1) & r;
+					BRect target2 = second.OffsetByCopy(out2) & r;
+					if (target1.IsValid())
+						fView->DrawBitmap(moving, target1.OffsetByCopy(-out1.x, -out1.y),
+							target1.OffsetByCopy(fArea.LeftTop()));
+					if (target2.IsValid())
+						fView->DrawBitmap(moving, target2.OffsetByCopy(-out2.x, -out2.y),
+							target2.OffsetByCopy(fArea.LeftTop()));
+					Step();
+				}
+				break;
+			}
+		}
+		UnlockLooper();
+	}
+
+	TDocWindow* fWindow;
+	Document* fDocument;
+	int32 fSlide;
+	float fZoom = 1;
+	BRect fArea;
+	int32 fRate = 60;
+	BBitmap* fShown = NULL;
+	TSlideView* fView = NULL;
+	bool fHidCursor = false;
+};
+
+
+void
+TSlideView::Draw(BRect update)
+{
+	SetHighColor(0, 0, 0);
+	FillRect(Bounds());
+	if (BBitmap* shown = fShow->Shown())
+		DrawBitmap(shown, fShow->Area().LeftTop());
+}
+
+
+void
+TSlideView::KeyDown(const char* bytes, int32 count)
+{
+	int32 modifiers = 0;
+	if (Window()->CurrentMessage() != NULL)
+		Window()->CurrentMessage()->FindInt32("modifiers", &modifiers);
+	fShow->Key(bytes[0], uint32(modifiers));
+}
+
+
+// TPRWinHelper::HandleClick: as Space
+void
+TSlideView::MouseDown(BPoint where)
+{
+	fShow->Key(B_SPACE, 0);
+}
+
+} // namespace
+
+
+void
+StartSlideShow(TDocWindow* window, Document* document, int32 slide)
+{
+	if (window == NULL || document == NULL || document->presentationPart < 0
+			|| document->slides.empty())
+		return;
+	slide = std::max<int32>(0, std::min<int32>(slide, int32(document->slides.size()) - 1));
+	TSlideShowWindow* show = new TSlideShowWindow(window, document, slide);
+	show->Show();
+	show->Activate();
 }
 
 } // namespace gobe

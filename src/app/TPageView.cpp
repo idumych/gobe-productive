@@ -1,5 +1,7 @@
 #include "TPageView.h"
 
+#include <Bitmap.h>
+
 #include "GobeResources.h"
 #include "TEntryBar.h"
 #include "TInkMenus.h"
@@ -2701,6 +2703,51 @@ TPageView::GeometryChanged()
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);
+}
+
+
+BBitmap*
+TPageView::RenderFrame(Document& document, size_t part, float zoom)
+{
+	static UndoStack undo;		// (nothing is edited)
+	TPageView* view = new TPageView(document, undo);
+	const Document::PlacedFrame* frame = NULL;
+	for (const auto& f : view->fFrames)
+		if (f.part == part) {
+			frame = &f;
+			break;
+		}
+	if (frame == NULL) {
+		delete view;
+		return NULL;
+	}
+	view->fZoom = zoom;
+	BSize size = view->PreferredSize();
+	BRect bounds(0, 0, ceilf(size.width), ceilf(size.height));
+	BRect area((frame->x + view->fMargin - view->fBounds.left) * zoom,
+		(frame->y + view->fMargin - view->fBounds.top) * zoom,
+		(frame->x + frame->width + view->fMargin - view->fBounds.left) * zoom - 1,
+		(frame->y + frame->height + view->fMargin - view->fBounds.top) * zoom - 1);
+	BBitmap* page = new BBitmap(bounds, B_RGBA32, true);
+	view->ResizeTo(bounds.Width(), bounds.Height());
+	page->Lock();
+	page->AddChild(view);
+	view->Draw(bounds);
+	view->Sync();
+	page->RemoveChild(view);
+	page->Unlock();
+	delete view;
+	// the frame's part of it
+	area = area & bounds;
+	BBitmap* out = new BBitmap(BRect(0, 0, floorf(area.Width()), floorf(area.Height())),
+		B_RGBA32);
+	int32 left = int32(area.left), top = int32(area.top);
+	int32 rows = int32(out->Bounds().Height()) + 1, bytes = int32(out->Bounds().Width() + 1) * 4;
+	for (int32 y = 0; y < rows; y++)
+		memcpy((uint8*)out->Bits() + y * out->BytesPerRow(),
+			(const uint8*)page->Bits() + (top + y) * page->BytesPerRow() + left * 4, bytes);
+	delete page;
+	return out;
 }
 
 

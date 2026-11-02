@@ -166,6 +166,16 @@ private:
 	bool fUpdating = false;
 };
 
+class TDocWindow;
+
+// TPRWinHelper: the slide show (Start Presentation…, Start, Start Here):
+// the slides filling the screen, black round them, the cursor hidden
+// unless Options > Cursor; Home and Up the first slide, End and Down the
+// last, Backspace, Page Up and Left the one before, Tab, Page Down, Right,
+// Space and a click the next (with the slide's transition), Escape, Q and
+// Command-period end it
+void StartSlideShow(TDocWindow* window, struct Document* document, int32 slide);
+
 } // namespace gobe
 
 #endif
