@@ -573,6 +573,9 @@ private:
 	void DrawImage(const Document::PlacedFrame& frame, BRect rect);
 	void DrawClock(const Document::PlacedFrame& frame, BRect rect);
 	void DrawChart(const Document::PlacedFrame& frame, BRect rect);
+	// a 2D chart with axes (T2DXYAxisChart): its pieces as TChartPiece::
+	// Draw draws them
+	void DrawChart2D(const ChartPart& chart, BRect rect);
 	void DrawTable(const Document::PlacedFrame& frame, BRect rect);
 	void FillInk(BRect rect, const Ink& ink, float opacity, BRect inkRect);
 	const CellStyle& SpreadsheetStyle(const std::vector<uint32_t>& stack);

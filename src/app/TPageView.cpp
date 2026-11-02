@@ -2139,6 +2139,10 @@ void
 TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 {
 	const ChartPart& chart = *fDocument.Chart(f.part);
+	if (chart.chartType == Sig("2DSM")) {
+		DrawChart2D(chart, r);
+		return;
+	}
 	BRect plot = r, legend, title;
 	std::string titleText;
 	bool hasLegend = false, hasTitle = false, labelFrames = false;

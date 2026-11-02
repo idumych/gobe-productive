@@ -67,6 +67,15 @@ Bits(float value)
 }
 
 
+float
+AsFloat(uint32_t bits)
+{
+	float value;
+	std::memcpy(&value, &bits, 4);
+	return value;
+}
+
+
 // TAxis::NiceNum (Heckbert's): 1, 2, 5 or 10 times a power of ten
 float
 NiceNum(float x, bool round)
@@ -822,6 +831,29 @@ ChartSeriesChanged(ChartPart& chart)
 	}
 	SetRange(chart.axes[1], low, high, -1);
 	SetRange(chart.axes[0], 0, float(chart.Categories()), int(chart.Categories()));
+}
+
+
+void
+ChartAxisRange(const ChartAxis& axis, float& low, float& high)
+{
+	low = AsFloat(axis.values[2]);
+	high = AsFloat(axis.values[3]);
+	if (low == high) {
+		low = 0;
+		high = 1e-05f;
+	}
+}
+
+
+float
+ChartAxisStep(const ChartAxis& axis)
+{
+	float step = AsFloat(axis.values[5]);
+	if (step > 0)
+		return step;
+	return NiceNum(0.25f * NiceNum(AsFloat(axis.values[1]) - AsFloat(axis.values[0]), false),
+		true);
 }
 
 

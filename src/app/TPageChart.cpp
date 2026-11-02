@@ -5,6 +5,8 @@
 #include "TPageView.h"
 
 #include <Beep.h>
+#include <Region.h>
+#include <algorithm>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -56,7 +58,246 @@ ChartString(int32 id, int32 index)
 	return BString(gobe::IndexString(GobeResources::Part("Chart"), id, index).c_str());
 }
 
+
+rgb_color
+InkColor(const Color& c, float opacity)
+{
+	rgb_color color = {c.r, c.g, c.b, uint8(std::min(255.0f, std::max(0.0f, opacity * 255)))};
+	return color;
+}
+
 } // namespace
+
+
+// TChartPiece::Draw for each piece shown, in its layer's order: its
+// rectangle filled (TShape::FillShape), its content clipped to it, then
+// stroked (StrokeShape), each with the piece's style. The plot (TRendering
+// Piece::DrawContent, T2DXYAxisChart::Draw2D) is the rectangle from the
+// vertical axis's labels (LeftAxisSpace) and 15 down to 13 from the right
+// and 18 from the bottom: the horizontal axis, the vertical one, then the
+// series sets twice (bars and areas, then lines). The legend
+// (TChartLegend::Draw) has a 10 by 10 box of each series' fill, outlined
+// black, at 5 across and 4 + 12 a series down, its name 14 right of the
+// box's left at its bottom; the title (TTitlePiece::DrawContent) its text
+// at its position.
+void
+TPageView::DrawChart2D(const ChartPart& chart, BRect r)
+{
+	const StyleMgr& styles = fDocument.styles;
+	PushState();
+	BRegion frameClip(r);
+	ConstrainClippingRegion(&frameClip);
+	SetDrawingMode(B_OP_ALPHA);
+	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+
+	// TStyleID::Push: the style's font and text color
+	auto useFont = [&](uint32_t style) {
+		TextStyle ts = ResolveTextStyle(styles, style);
+		BFont font = TDocView::MapFont(ts);
+		SetFont(&font);
+		SetHighColor(InkColor(ts.color, 1));
+		return font;
+	};
+	// the style's pen: its color and size (a hairline for 0); false if it
+	// doesn't show
+	auto usePen = [&](const ShapeStyle& style) {
+		if (!style.pen.set || style.penOpacity <= 0)
+			return false;
+		SetHighColor(InkColor(style.pen.color, style.penOpacity));
+		SetPenSize(std::max(1.0f, style.penSize));
+		return true;
+	};
+	auto useFill = [&](const ShapeStyle& style) {
+		if (!style.fill.set || style.fillOpacity <= 0)
+			return false;
+		SetHighColor(InkColor(style.fill.color, style.fillOpacity));
+		return true;
+	};
+	auto label = [](float value) {
+		char text[64];
+		snprintf(text, sizeof text, "%.6g", double(value));
+		return std::string(text);
+	};
+
+	const ChartAxis& vertical = chart.axes[1];
+	const ChartAxis& horizontal = chart.axes[0];
+	size_t categories = chart.Categories();
+	size_t seriesCount = chart.SeriesCount();
+	float low, high;
+	ChartAxisRange(vertical, low, high);
+	float step = ChartAxisStep(vertical);
+	bool axisDrawn = high != low && step > 0;
+	auto seriesStyle = [&](uint32_t s) {
+		return s < chart.series.size() ? chart.series[s].style : 0xffffffffu;
+	};
+
+	for (const GRLayer& layer : chart.graphics.layers)
+		for (const Shape& piece : layer.shapes) {
+			bool rendering = piece.kind == Sig("Rndr");
+			if (!rendering && piece.kind != Sig("Lgnd") && piece.kind != Sig("Titl"))
+				continue;
+			if ((piece.pieceValue & 1) == 0)
+				continue;
+			BRect pr(r.left + piece.origin[0], r.top + piece.origin[1],
+				r.left + piece.origin[0] + piece.size[0], r.top + piece.origin[1] + piece.size[1]);
+			ShapeStyle pieceStyle = ResolveShapeStyle(styles, piece.style);
+			if (useFill(pieceStyle))
+				FillRect(pr);
+			PushState();
+			BRegion pieceClip(pr);
+			ConstrainClippingRegion(&pieceClip);
+			if (rendering && categories > 0 && seriesCount > 0) {
+				// LeftAxisSpace: 4 more than T2DVerticalAxis::DrawOrMeasure's
+				// widest label and 4
+				BFont axisFont = useFont(vertical.style);
+				float widest = 0;
+				if (axisDrawn)
+					for (float v = low; v < step * 0.5f + high; v += step)
+						widest = std::max(widest, axisFont.StringWidth(label(v).c_str()));
+				BRect plot(pr.left + 8 + widest, pr.top + 15, pr.right - 13, pr.bottom - 18);
+
+				// T2DHorizontalAxis::Draw: the line, a tick 3 down at each
+				// category's edge, its label centered 12 under the line, the
+				// gridlines (not at the first edge)
+				ShapeStyle hs = ResolveShapeStyle(styles, horizontal.style);
+				BFont hf = useFont(horizontal.style);
+				rgb_color textColor = HighColor();
+				float slot = (plot.right - plot.left) / float(categories);
+				if (usePen(hs))
+					StrokeLine(BPoint(plot.left, plot.bottom), BPoint(plot.right, plot.bottom));
+				for (size_t c = 0; c <= categories; c++) {
+					float x = plot.left + slot * float(c);
+					if (usePen(hs))
+						StrokeLine(BPoint(x, plot.bottom), BPoint(x, plot.bottom + 3));
+					if (c < categories && c < chart.data.names1.size()) {
+						const char* name = chart.data.names1[c].c_str();
+						SetHighColor(textColor);
+						DrawString(name, BPoint(x + slot * 0.5f - hf.StringWidth(name) * 0.5f,
+							plot.bottom + 12));
+					}
+					if (c != 0 && horizontal.flags[1]) {
+						SetHighColor(200, 200, 200);
+						StrokeLine(BPoint(x, plot.bottom - 1), BPoint(x, plot.top));
+					}
+				}
+
+				// T2DVerticalAxis::DrawOrMeasure: the line, from the range's
+				// low up by its step: the value 4 left of a tick 3 long left
+				// of the line, the gridline (not at the low)
+				ShapeStyle vs = ResolveShapeStyle(styles, vertical.style);
+				useFont(vertical.style);
+				textColor = HighColor();
+				if (axisDrawn) {
+					if (usePen(vs))
+						StrokeLine(BPoint(plot.left, plot.top), BPoint(plot.left, plot.bottom));
+					float x = plot.left - 1, y = plot.bottom;
+					float rise = -((plot.bottom - plot.top) / (high - low)) * step;
+					for (float v = low; v < step * 0.5f + high; v += step, y += rise) {
+						std::string text = label(v);
+						SetHighColor(textColor);
+						DrawString(text.c_str(), BPoint(x - axisFont.StringWidth(text.c_str()) - 4,
+							y + 4));
+						if (usePen(vs))
+							StrokeLine(BPoint(x, y), BPoint(x - 3, y));
+						if (vertical.flags[1] && v != low) {
+							SetHighColor(200, 200, 200);
+							StrokeLine(BPoint(x + 1, y), BPoint(plot.right, y));
+						}
+					}
+				}
+
+				// the series sets (T2DBarSeries, T2DLineSeries, T2DAreaSeries
+				// and T2DStackedAreaSeries::SeriesSetDraw): values from the
+				// vertical axis's zero (ZeroPoint), a category's width
+				float scale = (plot.bottom - plot.top) / (high - low);
+				float zero = low == high ? plot.bottom : plot.bottom + scale * low;
+				for (int pass : {1, 6})
+					for (const ChartSeriesSet& set : chart.sets) {
+						size_t count = set.series.size();
+						if (set.kind == 0 && pass == 1) {
+							// bars: a tenth of the category left free at its
+							// left, the rest shared by the set's series
+							float gap = slot / 10;
+							float bar = (slot - gap) / float(count);
+							for (size_t i = 0; i < count; i++) {
+								ShapeStyle ss = ResolveShapeStyle(styles, seriesStyle(set.series[i]));
+								for (size_t c = 0; c < categories; c++) {
+									float v = chart.Value(set.series[i], c);
+									if (v == 0)
+										continue;
+									float x = plot.left + gap + slot * float(c) + bar * float(i);
+									float top = zero - v * scale;
+									BRect box(x, std::min(top, zero), x + bar, std::max(top, zero));
+									if (useFill(ss))
+										FillRect(box);
+									if (usePen(ss))
+										StrokeRect(box);
+								}
+							}
+						} else if (set.kind == 1 && pass == 6) {
+							// lines: through each category's middle, in the
+							// series' fill color
+							for (uint32_t s : set.series) {
+								ShapeStyle ss = ResolveShapeStyle(styles, seriesStyle(s));
+								if (!ss.fill.set)
+									continue;
+								SetHighColor(InkColor(ss.fill.color, ss.fillOpacity));
+								SetPenSize(std::max(1.0f, ss.penSize));
+								for (size_t c = 1; c < categories; c++)
+									StrokeLine(BPoint(plot.left + slot * (float(c) - 0.5f),
+											zero - chart.Value(s, c - 1) * scale),
+										BPoint(plot.left + slot * (float(c) + 0.5f),
+											zero - chart.Value(s, c) * scale));
+							}
+						} else if ((set.kind == 2 || set.kind == 3) && pass == 1) {
+							// areas: from the zero line, or (stacked) from the
+							// series before in the set, filled
+							std::vector<BPoint> below;
+							for (size_t c = 0; c < categories; c++)
+								below.push_back(BPoint(plot.left + slot * (float(c) + 0.5f), zero));
+							for (uint32_t s : set.series) {
+								std::vector<BPoint> points;
+								for (size_t c = 0; c < categories; c++)
+									points.push_back(BPoint(below[c].x,
+										below[c].y - chart.Value(s, c) * scale));
+								std::vector<BPoint> polygon = points;
+								polygon.insert(polygon.end(), below.rbegin(), below.rend());
+								ShapeStyle ss = ResolveShapeStyle(styles, seriesStyle(s));
+								if (useFill(ss))
+									FillPolygon(polygon.data(), int32(polygon.size()));
+								if (set.kind == 3)
+									below = points;
+							}
+						}
+					}
+				SetPenSize(1);
+			} else if (piece.kind == Sig("Lgnd")) {
+				for (size_t s = 0; s < chart.series.size(); s++) {
+					BRect box(pr.left + chart.legendRect[0] + 5,
+						pr.top + chart.legendRect[1] + 4 + 12 * float(s), 0, 0);
+					box.right = box.left + 10;
+					box.bottom = box.top + 10;
+					ShapeStyle ss = ResolveShapeStyle(styles, chart.series[s].style);
+					if (useFill(ss))
+						FillRect(box);
+					SetHighColor(0, 0, 0);
+					SetPenSize(1);
+					StrokeRect(box);
+					useFont(chart.series[s].style);
+					DrawString(chart.series[s].name.c_str(), BPoint(box.left + 14, box.bottom));
+				}
+			} else if (piece.kind == Sig("Titl")) {
+				useFont(piece.style);
+				DrawString(piece.text.c_str(),
+					BPoint(pr.left + piece.radius[0], pr.top + piece.radius[1]));
+			}
+			PopState();
+			if (usePen(pieceStyle))
+				StrokeRect(pr);
+			SetPenSize(1);
+		}
+	PopState();
+}
 
 
 // a double click in a chart's frame enters it (the chart part active);

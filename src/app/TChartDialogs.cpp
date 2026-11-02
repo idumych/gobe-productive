@@ -34,23 +34,6 @@ Bits(float f)
 }
 
 
-// TAxis::NiceNum
-float
-NiceNum(float x, bool round)
-{
-	if (!(x > 0))
-		return 0;
-	double exponent = std::floor(std::log10(double(x)));
-	double fraction = double(x) / std::pow(10.0, exponent);
-	double nice;
-	if (round)
-		nice = fraction < 1.5 ? 1 : fraction < 3 ? 2 : fraction < 7 ? 5 : 10;
-	else
-		nice = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10;
-	return float(nice * std::pow(10.0, exponent));
-}
-
-
 // TString(float): the number as the dialog shows it
 BString
 Number(float value)
@@ -279,17 +262,10 @@ TDialogAxis::Setup(int32 index)
 		SetTextItem(6, "");
 		return;
 	}
-	// TAxis::GetRange: the range (0 to 0.00001 if it has none) and
-	// TickSpacing (the step, or a quarter of the data's nice range)
-	float low = AsFloat(axis.values[2]), high = AsFloat(axis.values[3]);
-	if (!(low < high)) {
-		low = 0;
-		high = 1e-05f;
-	}
-	float step = AsFloat(axis.values[5]);
-	if (!(step > 0))
-		step = NiceNum(0.25f * NiceNum(AsFloat(axis.values[1]) - AsFloat(axis.values[0]), false),
-			true);
+	// TAxis::GetRange, TickSpacing
+	float low, high;
+	ChartAxisRange(axis, low, high);
+	float step = ChartAxisStep(axis);
 	SetTextItem(4, Number(low).String());
 	SetTextItem(5, Number(high).String());
 	SetTextItem(6, Number(step).String());

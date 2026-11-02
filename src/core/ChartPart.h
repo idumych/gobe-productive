@@ -134,6 +134,12 @@ bool ToggleChartSeriesOrder(Document& doc, size_t chart);
 // axis given its range keeps it). Only a 2DSM chart's.
 void ChartSeriesChanged(ChartPart& chart);
 
+// TAxis::GetRange: the axis's nice range (0 to 0.00001 when it has none);
+// TAxis::TickSpacing: its step, or for one without, a nice quarter of its
+// data's nice range
+void ChartAxisRange(const ChartAxis& axis, float& low, float& high);
+float ChartAxisStep(const ChartAxis& axis);
+
 // the chart's type as the Chart Type dialog shows it: its major (Bar, Pie,
 // Line/Area, XY) and minor type (TChartPart +0xb4, +0xb8)
 void ChartTypeOf(const ChartPart& chart, uint32_t& major, uint32_t& minor);
