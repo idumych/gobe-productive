@@ -7,11 +7,10 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-71-77-0.svg" alt="Port progress: 71 of 77 features done, 6 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-72-77-0.svg" alt="Port progress: 72 of 77 features done, 5 left (see Features)" width="720"></p>
 
-Not everything is ported yet: image editing, editing tables
-and charts, a drawing's views and layers, and a few dialogs are still to
-come. The bar counts the [features](#features) by state.
+Not everything is ported yet: image editing, editing charts and a few
+dialogs are still to come. The bar counts the [features](#features) by state.
 
 ![Gobe Productive on Haiku: a drawing with the ToolBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
@@ -43,9 +42,9 @@ original's fill and pen inks, dashed, dotted and hashed pens and arrows.
 **Frames.** Text, spreadsheet, drawing, table and picture frames dragged
 out anywhere in a document, text wrapped around them, text frames linked
 so the text flows on. Open Frame Window edits a frame on its own.
+Tables are made with Insert Table… and edited with the Table menu.
 Pictures are shown and saved but not edited yet (the original's image
-processing part), and tables and charts aren't edited yet beyond their
-text and cells.
+processing part), and charts aren't edited yet beyond their cells.
 
 **Presentations.** File > New makes a presentation the way the original
 did, and the original's presentations open and show their slides in the
@@ -277,7 +276,7 @@ sizes, headings and options are saved with the document.
 
 | Feature | State |
 |---|---|
-| The Table menu: Merge Cells, Split Cell…, Select Row, Select Column, Insert and Delete Row and Column, Distribute Rows and Columns Evenly, Cell Gutter…, and the cells' vertical alignment (top, center, bottom) | not yet |
+| The Table menu: Merge Cells, Split Cell…, Select Row, Select Column, Insert and Delete Row and Column, Distribute Rows and Columns Evenly, Cell Gutter…, and the cells' vertical alignment (top, center, bottom); cells selected by dragging across them | next |
 | Insert Table… and the table's options (Cell Gutter…) | next |
 
 ### Charts
