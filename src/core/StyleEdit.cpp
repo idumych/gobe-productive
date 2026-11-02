@@ -1,6 +1,7 @@
 #include "StyleEdit.h"
 
 #include <algorithm>
+#include <functional>
 
 #include "Document.h"
 #include "Editing.h"
@@ -491,6 +492,55 @@ ApplyCharacterStyle(Document& doc, size_t part, TextPosition from, TextPosition 
 	if (changed)
 		doc.stylesChanged = true;
 	return changed;
+}
+
+
+std::vector<uint32_t>
+SortStyles(StyleMgr& styles)
+{
+	// Build an index array so we can sort by reference into the original vector.
+	std::vector<size_t> idx(styles.styles.size());
+	for (size_t i = 0; i < idx.size(); i++)
+		idx[i] = i;
+	std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) {
+		const Style& sa = styles.styles[a];
+		const Style& sb = styles.styles[b];
+		if (sa.value10 != sb.value10)
+			return sa.value10 < sb.value10;
+		if (sa.name.empty() != sb.name.empty())
+			return !sa.name.empty();
+		if (!sa.name.empty())
+			return sa.name < sb.name;
+		return false;
+	});
+
+	// Build the reordered styles and the old->new map in one pass.
+	std::vector<Style> sorted;
+	sorted.reserve(styles.styles.size());
+	std::vector<uint32_t> mapping(styles.styles.size());
+	for (size_t i = 0; i < idx.size(); i++) {
+		sorted.push_back(styles.styles[idx[i]]);
+		mapping[idx[i]] = uint32_t(i);
+	}
+
+	styles.styles = std::move(sorted);
+
+	auto remap = [&](uint32_t& idx) {
+		if (idx != 0xffffffff && idx < styles.styles.size())
+			idx = mapping[idx];
+	};
+
+	std::function<void(Style&)> remapStyle = [&](Style& style) {
+		for (uint32_t& link : style.links)
+			remap(link);
+		for (auto& sub : style.substyles)
+			remapStyle(sub.second);
+	};
+	for (Style& style : styles.styles)
+		remapStyle(style);
+	remap(styles.afterSection);
+
+	return mapping;
 }
 
 } // namespace gobe

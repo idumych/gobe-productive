@@ -91,6 +91,14 @@ std::vector<StyleDefinition> CopyStyles(const StyleMgr& styles,
 // style has: that style's properties replaced. False if nothing changed.
 bool PasteStyles(Document& doc, const std::vector<StyleDefinition>& definitions);
 
+// TStyleManager's table order, as the original saves it: by type (value10,
+// ascending), within a type the named styles first in name order (byte by
+// byte, as strcmp), then the unnamed ones in the order they had. The styles
+// are put in that order and every index into the table follows them: each
+// style's links, the manager's afterSection. Returns where each style went
+// (old index -> new index), for the document's other references.
+std::vector<uint32_t> SortStyles(StyleMgr& styles);
+
 } // namespace gobe
 
 #endif
