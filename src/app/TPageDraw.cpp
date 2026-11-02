@@ -373,6 +373,16 @@ bool
 TPageView::DrawingAt(BPoint where, size_t& part, float& x, float& y) const
 {
 	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	// a chart entered: its drawing (its pieces)
+	if (fChart.active)
+		for (const Document::PlacedFrame& f : fFrames)
+			if (f.part == fChart.part && BRect(f.x + dx, f.y + dy, f.x + dx + f.width,
+					f.y + dy + f.height).Contains(where)) {
+				part = f.part;
+				x = f.x + dx;
+				y = f.y + dy;
+				return true;
+			}
 	const Document::PlacedFrame* found = nullptr;
 	for (const Document::PlacedFrame& f : fFrames) {
 		uint32_t kind = fDocument.parts.parts[f.part].kind;

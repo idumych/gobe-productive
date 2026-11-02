@@ -300,6 +300,11 @@ Document::GraphicsPart(size_t part) const
 	for (const auto& [index, gr] : graphicsParts)
 		if (index == part)
 			return &gr;
+	// (a chart is a drawing too: TChartPart is a TPartGR, its pieces its
+	// shapes)
+	for (const auto& [index, chart] : chartParts)
+		if (index == part)
+			return &chart.graphics;
 	return nullptr;
 }
 
@@ -954,6 +959,8 @@ Document::EditableGraphicsPart(size_t part)
 			dirtyParts.insert(part);
 			return &gr;
 		}
+	if (ChartPart* chart = EditableChart(part))
+		return &chart->graphics;
 	return nullptr;
 }
 

@@ -198,6 +198,25 @@ main()
 				const ChartPart* x = xyBack.Chart(chart);
 				Check(x != nullptr && x->chartType == Sig("2DXY") && x->xyMinor == 0
 					&& x->xyStyled == 1 && x->partValues[0] == 3, "read back: XY scatter");
+				// a piece moved as a drawing's shape (TChartPart is a
+				// TPartGR): the chart's drawing is its graphics part
+				GRPart* gr = xyBack.EditableGraphicsPart(chart);
+				Check(gr != nullptr && gr == &xyBack.EditableChart(chart)->graphics,
+					"the chart's drawing: its pieces");
+				if (gr != nullptr)
+					for (GRLayer& layer : gr->layers)
+						for (Shape& piece : layer.shapes)
+							if (piece.kind == Sig("Lgnd")) {
+								piece.origin[0] = 40;
+								piece.origin[1] = 50;
+							}
+				Document moved;
+				if (Reopen(xyBack, moved, "doc_chartsave_6.gobe")) {
+					const ChartPart* m = moved.Chart(chart);
+					const Shape* l = m != nullptr ? Piece(*m, Sig("Lgnd")) : nullptr;
+					Check(l != nullptr && l->origin[0] == 40 && l->origin[1] == 50,
+						"read back: the legend where it was moved");
+				}
 				Check(ChangeChartType(xyBack, chart, 0, 0), "bars again");
 				const ChartPart* bars = xyBack.Chart(chart);
 				Check(bars != nullptr && bars->chartType == Sig("2DSM") && bars->data.value44 == 0

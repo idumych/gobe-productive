@@ -284,7 +284,7 @@ sizes, headings and options are saved with the document.
 
 | Feature | State |
 |---|---|
-| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… and Axis… (axis options); 2D charts drawn as the original draws them (so far Chart Type makes the 2D bar, line, area and stacked area charts, not yet the 3D, pie and XY ones) | in progress |
+| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… and Axis… (axis options); 2D charts drawn as the original draws them; a chart entered with its PartBar and ribbon, its plot, legend and title selected, moved and sized like shapes (so far Chart Type makes the 2D bar, line, area, stacked area and XY charts, not yet the 3D and pie ones) | in progress |
 
 ### Image processing
 

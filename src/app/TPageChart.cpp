@@ -458,14 +458,23 @@ TPageView::ChartClick(BPoint where, int32 clicks)
 	}
 	if (fChart.active && (hit == NULL || hit->part != fChart.part)) {
 		fChart.active = false;
+		// (its pieces no longer selected)
+		fShapes.erase(std::remove_if(fShapes.begin(), fShapes.end(),
+			[&](const ShapeRef& s) { return s.part == fChart.part; }), fShapes.end());
 		Invalidate();
 		if (Window() != NULL)
 			Window()->PostMessage(kMsgActiveRibbon);
 	}
 	if (hit == NULL)
 		return false;
-	if (fChart.active)
-		return true;		// (in the chart entered: its pieces aren't picked yet)
+	// TChartPart::Click: in the chart entered, TPartGR::Click: its pieces
+	// selected, moved and sized as a drawing's shapes
+	if (fChart.active) {
+		DrawingClick(where, clicks);
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgActiveRibbon);
+		return true;
+	}
 	if (clicks < 2)
 		return false;
 	fChart.active = true;
