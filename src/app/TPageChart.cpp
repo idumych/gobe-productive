@@ -182,9 +182,25 @@ TPageView::ChartCommand(BMessage* message)
 		}
 		memcpy(chart->axes, data, size);
 	} else {
-		// Chart Type… (TDialogChart): not yet
-		beep();
-		return true;
+		const void* data = NULL;
+		ssize_t size = 0;
+		if (message->FindData("ChartType", B_RAW_TYPE, &data, &size) != B_OK
+				|| size != ssize_t(2 * sizeof(int32))) {
+			// TDialogChart with the chart's type
+			uint32_t major, minor;
+			ChartTypeOf(*fDocument.Chart(fChart.part), major, minor);
+			if (Window() != NULL)
+				(new TDialogChart(Window(), major, minor))->RunDialog();
+			return true;
+		}
+		// TChangeChartTypeCmd: "Change Chart Type"
+		int32 type[2];
+		memcpy(type, data, sizeof type);
+		fUndo.BeginDocument(fDocument, ChartString(3, 3).String(), CurrentViewState());
+		if (!ChangeChartType(fDocument, fChart.part, uint32_t(type[0]), uint32_t(type[1]))) {
+			beep();
+			return true;
+		}
 	}
 	Invalidate();
 	if (Window() != NULL)

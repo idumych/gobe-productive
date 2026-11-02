@@ -1,10 +1,11 @@
 // doc_chartsave: a chart changed after it was made (the Chart menu's
 // commands) saved and opened again: Show/Hide Legend and Title
 // (THideShowPieceCmd), Series In Rows (TToggleSeriesOrderCmd), an axis
-// changed (TChangeAxisCmd); an unchanged chart written as read. No
-// arguments.
+// changed (TChangeAxisCmd), Chart Type (TChangeChartTypeCmd); an
+// unchanged chart written as read. No arguments.
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 #include "ChartPart.h"
@@ -133,6 +134,37 @@ main()
 			Check(!b->axes[1].flags[0] && !b->axes[1].flags[1], "read back: the axis");
 		}
 		Check(back.parts.parts.size() == saved.parts.parts.size(), "the same parts");
+
+		// Chart Type: an area chart (each series a set of its own), then
+		// stacked areas (one set, the vertical axis to the categories'
+		// largest sum: Spring 4 + 2 + 6, Fall 7 + 5 + 1); the 3D types not
+		// yet
+		Check(!ChangeChartType(back, chart, 0, 1), "3D bars: not yet");
+		Check(ChangeChartType(back, chart, 2, 1), "an area chart");
+		const ChartPart* area = back.Chart(chart);
+		Check(area != nullptr && area->seriesKind == 2 && area->sets.size() == 3
+			&& area->sets[2].kind == 2 && area->sets[2].series == std::vector<uint32_t>({2}),
+			"area: a set for each series");
+		Check(area != nullptr && area->axes[1].flags[0] && area->axes[1].flags[1]
+			&& !area->axes[0].flags[1], "area: new axes, by their data");
+		uint32_t major = 9, minor = 9;
+		if (area != nullptr)
+			ChartTypeOf(*area, major, minor);
+		Check(major == 2 && minor == 1, "area: its type");
+		Check(ChangeChartType(back, chart, 2, 2), "stacked areas");
+		Document stacked;
+		if (Reopen(back, stacked, "doc_chartsave_4.gobe")) {
+			const ChartPart* s = stacked.Chart(chart);
+			float high = 0;
+			if (s != nullptr)
+				memcpy(&high, &s->axes[1].values[1], sizeof high);
+			Check(s != nullptr && s->seriesKind == 3 && s->sets.size() == 1
+				&& s->sets[0].series == std::vector<uint32_t>({0, 1, 2}),
+				"read back: stacked areas, one set");
+			Check(high == 13, "read back: the vertical axis to the largest sum");
+			Check(s != nullptr && s->partValues[0] == 2 && s->partValues[1] == 2,
+				"read back: its type");
+		}
 	}
 
 	printf("doc_chartsave ok %d, failed %d\n", sOk, sFailed);

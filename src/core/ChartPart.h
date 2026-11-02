@@ -125,6 +125,26 @@ bool ShowChartPiece(Document& doc, size_t chart, uint32_t kind, bool show,
 // MakeChart makes them). False if the chart has no cells.
 bool ToggleChartSeriesOrder(Document& doc, size_t chart);
 
+// T2DXYAxisChart::DataChanged: series past the data's taken out of their
+// sets (a set left empty dropped), those in no set added to the last (an
+// area set's each to a new area set), the sets made when there are none
+// (CreateSets: an area chart's series a set each, the others' one set of
+// them all); then FindMinMax: the vertical axis from the values (and 0)
+// and a stacked area set's sums, the horizontal from the categories (an
+// axis given its range keeps it). Only a 2DSM chart's.
+void ChartSeriesChanged(ChartPart& chart);
+
+// the chart's type as the Chart Type dialog shows it: its major (Bar, Pie,
+// Line/Area, XY) and minor type (TChartPart +0xb4, +0xb8)
+void ChartTypeOf(const ChartPart& chart, uint32_t& major, uint32_t& minor);
+
+// TChangeChartTypeCmd::Perform: the chart made again as the type (major,
+// minor) from what it shows (its legend; new axes; its series sets made
+// for the type) and its camera placed. The types with axes in 2D so far:
+// bar (0, 0), line, area, stacked area (2, 0 to 2); false for the others
+// or a chart that isn't one of them.
+bool ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor);
+
 // Make Chart (the PartBar's button and the Options menu: 's00T' with Kind
 // 'chrt', TDocWindow::DoInsertFrame): a new chart part (TChartPart::
 // TChartPart(TDoc*): a 2D bar chart, T2DXYAxisChart kind 0, its pieces,

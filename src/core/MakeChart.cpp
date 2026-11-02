@@ -92,6 +92,12 @@ SetRange(ChartAxis& axis, float low, float high, int ticks)
 {
 	if (ticks < 0)
 		ticks = 5;
+	axis.values[0] = Bits(low);
+	axis.values[1] = Bits(high);
+	axis.values[6] = uint32_t(ticks);
+	// (an axis given its range keeps it)
+	if (!axis.flags[0])
+		return;
 	float range = NiceNum(high - low, false);
 	float step = NiceNum(ticks > 1 ? range / float(ticks - 1) : range, high - low > 1);
 	float niceLow = 0, niceHigh = 0;
@@ -99,13 +105,10 @@ SetRange(ChartAxis& axis, float low, float high, int ticks)
 		niceLow = float(std::floor(low / step)) * step;
 		niceHigh = float(std::ceil(high / step)) * step;
 	}
-	axis.values[0] = Bits(low);
-	axis.values[1] = Bits(high);
 	axis.values[2] = Bits(niceLow);
 	axis.values[3] = Bits(niceHigh);
 	axis.values[4] = Bits(range);
 	axis.values[5] = Bits(step);
-	axis.values[6] = uint32_t(ticks);
 }
 
 
@@ -746,19 +749,141 @@ ToggleChartSeriesOrder(Document& doc, size_t chart)
 		s.style = styles[i];
 		c->series.push_back(s);
 	}
-	float low = 0, high = 0;
-	for (float v : data.table[0]) {
-		low = std::min(low, v);
-		high = std::max(high, v);
+	ChartSeriesChanged(*c);
+	return true;
+}
+
+
+void
+ChartSeriesChanged(ChartPart& chart)
+{
+	if (chart.chartType != Sig("2DSM"))
+		return;
+	int32_t count = int32_t(chart.SeriesCount());
+	for (size_t i = chart.sets.size(); i-- > 0;) {
+		std::vector<uint32_t>& series = chart.sets[i].series;
+		for (size_t j = series.size(); j-- > 0;) {
+			if (int32_t(series[j]) < count)
+				continue;
+			series.erase(series.begin() + long(j));
+			if (series.empty()) {
+				chart.sets.erase(chart.sets.begin() + long(i));
+				break;
+			}
+		}
 	}
-	SetRange(c->axes[0], 0, float(data.values[0]), int(data.values[0]));
-	SetRange(c->axes[1], low, high, -1);
+	for (int32_t s = count - 1; s >= 0; s--) {
+		bool present = false;
+		for (const ChartSeriesSet& set : chart.sets)
+			for (uint32_t index : set.series)
+				present |= int32_t(index) == s;
+		if (chart.sets.empty()) {
+			// CreateSets: an area chart's series a set each, the others'
+			// all in one
+			uint32_t sets = chart.seriesKind == 2 ? uint32_t(count) : 1;
+			for (uint32_t i = 0; i < sets && count != 0; i++) {
+				ChartSeriesSet set;
+				set.kind = chart.seriesKind;
+				if (chart.seriesKind == 2)
+					set.series.push_back(i);
+				else
+					for (int32_t j = 0; j < count; j++)
+						set.series.push_back(uint32_t(j));
+				chart.sets.push_back(set);
+			}
+		} else if (!present) {
+			if (chart.sets.back().kind == 2) {
+				ChartSeriesSet set;
+				set.kind = 2;
+				chart.sets.push_back(set);
+			}
+			chart.sets.back().series.push_back(uint32_t(s));
+		}
+	}
+	// FindMinMax: the values from 0, a stacked set's sums; the categories
+	float low = 0, high = 0;
+	for (size_t c = 0; c < chart.Categories(); c++)
+		for (size_t s = 0; s < chart.SeriesCount(); s++) {
+			float v = chart.Value(s, c);
+			high = std::max(high, v);
+			low = std::min(low, v);
+		}
+	for (const ChartSeriesSet& set : chart.sets) {
+		if (set.kind != 3)
+			continue;
+		for (size_t c = 0; c < chart.Categories(); c++) {
+			float sum = 0;
+			for (uint32_t s : set.series)
+				sum += chart.Value(s, c);
+			high = std::max(high, sum);
+		}
+	}
+	SetRange(chart.axes[1], low, high, -1);
+	SetRange(chart.axes[0], 0, float(chart.Categories()), int(chart.Categories()));
+}
+
+
+void
+ChartTypeOf(const ChartPart& chart, uint32_t& major, uint32_t& minor)
+{
+	major = chart.partValues[0];
+	minor = chart.partValues[1];
+}
+
+
+bool
+ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor)
+{
+	// T2DXYAxisChart's kinds: bar (0, 0), line, area and stacked area
+	// (2, 0 to 2)
+	int32_t kind = -1;
+	if (major == 0 && minor == 0)
+		kind = 0;
+	else if (major == 2 && minor <= 2)
+		kind = int32_t(minor) + 1;
+	if (kind < 0)
+		return false;
+	ChartPart* c = doc.EditableChart(chart);
+	if (c == nullptr || c->chartType != Sig("2DSM"))
+		return false;
+	c->partValues[0] = major;
+	c->partValues[1] = minor;
+	// T2DXYAxisChart(TChart const&, ...): the legend kept (its series'
+	// styles copied: the same ones), new axes (TAxis: a style each on "GR
+	// Default", by its data, the horizontal without gridlines), no sets;
+	// Init makes them
+	uint32_t base = FindNamedStyle(doc.styles, "GR Default");
+	if (base >= doc.styles.styles.size())
+		base = FindNamedStyle(doc.styles, "Default");
+	for (ChartAxis& axis : c->axes) {
+		if (axis.style < doc.styles.styles.size() && doc.styles.styles[axis.style].value4 > 1)
+			doc.styles.styles[axis.style].value4--;
+		axis = ChartAxis();
+		axis.style = doc.NewStyle(Sig("Basi"), "", 0x20, base, {});
+		doc.styles.styles[axis.style].value4++;
+	}
+	c->axes[0].flags[1] = false;
+	c->chartValue8 = 0;
+	c->surfaceLabels.clear();
+	c->chartFlags = 0x8002;
+	c->seriesKind = uint32_t(kind);
 	c->sets.clear();
-	ChartSeriesSet set;
-	set.kind = c->seriesKind;
-	for (uint32_t i = 0; i < data.values[1]; i++)
-		set.series.push_back(i);
-	c->sets.push_back(set);
+	ChartSeriesChanged(*c);
+	// PositionCamera: the 2D charts' camera
+	for (GRLayer& layer : c->graphics.layers)
+		for (Shape& shape : layer.shapes) {
+			if (shape.kind != Sig("Rndr") || shape.pieceData.size() < 4 + 6 * 4)
+				continue;
+			DocWriter w;
+			const uint32_t camera[6] = {0x3f79a7c1, 0x3f45fba4, 0x3f3ccaa3, 0x3ed26cc2,
+				0x3ec8c975, 0xbf209b20};
+			for (uint32_t bits : camera) {
+				float v;
+				memcpy(&v, &bits, sizeof v);
+				w.Float(v);
+			}
+			std::copy(w.Data().begin(), w.Data().end(), shape.pieceData.begin() + 4);
+		}
 	return true;
 }
 
