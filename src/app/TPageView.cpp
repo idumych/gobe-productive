@@ -1236,6 +1236,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 				}
 				if (tk.kind == Token::kFrame) {
 					const gobe::Frame* inner = FrameAt(fDocument, tk.misc->frame);
+					piece.width = inner->extent[0];
 					InlinePlacement p{part, {tk.misc->frame[0], tk.misc->frame[1],
 						tk.misc->frame[2]}, left + piece.x + fBounds.left - fMargin,
 						line.baseline - inner->extent[1] + fBounds.top - fMargin};

@@ -5,12 +5,15 @@
 
 #include <Alert.h>
 #include <Beep.h>
+#include <Clipboard.h>
 #include <Window.h>
 
 #include <algorithm>
+#include <cstring>
 
 #include "GobeResources.h"
 #include "TTableDialogs.h"
+#include "TableClip.h"
 
 namespace gobe {
 
@@ -454,35 +457,8 @@ TPageView::TableKey(const char* bytes, bool shift)
 	}
 	if (!fTableCells.active || fTableCells.table != table)
 		return false;
-	if (key == B_BACKSPACE || key == B_DELETE) {
-		// the selected cells' text gone, their breaks kept
-		fUndo.BeginDocument(fDocument, key == B_BACKSPACE ? "Backspace" : "Delete",
-			CurrentViewState());
-		for (const TableEditCell* c : edit.Selected(fTableCells.selection)) {
-			std::vector<WPParagraph>& text = edit.texts[size_t(c->id)].paragraphs;
-			if (text.empty())
-				continue;
-			WPParagraph kept = text.front();
-			kept.text = "\x05";
-			kept.misc.clear();
-			if (kept.runs.size() > 1)
-				kept.runs.resize(1);
-			text = {kept};
-		}
-		std::string error;
-		if (!StoreTableEdit(fDocument, table, edit, error)) {
-			beep();
-			return true;
-		}
-		const TableEditCell* first = edit.Cell(row, column);
-		fTableCells.active = false;
-		if (first != NULL)
-			fCaret = fAnchor = {true, t->textPart, TableEditParagraph(edit, first->id), 0};
-		GeometryChanged();
-		if (Window() != NULL)
-			Window()->PostMessage(kMsgDocumentChanged);
-		return true;
-	}
+	if (key == B_BACKSPACE || key == B_DELETE)
+		return ClearTableCells(key == B_BACKSPACE ? "Backspace" : "Delete");
 	if ((unsigned char)key >= 0x20 && key != B_DELETE) {
 		// (CheckForPare: the first cell's text, typed over)
 		if (const TableEditCell* first = edit.Cell(row, column))
@@ -490,6 +466,131 @@ TPageView::TableKey(const char* bytes, bool shift)
 		return false;
 	}
 	return false;
+}
+
+
+// the selected cells' text gone, their breaks kept (TWPPart::DeleteTextCmd
+// with cells selected), the caret in the first of them
+bool
+TPageView::ClearTableCells(const char* name)
+{
+	size_t table;
+	TableEdit edit;
+	int row, column;
+	if (!InsertLocation(table, edit, row, column) || !fTableCells.active
+			|| fTableCells.table != table)
+		return false;
+	const TablePart* t = fDocument.Table(table);
+	fUndo.BeginDocument(fDocument, name, CurrentViewState());
+	for (const TableEditCell* c : edit.Selected(fTableCells.selection)) {
+		std::vector<WPParagraph>& text = edit.texts[size_t(c->id)].paragraphs;
+		if (text.empty())
+			continue;
+		WPParagraph kept = text.front();
+		kept.text = "\x05";
+		kept.misc.clear();
+		if (kept.runs.size() > 1)
+			kept.runs.resize(1);
+		text = {kept};
+	}
+	std::string error;
+	if (!StoreTableEdit(fDocument, table, edit, error)) {
+		beep();
+		return true;
+	}
+	const TableEditCell* first = edit.Cell(row, column);
+	fTableCells.active = false;
+	if (first != NULL)
+		fCaret = fAnchor = {true, t->textPart, TableEditParagraph(edit, first->id), 0};
+	GeometryChanged();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
+}
+
+
+// what Copy put on the clipboard last, when it was cells (TCopyPart: a
+// table part; the system clipboard gets only the application's name)
+static TableClip sCopiedTable;
+
+
+static bool
+ClipboardHoldsTable()
+{
+	if (sCopiedTable.Empty() || !be_clipboard->Lock())
+		return false;
+	BMessage* data = be_clipboard->Data();
+	const char* application = NULL;
+	bool ours = data != NULL && !data->HasData("text/plain", B_MIME_TYPE)
+		&& data->FindString("Application", &application) == B_OK
+		&& strcmp(application, "Gobe Productive 2.0") == 0;
+	be_clipboard->Unlock();
+	return ours;
+}
+
+
+// Edit > Cut, Copy and Paste with a table's cells (TTablePart::
+// HandleMessage): Copy and Cut with cells selected copy them (TTable::
+// CopySelection), Cut then clears them; Paste with copied cells on the
+// clipboard pastes them into the table the caret is in (TTablePasteCommand)
+// or, in other text, as a table of their own. False if it isn't for them.
+bool
+TPageView::TableClipboard(BMessage* message)
+{
+	if (message->what == B_COPY || message->what == B_CUT) {
+		size_t table;
+		TableEdit edit;
+		int row, column;
+		if (!fTableCells.active || !InsertLocation(table, edit, row, column)
+				|| fTableCells.table != table)
+			return false;
+		sCopiedTable = CopyTableCells(fDocument, table, edit, fTableCells.selection);
+		if (be_clipboard->Lock()) {
+			be_clipboard->Clear();
+			be_clipboard->Data()->AddString("Application", "Gobe Productive 2.0");
+			be_clipboard->Commit();
+			be_clipboard->Unlock();
+		}
+		if (message->what == B_CUT)
+			ClearTableCells("Cut");
+		return true;
+	}
+	if (message->what != B_PASTE || !fCaret.active || !ClipboardHoldsTable())
+		return false;
+	std::string error;
+	size_t table;
+	TableEdit edit;
+	int row, column;
+	if (InsertLocation(table, edit, row, column)) {
+		fUndo.BeginDocument(fDocument, "Paste Cells", CurrentViewState());
+		if (!PasteTableCells(fDocument, table, row, column, sCopiedTable, error)) {
+			beep();
+			return true;
+		}
+		// the caret where the first pasted cell's text starts
+		const TablePart* t = fDocument.Table(table);
+		fTableCells.active = false;
+		if (t != NULL && LoadTable(table, edit) && edit.Cell(row, column) != NULL)
+			fCaret = fAnchor = {true, t->textPart,
+				TableEditParagraph(edit, edit.Cell(row, column)->id), 0};
+	} else {
+		fUndo.BeginDocument(fDocument, "Paste", CurrentViewState());
+		TextPosition from, to;
+		if (TextSelection(from, to) && !DeleteSelection())
+			return true;
+		TextPosition at{fCaret.paragraph, fCaret.offset};
+		if (PasteTableClip(fDocument, fCaret.part, at, sCopiedTable, error) < 0) {
+			beep();
+			return true;
+		}
+		// after the table's frame character
+		fCaret.offset++;
+		fAnchor = fCaret;
+	}
+	GeometryChanged();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
 }
 
 

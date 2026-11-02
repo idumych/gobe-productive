@@ -2122,9 +2122,11 @@ TDocWindow::MenusBeginning()
 		enable('sM15', false);
 		bool cells = fPages != NULL && fPages->fSelectedCell.active;
 		bool part = cells || (fPages != NULL && fPages->fCaret.active);
-		enable('CCUT', HasTextSelection() || cells);
-		enable('COPY', HasTextSelection() || cells);
-		enable('sM12', HasTextSelection() || cells);
+		// (a table's cells selected: TTablePart::HandleMessage copies them)
+		bool tableCells = fPages != NULL && fPages->HasTableCells();
+		enable('CCUT', HasTextSelection() || cells || tableCells);
+		enable('COPY', HasTextSelection() || cells || tableCells);
+		enable('sM12', HasTextSelection() || cells || tableCells);
 		enable('sM16', part);
 		enable('sM17', part && TPageView::HasCopiedFormat());
 		bool drawing = false;

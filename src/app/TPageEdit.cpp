@@ -187,14 +187,17 @@ TPageView::OffsetX(size_t lineIndex, size_t offset) const
 		if (offset < p.start)
 			break;
 		if (offset <= p.end) {
+			// a frame is one character as wide as it
+			if (p.width > 0)
+				at = p.x + (offset > p.start ? p.width : 0);
 			// a field is one character showing its text
-			if (p.field != 0)
+			else if (p.field != 0)
 				at = p.x + (offset > p.start ? TDocView::TextWidth(p.font, p.text) : 0);
 			else
 				at = p.x + SubstringWidth(p.font, text, p.start, offset);
 			break;
 		}
-		at = p.x + TDocView::TextWidth(p.font, p.text)
+		at = p.x + (p.width > 0 ? p.width : TDocView::TextWidth(p.font, p.text))
 			+ (offset - p.end) * TDocView::TextWidth(p.font, " ");
 	}
 	return line.frame.left + at;
@@ -3984,6 +3987,11 @@ TPageView::MessageReceived(BMessage* message)
 					}
 				}
 			}
+			if ((message->what == B_CUT || message->what == B_COPY || message->what == B_PASTE)
+					&& TableClipboard(message))
+				return;
+			if (message->what == kCmdClear && ClearTableCells("Clear"))
+				return;
 			if (fCaret.active) {
 				// the Edit menu (MENU 3) sends B_CUT, B_COPY, B_PASTE, B_SELECT_ALL
 				switch (message->what) {

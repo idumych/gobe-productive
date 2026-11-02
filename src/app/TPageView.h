@@ -374,8 +374,11 @@ private:
 	void VerticallyAlign(int align);
 	void SelectCellText(size_t table, const TableEdit& edit, int id);
 	bool TableKey(const char* bytes, bool shift);
+	bool ClearTableCells(const char* name);
+	bool TableClipboard(BMessage* message);
 public:
 	void TableMenuState(bool& merge, bool& split) const;
+	bool HasTableCells() const { return fTableCells.active; }
 	int TableVerticalAlignment() const;
 	bool CaretCellFrameStyle(uint32_t& style) const;
 private:
@@ -458,6 +461,7 @@ private:
 			uint32_t field = 0;
 			float ruleEnd = 0;
 			float dy = 0;			// superscript, subscript: off the baseline
+			float width = 0;		// a frame in the text: its width
 		};
 		std::vector<Piece> pieces;
 	};
