@@ -175,6 +175,8 @@ struct Document {
 	const IMPart* ImagePart(size_t part) const;
 	const ChartPart* Chart(size_t part) const;
 	const TablePart* Table(size_t part) const;
+	// the table part whose cells' text is part `textPart`, -1 if none
+	int TableOfText(size_t textPart) const;
 	// a part's frame by its number (ReadFramePtr: part, frame)
 	const Frame* FrameOf(uint32_t part, uint32_t index) const;
 

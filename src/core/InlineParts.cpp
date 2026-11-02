@@ -250,6 +250,22 @@ DefaultStyle(const Document& doc)
 } // namespace
 
 
+NewTable
+MakeNewTable(size_t rows, size_t columns)
+{
+	NewTable table;
+	if (rows == 0 || columns == 0)
+		return table;
+	table.columns.assign(columns, 400.0f / float(columns));
+	table.rows.assign(rows, 17.0f);
+	table.inset = 1;
+	table.border = 1;
+	table.cells.assign(rows, std::vector<std::string>(columns));
+	table.cellBreaks = true;
+	return table;
+}
+
+
 int
 AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& textPart,
 	std::string& error)
@@ -381,12 +397,23 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 	for (size_t r = 0; r < rows; r++)
 		for (size_t c = 0; c < columns; c++) {
 			const std::string& cellText = c < table.cells[r].size() ? table.cells[r][c] : "";
-			if (!all.empty() || r + c > 0)
+			if (!table.cellBreaks && (!all.empty() || r + c > 0))
 				all += '\n';
 			all += cellText;
 			paragraphsOf.push_back(size_t(std::count(cellText.begin(), cellText.end(), '\n')) + 1);
 		}
-	InsertMultiline(*wp, {0, 0}, all);
+	if (table.cellBreaks) {
+		// each cell's last paragraph ended by its cell break
+		TextPosition at = {0, 0};
+		size_t cell = 0;
+		for (size_t r = 0; r < rows; r++)
+			for (size_t c = 0; c < columns; c++, cell++) {
+				const std::string& cellText = c < table.cells[r].size() ? table.cells[r][c] : "";
+				at = InsertMultiline(*wp, at, cellText);
+				at = InsertSpecialChar(*wp, at, 0x05);
+			}
+	} else
+		InsertMultiline(*wp, {0, 0}, all);
 	// the cells' frames: inset 2 across and 1 down, their ranges
 	Portal cells;
 	cells.part = tablePart;
@@ -414,9 +441,10 @@ AddTablePart(Document& doc, size_t container, const NewTable& table, size_t& tex
 			raw.Float(0);
 			raw.Float(15);
 			raw.Float(1);
-			Frame f = MakeFrame(text, tablePart, x + 2, y + 1,
-				std::max(1.0f, table.columns[c] - 4), std::max(1.0f, table.rows[r] - 2),
-				frameStyle, 72, raw.Data());
+			float across = table.inset + 1, down = table.inset;
+			Frame f = MakeFrame(text, tablePart, x + across, y + down,
+				std::max(1.0f, table.columns[c] - 2 * across),
+				std::max(1.0f, table.rows[r] - 2 * down), frameStyle, 72, raw.Data());
 			f.values[1] = uint32_t(r * columns + c);
 			f.textStart = at;
 			f.textLength = length;
@@ -757,7 +785,7 @@ AddFrameShape(Document& doc, size_t drawing, size_t layer, const uint32_t pointe
 
 int
 AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind, const float rect[4],
-	std::string& error)
+	std::string& error, const NewTable* given)
 {
 	if (!IsDrawing(doc, drawing)) {
 		error = "not a drawing";
@@ -765,7 +793,7 @@ AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind, cons
 	}
 	float x = std::min(rect[0], rect[2]), y = std::min(rect[1], rect[3]);
 	float width = std::fabs(rect[2] - rect[0]), height = std::fabs(rect[3] - rect[1]);
-	if (width < 4 || height < 4) {
+	if (given == nullptr && (width < 4 || height < 4)) {
 		error = "too small";
 		return -1;
 	}
@@ -782,12 +810,20 @@ AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind, cons
 	doc.stylesChanged = true;
 	int made = -1;
 	if (kind == Sig("TBLE")) {
-		// TInsertTableDialog's default: 2 x 2, the frame shared
-		NewTable table;
-		table.columns = {width / 2, width / 2};
-		table.rows = {height / 2, height / 2};
-		table.cells = {{"", ""}, {"", ""}};
-		table.border = 1;
+		// the table given, at its size; or the part tool's one cell, the
+		// frame's size
+		NewTable table = MakeNewTable(1, 1);
+		if (given != nullptr) {
+			table = *given;
+			width = height = 0;
+			for (float w : table.columns)
+				width += w;
+			for (float h : table.rows)
+				height += h;
+		} else {
+			table.columns = {width};
+			table.rows = {height};
+		}
 		size_t text = 0;
 		made = AddTablePart(doc, drawing, table, text, error);
 	} else if (kind == Sig("BITS")) {

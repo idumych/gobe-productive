@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include <Alert.h>
 #include <Box.h>
 #include <Button.h>
 #include <CheckBox.h>
@@ -630,6 +631,24 @@ TDialog::RunDialog()
 		Unlock();
 	}
 	Show();
+}
+
+
+bool
+TDialog::CheckTextItem(int32 index, int32* value, int32 low, int32 high, int32 set)
+{
+	// (TString::Num)
+	BString text = TextItem(index, set);
+	char* end;
+	long number = strtol(text.String(), &end, 10);
+	*value = int32(number);
+	if (end != text.String() && number >= low && number <= high)
+		return true;
+	MakeFocusItem(index, set);
+	BString alert;
+	alert.SetToFormat(GobeResources::IndexString(6, 13).String(), int(low), int(high));
+	(new BAlert("", alert.String(), "OK"))->Go(NULL);
+	return false;
 }
 
 

@@ -2424,6 +2424,13 @@ TPageView::Draw(BRect updateRect)
 		fShapesWereSelected = ShapesSelected();
 		Window()->PostMessage(kMsgActiveRibbon);
 	}
+	// the caret into a table's cells or out of them: Table (TTablePart's
+	// activation)
+	bool inTable = fCaret.active && fDocument.TableOfText(fCaret.part) >= 0;
+	if (!IsPrinting() && Window() != NULL && inTable != fCaretInTable) {
+		fCaretInTable = inTable;
+		Window()->PostMessage(kMsgActiveRibbon);
+	}
 	if (!IsPrinting() && Window() != NULL && (fSelectedCell.active != fCellsActive
 			|| (fEntryBar != NULL && fSelectedCell.active == fEntryBar->IsHidden()))) {
 		fCellsActive = fSelectedCell.active;

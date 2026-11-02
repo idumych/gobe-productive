@@ -25,7 +25,15 @@ struct NewTable {
 	float inset = 1;
 	float border = 0;			// the table's pen (TTableImport: 0 transparent)
 	std::vector<std::vector<std::string>> cells;
+	// each cell's text ended by a cell break (0x05) rather than a line end,
+	// as a table made in Gobe has it (TTablePart::AddCellBreaks)
+	bool cellBreaks = false;
 };
+
+// TTablePart::TTablePart(TDoc*, rows, columns): `rows` by `columns` empty
+// cells, the columns 400 points across between them, the rows 17 points
+// high (TTable::TTable), the cell gutter 1, the cells' text cell breaks
+NewTable MakeNewTable(size_t rows, size_t columns);
 
 // A table part shown in `container` (a word processing part), and its
 // text part with a frame per cell, as the original's documents have
@@ -83,12 +91,14 @@ bool CopyLayerShapes(Document& doc, size_t drawing, size_t from, size_t to,
 
 // The ToolBar's part tool and the Frame menu's parts (TPartGR::DragOut
 // with a part kind, TDocWindow::DoInsertFrame): a new part of `kind`
-// ('WORD' text, 'SPRD' a spreadsheet, 'GRFX' a drawing, 'TBLE' a 2 x 2
-// table, 'BITS' a white picture) framed in drawing `drawing` at `rect`
-// (left, top, right, bottom in the drawing), its FRAM shape in `layer`.
-// Returns the part, -1 with `error`.
+// ('WORD' text, 'SPRD' a spreadsheet, 'GRFX' a drawing, 'TBLE' a table:
+// `table`, or one cell filling the frame as the part tool makes it
+// (TTablePartFactory::NewPart's 'TOOL'), 'BITS' a white picture) framed in
+// drawing `drawing` at `rect` (left, top, right, bottom in the drawing;
+// a given table's own size), its FRAM shape in `layer`. Returns the part,
+// -1 with `error`.
 int AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind,
-	const float rect[4], std::string& error);
+	const float rect[4], std::string& error, const NewTable* table = nullptr);
 
 // Frame > Make Linked Frame (TDocWindow::MakeLinkedFrame): a text frame
 // in a drawing gets a next frame in its portal, as big, right of it; the

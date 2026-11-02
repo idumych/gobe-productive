@@ -3,6 +3,7 @@
 // part kind, TDocWindow::DoInsertFrame), and the Frame menu's commands
 // for them (TDocWindow::MakeLinkedFrame, DoCloneFrame, TFrameCommand).
 #include "TPageView.h"
+#include "TTableDialogs.h"
 
 #include <Beep.h>
 #include <MenuBar.h>
@@ -319,6 +320,87 @@ TPageView::InsertPartFrame(uint32_t kind)
 }
 
 
+// Frame > Insert Frame > Table Frame ('s00T' Kind 'TBLE';
+// TTablePartFactory::NewPart): without its rows and columns, the Insert
+// Table dialog; with them, the table (TTablePart::TTablePart) inline at the
+// caret (TWPPart::InsertChildFrame, a TWPInsertSpecialCmd) or else in the
+// sheet's drawing, in the middle of what's shown (TPartGR::InsertChildFrame
+// at its PastePoint)
+void
+TPageView::InsertTable(BMessage* message)
+{
+	int32 rows = message->GetInt32("rows", 0), columns = message->GetInt32("columns", 0);
+	if (rows <= 0 || columns <= 0) {
+		if (Window() != NULL)
+			(new TDialogInsertTable(Window()))->RunDialog();
+		return;
+	}
+	NewTable table = MakeNewTable(size_t(rows), size_t(columns));
+	std::string error;
+	if (fCaret.active && fDocument.WordPart(fCaret.part) != NULL) {
+		fUndo.BeginDocument(fDocument, "Insert Special", CurrentViewState());
+		size_t text = 0;
+		int part = AddTablePart(fDocument, fCaret.part, table, text, error);
+		if (part < 0) {
+			fprintf(stderr, "table: %s\n", error.c_str());
+			beep();
+			return;
+		}
+		InsertInlineFrame(fDocument, fCaret.part, {fCaret.paragraph, fCaret.offset},
+			size_t(part));
+		// (the table active: the caret in its first cell)
+		fCaret.part = text;
+		fCaret.paragraph = 0;
+		fCaret.offset = 0;
+		fAnchor = fCaret;
+		GeometryChanged();
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+		return;
+	}
+	int sheet = fDocument.CurrentSheet();
+	if (sheet < 0 || size_t(sheet) >= fDocument.sheets.sheets.size())
+		return;
+	size_t drawing = fDocument.sheets.sheets[size_t(sheet)].graphicsPart;
+	const GRPart* gr = fDocument.GraphicsPart(drawing);
+	if (gr == NULL) {
+		beep();
+		return;
+	}
+	// the middle of the view in the drawing
+	BRect bounds = Bounds();
+	float mx = (bounds.left + bounds.Width() / 2) / fZoom - fMargin + fBounds.left;
+	float my = (bounds.top + bounds.Height() / 2) / fZoom - fMargin + fBounds.top;
+	for (const Document::PlacedFrame& f : fFrames)
+		if (f.part == drawing) {
+			mx -= f.x;
+			my -= f.y;
+			break;
+		}
+	float width = 0, height = 0;
+	for (float w : table.columns)
+		width += w;
+	for (float h : table.rows)
+		height += h;
+	float rect[4] = {mx - width / 2, my - height / 2, mx + width / 2, my + height / 2};
+	fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, 0).String(),
+		CurrentViewState());
+	size_t layer = gr->layers.empty() ? 0 : gr->layers.size() - 1;
+	int part = AddDrawingFrame(fDocument, drawing, layer, Sig("TBLE"), rect, error, &table);
+	if (part < 0) {
+		fprintf(stderr, "table: %s\n", error.c_str());
+		beep();
+		return;
+	}
+	fFrame.active = true;
+	fFrame.pointer[0] = uint32_t(part);
+	fFrame.pointer[1] = fFrame.pointer[2] = 0;
+	GeometryChanged();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+}
+
+
 // the Frame menu's commands for the selected frame, the part tool's kind
 bool
 TPageView::FrameCommand(BMessage* message)
@@ -334,7 +416,10 @@ TPageView::FrameCommand(BMessage* message)
 			uint32 kind = uint32(message->GetInt32("Kind", 0));
 			if (kind == 'chrt')
 				return false;		// Make Chart: the spreadsheet's
-			InsertPartFrame(kind);
+			if (kind == 'TBLE')
+				InsertTable(message);
+			else
+				InsertPartFrame(kind);
 			return true;
 		}
 		case 'sf0U':

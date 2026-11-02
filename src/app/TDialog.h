@@ -57,6 +57,10 @@ protected:
 	void MakeFocusItem(int32 index, int32 set = -1);
 	// a control's label (BControl::SetLabel)
 	void SetLabelItem(int32 index, const char* label, int32 set = -1);
+	// TDialog::CheckTextItem: the item's text as a whole number in `low` to
+	// `high` into `value`; else false, the item focused and the range
+	// alert (STR# 6, 13)
+	bool CheckTextItem(int32 index, int32* value, int32 low, int32 high, int32 set = -1);
 	// TDialog::SetItemEnabled
 	void SetItemEnabled(int32 index, bool on, int32 set = -1);
 	// radio buttons (TDialog::SetRadioItem, GetRadioValue: which of the

@@ -803,6 +803,16 @@ Document::Table(size_t part) const
 }
 
 
+int
+Document::TableOfText(size_t textPart) const
+{
+	for (const auto& [index, table] : tableParts)
+		if (table.textPart == textPart)
+			return int(index);
+	return -1;
+}
+
+
 const Frame*
 Document::FrameOf(uint32_t part, uint32_t index) const
 {

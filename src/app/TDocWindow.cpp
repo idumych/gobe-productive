@@ -443,9 +443,15 @@ TDocWindow::InstallPartMenus()
 	}
 	if (fDocument != NULL && fDocument->presentationPart >= 0 && !sheet)
 		drawing = true;
-	if (!fPartMenus.empty() && sheet == fSheetMenus && drawing == fDrawingMenus)
+	// TTablePart::InstallMenus: Table (MENU 100 of the Table part), the
+	// caret in a table's cells
+	bool table = !sheet && fPages != NULL && fDocument != NULL && fPages->fCaret.active
+		&& fDocument->TableOfText(fPages->fCaret.part) >= 0;
+	if (!fPartMenus.empty() && sheet == fSheetMenus && drawing == fDrawingMenus
+			&& table == fTableMenus)
 		return;
 	fDrawingMenus = drawing;
+	fTableMenus = table;
 	for (BMenu* menu : fPartMenus) {
 		fBar->RemoveItem(menu);
 		delete menu;
@@ -461,6 +467,9 @@ TDocWindow::InstallPartMenus()
 		// 11001 of the Presentation part)
 		fPartMenus.push_back(new TMenu(50));
 		fPartMenus.push_back(new TMenu(11001, GobeResources::Part("Presentation")));
+	} else if (table) {
+		fPartMenus.push_back(new TMenu(100, GobeResources::Part("Table")));
+		fPartMenus.push_back(new TMenu(51));
 	} else if (drawing)
 		fPartMenus.push_back(new TMenu(50));
 	else

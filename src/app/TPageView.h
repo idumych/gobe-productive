@@ -353,12 +353,14 @@ private:
 	void KeepFrameOnly();
 	void TextWrapCommand(BMessage* message);
 	void InsertPartFrame(uint32_t kind);
+	void InsertTable(BMessage* message);
 	ShapeDrag fShapeDrag;
 	int fShapeMode = 0;			// what a handle does: 0 resize, 1 rotate, 2 reshape
 	int32 fToolShape = 0;		// the TOOS tool's shape (a POLY resource)
 	std::vector<Vertex> fBezier;	// the Bezier tool's points so far
 	bool fAlignPreview = false;	// Align Objects' last step is a preview
 	bool fShapesWereSelected = false;
+	bool fCaretInTable = false;	// (the Table menu shown)
 	struct FrameGeometry {
 		BRect rect;					// in view coordinates, unrotated
 		float angle;				// degrees, counterclockwise, about the center
