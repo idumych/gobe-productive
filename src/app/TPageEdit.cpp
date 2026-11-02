@@ -358,6 +358,48 @@ TPageView::HitText(BPoint where, Caret& caret) const
 }
 
 
+int
+TPageView::TextCursor(BPoint where) const
+{
+	// TTableFrame::GetCursor: in the table being edited, a row's bottom
+	// edge (its factory's cursor 0, CURS 401) or a column's edge (1, 400)
+	size_t table;
+	BPoint origin;
+	TableEdit edit;
+	if (ActiveTable(table, origin) && LoadTable(table, edit)) {
+		BPoint at = where - origin;
+		if (edit.InRowResizeArea(at.x, at.y) >= 0)
+			return 401;
+		if (edit.InColumnResizeArea(at.x, at.y) > 0)
+			return 400;
+	}
+	// TWPFrame::GetCursor: a frame selected in the text, the hand over it
+	// and its handle's cursor (3, CURS 1100) over that (TFrame::
+	// GenericSelectionHdl); the I-beam over the text
+	const Document::PlacedFrame* selected = NULL;
+	if (SelectedInlineFrame(selected)) {
+		float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+		BRect r(selected->x + dx, selected->y + dy, selected->x + dx + selected->width,
+			selected->y + dy + selected->height);
+		if (BRect(r.right - 5, r.bottom - 5, r.right, r.bottom).Contains(where))
+			return 1100;
+		if (r.Contains(where))
+			return 4;
+	}
+	// (the text being edited: the caret's, a word processing document's)
+	int main = fDocument.MainPart();
+	for (const Line& line : fLines)
+		if (line.angle == 0 && line.textFrame.Contains(where)
+				&& fDocument.WordPart(line.part) != NULL
+				&& ((fCaret.active && line.part == fCaret.part)
+					|| (fTableCells.active && fDocument.TableOfText(line.part)
+						== int(fTableCells.table))
+					|| (main >= 0 && line.part == size_t(main))))
+			return 3;
+	return 0;
+}
+
+
 bool
 TPageView::DeleteSelection()
 {
@@ -1739,6 +1781,10 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 		delete menu;
 		return;
 	}
+	// (TTablePart::Click: a row's or column's edge in the table being
+	// edited dragged)
+	if ((buttons & B_PRIMARY_MOUSE_BUTTON) != 0 && clicks == 1 && TableResizeBegan(where))
+		return;
 	if (HitText(where, caret)) {
 		fSelectedCell.active = false;
 		fTableCells.active = false;
@@ -1817,6 +1863,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 		BView::MouseMoved(where, transit, dragMessage);
 		return;
 	}
+	if (TableResizeMoved(where)) {
+		BView::MouseMoved(where, transit, dragMessage);
+		return;
+	}
 	if (fDragging) {
 		Caret c;
 		if (HitText(where, c) && c.part == fCaret.part) {
@@ -1833,11 +1883,19 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 		int index;
 		float start, offset;
 		int shown = HitResize(where, part, columns, index, start, offset) ? (columns ? 1 : 2) : 0;
+		if (shown == 0)
+			shown = TextCursor(where);
 		if (shown != fCursorShown) {
 			fCursorShown = shown;
-			BCursor cursor(shown == 1 ? B_CURSOR_ID_RESIZE_EAST_WEST
-				: shown == 2 ? B_CURSOR_ID_RESIZE_NORTH_SOUTH : B_CURSOR_ID_SYSTEM_DEFAULT);
-			SetViewCursor(&cursor);
+			const BCursor* gobe = shown > 4 ? GobeResources::Cursor(shown) : NULL;
+			if (gobe != NULL)
+				SetViewCursor(gobe);
+			else {
+				BCursor cursor(shown == 1 ? B_CURSOR_ID_RESIZE_EAST_WEST
+					: shown == 2 ? B_CURSOR_ID_RESIZE_NORTH_SOUTH
+					: shown == 3 ? B_CURSOR_ID_I_BEAM : B_CURSOR_ID_SYSTEM_DEFAULT);
+				SetViewCursor(&cursor);
+			}
 		}
 	}
 	if (fResizing.active) {
@@ -1900,6 +1958,7 @@ TPageView::MouseUp(BPoint where)
 	}
 	fDragging = false;
 	fTableDrag.active = false;
+	fTableResize.active = false;
 	fDraggingCells = false;
 	fDraggingHeadings = false;
 	if (fResizing.active) {

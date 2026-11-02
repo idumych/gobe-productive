@@ -9,6 +9,7 @@ extern char** environ;
 #endif
 
 #include <AppFileInfo.h>
+#include <Cursor.h>
 #include <Application.h>
 #include <Entry.h>
 #include <File.h>
@@ -236,6 +237,39 @@ BString
 GobeResources::IndexString(int32 id, int32 index)
 {
 	return BString(gobe::IndexString(sFile, id, index).c_str());
+}
+
+
+const BCursor*
+GobeResources::Cursor(int32 id)
+{
+	static std::map<int32, BCursor*> sCursors;
+	auto found = sCursors.find(id);
+	if (found != sCursors.end())
+		return found->second;
+	BCursor*& cursor = sCursors[id];
+	cursor = NULL;
+	const ResourceFile::Resource* hot = sFile.Find('CURS', id);
+	const ResourceFile::Resource* picture = sFile.Find('MICN', id);
+	if (picture == NULL || picture->data.size() != 256)
+		return NULL;
+	// (TCursor: size 16, depth 1, the hot spot's y then x, the picture's
+	// bits, the mask's)
+	uint8 data[68] = {16, 1, 0, 0};
+	if (hot != NULL && hot->data.size() >= 8) {
+		data[3] = hot->data[0];		// (TRsrHelper::GetUInt32: little endian)
+		data[2] = hot->data[4];
+	}
+	const uint8* pixel = picture->data.data();
+	for (int row = 0; row < 32; row++)
+		for (int bit = 0; bit < 8; bit++, pixel++) {
+			if (*pixel == 0 || (*pixel != '?' && *pixel != B_TRANSPARENT_MAGIC_CMAP8))
+				data[4 + row] |= uint8(1 << (7 - bit));
+			if (*pixel == 0 || *pixel == '?')
+				data[36 + row] |= uint8(1 << (7 - bit));
+		}
+	cursor = new BCursor(data);
+	return cursor;
 }
 
 

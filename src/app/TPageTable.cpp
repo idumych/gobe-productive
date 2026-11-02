@@ -595,6 +595,104 @@ TPageView::TableClipboard(BMessage* message)
 
 
 bool
+TPageView::ActiveTable(size_t& table, BPoint& origin) const
+{
+	int t = -1;
+	if (fTableCells.active)
+		t = int(fTableCells.table);
+	else if (fCaret.active)
+		t = fDocument.TableOfText(fCaret.part);
+	if (t < 0)
+		return false;
+	for (const Document::PlacedFrame& f : fFrames)
+		if (f.part == size_t(t) && f.frame != NULL) {
+			table = size_t(t);
+			origin = BPoint(f.x - fBounds.left + fMargin, f.y - fBounds.top + fMargin);
+			return true;
+		}
+	return false;
+}
+
+
+// TTablePart::Click, TTable::ResizeRowOrColumn: in the table being edited,
+// a row's bottom edge (TTable::InRowResizeArea) or else a column's edge
+// (InColumnResizeArea) dragged
+bool
+TPageView::TableResizeBegan(BPoint where)
+{
+	size_t table;
+	BPoint origin;
+	TableEdit edit;
+	if (!ActiveTable(table, origin) || !LoadTable(table, edit))
+		return false;
+	BPoint at = where - origin;
+	int row = edit.InRowResizeArea(at.x, at.y);
+	float edge = row < 0 ? edit.InColumnResizeArea(at.x, at.y) : -1;
+	if (row < 0 && edge <= 0)
+		return false;
+	fTableResize = TableResize();
+	fTableResize.active = true;
+	fTableResize.table = table;
+	fTableResize.origin = origin;
+	if (row >= 0) {
+		fTableResize.row = true;
+		fTableResize.index = row;
+		fTableResize.height = edit.rows[size_t(row)].height;
+		fTableResize.from = at.y;
+	} else {
+		// (TResizeColumnCommand: sent as the drag begins; no narrower than
+		// 20 past the column before)
+		fUndo.BeginDocument(fDocument, "Resize Column", CurrentViewState());
+		fTableResize.edge = edge;
+		fTableResize.minimum = edit.FindPreviousColumnStart(edge) + 20;
+	}
+	if (Window() != NULL)
+		SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+	return true;
+}
+
+
+bool
+TPageView::TableResizeMoved(BPoint where)
+{
+	if (!fTableResize.active)
+		return false;
+	TableEdit edit;
+	if (!LoadTable(fTableResize.table, edit))
+		return true;
+	BPoint at = where - fTableResize.origin;
+	if (fTableResize.row) {
+		// TTable::ResizeRow: the row as high as the pointer has moved, and
+		// that the height it's given (TResizeRowCommand once it changed)
+		float height = fTableResize.height + (at.y - fTableResize.from);
+		if (fTableResize.index >= int(edit.rows.size()))
+			return true;
+		if (!fTableResize.changed) {
+			if (height == fTableResize.height)
+				return true;
+			fUndo.BeginDocument(fDocument, "Resize Row", CurrentViewState());
+			fTableResize.changed = true;
+		}
+		edit.ChangeRowHeight(fTableResize.index, height, height, true);
+		edit.RecalcSize();
+	} else {
+		float x = std::max(at.x, fTableResize.minimum);
+		if (x == fTableResize.edge)
+			return true;
+		edit.ChangeColumnWidth(fTableResize.edge, x - fTableResize.edge);
+		fTableResize.edge = x;
+	}
+	std::string error;
+	if (!StoreTableEdit(fDocument, fTableResize.table, edit, error))
+		return true;
+	GeometryChanged();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
+}
+
+
+bool
 TPageView::TableCommand(BMessage* message)
 {
 	const char* name = NULL;

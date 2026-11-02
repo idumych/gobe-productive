@@ -137,6 +137,21 @@ main()
 			"cells' text by their breaks, ranges stale");
 	}
 
+	// ---- TTable::InRowResizeArea, InColumnResizeArea ----
+	{
+		Check(edit.InRowResizeArea(50, 17) == 0 && edit.InRowResizeArea(50, 15.5f) == 0
+			&& edit.InRowResizeArea(50, 18.5f) == 0, "row 0's bottom edge, 2 either side");
+		Check(edit.InRowResizeArea(50, 14.5f) == -1 && edit.InRowResizeArea(50, 25) == -1,
+			"inside a cell: no row edge");
+		Check(edit.InRowResizeArea(50, 51) == 2, "the last row's bottom edge");
+		Check(edit.InColumnResizeArea(100, 8) == 100 && edit.InColumnResizeArea(101.5f, 8) == 100
+			&& edit.InColumnResizeArea(398.5f, 8) == 400, "column edges, 2 either side");
+		Check(edit.InColumnResizeArea(0.5f, 8) == -1 && edit.InColumnResizeArea(50, 8) == -1,
+			"the table's left edge and a cell's middle: none");
+		Check(edit.FindPreviousColumnStart(200) == 100 && edit.FindPreviousColumnStart(100) == 0
+			&& edit.FindPreviousColumnStart(0) == -1, "the column before an edge");
+	}
+
 	// ---- TCell::Grow: a row as high as its cells' text, no lower than
 	// the height it was given ----
 	{

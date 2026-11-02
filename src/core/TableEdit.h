@@ -71,6 +71,15 @@ struct TableEdit {
 	// with `grow`), NULL if none
 	TableEditCell* FindCell(float x, float y, bool grow = false);
 	TableEditCell* CellWithId(int id);
+	// TTable::InRowResizeArea: the row whose bottom edge `x`, `y` is within
+	// 2 of (the last row of the cell there), -1 if none
+	int InRowResizeArea(float x, float y);
+	// TTable::InColumnResizeArea: the column edge `x`, `y` is within 2 of
+	// (the cell there's left, but the table's, or its right), -1 if none
+	float InColumnResizeArea(float x, float y);
+	// TTable::FindPreviousColumnStart: the rightmost cell left before
+	// `columnEnd`, -1 if none
+	float FindPreviousColumnStart(float columnEnd) const;
 	// TTable::RowTop, FindRow
 	float RowTop(int row) const;
 	int FindRow(float y) const;

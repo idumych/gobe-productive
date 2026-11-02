@@ -86,6 +86,42 @@ TableEdit::FindCell(float x, float y, bool grow)
 }
 
 
+int
+TableEdit::InRowResizeArea(float x, float y)
+{
+	const TableEditCell* c = FindCell(x, y, true);
+	if (c != nullptr && Gt(y, c->y + c->height - 2) && Lt(y, c->y + c->height + 2))
+		return c->row + c->rowSpan - 1;
+	return -1;
+}
+
+
+float
+TableEdit::InColumnResizeArea(float x, float y)
+{
+	const TableEditCell* c = FindCell(x, y, true);
+	if (c == nullptr)
+		return -1;
+	if (c->x > 0 && Gt(x, c->x - 2) && Lt(x, c->x + 2))
+		return c->x;
+	if (Gt(x, c->x + c->width - 2) && Lt(x, c->x + c->width + 2))
+		return c->x + c->width;
+	return -1;
+}
+
+
+float
+TableEdit::FindPreviousColumnStart(float columnEnd) const
+{
+	float start = -1;
+	for (const TableEditRow& row : rows)
+		for (const TableEditCell& c : row.cells)
+			if (Lt(c.x, columnEnd))
+				start = std::max(start, c.x);
+	return start;
+}
+
+
 TableEditCell*
 TableEdit::CellWithId(int id)
 {
