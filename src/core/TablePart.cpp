@@ -1,5 +1,9 @@
 #include "TablePart.h"
 
+#include <algorithm>
+
+#include "DocWriter.h"
+
 namespace gobe {
 
 void
@@ -12,6 +16,8 @@ ReadTablePart(DocArchive& a, TablePart& out)
 		throw ArchiveError("table from an older format", a.Position());
 
 	// TTable::TTable(TInputArchive&, TTablePart*)
+	out.bodyStart = a.Position();
+	out.format = a.FileFormatVersion();
 	a.Point(out.size);
 	if (a.FileFormatVersion() >= 0x1d)
 		out.value20 = a.Float();
@@ -42,6 +48,44 @@ ReadTablePart(DocArchive& a, TablePart& out)
 	}
 	out.textPart = a.UInt32();
 	out.textPortal = a.UInt32();
+	out.bodyEnd = a.Position();
+}
+
+
+std::vector<uint8_t>
+WriteTableRecord(const TablePart& table, const std::vector<uint8_t>& record)
+{
+	DocWriter w;
+	w.Bytes(record.data(), std::min(table.bodyStart, record.size()));
+	w.Point(table.size);
+	if (table.format >= 0x1d)
+		w.Float(table.value20);
+	w.UInt32(uint32_t(table.rows.size()));
+	for (const TableRow& row : table.rows) {
+		w.Float(row.top);
+		w.Float(row.height);
+		w.UInt32(uint32_t(row.cells.size()));
+		for (const TableCell& cell : row.cells) {
+			w.UInt32(cell.row);
+			w.UInt32(cell.column);
+			w.Point(cell.origin);
+			w.Point(cell.size);
+			w.UInt32(cell.values[0]);
+			w.UInt32(cell.values[1]);
+			if (table.format == 0x19)
+				w.UInt32(0);
+			else if (table.format > 0x19 && table.format < 0x1d)
+				w.Float(0);
+			for (uint32_t v : cell.frame)
+				w.UInt32(v);
+		}
+	}
+	w.UInt32(table.textPart);
+	w.UInt32(table.textPortal);
+	std::vector<uint8_t> out = w.Data();
+	if (table.bodyEnd <= record.size())
+		out.insert(out.end(), record.begin() + long(table.bodyEnd), record.end());
+	return out;
 }
 
 } // namespace gobe

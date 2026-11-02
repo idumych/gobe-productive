@@ -990,6 +990,10 @@ Document::Save(const std::string& to, std::string& error)
 			out = WriteWPPart(*wp, record);
 		else if (dirtyParts.count(part) && SpreadsheetPart(part) != nullptr)
 			out = WriteSSPart(*SpreadsheetPart(part), record);
+		else if (dirtyParts.count(part) && Table(part) != nullptr
+				&& Table(part)->bodyEnd > Table(part)->bodyStart
+				&& Table(part)->bodyEnd <= record.size())
+			out = WriteTableRecord(*Table(part), record);
 		else if (dirtyParts.count(part) && GraphicsPart(part) != nullptr
 				&& GraphicsPart(part)->dataEnd > GraphicsPart(part)->dataStart
 				&& GraphicsPart(part)->dataEnd <= record.size()) {

@@ -33,10 +33,19 @@ struct TablePart {
 	std::vector<TableRow> rows;
 	uint32_t textPart = 0xffffffff;	// TPart*: the word processing part
 	uint32_t textPortal = 0;
+	// where TTable's data is in the part record (after TPart's header, up
+	// to the tail) and the file format it was read in
+	size_t bodyStart = 0, bodyEnd = 0;
+	int format = 0;
 };
 
 // `a` is positioned at the part record; reads the table and its text part.
 void ReadTablePart(DocArchive& a, TablePart& out);
+
+// The part record with TTable::Write's data (TTable: the size, the gutter,
+// TRow::Write's rows, TCell::Write's cells, the text part and portal) in
+// place of what was read, the header and tail as they are
+std::vector<uint8_t> WriteTableRecord(const TablePart& table, const std::vector<uint8_t>& record);
 
 } // namespace gobe
 
