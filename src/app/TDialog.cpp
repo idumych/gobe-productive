@@ -209,6 +209,43 @@ TDialog::ControlMessage(const ItemData& item) const
 }
 
 
+// TSliderControl: a slider that shows its value above its thumb in its
+// format ("%d%%"), sprintf'd
+class TSliderControl : public BSlider {
+public:
+	TSliderControl(const char* label, BMessage* message, int32 minimum, int32 maximum,
+			const char* format)
+		:
+		BSlider("slider", label, message, minimum, maximum, B_HORIZONTAL),
+		fFormat(format)
+	{
+	}
+
+	virtual void DrawThumb()
+	{
+		BSlider::DrawThumb();
+		if (fFormat.IsEmpty())
+			return;
+		BView* view = OffscreenView();
+		char text[256];
+		snprintf(text, sizeof(text), fFormat.String(), int(Value()));
+		view->SetFont(be_plain_font);
+		view->SetHighColor(0, 0, 0);
+		view->SetLowColor(ViewColor());
+		float width = view->StringWidth(text);
+		BRect bounds = Bounds(), thumb = ThumbFrame();
+		float x = (thumb.left + thumb.right) / 2 - width / 2;
+		x = std::max(bounds.left, std::min(x, bounds.right - width));
+		view->SetDrawingMode(B_OP_OVER);
+		// (its baseline two above the bar)
+		view->DrawString(text, BPoint(x, BarFrame().top - 2));
+	}
+
+private:
+	BString fFormat;
+};
+
+
 static alignment
 Alignment(uint32 align)
 {
@@ -349,17 +386,19 @@ TDialog::MakeControl(const ItemData& item)
 			int32 maximum = item.values.size() > 2 ? item.values[2] : 100;
 			if (maximum <= minimum)
 				maximum = minimum + 100;
-			BSlider* slider = new BSlider("slider", label, ControlMessage(item),
-				minimum, maximum, B_HORIZONTAL);
+			BSlider* slider = new TSliderControl(label, ControlMessage(item), minimum, maximum,
+				item.strings.size() > 2 ? item.strings[2].c_str() : "");
 			if (item.values.size() > 0 && item.values[0] > 0)
 				slider->SetExplicitMinSize(BSize(item.values[0], B_SIZE_UNSET));
 			if (item.values.size() > 3 && item.values[3] > 0) {
-				slider->SetHashMarks(B_HASH_MARKS_BOTTOM);
+				slider->SetHashMarks(B_HASH_MARKS_BOTH);
 				slider->SetHashMarkCount(item.values[3]);
 			}
-			if (item.strings.size() >= 2 && (item.strings[0].size() > 0
-					|| item.strings[1].size() > 0))
+			// (both, or neither)
+			if (item.strings.size() >= 2 && item.strings[0].size() > 0
+					&& item.strings[1].size() > 0)
 				slider->SetLimitLabels(item.strings[0].c_str(), item.strings[1].c_str());
+			slider->SetBarColor(make_color(0xa0, 0xa0, 0xa0));
 			slider->SetEnabled(item.enabled);
 			view = slider;
 			break;
@@ -615,7 +654,7 @@ TDialog::RunDialog()
 		// before its own sizes were asked for)
 		InvalidateLayouts(GetLayout());
 		ResizeToPreferred();
-		OurCenterWindow();
+		PlaceWindow();
 		Unlock();
 	}
 	Show();
@@ -798,15 +837,23 @@ TDialog::SetItemEnabled(int32 index, bool on, int32 set)
 void
 TDialog::LoadItemSet(int32 index, int32 itemsId)
 {
-	BGroupView* set = dynamic_cast<BGroupView*>(Item(index));
+	BView* set = Item(index);
 	if (set == NULL)
 		return;
+	bool user = dynamic_cast<BGroupView*>(set) == NULL;
+	if (user && dynamic_cast<BGroupLayout*>(set->GetLayout()) == NULL) {
+		set->SetLayout(new BGroupLayout(B_VERTICAL, 0));
+		set->SetExplicitMinSize(BSize(B_SIZE_UNSET, B_SIZE_UNSET));
+		set->SetExplicitPreferredSize(BSize(B_SIZE_UNSET, B_SIZE_UNSET));
+		set->SetExplicitMaxSize(BSize(B_SIZE_UNSET, B_SIZE_UNSET));
+	}
+	BGroupLayout* layout = dynamic_cast<BGroupLayout*>(set->GetLayout());
 	while (BView* child = set->ChildAt(0)) {
 		child->RemoveSelf();
 		delete child;
 	}
 	// (and what isn't a view: glue, groups)
-	while (BLayoutItem* item = set->GroupLayout()->RemoveItem(int32(0)))
+	while (BLayoutItem* item = layout->RemoveItem(int32(0)))
 		delete item;
 	fSetItems.clear();
 	fSetRadios.clear();
@@ -815,10 +862,11 @@ TDialog::LoadItemSet(int32 index, int32 itemsId)
 	if (r == NULL || !ParseItems(r->data, list))
 		return;
 	fBuildingSet = index;
-	AddItems(set->GroupLayout(), list.items);
+	AddItems(layout, list.items);
 	fBuildingSet = -1;
 	// the controls at the top of the set's room
-	set->GroupLayout()->AddItem(BSpaceLayoutItem::CreateGlue());
+	if (!user)
+		layout->AddItem(BSpaceLayoutItem::CreateGlue());
 }
 
 } // namespace gobe

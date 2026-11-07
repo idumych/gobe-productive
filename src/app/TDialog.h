@@ -41,6 +41,9 @@ public:
 	void RunDialog();
 	// OurCenterWindow: where the original puts its dialogs
 	void OurCenterWindow();
+	// TDialog::InitPostRecalc: placed once sized (OurCenterWindow unless a
+	// dialog puts itself elsewhere)
+	virtual void PlaceWindow() { OurCenterWindow(); }
 
 protected:
 	// TDialog::Init: fill in the controls (the window is locked)
@@ -77,7 +80,8 @@ protected:
 	void RemoveLastPopUpItems(int32 index, int32 count, int32 set = -1);
 	// TItemSet::LoadItems: the item set `index` shows the controls of Item
 	// resource `itemsId` (they send the set's command with "SubID", their
-	// index)
+	// index); a USER item (TItemHandler in a view put in it) too, as large
+	// as they are
 	void LoadItemSet(int32 index, int32 itemsId);
 
 private:

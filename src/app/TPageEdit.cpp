@@ -6264,7 +6264,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sTB5': case 'sTB6': case 'sTB7': case 'sTB8': case 'sTB9':
 		case 'sTBA': case 'sTBB': case 'sTBC': case 'sTBD':
 		case 's00T':	// Make Chart
-		case 'sI07': case 'sI09': case 'sI00': case 'sI01':	// the image's tools and colors
+		case 'sI07': case 'sI09': case 'sI00': case 'sI01': case 'sI0A':	// the image's tools, colors, settings
 		case 'sCHc': case 'sCHd': case 'sCHe': case 'sCH1': case 'sCH8':	// Chart
 		case 'sCH2': case 'sCH5': case 'sCH6': case 'sCHa': case 'sCHb':
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange

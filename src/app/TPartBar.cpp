@@ -665,6 +665,44 @@ TPartBar::BuildSheet()
 }
 
 
+namespace {
+
+// TIMToolbarElement: a tool's button; the secondary button chooses it
+// (unless its Flags say it does its work at once: Find Color) and asks for
+// its settings ('sI0A' with "Tool")
+class TIMToolbarElement : public TMICNButtonElement {
+public:
+	TIMToolbarElement(int32 tool, BPoint where, BBitmap* icon, BMessage* message)
+		:
+		TMICNButtonElement('IM00' + tool, where, icon, message),
+		fTool(tool)
+	{
+	}
+
+	virtual bool MouseDown(TRibbon* ribbon, BPoint where)
+	{
+		BPoint at;
+		uint32 buttons = 0;
+		ribbon->GetMouse(&at, &buttons, false);
+		if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 || ribbon->Window() == NULL)
+			return false;
+		if (fTool != 4) {
+			ribbon->SelectElement(id, family);
+			Invoke(ribbon);
+		}
+		BMessage settings('sI0A');
+		settings.AddInt32("Tool", fTool);
+		ribbon->Window()->PostMessage(&settings);
+		return true;
+	}
+
+private:
+	int32 fTool;
+};
+
+} // namespace
+
+
 // TPartIM::AddPartBarElements: the part's icon, the colors (TIMColorGadget),
 // then a TIMToolbarElement for each tool of TPartIMFactory (its selection
 // tools, then its others), 20 apart from 70, 4, five to a row 23 apart:
@@ -695,7 +733,7 @@ TPartBar::BuildImage()
 	for (int32 i = 0; i < 10; i++) {
 		BMessage* message = new BMessage('sI07');
 		message->AddInt32("Tool", i);
-		TMICNButtonElement* tool = new TMICNButtonElement('IM00' + i,
+		TMICNButtonElement* tool = new TIMToolbarElement(i,
 			BPoint(70 + 20 * (i % 5), 4 + 23 * (i / 5)),
 			TMICNElement::LoadIcon(kIcons[i], &ImageResources()), message);
 		tool->tip = IndexString(ImageResources(), kTips[i], 0);

@@ -11,6 +11,7 @@
 #include "GobeResources.h"
 #include "IMPart.h"
 #include "ImageTools.h"
+#include "TImageDialogs.h"
 #include "TRibbon.h"
 
 namespace gobe {
@@ -191,7 +192,7 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 			CurrentViewState());
 		IMPart* edit = fDocument.EditableImagePart(part);
 		fImageStroke.brush = std::make_shared<AirbrushBrush>(BuildAirbrush(fore,
-			AirbrushSettings()));
+			ToolConfig(kAirbrush).airbrush));
 		AirbrushStamp(edit->image, MaskOf(*edit), *fImageStroke.brush, x, y);
 		fImageStroke.lastStamp = system_time();
 		BMessage tick(kMsgImageIdle);
@@ -216,7 +217,8 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 		} else if (tool == kEraser)
 			changed = EraserDown(edit->image, mask, x, y, fZoom, back);
 		else
-			changed = BucketFill(edit->image, mask, x, y, fore, ToleranceDistance(20));
+			changed = BucketFill(edit->image, mask, x, y, fore,
+				ToleranceDistance(ToolConfig(kBucket).tolerance));
 		fImages.erase(part);
 		Invalidate();
 		if (tool == kBucket) {
@@ -290,7 +292,7 @@ TPageView::AirbrushTo(int x, int y)
 	bool moved;
 	bool timeUp = system_time() - fImageStroke.lastStamp >= 125000;
 	std::vector<std::array<int, 2>> points = AirbrushPath(fImageStroke.x, fImageStroke.y, x, y,
-		AirbrushSettings(), timeUp, moved);
+		ToolConfig(kAirbrush).airbrush, timeUp, moved);
 	if (points.empty())
 		return;
 	IMPart* edit = fDocument.EditableImagePart(fImageStroke.part);
@@ -436,11 +438,18 @@ bool
 TPageView::ImageCommand(BMessage* message)
 {
 	if (message->what != 'sI07' && message->what != 'sI09' && message->what != 'sI00'
-			&& message->what != 'sI01')
+			&& message->what != 'sI01' && message->what != 'sI0A')
 		return false;
 	int main = fDocument.MainPart();
 	if (main < 0 || fDocument.ImagePart(size_t(main)) == NULL)
 		return true;
+	// a tool's settings (TDialogConfigTool, for a tool that has them)
+	if (message->what == 'sI0A') {
+		int32 tool = message->GetInt32("Tool", -1);
+		if (TDialogConfigTool::HasSettings(tool))
+			(new TDialogConfigTool(tool))->RunDialog();
+		return true;
+	}
 	if (message->what == 'sI07') {
 		int32 tool = message->GetInt32("Tool", -1);
 		// (Find Color does its work at once: TPartIM's selections, not yet)
