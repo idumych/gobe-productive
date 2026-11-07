@@ -117,6 +117,31 @@ main()
 	Check(!BucketFill(b, half, 15, 2, red, ToleranceDistance(20)).Valid(),
 		"nothing from outside the selection");
 
+	// the airbrush: the default brush 41 across; its rings' radii go from
+	// 18.5 down, so the last drawn (radius 0.5) is at r 2: the middle's alpha
+	// ((20 - 2 + 1) / 20) * 38.25 + 0.5 = 36 (38.25: 15 percent of 255), the
+	// edge's (r 20) 2; a stamp blends
+	AirbrushSettings settings;
+	AirbrushBrush brush = BuildAirbrush(black, settings);
+	Check(brush.width == 41 && brush.height == 41, "the brush 41 across");
+	Check(brush.pixels[20 * 41 + 20].a == 36, "its middle's alpha");
+	Check(brush.pixels[20 * 41 + 0].a == 0 && brush.pixels[20 * 41 + 1].a == 2, "its edge");
+	Check(brush.pixels[20 * 41 + 1].a < brush.pixels[20 * 41 + 20].a, "less at the edge");
+	b = White(64, 64);
+	r = AirbrushStamp(b, none, brush, 32, 32);
+	IMColor middle = PixelAt(b, 32, 32);
+	Check(middle.r == (255 * (255 - 36)) / 255, "a stamp's middle blended");
+	Check(r.left == 13 && r.right == 51, "a stamp's extent");
+	bool moved;
+	Check(AirbrushPath(10, 10, 10, 10, settings, false, moved).empty() && !moved,
+		"held still before the time: nothing");
+	Check(AirbrushPath(10, 10, 10, 10, settings, true, moved).size() == 1 && moved,
+		"held still: again");
+	Check(AirbrushPath(10, 10, 13, 10, settings, false, moved).empty(), "a little way: nothing");
+	// spacing (20 + 20) * 15 / 100 = 6: 30 points along, stamps at 6, 12, 18, 24, then 30
+	auto path = AirbrushPath(0, 0, 30, 0, settings, false, moved);
+	Check(path.size() == 5 && path[0][0] == 6 && path[4][0] == 30 && moved, "along the way");
+
 	printf("image_tools: ok %d, failed %d\n", sOk, sFailed);
 	return sFailed == 0 ? 0 : 1;
 }

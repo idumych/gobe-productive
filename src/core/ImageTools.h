@@ -5,6 +5,7 @@
 #ifndef GOBE_IMAGE_TOOLS_H
 #define GOBE_IMAGE_TOOLS_H
 
+#include <array>
 #include <cstdint>
 #include <vector>
 
@@ -71,6 +72,30 @@ IMRect EraserMove(ArchiveBitmap& bitmap, const IMMask& mask, int x0, int y0, int
 // Heckbert's); nothing if the pixel is outside the selection
 IMRect BucketFill(ArchiveBitmap& bitmap, const IMMask& mask, int x, int y, IMColor fore,
 	float distance);
+
+// AirBrushTool's settings (GetFactoryConfig: radii 20, flow rate 15,
+// spacing 15, focus 0) and its brush (BuildBrush: concentric ellipses from
+// the radii less 1.5 in, each a pixel smaller, their alpha up from the edge
+// by the focus to the flow rate's share of 255)
+struct AirbrushSettings {
+	int xRadius = 20, yRadius = 20, flowRate = 15, spacing = 15, focus = 0;
+};
+struct AirbrushBrush {
+	int width = 0, height = 0;		// the radii twice, and one
+	std::vector<IMColor> pixels;
+};
+AirbrushBrush BuildAirbrush(IMColor color, const AirbrushSettings& settings);
+// Spritz: the brush centered on the point, blended in (DrawBitmapMasked,
+// B_OP_ALPHA: each channel by the brush's alpha, the alpha added)
+IMRect AirbrushStamp(ArchiveBitmap& bitmap, const IMMask& mask, const AirbrushBrush& brush,
+	int x, int y);
+// AirBrushTool::Modify '_MMV' from the last point to this one: the points
+// stamped (a spacing of the radii's sum's percent apart along the way, then
+// this one), or, nearer than that, the last point again if `timeUp` (125 ms
+// since the last stamp: TPartIM::Idle keeps it spraying), else none. `moved`
+// gets whether the last point becomes this one.
+std::vector<std::array<int, 2>> AirbrushPath(int x0, int y0, int x1, int y1,
+	const AirbrushSettings& settings, bool timeUp, bool& moved);
 
 } // namespace gobe
 

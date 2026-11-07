@@ -277,4 +277,99 @@ skip:
 	return changed;
 }
 
+
+AirbrushBrush
+BuildAirbrush(IMColor color, const AirbrushSettings& s)
+{
+	AirbrushBrush brush;
+	brush.width = 2 * s.xRadius + 1;
+	brush.height = 2 * s.yRadius + 1;
+	brush.pixels.assign(size_t(brush.width) * size_t(brush.height), IMColor{0, 0, 0, 0});
+	double maxAlpha = std::min(double(s.flowRate) * 255.0 / 100.0, 255.0);
+	float a = std::max(0.0f, float(s.xRadius) - 1.5f);
+	float b = std::max(0.0f, float(s.yRadius) - 1.5f);
+	float initial = float(std::min(s.xRadius, s.yRadius));
+	float cx = float(s.xRadius), cy = float(s.yRadius);
+	for (float r = initial; r > -0.01f; r -= 1, a -= 1, b -= 1) {
+		IMColor ring = color;
+		if (int(initial) == 0)
+			ring.a = 255;
+		else {
+			int alpha = int((initial - r * float(100 - s.focus) / 100.0f + 1) / initial
+				* float(maxAlpha) + 0.5);
+			ring.a = uint8_t(std::min(255, alpha));
+		}
+		if (a < 0 || b < 0)
+			continue;
+		// (BView::FillEllipse: the pixels of its rectangle inside it)
+		for (int y = 0; y < brush.height; y++)
+			for (int x = 0; x < brush.width; x++) {
+				float dx = (float(x) - cx) / (a + 0.5f), dy = (float(y) - cy) / (b + 0.5f);
+				if (dx * dx + dy * dy <= 1)
+					brush.pixels[size_t(y) * size_t(brush.width) + size_t(x)] = ring;
+			}
+	}
+	return brush;
+}
+
+
+IMRect
+AirbrushStamp(ArchiveBitmap& bitmap, const IMMask& mask, const AirbrushBrush& brush, int x, int y)
+{
+	IMRect changed;
+	int left = x - (brush.width - 1) / 2, top = y - (brush.height - 1) / 2;
+	for (int by = 0; by < brush.height; by++)
+		for (int bx = 0; bx < brush.width; bx++) {
+			int px = left + bx, py = top + by;
+			const IMColor& s = brush.pixels[size_t(by) * size_t(brush.width) + size_t(bx)];
+			if (s.a == 0 || !Inside(bitmap, px, py) || !mask.Contains(px, py))
+				continue;
+			IMColor d = PixelAt(bitmap, px, py);
+			int alpha = s.a, keep = 255 - s.a;
+			IMColor out;
+			out.r = uint8_t((s.r * alpha + d.r * keep) / 255);
+			out.g = uint8_t((s.g * alpha + d.g * keep) / 255);
+			out.b = uint8_t((s.b * alpha + d.b * keep) / 255);
+			out.a = uint8_t(std::max(int(d.a), std::min(255, alpha + int(d.a))));
+			SetPixel(bitmap, px, py, out);
+			changed.Include(px, py);
+		}
+	return changed;
+}
+
+
+std::vector<std::array<int, 2>>
+AirbrushPath(int x0, int y0, int x1, int y1, const AirbrushSettings& s, bool timeUp,
+	bool& moved)
+{
+	std::vector<std::array<int, 2>> points;
+	moved = false;
+	if (x0 == x1 && y0 == y1) {
+		if (timeUp) {
+			points.push_back({x1, y1});
+			moved = true;
+		}
+		return points;
+	}
+	float spacing = float((s.yRadius + s.xRadius) * s.spacing) / 100.0f;
+	float vx = float(x1 - x0), vy = float(y1 - y0);
+	float distance = sqrtf(vx * vx + vy * vy);
+	vx /= distance;
+	vy /= distance;
+	if (distance < spacing) {
+		if (timeUp)
+			points.push_back({x0, y0});
+		return points;
+	}
+	float px = float(x0), py = float(y0);
+	for (float along = spacing; along < distance; along += spacing) {
+		px += vx * spacing;
+		py += vy * spacing;
+		points.push_back({int(px), int(py)});
+	}
+	points.push_back({x1, y1});
+	moved = true;
+	return points;
+}
+
 } // namespace gobe

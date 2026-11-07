@@ -42,6 +42,8 @@ static const uint32 kMsgSlideChanged = 'Gsld';
 static const uint32 kMsgDocumentChanged = 'Gchg';
 // the page view to its window: the active part's ribbon to show or hide
 static const uint32 kMsgActiveRibbon = 'Grib';
+// the image tool's idle (TPartIM::Idle) while its button is held
+static const uint32 kMsgImageIdle = 'IMid';
 // test hook: run "script" (RunScript) in the window
 static const uint32 kMsgRunScript = 'Grun';
 
@@ -425,7 +427,12 @@ private:
 		int x = 0, y = 0;		// the last point, in the image's pixels
 		uint8 color[4] = {};	// the pencil's (IMColor)
 		bool option = false;	// the eyedropper for the tool (OptionToggle)
+		bigtime_t lastStamp = 0;	// the airbrush's (Spritz)
+		std::shared_ptr<struct AirbrushBrush> brush;
+		class BMessageRunner* idle = NULL;	// TPartIM::Idle while it's held
 	} fImageStroke;
+	void ImageIdle();
+	void AirbrushTo(int x, int y);
 	bool ImageClick(BPoint where, int32 clicks, int32 buttons);
 	bool ImageDragMoved(BPoint where);
 	bool ImageDragUp(BPoint where);

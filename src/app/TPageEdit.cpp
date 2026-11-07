@@ -2201,6 +2201,10 @@ TPageView::MessageReceived(BMessage* message)
 	if (message->HasInt32("series") && ChartCommand(message))
 		return;
 	// the image's tools and colors (TPartIM::HandleMessage)
+	if (message->what == kMsgImageIdle) {
+		ImageIdle();
+		return;
+	}
 	if (ImageCommand(message))
 		return;
 	// the drawing part's commands for the selected shapes (Arrange, the

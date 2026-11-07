@@ -3,6 +3,7 @@
 // and colors (TPartIM::HandleMessage).
 #include "TPageView.h"
 
+#include <MessageRunner.h>
 #include <Window.h>
 
 #include <cmath>
@@ -101,6 +102,20 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 	fImageStroke.option = option;
 	IMColor fore = ColorOf(image->colors[0]), back = ColorOf(image->colors[1]);
 	IMRect changed;
+	if (tool == kAirbrush) {
+		// AirBrushTool::Modify '_MDN': the brush built, sprayed once
+		fUndo.BeginDocument(fDocument, IndexString(ImageResources(), 102, 1).c_str(),
+			CurrentViewState());
+		IMPart* edit = fDocument.EditableImagePart(part);
+		fImageStroke.brush = std::make_shared<AirbrushBrush>(BuildAirbrush(fore,
+			AirbrushSettings()));
+		AirbrushStamp(edit->image, MaskOf(*edit), *fImageStroke.brush, x, y);
+		fImageStroke.lastStamp = system_time();
+		BMessage tick(kMsgImageIdle);
+		fImageStroke.idle = new BMessageRunner(BMessenger(this), &tick, 25000);
+		fImages.erase(part);
+		Invalidate();
+	}
 	if (tool == kPencil || tool == kEraser || tool == kBucket) {
 		// (each its UndoString: STR# 100 on, index 1)
 		int32 strings = tool == kPencil ? 100 : tool == kEraser ? 101 : 105;
@@ -139,7 +154,7 @@ TPageView::ImageDragMoved(BPoint where)
 	if (!fImageStroke.active)
 		return false;
 	int32 tool = fImageStroke.tool;
-	if (tool != kPencil && tool != kEraser)
+	if (tool != kPencil && tool != kEraser && tool != kAirbrush)
 		return true;
 	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
 	(void)dx;
@@ -153,6 +168,10 @@ TPageView::ImageDragMoved(BPoint where)
 				x = int(floorf(where.x - (f.x + fMargin - fBounds.left)));
 				y = int(floorf(where.y - (f.y + fMargin - fBounds.top)));
 			}
+	}
+	if (tool == kAirbrush) {
+		AirbrushTo(x, y);
+		return true;
 	}
 	if (x == fImageStroke.x && y == fImageStroke.y)
 		return true;
@@ -174,12 +193,63 @@ TPageView::ImageDragMoved(BPoint where)
 
 // '_MUP': the stroke done; the eyedropper's color taken (EyeDropperTool:
 // the foreground's, with Option the background's)
+// AirBrushTool::Modify '_MMV': along the way a spacing apart, or held still
+// again each 125 ms
+void
+TPageView::AirbrushTo(int x, int y)
+{
+	bool moved;
+	bool timeUp = system_time() - fImageStroke.lastStamp >= 125000;
+	std::vector<std::array<int, 2>> points = AirbrushPath(fImageStroke.x, fImageStroke.y, x, y,
+		AirbrushSettings(), timeUp, moved);
+	if (points.empty())
+		return;
+	IMPart* edit = fDocument.EditableImagePart(fImageStroke.part);
+	IMMask mask = MaskOf(*edit);
+	for (const std::array<int, 2>& p : points)
+		AirbrushStamp(edit->image, mask, *fImageStroke.brush, p[0], p[1]);
+	fImageStroke.lastStamp = system_time();
+	if (moved) {
+		fImageStroke.x = x;
+		fImageStroke.y = y;
+	}
+	fImages.erase(fImageStroke.part);
+	Invalidate();
+}
+
+
+// TPartIM::Idle: the tool given the pointer where it is
+void
+TPageView::ImageIdle()
+{
+	if (!fImageStroke.active || fImageStroke.tool != kAirbrush)
+		return;
+	BPoint where;
+	uint32 buttons;
+	GetMouse(&where, &buttons, false);
+	if (buttons == 0)
+		return;
+	where.x /= fZoom;
+	where.y /= fZoom;
+	size_t part;
+	int x, y;
+	if (!ImageAt(where, part, x, y) || part != fImageStroke.part) {
+		x = fImageStroke.x;
+		y = fImageStroke.y;
+	}
+	AirbrushTo(x, y);
+}
+
+
 bool
 TPageView::ImageDragUp(BPoint where)
 {
 	if (!fImageStroke.active)
 		return false;
 	fImageStroke.active = false;
+	delete fImageStroke.idle;
+	fImageStroke.idle = NULL;
+	fImageStroke.brush.reset();
 	if (fImageStroke.tool == kEyeDropper) {
 		size_t part;
 		int x, y;
