@@ -1432,10 +1432,13 @@ TPageView::SetInk(const Ink& ink, float opacity, BRect rect, BGradient** gradien
 				rect.top + rect.Height() * ink.center[1]);
 			g = new BGradientRadial(center, std::max(rect.Width(), rect.Height()) / 2);
 		} else {
-			// directional: across the rect at the gradient's angle
+			// directional (TDirectionalGradient::DoDraw): along the angle,
+			// between the rect's corners that are farthest that way
+			// (TRect::Inscribe at the angle and opposite it)
 			float a = ink.angle * M_PI / 180;
 			BPoint c = rect.LeftTop() + BPoint(rect.Width() / 2, rect.Height() / 2);
-			BPoint d(cosf(a) * rect.Width() / 2, -sinf(a) * rect.Height() / 2);
+			float half = (fabsf(rect.Width() * cosf(a)) + fabsf(rect.Height() * sinf(a))) / 2;
+			BPoint d(cosf(a) * half, -sinf(a) * half);
 			g = new BGradientLinear(c - d, c + d);
 		}
 		for (int i = 0; i < ink.colorCount; i++)
@@ -2328,14 +2331,19 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 								continue;
 							BPoint across((a.y - b.y) / length * half, (b.x - a.x) / length * half);
 							BPoint quad[4] = {a + across, b + across, b - across, a - across};
-							// (a straight one on whole pixels: the original's
-							// strokes aren't antialiased)
-							if (a.x == b.x || a.y == b.y)
-								for (BPoint& corner : quad) {
-									corner.x = roundf(corner.x * penZoom) / penZoom;
-									corner.y = roundf(corner.y * penZoom) / penZoom;
-								}
-							FillPolygon(quad, 4, *gradient);
+							if (a.x == b.x || a.y == b.y) {
+								// a straight one on whole pixels, as the original
+								// strokes (no antialiasing): the pixels it covers
+								float left = std::min(quad[0].x, quad[2].x);
+								float right = std::max(quad[0].x, quad[2].x);
+								float top = std::min(quad[0].y, quad[2].y);
+								float bottom = std::max(quad[0].y, quad[2].y);
+								BRect pixels(roundf(left * penZoom), roundf(top * penZoom),
+									roundf(right * penZoom) - 1, roundf(bottom * penZoom) - 1);
+								FillRect(BRect(pixels.left / penZoom, pixels.top / penZoom,
+									pixels.right / penZoom, pixels.bottom / penZoom), *gradient);
+							} else
+								FillPolygon(quad, 4, *gradient);
 							if (outline.closed || k + 1 < segments) {
 								if (s.kind == Sig("RECT"))
 									FillRect(BRect(b.x - half, b.y - half, b.x + half, b.y + half),
