@@ -138,9 +138,8 @@ main()
 
 		// Chart Type: an area chart (each series a set of its own), then
 		// stacked areas (one set, the vertical axis to the categories'
-		// largest sum: Spring 4 + 2 + 6, Fall 7 + 5 + 1); the 3D types not
-		// yet
-		Check(!ChangeChartType(back, chart, 0, 1), "3D bars: not yet");
+		// largest sum: Spring 4 + 2 + 6, Fall 7 + 5 + 1)
+		Check(ChangeChartType(back, chart, 0, 1), "3D bars");
 		Check(ChangeChartType(back, chart, 2, 1), "an area chart");
 		const ChartPart* area = back.Chart(chart);
 		Check(area != nullptr && area->seriesKind == 2 && area->sets.size() == 3

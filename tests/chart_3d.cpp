@@ -80,12 +80,13 @@ main(int argc, char** argv)
 			if (doc.Chart(part)->SeriesCount() == 0)
 				continue;
 			charts++;
+			bool was2D = !doc.Chart(part)->Is3D();
 			Check(ChangeChartType(doc, part, 0, 1), "to a 3D bar chart");
 			const ChartPart* chart = doc.Chart(part);
 			Check(chart->chartType == Sig("BAR3") && chart->chartFlags == 3, "a BAR3's type, flags");
 			Check(Near(chart->axisDepth[1], float(chart->SeriesCount())), "as deep as its series");
 			ChartCamera at;
-			if (ReadChartCamera(*chart, at)) {
+			if (was2D && ReadChartCamera(*chart, at)) {
 				uint32_t bits;
 				memcpy(&bits, &at.position[0], 4);
 				Check(bits == 0x3f79a7c1, "the camera a 2D chart gets");

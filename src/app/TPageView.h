@@ -517,6 +517,7 @@ private:
 		BRect textFrame;			// the text frame it is in (view coordinates)
 		// the text it shows: part, paragraph, byte offsets [from, to)
 		size_t part = 0, paragraph = 0, from = 0, to = 0;
+		int frameIndex = 0;			// its frame's number in the part
 		struct Piece {
 			std::string text;
 			BFont font;
@@ -590,7 +591,18 @@ private:
 	void DrawChart(const Document::PlacedFrame& frame, BRect rect);
 	// a 2D chart with axes (T2DXYAxisChart): its pieces as TChartPiece::
 	// Draw draws them
-	void DrawChart2D(const ChartPart& chart, BRect rect, size_t part);
+	void DrawChart2D(const Document::PlacedFrame& frame, const ChartPart& chart, BRect rect,
+		float dx, float dy);
+	// the frames in draw order: a drawing's FRAM shapes draw theirs among
+	// its shapes, what's left goes by depth
+	bool HeldByDrawing(const Document::PlacedFrame& frame) const;
+	void DrawOrderedFrame(size_t index, float dx, float dy, bool held);
+	void DrawChildFrame(const Shape& shape, const Document::PlacedFrame& parent, float dx,
+		float dy);
+	void DrawLine(const Line& line, BRect updateRect, float dx, float dy);
+	const std::vector<Document::PlacedFrame>* fDrawOrder = NULL;
+	std::vector<bool> fFrameDrawn, fLineDrawn;
+	BRect fDrawClipBounds, fDrawUpdate;
 	// TChartPart::SetUpContextMenu's items, a chart entered
 	void AddChartContextItems(class BPopUpMenu* menu, BPoint where);
 	void DrawTable(const Document::PlacedFrame& frame, BRect rect);

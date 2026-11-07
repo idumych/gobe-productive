@@ -2055,7 +2055,9 @@ TDocWindow::MenusBeginning()
 	// TPartGR::FixMenus: Arrange's ported items
 	if (fDrawingMenus && fPages != NULL)
 		for (BMenu* menu : fPartMenus)
-			fPages->FixShapeMenu(menu);
+			// (not the chart's own menu, MENU 300: TChartPart::FixMenus above)
+			if (!fChartMenus || menu != fPartMenus.back())
+				fPages->FixShapeMenu(menu);
 		// TPartSS::FixMenus: Fill Down and Up with a block more than one cell
 	// high, Fill Right and Left more than one wide, Sort Cells either way.
 	// (Commands not ported yet are off.)

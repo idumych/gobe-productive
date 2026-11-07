@@ -75,6 +75,10 @@ void ResizeShape(Shape& shape, const float bounds[4]);
 // which handle (TShape::InHandles: 0 top left, 1 top right, 2 bottom right,
 // 3 bottom left) of the box is within `tolerance` of the point; -1 none
 int HitHandle(const Shape& shape, float x, float y, float tolerance);
+// TGRLine::GetEndPoints: a line's ends in its rectangle, from the corner it
+// starts at (TGRLine::StartPos: +0x2c, bit 0 flipped by the shape's flag 4
+// and bit 1 by its flag 8)
+void LineEnds(const Shape& shape, float from[2], float to[2]);
 // the box with handle `handle` dragged to (x, y)
 void DragHandle(const float bounds[4], int handle, float x, float y, float out[4]);
 

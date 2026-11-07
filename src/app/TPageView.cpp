@@ -1261,6 +1261,7 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 			line.frame.Set(left, y, right, y + height);
 			line.baseline = y + ascent;
 			line.angle = geometry[frameIndex].angle;
+			line.frameIndex = geometry[frameIndex].index;
 			// (turned about the frame's middle, not the room it has to grow)
 			line.center = frame.LeftTop() + BPoint(frame.Width() / 2, (geometry[frameIndex].height > 0
 				? geometry[frameIndex].height : frame.Height()) / 2);
@@ -2139,7 +2140,8 @@ TPageView::DrawTable(const Document::PlacedFrame& f, BRect r)
 void
 TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 {
-	DrawChart2D(*fDocument.Chart(f.part), r, f.part);
+	float dx = r.left - f.x, dy = r.top - f.y;
+	DrawChart2D(f, *fDocument.Chart(f.part), r, dx, dy);
 }
 
 
@@ -2165,8 +2167,11 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 		if (fDocument.LayerHidden(f.part, l))
 			continue;
 		for (const Shape& s : gr->layers[l].shapes) {
-			if (s.kind == Sig("FRAM"))
-				continue;	// another part's frame: drawn with that part
+			if (s.kind == Sig("FRAM")) {
+				// another part's frame: at its place among the shapes
+				DrawChildFrame(s, f, dx, dy);
+				continue;
+			}
 			ShapeStyle style = ResolveShapeStyle(fDocument.styles, s.style);
 			BPoint o(f.x + dx + s.origin[0], f.y + dy + s.origin[1]);
 			BRect r(o.x, o.y, o.x + s.size[0], o.y + s.size[1]);
@@ -2281,16 +2286,63 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 			int arrows = 0;
 			ShapePenAndArrows(fDocument.styles, s.style, penType, arrows);
 			bool printed = penType.print || !IsPrinting();
+			// the rectangle a pen's gradient goes across (TStroker: half the
+			// pen at this zoom out from the shape's; TTransManager::StrokeLine:
+			// a line's is its bounds and half the pen; TGradientOffscreen:
+			// a pixel more)
+			float penZoom = IsPrinting() ? 1 : fZoom;
+			BRect penRect = r;
+			if (s.kind == Sig("LINE"))
+				penRect.InsetBy(-style.penSize / 2, -style.penSize / 2);
+			penRect.InsetBy(-style.penSize * penZoom / 2, -style.penSize * penZoom / 2);
+			penRect.right += 1 / penZoom;
+			penRect.bottom += 1 / penZoom;
 			if (printed && style.penSize > 0
-					&& SetInk(style.pen, style.penOpacity, r, &gradient)) {
-				delete gradient;	// pens: solid color only for now
+					&& SetInk(style.pen, style.penOpacity, penRect, &gradient)) {
 				RestoreInkLow();
 				SetPenSize(style.penSize);
 				BPoint offset(f.x + dx, f.y + dy);
 				std::vector<Outline> outlines;
-				if (penType.kind != 0 || arrows != 0)
+				if (penType.kind != 0 || arrows != 0 || gradient != NULL)
 					outlines = ShapeOutline(s);
-				if (penType.kind != 0) {
+				if (gradient != NULL) {
+					// the outline filled with the gradient: a quad for each
+					// segment, its joins filled too
+					if (style.pen.colorCount > 0)
+						SetHighColor(ToColor(style.pen.colors[0], style.penOpacity));
+					SetDrawingMode(style.penOpacity >= 0.999f ? B_OP_COPY : B_OP_ALPHA);
+					float half = style.penSize / 2;
+					for (const Outline& outline : outlines) {
+						size_t count = outline.points.size();
+						size_t segments = outline.closed ? count : count - 1;
+						for (size_t k = 0; count >= 2 && k < segments; k++) {
+							BPoint a(offset.x + outline.points[k][0], offset.y + outline.points[k][1]);
+							const DrawPoint& next = outline.points[(k + 1) % count];
+							BPoint b(offset.x + next[0], offset.y + next[1]);
+							float length = hypotf(b.x - a.x, b.y - a.y);
+							if (length <= 0)
+								continue;
+							BPoint across((a.y - b.y) / length * half, (b.x - a.x) / length * half);
+							BPoint quad[4] = {a + across, b + across, b - across, a - across};
+							// (a straight one on whole pixels: the original's
+							// strokes aren't antialiased)
+							if (a.x == b.x || a.y == b.y)
+								for (BPoint& corner : quad) {
+									corner.x = roundf(corner.x * penZoom) / penZoom;
+									corner.y = roundf(corner.y * penZoom) / penZoom;
+								}
+							FillPolygon(quad, 4, *gradient);
+							if (outline.closed || k + 1 < segments) {
+								if (s.kind == Sig("RECT"))
+									FillRect(BRect(b.x - half, b.y - half, b.x + half, b.y + half),
+										*gradient);
+								else
+									FillEllipse(b, half, half, *gradient);
+							}
+						}
+					}
+					delete gradient;
+				} else if (penType.kind != 0) {
 					for (const Outline& outline : outlines)
 						StrokePenType(this, outline, penType, style.penSize, offset);
 				} else if (s.kind == Sig("RECT"))
@@ -2315,8 +2367,12 @@ TPageView::DrawGraphics(const Document::PlacedFrame& f, float dx, float dy)
 					}
 				} else if (s.kind == Sig("ARC "))
 					StrokeArc(r, s.arcAngles[0], s.arcAngles[1]);
-				else if (s.kind == Sig("LINE"))
-					StrokeLine(o, o + BPoint(s.size[0], s.size[1]));
+				else if (s.kind == Sig("LINE")) {
+					float from[2], to[2];
+					LineEnds(s, from, to);
+					StrokeLine(BPoint(f.x + dx + from[0], f.y + dy + from[1]),
+						BPoint(f.x + dx + to[0], f.y + dy + to[1]));
+				}
 				else if (path != NULL)
 					StrokeShape(path);
 				for (const Outline& outline : outlines)
@@ -2364,16 +2420,19 @@ TPageView::Draw(BRect updateRect)
 	std::vector<Document::PlacedFrame> order = fFrames;
 	std::stable_sort(order.begin(), order.end(),
 		[](const auto& a, const auto& b) { return a.depth < b.depth; });
-	for (const auto& f : order) {
-		uint32_t kind = fDocument.parts.parts[f.part].kind;
-		BRect r(f.x + dx, f.y + dy, f.x + dx + f.width, f.y + dy + f.height);
-		PushState();
-		BRegion frameClip(ContainerClip(f).OffsetByCopy(dx, dy) & bounds);
-		ConstrainClippingRegion(&frameClip);
-		DrawFrame(f, r, kind, dx, dy);
-		DrawFrameBorder(f, r);
-		PopState();
-	}
+	// (those a drawing or chart holds in its shapes it draws among them)
+	fDrawOrder = &order;
+	fFrameDrawn.assign(order.size(), false);
+	fLineDrawn.assign(fLines.size(), false);
+	fDrawClipBounds = bounds;
+	fDrawUpdate = updateRect;
+	for (size_t i = 0; i < order.size(); i++)
+		if (!fFrameDrawn[i] && !HeldByDrawing(order[i]))
+			DrawOrderedFrame(i, dx, dy, false);
+	for (size_t i = 0; i < order.size(); i++)
+		if (!fFrameDrawn[i])
+			DrawOrderedFrame(i, dx, dy, false);
+	fDrawOrder = NULL;
 	DrawLines(updateRect, dx, dy);
 	if (!IsPrinting()) {
 		DrawShapeSelection(dx, dy);
@@ -2487,39 +2546,128 @@ TPageView::DrawFrame(const Document::PlacedFrame& f, BRect r, uint32_t kind, flo
 }
 
 
+// whether a drawing or chart among the frames shown lists this frame in its
+// visible shapes (TPartGR's FRAM shapes)
+bool
+TPageView::HeldByDrawing(const Document::PlacedFrame& f) const
+{
+	if (f.frame->container >= fDocument.parts.parts.size())
+		return false;
+	const GRPart* gr = NULL;
+	if (const ChartPart* chart = fDocument.Chart(f.frame->container))
+		gr = &chart->graphics;
+	else
+		gr = fDocument.GraphicsPart(f.frame->container);
+	if (gr == NULL)
+		return false;
+	for (size_t l = 0; l < gr->layers.size(); l++) {
+		if (fDocument.LayerHidden(f.frame->container, l))
+			continue;
+		for (const Shape& s : gr->layers[l].shapes)
+			if (s.kind == Sig("FRAM") && FrameAt(fDocument, s.frame) == f.frame)
+				return true;
+	}
+	return false;
+}
+
+
+// one frame of the draw order; `held`, it's among a drawing's shapes: what's
+// under later shapes goes down now, its text and what's inside it too
+void
+TPageView::DrawOrderedFrame(size_t index, float dx, float dy, bool held)
+{
+	const Document::PlacedFrame& f = (*fDrawOrder)[index];
+	fFrameDrawn[index] = true;
+	uint32_t kind = fDocument.parts.parts[f.part].kind;
+	BRect r(f.x + dx, f.y + dy, f.x + dx + f.width, f.y + dy + f.height);
+	PushState();
+	BRegion frameClip(ContainerClip(f).OffsetByCopy(dx, dy) & fDrawClipBounds);
+	ConstrainClippingRegion(&frameClip);
+	DrawFrame(f, r, kind, dx, dy);
+	DrawFrameBorder(f, r);
+	PopState();
+	if (!held)
+		return;
+	PushState();
+	SetDrawingMode(B_OP_OVER);
+	for (size_t i = 0; i < fLines.size(); i++)
+		if (i < fLineDrawn.size() && !fLineDrawn[i] && fLines[i].part == f.part
+				&& fLines[i].frameIndex == f.index) {
+			fLineDrawn[i] = true;
+			DrawLine(fLines[i], fDrawUpdate, dx, dy);
+		}
+	PopState();
+	for (size_t i = 0; i < fDrawOrder->size(); i++) {
+		const Document::PlacedFrame& c = (*fDrawOrder)[i];
+		if (!fFrameDrawn[i] && c.frame->container == f.part
+				&& (c.page == f.page || c.page < 0 || f.page < 0) && !HeldByDrawing(c))
+			DrawOrderedFrame(i, dx, dy, true);
+	}
+}
+
+
+// a FRAM shape of a drawing or chart: the frame it names, where it comes
+void
+TPageView::DrawChildFrame(const Shape& shape, const Document::PlacedFrame& parent, float dx,
+	float dy)
+{
+	if (fDrawOrder == NULL)
+		return;
+	const gobe::Frame* frame = FrameAt(fDocument, shape.frame);
+	if (frame == NULL)
+		return;
+	for (size_t i = 0; i < fDrawOrder->size(); i++)
+		if (!fFrameDrawn[i] && (*fDrawOrder)[i].frame == frame
+				&& ((*fDrawOrder)[i].page == parent.page || (*fDrawOrder)[i].page < 0
+					|| parent.page < 0)) {
+			PushState();
+			DrawOrderedFrame(i, dx, dy, true);
+			PopState();
+		}
+}
+
+
+void
+TPageView::DrawLine(const Line& line, BRect updateRect, float dx, float dy)
+{
+	if (line.angle == 0 && !line.frame.Intersects(updateRect))
+		return;
+	PushState();
+	BRegion lineClip(line.clip.OffsetByCopy(dx, dy) & fDrawBounds);
+	ConstrainClippingRegion(&lineClip);
+	if (line.angle != 0)
+		SetTransform(FrameRotation(line.center, line.angle));
+	drawing_mode mode = DrawingMode();
+	for (const Line::Piece& p : line.pieces) {
+		SetFont(&p.font);
+		SetHighColor(p.color);
+		if (p.color.alpha < 255) {
+			SetDrawingMode(B_OP_ALPHA);
+			SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
+		} else
+			SetDrawingMode(mode);
+		if (p.field == Sig("LINE")) {
+			// half the ascent above the baseline
+			float y = line.baseline - p.font.Size() * 0.95f / 2;
+			StrokeLine(BPoint(line.frame.left + p.x, y),
+				BPoint(line.frame.left + p.ruleEnd, y));
+			continue;
+		}
+		DrawString(p.text.c_str(), BPoint(line.frame.left + p.x, line.baseline + p.dy));
+	}
+	if ((fDocument.documentFlags & 4) && !IsPrinting())
+		DrawInvisibles(size_t(&line - &fLines[0]));
+	PopState();
+}
+
+
 void
 TPageView::DrawLines(BRect updateRect, float dx, float dy)
 {
 	SetDrawingMode(B_OP_OVER);
-	for (const Line& line : fLines) {
-		if (line.angle == 0 && !line.frame.Intersects(updateRect))
-			continue;
-		PushState();
-		BRegion lineClip(line.clip.OffsetByCopy(dx, dy) & fDrawBounds);
-		ConstrainClippingRegion(&lineClip);
-		if (line.angle != 0)
-			SetTransform(FrameRotation(line.center, line.angle));
-		drawing_mode mode = DrawingMode();
-		for (const Line::Piece& p : line.pieces) {
-			SetFont(&p.font);
-			SetHighColor(p.color);
-			if (p.color.alpha < 255) {
-				SetDrawingMode(B_OP_ALPHA);
-				SetBlendingMode(B_CONSTANT_ALPHA, B_ALPHA_OVERLAY);
-			} else
-				SetDrawingMode(mode);
-			if (p.field == Sig("LINE")) {
-				// half the ascent above the baseline
-				float y = line.baseline - p.font.Size() * 0.95f / 2;
-				StrokeLine(BPoint(line.frame.left + p.x, y),
-					BPoint(line.frame.left + p.ruleEnd, y));
-				continue;
-			}
-			DrawString(p.text.c_str(), BPoint(line.frame.left + p.x, line.baseline + p.dy));
-		}
-		if ((fDocument.documentFlags & 4) && !IsPrinting())
-			DrawInvisibles(size_t(&line - &fLines[0]));
-		PopState();
+	for (size_t i = 0; i < fLines.size(); i++) {
+		if (i >= fLineDrawn.size() || !fLineDrawn[i])
+			DrawLine(fLines[i], updateRect, dx, dy);
 	}
 	// the selection inverted over the text (TWPPart's highlight)
 	if (!IsPrinting()) {

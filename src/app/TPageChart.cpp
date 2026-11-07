@@ -162,8 +162,10 @@ InkColor(const Color& c, float opacity)
 // box's left at its bottom; the title (TTitlePiece::DrawContent) its text
 // at its position.
 void
-TPageView::DrawChart2D(const ChartPart& chart, BRect r, size_t part)
+TPageView::DrawChart2D(const Document::PlacedFrame& frame, const ChartPart& chart, BRect r,
+	float dx, float dy)
 {
+	size_t part = frame.part;
 	const StyleMgr& styles = fDocument.styles;
 	PushState();
 	BRegion frameClip(r);
@@ -214,6 +216,11 @@ TPageView::DrawChart2D(const ChartPart& chart, BRect r, size_t part)
 
 	for (const GRLayer& layer : chart.graphics.layers)
 		for (const Shape& piece : layer.shapes) {
+			// (a frame in the chart, its labels: where it comes)
+			if (piece.kind == Sig("FRAM")) {
+				DrawChildFrame(piece, frame, dx, dy);
+				continue;
+			}
 			bool rendering = piece.kind == Sig("Rndr");
 			if (!rendering && piece.kind != Sig("Lgnd") && piece.kind != Sig("Titl"))
 				continue;

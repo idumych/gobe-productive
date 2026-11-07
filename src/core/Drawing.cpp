@@ -193,9 +193,11 @@ Contains(const Shape& s, float x, float y, float tolerance)
 	if (x < b[0] - tolerance || x > b[2] + tolerance || y < b[1] - tolerance
 			|| y > b[3] + tolerance)
 		return false;
-	if (s.kind == Sig("LINE"))
-		return SegmentDistance(x, y, s.origin[0], s.origin[1], s.origin[0] + s.size[0],
-			s.origin[1] + s.size[1]) <= tolerance;
+	if (s.kind == Sig("LINE")) {
+		float from[2], to[2];
+		LineEnds(s, from, to);
+		return SegmentDistance(x, y, from[0], from[1], to[0], to[1]) <= tolerance;
+	}
 	if (s.kind == Sig("ELPS")) {
 		float rx = (b[2] - b[0]) / 2 + tolerance, ry = (b[3] - b[1]) / 2 + tolerance;
 		float cx = (b[0] + b[2]) / 2, cy = (b[1] + b[3]) / 2;
@@ -246,6 +248,25 @@ MoveShape(Shape& shape, float dx, float dy)
 {
 	shape.origin[0] += dx;
 	shape.origin[1] += dy;
+}
+
+
+void
+LineEnds(const Shape& shape, float from[2], float to[2])
+{
+	from[0] = shape.origin[0];
+	from[1] = shape.origin[1];
+	to[0] = shape.origin[0] + shape.size[0];
+	to[1] = shape.origin[1] + shape.size[1];
+	uint32_t start = shape.lineValue;
+	if ((shape.values[0] & 4) != 0)
+		start ^= 1;
+	if ((shape.values[0] & 8) != 0)
+		start ^= 2;
+	if ((start & 1) != 0)
+		std::swap(from[0], to[0]);
+	if ((start & 2) != 0)
+		std::swap(from[1], to[1]);
 }
 
 
@@ -396,8 +417,10 @@ ShapeVertices(const Shape& shape)
 {
 	std::vector<DrawPoint> points;
 	if (shape.kind == Sig("LINE")) {
-		points.push_back({shape.origin[0], shape.origin[1]});
-		points.push_back({shape.origin[0] + shape.size[0], shape.origin[1] + shape.size[1]});
+		float from[2], to[2];
+		LineEnds(shape, from, to);
+		points.push_back({from[0], from[1]});
+		points.push_back({to[0], to[1]});
 	} else if (shape.kind == Sig("BEZI") && !shape.paths.empty()) {
 		for (const Vertex& v : shape.paths[0].vertices)
 			points.push_back({shape.origin[0] + v.point[0], shape.origin[1] + v.point[1]});
@@ -452,16 +475,22 @@ void
 MoveVertex(Shape& shape, int vertex, float x, float y)
 {
 	if (shape.kind == Sig("LINE")) {
+		// (from its ends as drawn: the flips are in them now)
+		float from[2], to[2];
+		LineEnds(shape, from, to);
 		if (vertex == 0) {
-			float endX = shape.origin[0] + shape.size[0], endY = shape.origin[1] + shape.size[1];
-			shape.origin[0] = x;
-			shape.origin[1] = y;
-			shape.size[0] = endX - x;
-			shape.size[1] = endY - y;
+			from[0] = x;
+			from[1] = y;
 		} else if (vertex == 1) {
-			shape.size[0] = x - shape.origin[0];
-			shape.size[1] = y - shape.origin[1];
+			to[0] = x;
+			to[1] = y;
 		}
+		shape.values[0] &= ~uint32_t(4 | 8);
+		shape.lineValue = 0;
+		shape.origin[0] = from[0];
+		shape.origin[1] = from[1];
+		shape.size[0] = to[0] - from[0];
+		shape.size[1] = to[1] - from[1];
 		return;
 	}
 	if (shape.kind != Sig("BEZI") || shape.paths.empty() || vertex < 0
@@ -853,9 +882,11 @@ OutlineShape(Shape& s)
 	const float k = 0.5522847f;
 	if (s.kind == Sig("LINE")) {
 		path.closed = false;
-		float x0 = s.size[0] < 0 ? -s.size[0] : 0, y0 = s.size[1] < 0 ? -s.size[1] : 0;
-		path.vertices.push_back(vertex(x0, y0, 0, 0, 0, 0, 4));
-		path.vertices.push_back(vertex(x0 + s.size[0], y0 + s.size[1], 0, 0, 0, 0, 4));
+		float from[2], to[2];
+		LineEnds(s, from, to);
+		float left = std::min(from[0], to[0]), top = std::min(from[1], to[1]);
+		path.vertices.push_back(vertex(from[0] - left, from[1] - top, 0, 0, 0, 0, 4));
+		path.vertices.push_back(vertex(to[0] - left, to[1] - top, 0, 0, 0, 0, 4));
 	} else if (s.kind == Sig("RECT") || (s.kind == Sig("RRCT") && s.radius[0] <= 0
 			&& s.radius[1] <= 0)) {
 		path.closed = true;
@@ -1260,8 +1291,9 @@ ShapeOutline(const Shape& s)
 		}
 	};
 	if (s.kind == Sig("LINE")) {
-		out.push_back({{{s.origin[0], s.origin[1]},
-			{s.origin[0] + s.size[0], s.origin[1] + s.size[1]}}, false});
+		float from[2], to[2];
+		LineEnds(s, from, to);
+		out.push_back({{{from[0], from[1]}, {to[0], to[1]}}, false});
 	} else if (s.kind == Sig("ELPS")) {
 		Outline o;
 		o.closed = true;
