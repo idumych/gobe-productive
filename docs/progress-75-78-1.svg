@@ -93,11 +93,11 @@ text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sa
 <rect class="sources" x="667.4" y="34" width="6.3" height="22" rx="2"/>
 <rect class="sources" x="676.7" y="34" width="6.3" height="22" rx="2"/>
 <rect class="sources" x="685.9" y="34" width="6.3" height="22" rx="2"/>
-<rect class="left" x="695.2" y="34" width="6.3" height="22" rx="2"/>
+<rect class="doing" x="695.2" y="34" width="6.3" height="22" rx="2"/>
 <rect class="left" x="704.5" y="34" width="6.3" height="22" rx="2"/>
 <rect class="left" x="713.7" y="34" width="6.3" height="22" rx="2"/>
 <rect class="released" x="0" y="70" width="12" height="12" rx="2"/><text class="small" x="18" y="80">59 released</text>
 <rect class="sources" x="180" y="70" width="12" height="12" rx="2"/><text class="small" x="198" y="80">16 in the sources</text>
-<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">0 in progress</text>
-<rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">3 not started</text>
+<rect class="doing" x="360" y="70" width="12" height="12" rx="2"/><text class="small" x="378" y="80">1 in progress</text>
+<rect class="left" x="540" y="70" width="12" height="12" rx="2"/><text class="small" x="558" y="80">2 not started</text>
 </svg>

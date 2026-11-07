@@ -7,9 +7,9 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-75-78-0.svg" alt="Port progress: 75 of 78 features done, 3 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-75-78-1.svg" alt="Port progress: 75 of 78 features done, 3 left (see Features)" width="720"></p>
 
-Not everything is ported yet: image editing is still to come. The bar counts the [features](#features) by state.
+Not everything is ported yet: most of image editing is still to come. The bar counts the [features](#features) by state.
 
 ![Gobe Productive on Haiku: a drawing with the ToolBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
@@ -42,8 +42,9 @@ original's fill and pen inks, dashed, dotted and hashed pens and arrows.
 out anywhere in a document, text wrapped around them, text frames linked
 so the text flows on. Open Frame Window edits a frame on its own.
 Tables are made with Insert Table… and edited with the Table menu.
-Pictures are shown and saved but not edited yet (the original's image
-processing part).
+Pictures in a document are shown and saved but not edited yet; image
+documents (File > New, Image Processing) are made, resized and painted
+with the first of the original's tools.
 
 **Presentations.** File > New makes a presentation the way the original
 did, and the original's presentations open and show their slides in the
@@ -290,7 +291,7 @@ sizes, headings and options are saved with the document.
 | Feature | State |
 |---|---|
 | New image processing documents (File > New, Image Processing) as the original makes them: a white image 512 points square, its window with the Image and Plugins menus and the PartBar's colors and tools; Document Size… (the image cut off or grown in the background color, light gray around it) | next |
-| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings | not yet |
+| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) (so far the pencil, eraser, paint bucket and eyedropper with their default settings, and the colours) | in progress |
 | Selections: marquee, lasso and magic wand; moved, duplicated, floated and unfloated, inverted, deselected, deleted; Crop; pictures pasted and dropped in | not yet |
 | Plug-in filters (ImageManip and GIMP plug-ins) and Edit Externally… | not yet |
 
