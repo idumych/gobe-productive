@@ -27,6 +27,11 @@ struct ArchiveBitmap {
 	bool Empty() const { return bits.empty(); }
 };
 void ReadBitmap(DocArchive& a, ArchiveBitmap& out);
+// TOutputArchive::WriteBitmap: 'BMAP', the size of the bits, an unused
+// bool, the color space, bytes per row, the bounds, compressed (zlib, its
+// size, the data), 'BmaP'; an empty one is 'BMAP', 0, 'BmaP'
+class DocWriter;
+void WriteBitmap(DocWriter& w, const ArchiveBitmap& bitmap);
 
 struct IMPart {
 	PartHeader header;

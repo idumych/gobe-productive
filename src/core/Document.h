@@ -393,6 +393,9 @@ bool CreateBlankDrawing(Document& doc, std::string& error);
 // File > New for presentations (TPartPRFactory::NewPart): a presentation
 // the screen's size (`width` x `height`) with a "Background" layer and
 // one slide, "untitled slide 1", with its own layer, in a browse root.
+// File > New for image processing: a white image (512 by 512 points, as
+// TPartIM::TPartIM(TDoc*) makes it), its drawing and a browse root
+bool CreateBlankImage(Document& doc, std::string& error, float width = 512, float height = 512);
 bool CreateBlankPresentation(Document& doc, std::string& error, float width = 800,
 	float height = 600);
 

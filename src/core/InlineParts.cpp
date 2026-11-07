@@ -180,9 +180,9 @@ FrameStyle(const Document& doc, size_t container)
 }
 
 
-// TInputArchive::WriteBitmap: 'BMAP', the size of the bits, an unused
-// bool, the color space, bytes per row, the bounds, compressed (zlib, its
-// size, the data), 'BmaP'; an empty one is 'BMAP', 0, 'BmaP'
+} // namespace
+
+
 void
 WriteBitmap(DocWriter& w, const ArchiveBitmap& bitmap)
 {
@@ -208,6 +208,9 @@ WriteBitmap(DocWriter& w, const ArchiveBitmap& bitmap)
 	}
 	w.Sig(Sig("BmaP"));
 }
+
+
+namespace {
 
 
 // a style based on `base` with these properties of its own (the

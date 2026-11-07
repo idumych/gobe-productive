@@ -10,6 +10,7 @@
 
 #include "DocWriter.h"
 #include "Editing.h"
+#include "IMPart.h"
 
 #include <algorithm>
 #include <cstring>
@@ -1313,6 +1314,257 @@ CreateBlankPresentation(Document& doc, std::string& error, float width, float he
 		{"CommandMgr", Hex("434d444d00000000436d644d")},
 		{"HistoryMgr", Hex("000000000000000000000014")},
 		{"WindowMgr", PresentationWindowSection()}});
+}
+
+namespace {
+
+// #pragma mark - images
+
+// File > New for image processing (TPartIM::TPartIM(TDoc*), TLeafSheet for a
+// BITS sheet): the image, the sheet's drawing and a browse root, all as
+// large as the image, as the original's new image document has them
+enum { kImagePart = 0, kImageGraphicsPart = 1, kImageRootPart = 2 };
+
+// its styles: TDoc::TDoc's, as the original writes them for a new image
+// (its properties in order of type, then value)
+enum { kIMBaseStyle, kIMFrameStyle, kIMDocumentStyle, kIMGRDefaultStyle };
+
+
+std::vector<uint8_t>
+ImageStyleSection()
+{
+	StyleMgr styles;
+	auto add = [&](const char* type, const char* hex) {
+		styles.properties.push_back({Code(type), Hex(hex)});
+		return uint32_t(styles.properties.size() - 1);
+	};
+	const char* white = "01ffffffff77747700ffffffffffffffff";
+	const char* black = "01000000ff77747700ffffffffffffffff";
+	uint32_t arrows = add("Arrw", "0000");
+	uint32_t fill = add("FCol", white);
+	uint32_t fillClear = add("FTra", "00000000");
+	uint32_t fillOpaque = add("FTra", "3f800000");
+	uint32_t penColor = add("PCol", black);
+	uint32_t penType = add("PEN ", "ffffffff4e4f524d0000000b000744656661756c740001");
+	uint32_t penNone = add("PENz", "00000000");
+	uint32_t penSize = add("PENz", "3f800000");
+	uint32_t penClear = add("PTra", "00000000");
+	uint32_t penOpaque = add("PTra", "3f800000");
+	uint32_t textColor = add("TCol", black);
+	uint32_t face = add("TFac", "0000000101");
+	uint32_t font = add("TFon", "000e447574636838303120526d20425400000000");
+	uint32_t size = add("TSiz", "000c");
+	const uint32_t none = 0xffffffff;
+	auto style = [&](const char* type, const char* name, uint32_t flags, uint32_t users,
+			uint32_t parent, std::vector<uint32_t> props) {
+		Style s;
+		s.id = Sig("STYL");
+		s.value4 = users + 1;
+		s.value8 = flags;
+		s.valueC = 0xffff;
+		s.value10 = Code(type);
+		s.name = name;
+		s.links[0] = parent;
+		s.links[1] = none;
+		s.links[2] = none;
+		s.props = std::move(props);
+		styles.styles.push_back(std::move(s));
+	};
+	// (users: the styles based on it, the frames, TDoc +0x6c)
+	style("Basi", "Default", 0x802, 2, none, {arrows, fill, fillOpaque, penColor, penType,
+		penSize, penOpaque, textColor, face, font, size});
+	style("Basi", "", 0, 3, kIMBaseStyle, {fillClear, penNone, penClear});	// the frames
+	style("Basi", "", 0, 1, kIMGRDefaultStyle, {});						// TDoc +0x6c
+	style("GRFX", "GR Default", 0x802, 1, kIMBaseStyle, {});
+	for (int pass = 0; pass < 3; pass++)
+		for (Style& s : styles.styles)
+			s.props2 = StyleUnionSet(styles, s);
+	styles.afterSection = kIMDocumentStyle;
+	return WriteStyleMgr(styles);
+}
+
+
+// TPartIM::Write: 'imp+', its size, the image (white, B_RGBA32), no floating
+// bits, the selection's rectangle (the whole), the colors (black on white),
+// 'imp-'; framed in the root
+std::vector<uint8_t>
+ImagePartRecord(float width, float height)
+{
+	DocWriter w;
+	WritePartHeader(w, Sig("BITS"), 2, 1, 0);
+	w.Sig(Sig("imp+"));
+	w.Float(width);
+	w.Float(height);
+	ArchiveBitmap image;
+	image.colorSpace = 0x2008;		// B_RGBA32
+	image.bytesPerRow = uint32_t(width) * 4;
+	image.bounds[2] = width - 1;
+	image.bounds[3] = height - 1;
+	image.bits.assign(size_t(image.bytesPerRow) * size_t(height), 0xff);
+	WriteBitmap(w, image);
+	WriteBitmap(w, ArchiveBitmap());
+	const float rect[4] = {0, 0, width - 1, height - 1};
+	w.Rect(rect);
+	w.Bytes(Hex("000000ff" "ffffffff"));
+	w.Sig(Sig("imp-"));
+	PortalStart(w, kImageRootPart, 12);
+	const float origin[2] = {0, 0};
+	WriteFrame(w, origin, width, height, kIMFrameStyle, kImagePart, kImageRootPart);
+	// TFrameIM: the image's rectangle shown
+	const float shown[4] = {0, 0, width, height};
+	w.Rect(shown);
+	w.Sig(Sig("FraM"));
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+ImageGraphicsRecord(float width, float height)
+{
+	DocWriter w;
+	WritePartHeader(w, Sig("GRFX"), 2, 2, 1);
+	w.Sig(Sig("GRAP"));
+	w.Bytes(Hex("00000000" "41100000" "0000" "4974240049742400" "00000000000000000000000000000000" "00"));
+	w.Sig(Sig("lyr+"));
+	w.UInt32(1);
+	w.String("Layer 1");
+	w.UInt32(0);
+	w.Sig(Sig("lyr-"));
+	w.Sig(Sig("vew+"));
+	w.UInt32(1);
+	w.String("View 1");
+	w.UInt32(1);
+	w.UInt32(0);
+	w.Bytes(Hex("0101000100"));
+	w.Sig(Sig("vew-"));
+	w.Sig(Sig("GraP"));
+	PortalStart(w, kImageRootPart, 4);
+	const float origin[2] = {0, 0};
+	WriteFrame(w, origin, width, height, kIMFrameStyle, kImageGraphicsPart, kImageRootPart);
+	const float drawing[4] = {0, 0, width, height};
+	w.Rect(drawing);		// TFrameGR
+	w.Sig(Sig("FraM"));
+	w.UInt32(0);			// TGRPortal: view 0
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+ImageRootRecord(float width, float height)
+{
+	DocWriter w;
+	WritePartHeader(w, Sig("BROT"), 0, 3, 0xffffffff);
+	w.UInt32(0);			// TRootPart: the sheet
+	PortalStart(w, 0xffffffff, 0);
+	const float origin[2] = {0, 0};
+	WriteFrame(w, origin, width, height, kIMFrameStyle, kImageRootPart, 0xffffffff);
+	// TBrowseRootFrame: the sheet's frame and its graphics frame
+	FramePtr(w, kImagePart, 0, 0);
+	FramePtr(w, kImageGraphicsPart, 0, 0);
+	w.Sig(Sig("FraM"));
+	w.Sig(Sig("PorT"));
+	w.Sig(Sig("ParT"));
+	return w.Data();
+}
+
+
+// the image's (TIMSelection: not a rectangle, at 0, 0, a mask with nothing
+// in it, B_GRAY1) and the drawing's (no shapes)
+std::vector<uint8_t>
+ImageSelectionSection(float width, float height)
+{
+	DocWriter w;
+	w.Sig(Sig("SELM"));
+	w.UInt32(2);
+	DocWriter body;
+	body.Sig(Sig("BITS"));
+	body.UInt32(kImagePart);
+	body.UInt32(0);
+	body.Bool(false);
+	body.Float(0);
+	body.Float(0);
+	ArchiveBitmap mask;
+	mask.colorSpace = 0x0001;	// B_GRAY1
+	mask.bytesPerRow = (uint32_t(width) + 31) / 32 * 4;
+	mask.bounds[2] = width - 1;
+	mask.bounds[3] = height - 1;
+	mask.bits.assign(size_t(mask.bytesPerRow) * size_t(height), 0);
+	WriteBitmap(body, mask);
+	w.UInt32(uint32_t(body.Data().size()));
+	w.Bytes(body.Data());
+	w.UInt32(16);
+	w.Sig(Sig("GRFX"));
+	w.UInt32(kImageGraphicsPart);
+	w.UInt32(1);
+	w.UInt32(0);
+	w.Sig(Sig("SelM"));
+	return w.Data();
+}
+
+
+std::vector<uint8_t>
+ImageSheetSection(float width, float height)
+{
+	SheetMgr sheets;
+	sheets.sheetCount = 1;
+	LeafSheet sheet;
+	sheet.name = "Sheet 1";
+	sheet.mainPart = kImagePart;
+	sheet.graphicsPart = kImageGraphicsPart;
+	std::copy(kPaper, kPaper + 4, sheet.paper);
+	std::copy(kPrintable, kPrintable + 4, sheet.printable);
+	sheet.flags[0] = sheet.flags[1] = sheet.flags[2] = true;
+	sheet.divisions = 8;
+	sheets.sheets.push_back(sheet);
+	return WriteSheetMgr(sheets);
+}
+
+
+std::vector<uint8_t>
+ImageWindowSection()
+{
+	// TDocWindow::Write as the original's new image document has it: the
+	// sheet (0), the root frame (2, 0, 0), the zoom (1), the views' values,
+	// the window's frame (20, 38, 546, 635), the image part's ribbons
+	return Hex("00000000" "00000002" "00000000" "00000000" "3f800000"
+		"00000000" "00000001" "00000000" "00000000" "00000000" "00000001" "00000000" "ffffffff"
+		"41a00000" "42180000" "44088000" "441ec000"
+		"0000000a00000003000000000000000000010000"
+		"00000a01000000080000000006010000000901000069d10100000004000000000500");
+}
+
+} // namespace
+
+
+bool
+CreateBlankImage(Document& doc, std::string& error, float width, float height)
+{
+	PartMgr parts;
+	parts.value14 = 4;
+	parts.parts.push_back({Sig("BITS"), 0, ImagePartRecord(width, height)});
+	parts.parts.push_back({Sig("GRFX"), 0, ImageGraphicsRecord(width, height)});
+	parts.parts.push_back({Sig("BROT"), 0, ImageRootRecord(width, height)});
+	return LoadSections(doc, error, {
+		{"VersionMgr", Hex("5645524d0000000100020000001e000400000000000000005665724d")},
+		{"PartFactory Table", WriteFactoryTable({
+			{Sig("BITS"), 1, "Image Processing"},
+			{Sig("GRFX"), 1, "Graphics"},
+			{Sig("BROT"), 1, "BrowseRootPart"}})},
+		{"Document Misc", Hex("00000001000000000000000000000000000000000000000000000000")},
+		{"SetMgr", Hex("5345544d0000000000000000000000005365744d")},
+		{"PenMgr", Hex("50454e4d0000000601000000000050656e4d")},
+		{"StyleMgr", ImageStyleSection()},
+		{"SheetMgr", ImageSheetSection(width, height)},
+		{"SelectionMgr", ImageSelectionSection(width, height)},
+		{"LinksMgr", Hex("4c494e4b00000000004c696e4b")},
+		{"PartMgr", WritePartMgrFromRecords(parts)},
+		{"CommandMgr", Hex("434d444d00000000436d644d")},
+		{"HistoryMgr", Hex("000000000000000000000014")},
+		{"WindowMgr", ImageWindowSection()}});
 }
 
 } // namespace gobe
