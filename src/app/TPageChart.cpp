@@ -9,6 +9,7 @@
 #include <PopUpMenu.h>
 #include <Region.h>
 #include <algorithm>
+#include <array>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
@@ -241,11 +242,15 @@ TPageView::DrawChart2D(const Document::PlacedFrame& frame, const ChartPart& char
 				// piece's font
 				int32 width = int32(ceilf(piece.size[0])), height = int32(ceilf(piece.size[1]));
 				std::shared_ptr<ChartRender3D>& render = fChartRenders[part];
-				std::string key = ChartRenderKey(chart, styles, width, height);
+				std::array<float, 3>& normal = ChartNormal(part);
+				std::string key = ChartRenderKey(chart, styles, width, height)
+					+ std::string((const char*)normal.data(), sizeof(float) * 3);
 				if (render == NULL || render->key != key) {
 					render = std::make_shared<ChartRender3D>();
-					render->key = key;
-					RenderChart3D(chart, styles, width, height, *render);
+					RenderChart3D(chart, styles, width, height, normal.data(), *render);
+					// (what it leaves is what the next drawing starts from)
+					render->key = ChartRenderKey(chart, styles, width, height)
+						+ std::string((const char*)normal.data(), sizeof(float) * 3);
 				}
 				if (render->bitmap != NULL) {
 					SetDrawingMode(B_OP_ALPHA);
@@ -612,6 +617,16 @@ TPageView::AddChartContextItems(BPopUpMenu* menu, BPoint where)
 }
 
 
+std::array<float, 3>&
+TPageView::ChartNormal(size_t part)
+{
+	auto found = fChartNormals.find(part);
+	if (found == fChartNormals.end())
+		found = fChartNormals.emplace(part, std::array<float, 3>{0, 0, 1}).first;
+	return found->second;
+}
+
+
 bool
 TPageView::ActiveChartIs3D() const
 {
@@ -672,7 +687,8 @@ TPageView::ChartClick(BPoint where, int32 clicks)
 			if (top != NULL && top->kind == Sig("Rndr") && !handle) {
 				int32 object = FindChart3DObject(*chart, fDocument.styles,
 					int32(ceilf(top->size[0])), int32(ceilf(top->size[1])),
-					BPoint(at.x - top->origin[0], at.y - top->origin[1]));
+					BPoint(at.x - top->origin[0], at.y - top->origin[1]),
+					ChartNormal(fChart.part).data());
 				fUndo.BeginDocument(fDocument, ChartString(3, 7).String(), CurrentViewState());
 				ChartPart* editing = fDocument.EditableChart(fChart.part);
 				if (object >= 0)

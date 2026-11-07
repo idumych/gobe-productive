@@ -44,8 +44,8 @@ main(int argc, char** argv)
 		Check(Near(std::hypot(p[0], p[1]), 3500, 60), "each point on the circle");
 	std::vector<std::array<float, 2>> quarter = ChartArcPoints(3500, 0, 90);
 	Check(quarter.size() >= 13 && quarter.size() <= 15, "a quarter's points");
-	Check(Near(quarter.front()[0], -3500, 1) && Near(quarter.front()[1], 0, 1),
-		"a slice starts at the left");
+	Check(Near(quarter.front()[0], 3500, 1) && Near(quarter.front()[1], 0, 1),
+		"a slice starts at the right");
 	Check(Near(quarter.back()[0], 0, 80) && Near(quarter.back()[1], -3500, 80),
 		"a quarter ends at the bottom");
 

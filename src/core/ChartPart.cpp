@@ -527,8 +527,10 @@ ChartCameraKey(ChartCamera& camera, uint8_t key)
 std::vector<std::array<float, 2>>
 ChartArcPoints(float radius, float start, float sweep)
 {
-	const std::array<float, 2> corners[4] = {{-radius, -radius}, {radius, -radius},
-		{radius, radius}, {-radius, radius}};
+	// (the first quarter from the right going down, as the original's pies
+	// show their first slice)
+	const std::array<float, 2> corners[4] = {{radius, -radius}, {-radius, -radius},
+		{-radius, radius}, {radius, radius}};
 	const int shift = 3;
 	const float scale = float(1 << shift);
 	const int steps = (0x19220 << shift) >> 16;

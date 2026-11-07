@@ -403,6 +403,10 @@ private:
 	} fChart;
 	// each 3D chart's last frame (TRenderingPiece's bitmap)
 	std::map<size_t, std::shared_ptr<struct ChartRender3D>> fChartRenders;
+	// the normal each chart's OpenGL context was left with (TChartView's
+	// context lasts while the document is open)
+	std::map<size_t, std::array<float, 3>> fChartNormals;
+	std::array<float, 3>& ChartNormal(size_t part);
 	// TRenderingPiece::Click's tracking: the camera dragged with a tool
 	struct ChartDrag {
 		bool active = false;

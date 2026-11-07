@@ -52,6 +52,9 @@ public:
 		glShadeModel(GL_SMOOTH);
 		glEnable(GL_DEPTH_TEST);
 		glEnable(GL_LIGHTING);
+		// (BeOS's OpenGL lights by unit normals: T3DAreaChart's front, given
+		// longer ones, comes out as there; the other charts' are unit ones)
+		glEnable(GL_NORMALIZE);
 	}
 
 	float WidthOf() const { return fWidth; }
@@ -657,7 +660,7 @@ ChartRenderKey(const ChartPart& chart, const StyleMgr& styles, int32 width, int3
 
 bool
 RenderChart3D(const ChartPart& chart, const StyleMgr& styles, int32 width, int32 height,
-	ChartRender3D& out)
+	float normal[3], ChartRender3D& out)
 {
 	out.bitmap.reset();
 	out.labels.clear();
@@ -678,13 +681,13 @@ RenderChart3D(const ChartPart& chart, const StyleMgr& styles, int32 width, int32
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 	glPushMatrix();
 	SnapLightAndCamera(camera);
-	// (a fresh context's normal: the pie's faces have none of their own)
-	glNormal3f(0, 0, 1);
+	glNormal3fv(normal);
 	DrawInfo info;
 	info.chart = &chart;
 	info.styles = &styles;
 	info.selected = int32(chart.chartValue8);
 	DrawChart(info);
+	glGetFloatv(GL_CURRENT_NORMAL, normal);
 	AxisLabels(chart, view->WidthOf(), view->HeightOf(), out);
 	glFlush();
 	view->SwapBuffers();
@@ -718,7 +721,7 @@ RenderChart3D(const ChartPart& chart, const StyleMgr& styles, int32 width, int32
 
 int32
 FindChart3DObject(const ChartPart& chart, const StyleMgr& styles, int32 width, int32 height,
-	BPoint where)
+	BPoint where, float normal[3])
 {
 	ChartCamera camera;
 	if (width <= 10 || height <= 10 || !ReadChartCamera(chart, camera))
@@ -743,7 +746,9 @@ FindChart3DObject(const ChartPart& chart, const StyleMgr& styles, int32 width, i
 	info.chart = &chart;
 	info.styles = &styles;
 	info.clickTest = true;
+	glNormal3fv(normal);
 	DrawChart(info);
+	glGetFloatv(GL_CURRENT_NORMAL, normal);
 	uint8 pixel[3] = {0, 0, 0};
 	glReadBuffer(GL_BACK);
 	glReadPixels(GLint(where.x), GLint(view->HeightOf() - where.y), 1, 1, GL_RGB,

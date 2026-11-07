@@ -131,7 +131,8 @@ float ChartCameraDistance(const ChartCamera& camera);
 bool ChartCameraKey(ChartCamera& camera, uint8_t key);
 
 // CalcArcPoly (shift 3) for a slice of a T3DPieChart, radius 3500: the points
-// of the arc from `start` through `sweep` degrees, each quarter-circle
+// of the arc from `start` through `sweep` degrees (0 at the right, going
+// down with y up), each quarter-circle
 // stepped as FUN_00170d40 does (a Minsky circle)
 std::vector<std::array<float, 2>> ChartArcPoints(float radius, float start, float sweep);
 

@@ -36,14 +36,17 @@ std::string ChartRenderKey(const ChartPart& chart, const StyleMgr& styles, int32
 	int32 height);
 
 // the chart drawn at the size (TChartView::DoDraw), false if it couldn't be;
-// `out` is then empty
+// `out` is then empty. `normal` is OpenGL's current normal as the chart's
+// context had it, and as it leaves it: each chart's TChartView keeps its
+// context while the document is open, and a pie, which gives its faces no
+// normal, is lit by what the chart drew before (a fresh one's: 0, 0, 1)
 bool RenderChart3D(const ChartPart& chart, const StyleMgr& styles, int32 width, int32 height,
-	ChartRender3D& out);
+	float normal[3], ChartRender3D& out);
 
 // TChartView::FindObject: what's at the piece's point: 0 the vertical axis,
 // 1 the horizontal one, 2 and on a series (by its click test color), -1 nothing
 int32 FindChart3DObject(const ChartPart& chart, const StyleMgr& styles, int32 width,
-	int32 height, BPoint where);
+	int32 height, BPoint where, float normal[3]);
 
 } // namespace gobe
 
