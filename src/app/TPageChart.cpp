@@ -257,6 +257,8 @@ TPageView::DrawChart2D(const Document::PlacedFrame& frame, const ChartPart& char
 					SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
 					DrawBitmap(render->bitmap.get(), BPoint(pr.left, pr.top));
 				}
+				// (TChartView::Draw2D: B_OP_OVER)
+				SetDrawingMode(B_OP_OVER);
 				useFont(piece.style);
 				SetHighColor(0, 0, 0);
 				for (const ChartRender3D::Label& text : render->labels)

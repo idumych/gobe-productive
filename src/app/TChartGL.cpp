@@ -690,28 +690,29 @@ RenderChart3D(const ChartPart& chart, const StyleMgr& styles, int32 width, int32
 	glGetFloatv(GL_CURRENT_NORMAL, normal);
 	AxisLabels(chart, view->WidthOf(), view->HeightOf(), out);
 	glFlush();
-	view->SwapBuffers();
+	// the frame read back as drawn (OpenGL's rows go up from the bottom)
+	std::vector<uint8> pixels(size_t(width) * height * 4);
+	glReadBuffer(GL_BACK);
+	glPixelStorei(GL_PACK_ALIGNMENT, 1);
+	glReadPixels(0, 0, width, height, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 	glPopMatrix();
 	view->UnlockGL();
 
-	BBitmap frame(BRect(0, 0, width - 1, height - 1), B_RGB32);
-	if (frame.InitCheck() != B_OK || view->CopyPixelsOut(B_ORIGIN, &frame) != B_OK) {
+	// TTransManager::DrawBitmap with B_OP_OVER: the clear color lets
+	// through what's under it
+	std::unique_ptr<BBitmap> bitmap(new BBitmap(BRect(0, 0, width - 1, height - 1), B_RGBA32));
+	if (bitmap->InitCheck() != B_OK) {
 		out.labels.clear();
 		return false;
 	}
-	// TTransManager::DrawBitmap with B_OP_OVER: the clear color lets
-	// through what's under it
-	std::unique_ptr<BBitmap> bitmap(new BBitmap(frame.Bounds(), B_RGBA32));
-	if (bitmap->InitCheck() != B_OK)
-		return false;
 	for (int32 y = 0; y < height; y++) {
-		const uint8* from = (const uint8*)frame.Bits() + y * frame.BytesPerRow();
+		const uint8* from = pixels.data() + size_t(height - 1 - y) * width * 4;
 		uint8* to = (uint8*)bitmap->Bits() + y * bitmap->BytesPerRow();
 		for (int32 x = 0; x < width; x++, from += 4, to += 4) {
-			to[0] = from[0];
+			to[0] = from[2];
 			to[1] = from[1];
-			to[2] = from[2];
-			to[3] = from[0] == kClear[2] && from[1] == kClear[1] && from[2] == kClear[0] ? 0 : 255;
+			to[2] = from[0];
+			to[3] = from[0] == kClear[0] && from[1] == kClear[1] && from[2] == kClear[2] ? 0 : 255;
 		}
 	}
 	out.bitmap = std::move(bitmap);

@@ -4176,7 +4176,7 @@ TPageView::MessageReceived(BMessage* message)
 
 
 // Test hook (--do): commands separated by ';': "click x y", "dclick x y",
-// "sclick x y" (shift-click), "tclick x y" (triple-click),
+// "sclick x y" (shift-click), "tclick x y" (triple-click), "scroll x y",
 // "key text" (with {enter} {bs} {del} {left} {right} {up} {down} {tab}
 // {esc} {home} {end} {sleft} {sright}), "selectall", "copy", "cut", "paste",
 // "undo", "redo", "cellrect row col", "cell row col", "celltext row col",
@@ -4424,6 +4424,11 @@ TPageView::RunScript(const std::string& script, Document& document)
 			float x, y;
 			if (sscanf(command.c_str() + 6, "%f %f", &x, &y) == 2)
 				Click(BPoint(x, y), 1, B_PRIMARY_MOUSE_BUTTON);
+		} else if (command.compare(0, 7, "scroll ") == 0) {
+			// "scroll x y": the view scrolled to there (its pixels)
+			float x, y;
+			if (sscanf(command.c_str() + 7, "%f %f", &x, &y) == 2)
+				ScrollTo(x, y);
 		} else if (command.compare(0, 7, "dclick ") == 0) {
 			float x, y;
 			if (sscanf(command.c_str() + 7, "%f %f", &x, &y) == 2)
