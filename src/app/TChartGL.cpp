@@ -1,5 +1,7 @@
 #include "TChartGL.h"
 
+#ifndef GOBE_NO_OPENGL
+
 #include <GLView.h>
 #include <GL/gl.h>
 #include <Window.h>
@@ -762,3 +764,43 @@ FindChart3DObject(const ChartPart& chart, const StyleMgr& styles, int32 width, i
 }
 
 } // namespace gobe
+
+#else // GOBE_NO_OPENGL: no OpenGL to draw 3D charts with
+
+#include "DocWriter.h"
+
+namespace gobe {
+
+void
+PrepareChartGL()
+{
+}
+
+
+std::string
+ChartRenderKey(const ChartPart& chart, const StyleMgr& styles, int32 width, int32 height)
+{
+	return std::string();
+}
+
+
+bool
+RenderChart3D(const ChartPart& chart, const StyleMgr& styles, int32 width, int32 height,
+	float normal[3], ChartRender3D& out)
+{
+	out.bitmap.reset();
+	out.labels.clear();
+	return false;
+}
+
+
+int32
+FindChart3DObject(const ChartPart& chart, const StyleMgr& styles, int32 width, int32 height,
+	BPoint where, float normal[3])
+{
+	return -1;
+}
+
+} // namespace gobe
+
+#endif

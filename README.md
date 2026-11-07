@@ -7,10 +7,9 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-73-78-1.svg" alt="Port progress: 73 of 78 features done, 5 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-74-78-0.svg" alt="Port progress: 74 of 78 features done, 4 left (see Features)" width="720"></p>
 
-Not everything is ported yet: image editing, editing charts and a few
-dialogs are still to come. The bar counts the [features](#features) by state.
+Not everything is ported yet: image editing is still to come. The bar counts the [features](#features) by state.
 
 ![Gobe Productive on Haiku: a drawing with the ToolBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
@@ -44,7 +43,7 @@ out anywhere in a document, text wrapped around them, text frames linked
 so the text flows on. Open Frame Window edits a frame on its own.
 Tables are made with Insert Table… and edited with the Table menu.
 Pictures are shown and saved but not edited yet (the original's image
-processing part), and charts aren't edited yet beyond their cells.
+processing part).
 
 **Presentations.** File > New makes a presentation the way the original
 did, and the original's presentations open and show their slides in the
@@ -284,7 +283,7 @@ sizes, headings and options are saved with the document.
 
 | Feature | State |
 |---|---|
-| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… and Axis… (axis options); 2D charts drawn as the original draws them; a chart entered with its PartBar and ribbon, its plot, legend and title selected, moved and sized like shapes; the legend's context menu (a series' colour, symbols, colour of symbols, Display As, Bring Forward and Send Backward) (so far Chart Type makes the 2D bar, line, area, stacked area and XY charts, not yet the 3D and pie ones) | in progress |
+| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… (2D bar, line, area, stacked area, XY scatter and line; 3D bar, pie and 3D area, drawn with OpenGL as the original draws them) and Axis…; a chart entered with its PartBar and ribbon (for 3D charts the camera's tools: move it toward and away, sideways, around, and the pointer; the arrow, -, = and a, z keys), its plot, legend and title selected, moved and sized like shapes; the legend's context menu (a series' colour, symbols, colour of symbols, Display As, Bring Forward and Send Backward). (3D charts aren't drawn on Haiku arm64, which has no OpenGL) | next |
 
 ### Image processing
 
@@ -332,11 +331,13 @@ original.
 The same sources build on both systems; the Makefile finds out which
 one it's on.
 
-- **Haiku:** `pkgman install gcc make haiku_devel zlib_devel`, then `make`.
+- **Haiku:** `pkgman install gcc make haiku_devel zlib_devel mesa_devel`, then `make`.
 - **Haiku arm64:** cross-built on Linux: `sh tools/haiku-arm64/make-sysroot.sh <dir>`
   once, then `. <dir>/env.sh && make HAIKU_CROSS=1 && sh packaging/build-hpkg-arm64.sh`.
+  (There's no Mesa for Haiku arm64, so this build draws no 3D charts.)
 - **Linux:** build [Hokku](https://github.com/idumych/hokku) (the Haiku API
-  as a library, a fork of Cosmoe), then `make COSMOE_ROOT=<its prefix>`.
+  as a library, a fork of Cosmoe) with its OpenGL view (EGL and the GL
+  headers), then `make COSMOE_ROOT=<its prefix>`.
 
 Run `./GobeProductive [document…]`. `make test` runs the host-side tests of
 the portable core (`src/core`, no Haiku API) on any system; with the

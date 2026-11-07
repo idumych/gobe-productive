@@ -62,7 +62,7 @@ rm -rf "$APPDIR"
 mkdir -p "$APPDIR/usr/bin" "$APPDIR/usr/lib" "$APPDIR/usr/share/cosmoe" \
 	"$APPDIR/usr/share/fonts/noto" "$APPDIR/etc/fonts" "$DOC"
 install -m 0755 "$APP_NAME" "$APPDIR/usr/bin/$APP_NAME"
-for lib in libbe.so libtracker.so libcosmoe-x11.so libcosmoe-wayland.so; do
+for lib in libbe.so libtracker.so libopengl.so libcosmoe-x11.so libcosmoe-wayland.so; do
 	install -m 0755 "$CROOT/lib/$lib" "$APPDIR/usr/lib/$lib"
 done
 cp -a "$CROOT/lib/addons" "$APPDIR/usr/lib/"

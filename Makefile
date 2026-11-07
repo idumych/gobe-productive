@@ -38,7 +38,9 @@ ifneq ($(HAIKU_CROSS),)
   PLATFORM     := Haiku
   override CXXFLAGS += $(HAIKU_CROSS_CFLAGS)
   override LDFLAGS  += $(HAIKU_CROSS_LDFLAGS)
-  LIBS         := -lbe -ltracker -ltranslation -ltextencoding -lGL $(APP_LIBS)
+  LIBS         := -lbe -ltracker -ltranslation -ltextencoding $(APP_LIBS)
+  # (no OpenGL for Haiku arm64: HaikuPorts has no Mesa there; 3D charts aren't drawn)
+  override CXXFLAGS += -DGOBE_NO_OPENGL
   RESOURCES     = rc -o obj/$(NAME).rsrc $(RDEF) && xres -o $@ obj/$(NAME).rsrc
 else ifeq ($(UNAME),Haiku)
   PLATFORM     := Haiku
