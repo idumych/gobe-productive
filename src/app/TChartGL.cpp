@@ -63,13 +63,29 @@ private:
 
 
 struct GLHolder {
-	BWindow* window = NULL;
 	TChartGLView* view = NULL;
 	bool ready = false;
 };
 
 
-// a window never shown with a view for each size in use
+// the window never shown that the views are in (not made while another
+// window draws: PrepareChartGL)
+BWindow*
+GLWindow()
+{
+	static BWindow* window = NULL;
+	if (window == NULL) {
+		window = new BWindow(BRect(-30000, -30000, -28000, -28000), "ChartView",
+			B_NO_BORDER_WINDOW_LOOK, B_FLOATING_APP_WINDOW_FEEL,
+			B_NOT_MOVABLE | B_NOT_RESIZABLE | B_AVOID_FOCUS);
+		window->Hide();
+		window->Show();
+	}
+	return window;
+}
+
+
+// a view for each size in use
 GLHolder*
 HolderFor(int32 width, int32 height)
 {
@@ -78,24 +94,19 @@ HolderFor(int32 width, int32 height)
 	auto found = holders.find(size);
 	if (found != holders.end())
 		return &found->second;
+	BWindow* window = GLWindow();
+	if (!window->Lock())
+		return NULL;
 	if (holders.size() >= 8) {
-		GLHolder& old = holders.begin()->second;
-		if (old.window->Lock())
-			old.window->Quit();
+		TChartGLView* old = holders.begin()->second.view;
+		window->RemoveChild(old);
+		delete old;
 		holders.erase(holders.begin());
 	}
 	GLHolder& holder = holders[size];
-	BRect frame(0, 0, width - 1, height - 1);
-	holder.window = new BWindow(frame.OffsetToCopy(-30000, -30000), "ChartView",
-		B_NO_BORDER_WINDOW_LOOK, B_FLOATING_APP_WINDOW_FEEL,
-		B_NOT_MOVABLE | B_NOT_RESIZABLE | B_AVOID_FOCUS);
-	holder.window->Hide();
-	holder.window->Show();
-	holder.view = new TChartGLView(frame);
-	if (holder.window->Lock()) {
-		holder.window->AddChild(holder.view);
-		holder.window->Unlock();
-	}
+	holder.view = new TChartGLView(BRect(0, 0, width - 1, height - 1));
+	window->AddChild(holder.view);
+	window->Unlock();
 	return &holder;
 }
 
@@ -610,6 +621,13 @@ AxisLabels(const ChartPart& chart, float width, float height, ChartRender3D& out
 } // namespace
 
 
+void
+PrepareChartGL()
+{
+	GLWindow();
+}
+
+
 std::string
 ChartRenderKey(const ChartPart& chart, const StyleMgr& styles, int32 width, int32 height)
 {
@@ -648,6 +666,8 @@ RenderChart3D(const ChartPart& chart, const StyleMgr& styles, int32 width, int32
 	if (width <= 10 || height <= 10 || !ReadChartCamera(chart, camera))
 		return false;
 	GLHolder* holder = HolderFor(width, height);
+	if (holder == NULL)
+		return false;
 	TChartGLView* view = holder->view;
 	view->LockGL();
 	if (!holder->ready) {
@@ -704,6 +724,8 @@ FindChart3DObject(const ChartPart& chart, const StyleMgr& styles, int32 width, i
 	if (width <= 10 || height <= 10 || !ReadChartCamera(chart, camera))
 		return -1;
 	GLHolder* holder = HolderFor(width, height);
+	if (holder == NULL)
+		return -1;
 	TChartGLView* view = holder->view;
 	view->LockGL();
 	if (!holder->ready) {

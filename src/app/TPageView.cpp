@@ -1,4 +1,5 @@
 #include "TPageView.h"
+#include "TChartGL.h"
 
 #include <Bitmap.h>
 
@@ -207,6 +208,9 @@ TPageView::AttachedToWindow()
 {
 	BView::AttachedToWindow();
 	MakeFocus(true);
+	// (any chart may become a 3D one)
+	if (!fDocument.chartParts.empty())
+		PrepareChartGL();
 }
 
 

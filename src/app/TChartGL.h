@@ -27,6 +27,10 @@ struct ChartRender3D {
 	std::vector<Label> labels;
 };
 
+// the window off screen the charts are drawn in: made here, before a window
+// that shows one starts drawing
+void PrepareChartGL();
+
 // what a render of the chart at the size depends on
 std::string ChartRenderKey(const ChartPart& chart, const StyleMgr& styles, int32 width,
 	int32 height);
