@@ -291,7 +291,7 @@ sizes, headings and options are saved with the document.
 | Feature | State |
 |---|---|
 | New image processing documents (File > New, Image Processing) as the original makes them: a white image 512 points square, its window with the Image and Plugins menus and the PartBar's colors and tools; Document Size… (the image cut off or grown in the background color, light gray around it) | next |
-| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) (so far the pencil, eraser, paint bucket and eyedropper with their default settings, and the colours) | in progress |
+| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) (so far all but find colour, which makes a selection and comes with them) | in progress |
 | Selections: marquee, lasso and magic wand; moved, duplicated, floated and unfloated, inverted, deselected, deleted; Crop; pictures pasted and dropped in | not yet |
 | Plug-in filters (ImageManip and GIMP plug-ins) and Edit Externally… | not yet |
 
