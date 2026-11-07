@@ -1477,6 +1477,23 @@ TPageView::RestoreInkLow()
 // stroked with it (TShape::StrokeShape; a hairline for size 0), whether
 // its border is on or not (flag 2, TFrame::SetBorder, only puts a gray
 // line round a frame without a pen)
+// TDocWindow::ActivePart: the chart entered, the text with the caret, the
+// cells selected, the drawing with shapes selected; -1 for none
+int
+TPageView::ActivePart() const
+{
+	if (fChart.active)
+		return int(fChart.part);
+	if (fCaret.active)
+		return int(fCaret.part);
+	if (fSelectedCell.active)
+		return int(fSelectedCell.part);
+	if (!fShapes.empty())
+		return int(fShapes[0].part);
+	return -1;
+}
+
+
 void
 TPageView::DrawFrameBorder(const Document::PlacedFrame& f, BRect r)
 {
@@ -1484,8 +1501,19 @@ TPageView::DrawFrameBorder(const Document::PlacedFrame& f, BRect r)
 		return;
 	ShapeStyle style = ResolveShapeStyle(fDocument.styles, f.frame->style);
 	BGradient* gradient;
-	if (!style.pen.set || style.penOpacity <= 0
-			|| !SetInk(style.pen, style.penOpacity, r, &gradient))
+	if (!style.pen.set || style.penOpacity <= 0) {
+		// TFrame::Draw: a frame without a pen outlined in the selection gray
+		// (SelectionGrayInk) when its flag 2 is on, or when its part is the
+		// one being worked in (TDocWindow::ActivePart); not printed
+		if (IsPrinting() || ((f.frame->values[3] & 2) == 0 && int(f.part) != ActivePart()))
+			return;
+		SetHighColor(160, 160, 160);
+		SetDrawingMode(B_OP_COPY);
+		SetPenSize(1);
+		StrokeRect(r);
+		return;
+	}
+	if (!SetInk(style.pen, style.penOpacity, r, &gradient))
 		return;
 	delete gradient;	// (pens: solid colors)
 	RestoreInkLow();

@@ -423,6 +423,7 @@ public:
 	// the chart part entered, -1 if none
 	int ActiveChartPart() const { return fChart.active ? int(fChart.part) : -1; }
 	bool ActiveChartIs3D() const;
+	int ActivePart() const;
 	void ChartMenuState(bool& seriesInRows, BString& legend, BString& title,
 		bool& titleEnabled, bool& axis) const;
 private:
