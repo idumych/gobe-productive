@@ -416,6 +416,22 @@ private:
 		float distance = 0;
 	} fChartDrag;
 	bool ChartClick(BPoint where, int32 clicks);
+	// TPartIM::Click with the tool in use (TPageImage.cpp): a stroke of the
+	// pencil or eraser, the bucket, the eyedropper
+	struct ImageStroke {
+		bool active = false;
+		int32 tool = -1;
+		size_t part = 0;
+		int x = 0, y = 0;		// the last point, in the image's pixels
+		uint8 color[4] = {};	// the pencil's (IMColor)
+		bool option = false;	// the eyedropper for the tool (OptionToggle)
+	} fImageStroke;
+	bool ImageClick(BPoint where, int32 clicks, int32 buttons);
+	bool ImageDragMoved(BPoint where);
+	bool ImageDragUp(BPoint where);
+	bool ImageCommand(BMessage* message);
+	// the image's frame under a point and the pixel there
+	bool ImageAt(BPoint where, size_t& part, int& x, int& y) const;
 	bool ChartDragMoved(BPoint where);
 	bool ChartDragUp();
 	bool ChartKey(const char* bytes, int32 count);

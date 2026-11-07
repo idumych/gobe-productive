@@ -1,6 +1,10 @@
 #include "TPartBar.h"
+#include "TInkEditors.h"
+#include "TInkMenus.h"
 
 #include <memory>
+#include <OS.h>
+#include <PopUpMenu.h>
 
 #include <Alert.h>
 #include <Region.h>
@@ -439,12 +443,60 @@ public:
 
 	virtual bool Clickable() const { return true; }
 
+	// TIMColorGadget::MouseDown: let go within half a second, a square's
+	// color edited (TDialogEditColor: 'sI00' the foreground, 'sI01' the
+	// background) or, right of the foreground and above the background, the
+	// colors swapped ('sI09'); held (or the secondary button), the color
+	// set's menu for the square's color
 	virtual bool MouseDown(TRibbon* ribbon, BPoint where)
 	{
-		uint32 what = ForeRect().Contains(where) ? 'sI01' : BackRect().Contains(where) ? 'sI00'
-			: 'sI09';
-		BMessage message(what);
-		ribbon->Send(&message);
+		bigtime_t start = system_time();
+		BPoint at = where;
+		uint32 buttons = 0;
+		bool released = false;
+		for (;;) {
+			ribbon->GetMouse(&at, &buttons, true);
+			if ((buttons & B_SECONDARY_MOUSE_BUTTON) != 0 || system_time() - start > 500000)
+				break;
+			if (buttons == 0) {
+				released = true;
+				break;
+			}
+			snooze(10000);
+		}
+		bool fore = ForeRect().Contains(where), back = !fore && BackRect().Contains(where);
+		if (released) {
+			if (fore || back) {
+				rgb_color color[2] = {{0, 0, 0, 255}, {255, 255, 255, 255}};
+				fPages->ImageColors(color[0], color[1]);
+				Ink ink;
+				ink.set = true;
+				ink.color.r = color[back].red;
+				ink.color.g = color[back].green;
+				ink.color.b = color[back].blue;
+				EditInk(0, &ink, ribbon->Window(), BMessage(back ? 'sI01' : 'sI00'));
+			} else if (where.x > ForeRect().right && where.y < BackRect().top) {
+				BMessage swap('sI09');
+				ribbon->Send(&swap);
+			}
+			return true;
+		}
+		if (!fore && !back)
+			return true;
+		BMenu* colors = ColorSetMenu(BMessage(back ? 'sI01' : 'sI00'),
+			&fPages->Doc().inkSets);
+		if (colors == NULL)
+			return true;
+		BPopUpMenu* menu = new BPopUpMenu("colors", false, false);
+		while (BMenuItem* item = colors->RemoveItem(int32(0)))
+			menu->AddItem(item);
+		delete colors;
+		BPoint screen = ribbon->ConvertToScreen(where);
+		if (BMenuItem* chosen = menu->Go(screen, false, true)) {
+			if (chosen->Message() != NULL)
+				ribbon->Send(chosen->Message());
+		}
+		delete menu;
 		return true;
 	}
 

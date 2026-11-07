@@ -1,0 +1,258 @@
+// TPageView's images (Parts/ImageProcessing: TPartIM): the tool in use on the
+// image (TPartIM::Click, the tools' Modify: ImageTools), the PartBar's tools
+// and colors (TPartIM::HandleMessage).
+#include "TPageView.h"
+
+#include <Window.h>
+
+#include <cmath>
+
+#include "GobeResources.h"
+#include "IMPart.h"
+#include "ImageTools.h"
+#include "TRibbon.h"
+
+namespace gobe {
+
+namespace {
+
+// TPartIMFactory's tools, by index
+enum {
+	kMarquee, kLasso, kMagicWand, kMagnify, kFindColor, kPencil, kEraser, kEyeDropper, kBucket,
+	kAirbrush
+};
+
+
+const ResourceFile&
+ImageResources()
+{
+	return GobeResources::Part("ImageProcessing");
+}
+
+
+IMColor
+ColorOf(const uint8_t c[4])
+{
+	IMColor color;
+	color.r = c[0];
+	color.g = c[1];
+	color.b = c[2];
+	color.a = c[3];
+	return color;
+}
+
+
+// the image's selection mask (IMToolSelection): none yet, all the image
+IMMask
+MaskOf(const IMPart&)
+{
+	return IMMask();
+}
+
+} // namespace
+
+
+bool
+TPageView::ImageAt(BPoint where, size_t& part, int& x, int& y) const
+{
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	const Document::PlacedFrame* hit = NULL;
+	for (const Document::PlacedFrame& f : fFrames) {
+		if (f.part >= fDocument.parts.parts.size() || fDocument.ImagePart(f.part) == NULL)
+			continue;
+		BRect r(f.x + dx, f.y + dy, f.x + dx + f.width, f.y + dy + f.height);
+		if (r.Contains(where) && (hit == NULL || f.depth >= hit->depth))
+			hit = &f;
+	}
+	if (hit == NULL)
+		return false;
+	// (TFrameIM: the image's rectangle the frame shows)
+	const float* shown = hit->frame->sheetRect;
+	float left = shown[2] >= shown[0] ? shown[0] : 0, top = shown[2] >= shown[0] ? shown[1] : 0;
+	part = hit->part;
+	x = int(floorf(where.x - (hit->x + dx) + left));
+	y = int(floorf(where.y - (hit->y + dy) + top));
+	return true;
+}
+
+
+// TPartIM::Click: an image document's image (an image in another document is
+// edited once its part is active: not yet), the tool in use; Option makes
+// the pencil, bucket and airbrush the eyedropper (OptionToggle)
+bool
+TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
+{
+	int main = fDocument.MainPart();
+	size_t part;
+	int x, y;
+	if (main < 0 || fDocument.ImagePart(size_t(main)) == NULL || !ImageAt(where, part, x, y)
+			|| part != size_t(main))
+		return false;
+	const IMPart* image = fDocument.ImagePart(part);
+	int32 tool = fImageTool;
+	bool option = (modifiers() & B_OPTION_KEY) != 0;
+	if (option && (tool == kPencil || tool == kBucket || tool == kAirbrush))
+		tool = kEyeDropper;
+	fImageStroke = ImageStroke();
+	fImageStroke.tool = tool;
+	fImageStroke.part = part;
+	fImageStroke.x = x;
+	fImageStroke.y = y;
+	fImageStroke.option = option;
+	IMColor fore = ColorOf(image->colors[0]), back = ColorOf(image->colors[1]);
+	IMRect changed;
+	if (tool == kPencil || tool == kEraser || tool == kBucket) {
+		// (each its UndoString: STR# 100 on, index 1)
+		int32 strings = tool == kPencil ? 100 : tool == kEraser ? 101 : 105;
+		fUndo.BeginDocument(fDocument, IndexString(ImageResources(), strings, 1).c_str(),
+			CurrentViewState());
+		IMPart* edit = fDocument.EditableImagePart(part);
+		IMMask mask = MaskOf(*edit);
+		if (tool == kPencil) {
+			IMColor used;
+			changed = PencilDown(edit->image, mask, x, y, fore, back, used);
+			fImageStroke.color[0] = used.r;
+			fImageStroke.color[1] = used.g;
+			fImageStroke.color[2] = used.b;
+			fImageStroke.color[3] = used.a;
+		} else if (tool == kEraser)
+			changed = EraserDown(edit->image, mask, x, y, fZoom, back);
+		else
+			changed = BucketFill(edit->image, mask, x, y, fore, ToleranceDistance(20));
+		fImages.erase(part);
+		Invalidate();
+		if (tool == kBucket) {
+			if (Window() != NULL)
+				Window()->PostMessage(kMsgDocumentChanged);
+			return true;
+		}
+	}
+	fImageStroke.active = true;
+	SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+	return true;
+}
+
+
+bool
+TPageView::ImageDragMoved(BPoint where)
+{
+	if (!fImageStroke.active)
+		return false;
+	int32 tool = fImageStroke.tool;
+	if (tool != kPencil && tool != kEraser)
+		return true;
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	(void)dx;
+	(void)dy;
+	size_t part;
+	int x, y;
+	// (outside the image the point goes on, as the frame's coordinates)
+	if (!ImageAt(where, part, x, y) || part != fImageStroke.part) {
+		for (const Document::PlacedFrame& f : fFrames)
+			if (f.part == fImageStroke.part) {
+				x = int(floorf(where.x - (f.x + fMargin - fBounds.left)));
+				y = int(floorf(where.y - (f.y + fMargin - fBounds.top)));
+			}
+	}
+	if (x == fImageStroke.x && y == fImageStroke.y)
+		return true;
+	IMPart* edit = fDocument.EditableImagePart(fImageStroke.part);
+	IMMask mask = MaskOf(*edit);
+	if (tool == kPencil)
+		PencilLine(edit->image, mask, fImageStroke.x, fImageStroke.y, x, y,
+			ColorOf(fImageStroke.color));
+	else
+		EraserMove(edit->image, mask, fImageStroke.x, fImageStroke.y, x, y, fZoom,
+			ColorOf(edit->colors[1]));
+	fImageStroke.x = x;
+	fImageStroke.y = y;
+	fImages.erase(fImageStroke.part);
+	Invalidate();
+	return true;
+}
+
+
+// '_MUP': the stroke done; the eyedropper's color taken (EyeDropperTool:
+// the foreground's, with Option the background's)
+bool
+TPageView::ImageDragUp(BPoint where)
+{
+	if (!fImageStroke.active)
+		return false;
+	fImageStroke.active = false;
+	if (fImageStroke.tool == kEyeDropper) {
+		size_t part;
+		int x, y;
+		if (ImageAt(where, part, x, y) && part == fImageStroke.part) {
+			const IMPart* image = fDocument.ImagePart(part);
+			IMColor picked = PixelAt(image->image, x, y);
+			bool back = (modifiers() & B_OPTION_KEY) != 0;
+			fUndo.BeginDocument(fDocument, IndexString(ImageResources(), 1, back ? 5 : 4).c_str(),
+				CurrentViewState());
+			IMPart* edit = fDocument.EditableImagePart(part);
+			uint8* c = edit->colors[back ? 1 : 0];
+			c[0] = picked.r;
+			c[1] = picked.g;
+			c[2] = picked.b;
+			c[3] = picked.a;
+			if (fPartBar != NULL)
+				fPartBar->Update();
+		}
+	}
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
+}
+
+
+// TPartIM::HandleMessage: a tool chosen ('sI07', TPartIM::SetTool), a color
+// set ('sI00', 'sI01' with "color"), the colors swapped ('sI09': "Swap
+// Colors")
+bool
+TPageView::ImageCommand(BMessage* message)
+{
+	if (message->what != 'sI07' && message->what != 'sI09' && message->what != 'sI00'
+			&& message->what != 'sI01')
+		return false;
+	int main = fDocument.MainPart();
+	if (main < 0 || fDocument.ImagePart(size_t(main)) == NULL)
+		return true;
+	if (message->what == 'sI07') {
+		int32 tool = message->GetInt32("Tool", -1);
+		// (Find Color does its work at once: TPartIM's selections, not yet)
+		if (tool >= 0 && tool <= kAirbrush && tool != kFindColor)
+			fImageTool = tool;
+	} else if (message->what == 'sI00' || message->what == 'sI01') {
+		// TPartIM::SetForeColor, SetBackColor ("Set Foreground Color",
+		// "Set Background Color")
+		const void* data = NULL;
+		ssize_t size = 0;
+		if (message->FindData("color", B_RGB_COLOR_TYPE, &data, &size) != B_OK
+				|| size < ssize_t(sizeof(rgb_color)))
+			return true;
+		rgb_color color = *(const rgb_color*)data;
+		bool back = message->what == 'sI01';
+		fUndo.BeginDocument(fDocument, IndexString(ImageResources(), 1, back ? 5 : 4).c_str(),
+			CurrentViewState());
+		uint8* c = fDocument.EditableImagePart(size_t(main))->colors[back ? 1 : 0];
+		c[0] = color.red;
+		c[1] = color.green;
+		c[2] = color.blue;
+		c[3] = 255;
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+	} else {
+		fUndo.BeginDocument(fDocument, IndexString(ImageResources(), 1, 21).c_str(),
+			CurrentViewState());
+		IMPart* edit = fDocument.EditableImagePart(size_t(main));
+		for (int i = 0; i < 4; i++)
+			std::swap(edit->colors[0][i], edit->colors[1][i]);
+		if (Window() != NULL)
+			Window()->PostMessage(kMsgDocumentChanged);
+	}
+	if (fPartBar != NULL)
+		fPartBar->Update();
+	return true;
+}
+
+} // namespace gobe

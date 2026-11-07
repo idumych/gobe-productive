@@ -1617,6 +1617,9 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	fUndo.Break();
 
 	// a chart's frame double-clicked: the chart entered (TChartPart)
+	// an image's tools (TPartIM::Click)
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && ImageClick(where, clicks, buttons))
+		return;
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && ChartClick(where, clicks))
 		return;
 	// the selected frame's handles and edge, then the ToolBar's tools: a
@@ -1909,6 +1912,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 	where.x /= fZoom;
 	where.y /= fZoom;
 	UpdateCursor(where);
+	if (ImageDragMoved(where)) {
+		BView::MouseMoved(where, transit, dragMessage);
+		return;
+	}
 	if (ChartDragMoved(where)) {
 		BView::MouseMoved(where, transit, dragMessage);
 		return;
@@ -1984,6 +1991,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 void
 TPageView::MouseUp(BPoint where)
 {
+	if (ImageDragUp(BPoint(where.x / fZoom, where.y / fZoom))) {
+		BView::MouseUp(where);
+		return;
+	}
 	if (ChartDragUp()) {
 		BView::MouseUp(where);
 		return;
@@ -2188,6 +2199,9 @@ TPageView::MessageReceived(BMessage* message)
 {
 	// a chart's series (the legend's context menu)
 	if (message->HasInt32("series") && ChartCommand(message))
+		return;
+	// the image's tools and colors (TPartIM::HandleMessage)
+	if (ImageCommand(message))
 		return;
 	// the drawing part's commands for the selected shapes (Arrange, the
 	// FormatBar's fill and pen)
@@ -6234,6 +6248,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sTB5': case 'sTB6': case 'sTB7': case 'sTB8': case 'sTB9':
 		case 'sTBA': case 'sTBB': case 'sTBC': case 'sTBD':
 		case 's00T':	// Make Chart
+		case 'sI07': case 'sI09': case 'sI00': case 'sI01':	// the image's tools and colors
 		case 'sCHc': case 'sCHd': case 'sCHe': case 'sCH1': case 'sCH8':	// Chart
 		case 'sCH2': case 'sCH5': case 'sCH6': case 'sCHa': case 'sCHb':
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange
