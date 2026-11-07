@@ -448,6 +448,27 @@ TPageView::SetZoom(float zoom)
 
 
 void
+TPageView::SetZoomAround(float zoom, BPoint point)
+{
+	zoom = std::max(0.015625f, std::min(64.0f, zoom));
+	BRect bounds = Bounds();
+	fZoom = zoom;
+	InvalidateLayout();
+	if (Parent() != NULL)
+		Parent()->Layout(false);
+	// (TPoint::Pin: within the scrolling's range)
+	BSize preferred = PreferredSize();
+	float x = point.x * fZoom - bounds.Width() / 2, y = point.y * fZoom - bounds.Height() / 2;
+	x = std::max(0.0f, std::min(x, preferred.width - bounds.Width()));
+	y = std::max(0.0f, std::min(y, preferred.height - bounds.Height()));
+	ScrollTo(x, y);
+	Invalidate();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgZoomShown);
+}
+
+
+void
 TPageView::GetPreferredSize(float* width, float* height)
 {
 	BSize s = PreferredSize();
@@ -2085,6 +2106,24 @@ TPageView::DrawImage(const Document::PlacedFrame& f, BRect r)
 	SetDrawingMode(B_OP_ALPHA);
 	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
 	DrawBitmap(found->second.get(), source, dest);
+	// TFrameIM::Draw: the magnify's rectangle (TPartIM::MarqueeHack) in
+	// black and white stripes
+	if (fImageMarqueePart == f.part && fImageMarquee.IsValid()) {
+		static const pattern kStripes = {{0xf0, 0xe1, 0xc3, 0x87, 0x0f, 0x1e, 0x3c, 0x78}};
+		BRect m = fImageMarquee.OffsetByCopy(dest.left - source.left, dest.top - source.top);
+		// (TTransManager::StrokeRect: a pixel wide at any zoom, its corners
+		// where the zoom puts them)
+		float zoom = IsPrinting() ? 1 : fZoom;
+		PushState();
+		SetScale(1 / zoom);
+		m.Set(m.left * zoom, m.top * zoom, m.right * zoom, m.bottom * zoom);
+		SetDrawingMode(B_OP_COPY);
+		SetHighColor(0, 0, 0);
+		SetLowColor(255, 255, 255);
+		SetPenSize(1);
+		StrokeRect(m, kStripes);
+		PopState();
+	}
 	PopState();
 }
 

@@ -859,6 +859,11 @@ TDocWindow::MessageReceived(BMessage* message)
 			window->Show();
 			return;
 		}
+		// the view's zoom changed (TDocWindow::ChangeScaleAroundPt)
+		case kMsgZoomShown:
+			if (fPages != NULL && fScaleSlider != NULL)
+				fScaleSlider->SetScale(fPages->Zoom(), false);
+			return;
 		// the zoom tool (TDocWindow::ScaleTo)
 		case 's003':
 			if (fPages != NULL)

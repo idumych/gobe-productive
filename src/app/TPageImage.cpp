@@ -77,6 +77,84 @@ TPageView::ImageAt(BPoint where, size_t& part, int& x, int& y) const
 }
 
 
+bool
+TPageView::ImagePointOf(size_t part, BPoint where, BPoint& point) const
+{
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	for (const Document::PlacedFrame& f : fFrames) {
+		if (f.part != part)
+			continue;
+		const float* shown = f.frame->sheetRect;
+		float left = shown[2] >= shown[0] ? shown[0] : 0, top = shown[2] >= shown[0] ? shown[1] : 0;
+		point.x = where.x - (f.x + dx) + left;
+		point.y = where.y - (f.y + dy) + top;
+		return true;
+	}
+	return false;
+}
+
+
+// TPartIM::SetMarqueeHack: the old rectangle and the new redrawn
+void
+TPageView::SetImageMarquee(size_t part, BRect rect)
+{
+	fImageMarquee = rect;
+	fImageMarqueePart = part;
+	Invalidate();
+}
+
+
+// MagnifyTool::Modify: '_MDN' anchors a rectangle, '_MMV' stretches it to the
+// point (with Option it stays the anchor), '_MUP' zooms to show it
+// (TDocWindow::CalcScaleFromSize), or for a click twice as close (with
+// Option half: CalcScale), around its middle; not past 1/64 or 64
+bool
+TPageView::MagnifyAt(size_t part, BPoint point, int32 phase)
+{
+	bool option = (modifiers() & B_OPTION_KEY) != 0;
+	if (option ? fZoom <= 0.015625f : fZoom >= 64)
+		return false;
+	// (MagnifyTool::CalcScale)
+	float scale = option ? fZoom * 0.5f : fZoom + fZoom;
+	if (scale > 64 || scale < 0.015625f)
+		scale = -1;
+	BPoint anchor = fImageStroke.anchor;
+	BRect rect(std::min(point.x, anchor.x), std::min(point.y, anchor.y),
+		std::max(point.x, anchor.x), std::max(point.y, anchor.y));
+	if (phase == '_MDN') {
+		fImageStroke.anchor = point;
+		SetImageMarquee(part, BRect(point, point));
+	} else if (phase == '_MMV') {
+		if (option)
+			rect = BRect(anchor, anchor);
+		SetImageMarquee(part, rect);
+	} else {
+		// (TFrameIM::Scale: an image frame shows its pixels as points)
+		if (rect.LeftTop() != rect.RightBottom() && !option) {
+			BRect bounds = Bounds();
+			scale = bounds.Width() / bounds.Height() < rect.Width() / rect.Height()
+				? bounds.Width() / rect.Width() : bounds.Height() / rect.Height();
+		}
+		scale = std::max(0.015625f, std::min(64.0f, scale));
+		BPoint middle((rect.right - rect.left) * 0.5f + rect.left,
+			(rect.bottom - rect.top) * 0.5f + rect.top);
+		// (the frame's point, in the view's points)
+		float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+		for (const Document::PlacedFrame& f : fFrames)
+			if (f.part == part) {
+				const float* shown = f.frame->sheetRect;
+				float left = shown[2] >= shown[0] ? shown[0] : 0;
+				float top = shown[2] >= shown[0] ? shown[1] : 0;
+				middle.x += f.x + dx - left;
+				middle.y += f.y + dy - top;
+				break;
+			}
+		SetZoomAround(scale, middle);
+	}
+	return true;
+}
+
+
 // TPartIM::Click: an image document's image (an image in another document is
 // edited once its part is active: not yet), the tool in use; Option makes
 // the pencil, bucket and airbrush the eyedropper (OptionToggle)
@@ -102,6 +180,11 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 	fImageStroke.option = option;
 	IMColor fore = ColorOf(image->colors[0]), back = ColorOf(image->colors[1]);
 	IMRect changed;
+	if (tool == kMagnify) {
+		BPoint point;
+		ImagePointOf(part, where, point);
+		MagnifyAt(part, point, '_MDN');
+	}
 	if (tool == kAirbrush) {
 		// AirBrushTool::Modify '_MDN': the brush built, sprayed once
 		fUndo.BeginDocument(fDocument, IndexString(ImageResources(), 102, 1).c_str(),
@@ -154,6 +237,12 @@ TPageView::ImageDragMoved(BPoint where)
 	if (!fImageStroke.active)
 		return false;
 	int32 tool = fImageStroke.tool;
+	if (tool == kMagnify) {
+		BPoint point;
+		if (ImagePointOf(fImageStroke.part, where, point))
+			MagnifyAt(fImageStroke.part, point, '_MMV');
+		return true;
+	}
 	if (tool != kPencil && tool != kEraser && tool != kAirbrush)
 		return true;
 	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
@@ -250,6 +339,14 @@ TPageView::ImageDragUp(BPoint where)
 	delete fImageStroke.idle;
 	fImageStroke.idle = NULL;
 	fImageStroke.brush.reset();
+	if (fImageStroke.tool == kMagnify) {
+		BPoint point;
+		ImagePointOf(fImageStroke.part, where, point);
+		// (TPartIM::Click: the rectangle gone once the tool is done)
+		SetImageMarquee(fImageStroke.part, BRect(0, 0, -1, -1));
+		MagnifyAt(fImageStroke.part, point, '_MUP');
+		return true;
+	}
 	if (fImageStroke.tool == kEyeDropper) {
 		size_t part;
 		int x, y;

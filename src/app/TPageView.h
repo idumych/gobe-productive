@@ -44,6 +44,8 @@ static const uint32 kMsgDocumentChanged = 'Gchg';
 static const uint32 kMsgActiveRibbon = 'Grib';
 // the image tool's idle (TPartIM::Idle) while its button is held
 static const uint32 kMsgImageIdle = 'IMid';
+// to the window: the zoom changed in the view (the Scale floater shows it)
+static const uint32 kMsgZoomShown = 'IMzm';
 // test hook: run "script" (RunScript) in the window
 static const uint32 kMsgRunScript = 'Grun';
 
@@ -156,6 +158,9 @@ public:
 	// the zoom (TDocWindow::Scale, 1/64 to 64)
 	float Zoom() const { return fZoom; }
 	void SetZoom(float zoom);
+	// TDocWindow::ChangeScaleAroundPt: the zoom changed, the view scrolled to
+	// have `point` (the view's, as unzoomed) in its middle
+	void SetZoomAround(float zoom, BPoint point);
 	// the window's text ruler (updated as the view draws), or NULL
 	TWPRuler* fRuler = NULL;
 	// the graphics rulers (Window > Show Graphics Ruler): top, left
@@ -430,7 +435,16 @@ private:
 		bigtime_t lastStamp = 0;	// the airbrush's (Spritz)
 		std::shared_ptr<struct AirbrushBrush> brush;
 		class BMessageRunner* idle = NULL;	// TPartIM::Idle while it's held
+		BPoint anchor;	// the magnify's ("anchor"), in the image's pixels
 	} fImageStroke;
+	// TPartIM::MarqueeHack: the magnify's rectangle, in the image's pixels
+	// (none while it's empty, 0, 0 to -1, -1)
+	BRect fImageMarquee = BRect(0, 0, -1, -1);
+	size_t fImageMarqueePart = 0;
+	void SetImageMarquee(size_t part, BRect rect);
+	bool MagnifyAt(size_t part, BPoint point, int32 phase);
+	// the point in part `part`'s image's pixels (beyond its frame too)
+	bool ImagePointOf(size_t part, BPoint where, BPoint& point) const;
 	void ImageIdle();
 	void AirbrushTo(int x, int y);
 	bool ImageClick(BPoint where, int32 clicks, int32 buttons);
