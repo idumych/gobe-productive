@@ -1,5 +1,7 @@
 #include "TPartBar.h"
 
+#include <memory>
+
 #include <Alert.h>
 #include <Region.h>
 #include <MenuItem.h>
@@ -378,6 +380,80 @@ private:
 };
 
 
+const ResourceFile&
+ImageResources()
+{
+	return GobeResources::Part("ImageProcessing");
+}
+
+
+// TIMColorGadget ('kolr', 30, 1 to 57, 24): the foreground color's square
+// over the background's (TIMColorGadget::ForeRect, BackRect), each outlined
+// in black, and the arrows that swap them (MICN 100 of the image part) at
+// its top right. A click on a square edits its color (TDialogEditColor:
+// 'sI01' the foreground, 'sI00' the background), elsewhere swaps them
+// ('sI09'); the tip is the image part's STR# 3.
+class TIMColorGadget : public TRibbonElement {
+public:
+	TIMColorGadget(TPageView* pages)
+		:
+		TRibbonElement('kolr', BRect(30, 1, 57, 24)),
+		fPages(pages),
+		fArrows(TMICNElement::LoadIcon(100, &ImageResources()))
+	{
+		tip = IndexString(ImageResources(), 3, 0);
+	}
+
+	BRect ForeRect() const
+	{
+		float top = rect.top + 3, right = rect.right - 4;
+		return BRect(rect.left, top, right - (right - rect.left) / 3,
+			rect.bottom - (rect.bottom - top) / 3);
+	}
+
+	BRect BackRect() const
+	{
+		float top = rect.top + 3, right = rect.right - 4;
+		return BRect((right - rect.left) / 3 + rect.left, (rect.bottom - top) / 3 + top, right,
+			rect.bottom);
+	}
+
+	virtual void Draw(BView* view, bool down)
+	{
+		rgb_color fore = {0, 0, 0, 255}, back = {255, 255, 255, 255};
+		fPages->ImageColors(fore, back);
+		view->SetHighColor(back);
+		view->FillRect(BackRect());
+		view->SetHighColor(0, 0, 0);
+		view->StrokeRect(BackRect());
+		view->SetHighColor(fore);
+		view->FillRect(ForeRect());
+		view->SetHighColor(0, 0, 0);
+		view->StrokeRect(ForeRect());
+		if (fArrows != NULL) {
+			view->SetDrawingMode(B_OP_OVER);
+			view->DrawBitmap(fArrows.get(), BPoint(rect.right - 9, rect.top));
+			view->SetDrawingMode(B_OP_COPY);
+		}
+	}
+
+	virtual bool Clickable() const { return true; }
+
+	virtual bool MouseDown(TRibbon* ribbon, BPoint where)
+	{
+		uint32 what = ForeRect().Contains(where) ? 'sI01' : BackRect().Contains(where) ? 'sI00'
+			: 'sI09';
+		BMessage message(what);
+		ribbon->Send(&message);
+		return true;
+	}
+
+private:
+	TPageView* fPages;
+	std::unique_ptr<BBitmap> fArrows;
+};
+
+
 TPartBar::TPartBar(TPageView* pages)
 	:
 	TRibbon("PartBar"),
@@ -393,6 +469,7 @@ void
 TPartBar::Build(bool text, uint16 kind, bool table)
 {
 	RemoveAllElements();
+	SetHeight(24);
 	if (fSpacing != NULL) {
 		fSpacing->RemoveSelf();
 		delete fSpacing;
@@ -402,6 +479,7 @@ TPartBar::Build(bool text, uint16 kind, bool table)
 	fTable = table;
 	fSheet = false;
 	fDrawing = false;
+	fImage = false;
 	fKind = kind;
 	fAlignment = -2;
 	fLineSpacing = -1;
@@ -495,6 +573,8 @@ void
 TPartBar::BuildSheet()
 {
 	RemoveAllElements();
+	SetHeight(24);
+	fImage = false;
 	if (fSpacing != NULL) {
 		fSpacing->RemoveSelf();
 		delete fSpacing;
@@ -533,6 +613,50 @@ TPartBar::BuildSheet()
 }
 
 
+// TPartIM::AddPartBarElements: the part's icon, the colors (TIMColorGadget),
+// then a TIMToolbarElement for each tool of TPartIMFactory (its selection
+// tools, then its others), 20 apart from 70, 4, five to a row 23 apart:
+// MICN 0x5dc on of the image part, their tips its STR# 100 on; 'sI07' with
+// the tool's index, the one in use down (all but Find Color stay down)
+void
+TPartBar::BuildImage()
+{
+	RemoveAllElements();
+	if (fSpacing != NULL) {
+		fSpacing->RemoveSelf();
+		delete fSpacing;
+		fSpacing = NULL;
+	}
+	fText = false;
+	fSheet = false;
+	fDrawing = false;
+	fImage = true;
+	TMICNElement* part = new TMICNElement('Part', BPoint(5, 4), PartIcon('BITS'));
+	AddElement(part);
+	AddElement(new TIMColorGadget(fPages));
+	// (MarqueeTool, LassoTool, MagicWandTool, MagnifyTool, FindColorTool,
+	// PencilTool, EraserTool, EyeDropperTool, BucketTool, AirBrushTool: their
+	// ToolIconID, TipText's STR#)
+	static const int32 kIcons[10] = {0x5dd, 0x5e1, 0x5e0, 0x5e3, 0x5e2, 0x5dc, 0x5e4, 0x5df,
+		0x5de, 0x5e5};
+	static const int32 kTips[10] = {103, 104, 107, 108, 109, 100, 101, 106, 105, 102};
+	for (int32 i = 0; i < 10; i++) {
+		BMessage* message = new BMessage('sI07');
+		message->AddInt32("Tool", i);
+		TMICNButtonElement* tool = new TMICNButtonElement('IM00' + i,
+			BPoint(70 + 20 * (i % 5), 4 + 23 * (i / 5)),
+			TMICNElement::LoadIcon(kIcons[i], &ImageResources()), message);
+		tool->tip = IndexString(ImageResources(), kTips[i], 0);
+		tool->family = 'sI0G';
+		tool->selectable = i != 4;
+		tool->selected = i == fPages->ImageTool();
+		AddElement(tool);
+	}
+	// (the PartBar as high as its elements and 2)
+	SetHeight(50);
+}
+
+
 // TPartGR::AddPartBarElements: from 29, four vertical alignments ('GRAV':
 // top, middle, bottom, to each other: "AlignY" 1-4), 15 on four
 // horizontal ones ('GRAH': "AlignX" 1-4), then Text Wrap ('GRTW', MICN
@@ -542,6 +666,8 @@ void
 TPartBar::BuildDrawing(uint32 kind)
 {
 	RemoveAllElements();
+	SetHeight(24);
+	fImage = false;
 	if (fSpacing != NULL) {
 		fSpacing->RemoveSelf();
 		delete fSpacing;
@@ -624,6 +750,19 @@ void
 TPartBar::Update()
 {
 	const Document& doc = fPages->Doc();
+	// an image document's image (TPartIM): its tools
+	int imageMain = doc.MainPart();
+	if (imageMain >= 0 && doc.parts.parts[size_t(imageMain)].kind == Sig("BITS")
+			&& fPages->ActiveChartPart() < 0) {
+		if (!fImage)
+			BuildImage();
+		else {
+			SelectElement('IM00' + fPages->ImageTool(), 'sI0G');
+			if (TRibbonElement* colors = GetElement('kolr'))
+				DrawElement(colors);
+		}
+		return;
+	}
 	// a chart entered: its drawing's (TChartPart is a TPartGR)
 	if (fPages->ActiveChartPart() >= 0) {
 		if (!fDrawing || fDrawingKind != 'chrt')

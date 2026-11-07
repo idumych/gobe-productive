@@ -173,6 +173,8 @@ struct Document {
 	const GRPart* GraphicsPart(size_t part) const;
 	const SSPart* SpreadsheetPart(size_t part) const;
 	const IMPart* ImagePart(size_t part) const;
+	// the image part, marked changed (written anew when saved)
+	IMPart* EditableImagePart(size_t part);
 	const ChartPart* Chart(size_t part) const;
 	// a chart part to change (marked dirty: its chart section is written
 	// anew on save)

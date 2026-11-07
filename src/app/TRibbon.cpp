@@ -153,21 +153,32 @@ TRibbon::TRibbon(const char* name)
 BSize
 TRibbon::MinSize()
 {
-	return BSize(50, 24);
+	return BSize(50, fHeight);
 }
 
 
 BSize
 TRibbon::MaxSize()
 {
-	return BSize(B_SIZE_UNLIMITED, 24);
+	return BSize(B_SIZE_UNLIMITED, fHeight);
 }
 
 
 BSize
 TRibbon::PreferredSize()
 {
-	return BSize(400, 24);
+	return BSize(400, fHeight);
+}
+
+
+void
+TRibbon::SetHeight(float height)
+{
+	if (height == fHeight)
+		return;
+	fHeight = height;
+	InvalidateLayout();
+	Invalidate();
 }
 
 

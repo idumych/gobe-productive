@@ -406,6 +406,7 @@ private:
 	// the normal each chart's OpenGL context was left with (TChartView's
 	// context lasts while the document is open)
 	std::map<size_t, std::array<float, 3>> fChartNormals;
+	int32 fImageTool = 5;
 	std::array<float, 3>& ChartNormal(size_t part);
 	// TRenderingPiece::Click's tracking: the camera dragged with a tool
 	struct ChartDrag {
@@ -423,6 +424,10 @@ public:
 	// the chart part entered, -1 if none
 	int ActiveChartPart() const { return fChart.active ? int(fChart.part) : -1; }
 	bool ActiveChartIs3D() const;
+	// TPartIM: the tool in use (TPartIMFactory's index; the pencil at
+	// first, TPartIMFactory::DefaultTool) and the image's colors
+	int32 ImageTool() const { return fImageTool; }
+	void ImageColors(rgb_color& fore, rgb_color& back) const;
 	int ActivePart() const;
 	void ChartMenuState(bool& seriesInRows, BString& legend, BString& title,
 		bool& titleEnabled, bool& axis) const;

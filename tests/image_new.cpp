@@ -85,12 +85,49 @@ main(int argc, char** argv)
 	Check(back.ImagePart(0) != nullptr && back.ImagePart(0)->image.bits.size() == 512 * 512 * 4,
 		"its image after saving");
 
+	// Document Size… (TIMSetPartSizeCommand): smaller, then larger with the
+	// background color around the old image
+	Check(SetImageSize(doc, 0, 300, 200), "resized to 300 by 200");
+	Check(!SetImageSize(doc, 0, 300, 200), "the same size again: nothing");
+	for (const Document::PlacedFrame& f : doc.PlacedFrames())
+		Check(doc.parts.parts[f.part].kind == Sig("BROT") ? f.width == 512 && f.height == 512
+			: f.width == 300 && f.height == 200, "its frames 300 by 200, the root's as it was");
+	IMPart* edit = doc.EditableImagePart(0);
+	edit->image.bits[0] = 0x10;		// a pixel at the top left, blue
+	edit->colors[1][0] = 0x20;		// the background (TColor: red first)
+	edit->colors[1][1] = 0x40;
+	edit->colors[1][2] = 0x60;
+	Check(SetImageSize(doc, 0, 400, 500), "resized to 400 by 500");
+	const IMPart* grown = doc.ImagePart(0);
+	Check(grown->image.Width() == 400 && grown->image.Height() == 500
+		&& grown->image.bits.size() == 400 * 500 * 4, "a bitmap 400 by 500");
+	Check(grown->image.bits[0] == 0x10, "the old image at the top left");
+	size_t corner = (size_t(499) * 400 + 399) * 4;
+	Check(grown->image.bits[corner] == 0x60 && grown->image.bits[corner + 1] == 0x40
+		&& grown->image.bits[corner + 2] == 0x20, "the rest the background color");
+	size_t edge = (size_t(10) * 400 + 300) * 4;
+	Check(grown->image.bits[edge] == 0x60, "past the old width the background too");
+	Check(doc.Save(path, error), "resized saved: " + error);
+	Document resized;
+	Check(LoadDocument(path, resized, error) && resized.ImagePart(0) != nullptr
+		&& resized.ImagePart(0)->size[0] == 400 && resized.ImagePart(0)->image.Height() == 500,
+		"resized read back");
+	int resizedFrames = 0;
+	for (const Document::PlacedFrame& f : resized.PlacedFrames()) {
+		resizedFrames++;
+		Check(resized.parts.parts[f.part].kind == Sig("BROT") || (f.width == 400 && f.height == 500),
+			"its frames read back 400 by 500");
+	}
+	Check(resizedFrames == 3, "three frames read back");
+
 	Document original;
+	Document fresh;
+	CreateBlankImage(fresh, error);
 	if (LoadDocument("../original/blanks/imgblank", original, error)) {
 		for (const char* name : {"VersionMgr", "PartFactory Table", "Document Misc", "SetMgr",
 				"PenMgr", "StyleMgr", "LinksMgr", "CommandMgr", "HistoryMgr"})
-			Check(Section(doc, name) == Section(original, name), std::string(name) + " as the original's");
-		std::vector<uint8_t> ours = Section(doc, "PartMgr"), theirs = Section(original, "PartMgr");
+			Check(Section(fresh, name) == Section(original, name), std::string(name) + " as the original's");
+		std::vector<uint8_t> ours = Section(fresh, "PartMgr"), theirs = Section(original, "PartMgr");
 		size_t differ = 0;
 		for (size_t i = 0; i < ours.size() && i < theirs.size(); i++)
 			differ += ours[i] != theirs[i];

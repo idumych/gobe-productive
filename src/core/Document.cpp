@@ -951,6 +951,18 @@ Document::EditableChart(size_t part)
 }
 
 
+IMPart*
+Document::EditableImagePart(size_t part)
+{
+	for (auto& [index, image] : imageParts)
+		if (index == part) {
+			dirtyParts.insert(part);
+			return &image;
+		}
+	return nullptr;
+}
+
+
 GRPart*
 Document::EditableGraphicsPart(size_t part)
 {
@@ -1056,6 +1068,16 @@ Document::Save(const std::string& to, std::string& error)
 				record.begin() + long(chart->sectionStart));
 			out.insert(out.end(), section.begin(), section.end());
 			out.insert(out.end(), record.begin() + long(chart->sectionEnd), record.end());
+		}
+		else if (dirtyParts.count(part) && ImagePart(part) != nullptr
+				&& ImagePart(part)->sectionEnd > ImagePart(part)->sectionStart
+				&& ImagePart(part)->sectionEnd <= record.size()) {
+			// TPartIM::Write's data between what's around it as read
+			const IMPart* image = ImagePart(part);
+			std::vector<uint8_t> section = WriteIMSection(*image);
+			out.assign(record.begin(), record.begin() + long(image->sectionStart));
+			out.insert(out.end(), section.begin(), section.end());
+			out.insert(out.end(), record.begin() + long(image->sectionEnd), record.end());
 		}
 		else if (dirtyParts.count(part) && GraphicsPart(part) != nullptr
 				&& GraphicsPart(part)->dataEnd > GraphicsPart(part)->dataStart

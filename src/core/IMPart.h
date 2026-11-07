@@ -40,10 +40,22 @@ struct IMPart {
 	ArchiveBitmap floating;
 	float rect[4] = {0, 0, -1, -1};
 	uint8_t colors[2][4] = {};		// TColor: foreground, background
+	// where 'imp+' starts and 'imp-' ends in the part record
+	size_t sectionStart = 0, sectionEnd = 0;
 };
 
 // `a` is positioned at the part record; reads up to and including 'imp-'.
 void ReadIMPart(DocArchive& a, IMPart& out);
+// TPartIM::Write's own data: 'imp+' to 'imp-'
+std::vector<uint8_t> WriteIMSection(const IMPart& part);
+
+struct Document;
+// TIMSetPartSizeCommand::Perform (Document Size…): image part `part` made
+// width by height points: a new bitmap of its color space filled with the
+// background color, the image drawn at its top left (cut off if smaller),
+// its frames as large; for the document's own image, its drawing's frame
+// too (the root's stays). False if it isn't an image or nothing changed.
+bool SetImageSize(Document& doc, size_t part, float width, float height);
 
 } // namespace gobe
 

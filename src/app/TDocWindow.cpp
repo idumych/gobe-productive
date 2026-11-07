@@ -53,6 +53,8 @@
 #include "TEntryBar.h"
 #include "TPageBar.h"
 #include "TChartRibbon.h"
+#include "TImageDialogs.h"
+#include "IMPart.h"
 #include "TPartBar.h"
 #include "TInkMenus.h"
 #include "TSpellBar.h"
@@ -208,11 +210,14 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 			bool drawing = mainPart >= 0
 				&& (document->parts.parts[size_t(mainPart)].kind == Sig("GRFX")
 					|| document->parts.parts[size_t(mainPart)].kind == Sig("PRES"));
+			// (an image document: no FormatBar, the PartBar with its tools)
+			bool image = mainPart >= 0
+				&& document->parts.parts[size_t(mainPart)].kind == Sig("BITS");
 			if (text || cells || drawing) {
 				fFormatBar = new TFormatBar(pages);
 				pages->fFormatBar = fFormatBar;
 			}
-			if (text || cells || drawing) {
+			if (text || cells || drawing || image) {
 				fPartBar = new TPartBar(pages);
 				pages->fPartBar = fPartBar;
 				// (TChartPart::ActivePartRibbon: a chart entered)
@@ -457,9 +462,17 @@ TDocWindow::InstallPartMenus()
 	// caret in a table's cells
 	bool table = !sheet && fPages != NULL && fDocument != NULL && fPages->fCaret.active
 		&& fDocument->TableOfText(fPages->fCaret.part) >= 0;
+	// TPartIM::InstallMenus: Image and Plugins (MENU 3 and 2 of the image
+	// part), an image document's image
+	bool image = false;
+	if (fDocument != NULL && !chart && !sheet) {
+		int main = fDocument->MainPart();
+		image = main >= 0 && fDocument->parts.parts[size_t(main)].kind == Sig("BITS");
+	}
 	if (!fPartMenus.empty() && sheet == fSheetMenus && drawing == fDrawingMenus
-			&& table == fTableMenus && chart == fChartMenus)
+			&& table == fTableMenus && chart == fChartMenus && image == fImageMenus)
 		return;
+	fImageMenus = image;
 	fDrawingMenus = drawing;
 	fTableMenus = table;
 	fChartMenus = chart;
@@ -472,6 +485,10 @@ TDocWindow::InstallPartMenus()
 	if (chart) {
 		fPartMenus.push_back(new TMenu(50));
 		fPartMenus.push_back(new TMenu(300, GobeResources::Part("Chart")));
+	} else if (image) {
+		const ResourceFile& resources = GobeResources::Part("ImageProcessing");
+		fPartMenus.push_back(new TMenu(3, resources));
+		fPartMenus.push_back(new TMenu(2, resources));
 	} else if (sheet) {
 		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
 		fPartMenus.push_back(new TMenu(52, resources));
@@ -1429,6 +1446,29 @@ TDocWindow::MessageReceived(BMessage* message)
 	// spreadsheets: TPartSS, TDialogSSDocSize, TSSSetDocSizeCommand;
 	// presentations: TPartPR, TDialogPRDocSize, TPRSetDocSizeCommand,
 	// STR# 11001, 13 of Parts/Presentation)
+	// (images: TPartIM, TDialogBTDocSize, TIMSetPartSizeCommand: "Set
+	// Document Size")
+	if (message->what == 'sM21' && fPages != NULL && fDocument != NULL
+			&& fDocument->MainPart() >= 0
+			&& fDocument->ImagePart(size_t(fDocument->MainPart())) != NULL) {
+		size_t main = size_t(fDocument->MainPart());
+		const IMPart* image = fDocument->ImagePart(main);
+		float width, height;
+		if (message->FindFloat("Width", &width) != B_OK
+				|| message->FindFloat("Height", &height) != B_OK) {
+			(new TDialogBTDocSize(this, image->size[0], image->size[1]))->RunDialog();
+			return;
+		}
+		if (width == image->size[0] && height == image->size[1])
+			return;
+		fPages->fUndo.BeginDocument(*fDocument, GobeResources::IndexString(3, 12).String(),
+			fPages->CurrentViewState());
+		if (SetImageSize(*fDocument, main, width, height)) {
+			fPages->GeometryChanged();
+			PostMessage(kMsgDocumentChanged);
+		}
+		return;
+	}
 	if (message->what == 'sM21' && fPages != NULL && fDocument != NULL
 			&& fDocument->presentationPart >= 0) {
 		size_t part = size_t(fDocument->presentationPart);

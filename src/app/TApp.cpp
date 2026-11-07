@@ -81,6 +81,7 @@ public:
 		fNewDocument(false),
 		fNewSpreadsheet(false),
 		fNewDrawing(false),
+		fNewImage(false),
 		fNewPresentation(false),
 		fOpenPanel(NULL),
 		fWindowCount(0),
@@ -98,7 +99,7 @@ public:
 	{
 		fprintf(stderr,
 		    "usage: %s [--menu <n>] [--dialog <id>] [--render <png>]\n"
-		    "        [--slide <n>] [--do <script>] [--new] [--new-spreadsheet] [--new-drawing] [--new-presentation] <document> ...\n",
+		    "        [--slide <n>] [--do <script>] [--new] [--new-spreadsheet] [--new-drawing] [--new-presentation] [--new-image] <document> ...\n",
 		    prog);
 	}
 
@@ -152,10 +153,12 @@ public:
 			} else if (strcmp(argv[i], "--new") == 0
 					|| strcmp(argv[i], "--new-spreadsheet") == 0
 					|| strcmp(argv[i], "--new-drawing") == 0
+					|| strcmp(argv[i], "--new-image") == 0
 					|| strcmp(argv[i], "--new-presentation") == 0) {
 				fNewDocument = true;
 				fNewSpreadsheet = strcmp(argv[i], "--new-spreadsheet") == 0;
 				fNewDrawing = strcmp(argv[i], "--new-drawing") == 0;
+				fNewImage = strcmp(argv[i], "--new-image") == 0;
 				fNewPresentation = strcmp(argv[i], "--new-presentation") == 0;
 			} else if (strncmp(argv[i], "--", 2) == 0) {
 				fprintf(stderr, "unknown option: %s\n", argv[i]);
@@ -266,11 +269,13 @@ public:
 				(new TDialogNewDoc(CountDocuments()))->RunDialog();
 				return;
 			}
-			if (kind != 'WORD' && kind != 'SPRD' && kind != 'GRFX' && kind != 'PRES')
+			if (kind != 'WORD' && kind != 'SPRD' && kind != 'GRFX' && kind != 'PRES'
+					&& kind != 'BITS')
 				return;
 			Document* document = new Document;
 			std::string error;
-			if (!(kind == 'SPRD' ? CreateBlankSpreadsheet(*document, error)
+			if (!(kind == 'BITS' ? CreateBlankImage(*document, error)
+					: kind == 'SPRD' ? CreateBlankSpreadsheet(*document, error)
 					: kind == 'GRFX' ? CreateBlankDrawing(*document, error)
 					: kind == 'PRES' ? NewPresentation(*document, error)
 					: CreateBlankDocument(*document, error))) {
@@ -279,6 +284,9 @@ public:
 			}
 			NewSheetPreferences(*document);
 			BRect frame(80, 60, 720, 620);
+			// (a new image's window fits the image: TPartIM's frame)
+			if (kind == 'BITS')
+				frame.Set(20, 38, 546, 635);
 			frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
 			fWindowCount++;
 			(new TDocWindow(frame, document->name.c_str(), document))->Show();
@@ -533,7 +541,8 @@ public:
 		if (fNewDocument) {
 			Document* document = new Document;
 			std::string error;
-			if (fNewSpreadsheet ? CreateBlankSpreadsheet(*document, error)
+			if (fNewImage ? CreateBlankImage(*document, error)
+					: fNewSpreadsheet ? CreateBlankSpreadsheet(*document, error)
 					: fNewDrawing ? CreateBlankDrawing(*document, error)
 					: fNewPresentation ? NewPresentation(*document, error)
 					: CreateBlankDocument(*document, error)) {
@@ -544,6 +553,8 @@ public:
 					return;
 				}
 				BRect frame(80, 60, 720, 520);
+				if (fNewImage)
+					frame.Set(20, 38, 546, 635);
 				frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
 				fWindowCount++;
 				TDocWindow* window = new TDocWindow(frame, document->name.c_str(), document);
@@ -587,6 +598,7 @@ private:
 	bool fNewDocument;
 	bool fNewSpreadsheet;
 	bool fNewDrawing;
+	bool fNewImage;
 	bool fNewPresentation;
 	BFilePanel* fOpenPanel;
 	int32 fWindowCount;

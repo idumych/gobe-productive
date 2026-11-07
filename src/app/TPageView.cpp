@@ -154,6 +154,10 @@ TPageView::RebuildFrames()
 		}
 	}
 	fMargin = kDesk;
+	// (TBrowseRootFrame: a browse root's frames start at the view's corner)
+	int root = fDocument.RootPart();
+	if (root >= 0 && fDocument.parts.parts[size_t(root)].kind == Sig("BROT"))
+		fMargin = 0;
 	if (fFrameOnly.active)
 		KeepFrameOnly();
 	if (fBrowse) {
@@ -2526,6 +2530,30 @@ TPageView::DrawFrame(const Document::PlacedFrame& f, BRect r, uint32_t kind, flo
 {
 	if (kind == Sig("BROT")) {
 		// browse mode (no pages): the window's white background
+		// (TBrowseRootFrame::Draw: for an image smaller than the view, light
+		// gray around it, the image's frame white and outlined a pixel out)
+		int main = fDocument.MainPart();
+		if (!IsPrinting() && main >= 0 && fDocument.ImagePart(size_t(main)) != NULL) {
+			for (const Document::PlacedFrame& m : fFrames) {
+				if (m.part != size_t(main))
+					continue;
+				BRect frame(m.x + dx, m.y + dy, m.x + dx + m.width, m.y + dy + m.height);
+				BRect view = fDrawBounds;
+				if (frame.left <= view.left && frame.top <= view.top && frame.right >= view.right
+						&& frame.bottom >= view.bottom)
+					break;
+				SetHighColor(0xee, 0xee, 0xee);
+				FillRect(view);
+				SetHighColor(255, 255, 255);
+				FillRect(frame);
+				float pixel = 1 / (IsPrinting() ? 1 : fZoom);
+				// (a hairline: pen size 0 in the original)
+				SetHighColor(0, 0, 0);
+				SetPenSize(1);
+				StrokeRect(frame.InsetByCopy(-pixel, -pixel));
+				return;
+			}
+		}
 		SetHighColor(255, 255, 255);
 		FillRect(r);
 		return;

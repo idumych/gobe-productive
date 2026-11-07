@@ -17,6 +17,7 @@
 #include <Window.h>
 
 #include "ChartPart.h"
+#include "IMPart.h"
 #include "DocArchive.h"
 #include "DocWriter.h"
 #include "GobeResources.h"
@@ -626,6 +627,19 @@ TPageView::ChartNormal(size_t part)
 	if (found == fChartNormals.end())
 		found = fChartNormals.emplace(part, std::array<float, 3>{0, 0, 1}).first;
 	return found->second;
+}
+
+
+void
+TPageView::ImageColors(rgb_color& fore, rgb_color& back) const
+{
+	int main = fDocument.MainPart();
+	const IMPart* image = main >= 0 ? fDocument.ImagePart(size_t(main)) : NULL;
+	if (image == NULL)
+		return;
+	// (TColor: red, green, blue, alpha)
+	fore = {image->colors[0][0], image->colors[0][1], image->colors[0][2], 255};
+	back = {image->colors[1][0], image->colors[1][1], image->colors[1][2], 255};
 }
 
 

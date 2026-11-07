@@ -27,7 +27,7 @@ namespace {
 bool
 CanMake(uint32 kind)
 {
-	return kind == 'WORD' || kind == 'SPRD' || kind == 'GRFX' || kind == 'PRES';
+	return kind == 'WORD' || kind == 'SPRD' || kind == 'GRFX' || kind == 'PRES' || kind == 'BITS';
 }
 
 

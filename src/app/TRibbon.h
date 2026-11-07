@@ -153,6 +153,8 @@ public:
 
 	void AddElement(TRibbonElement* element);
 	void RemoveAllElements();
+	// its height (24; the image part's PartBar, two rows of tools, 50)
+	void SetHeight(float height);
 	TRibbonElement* GetElement(uint32 id) const;
 	void SetEnabled(uint32 id, bool enabled);
 	// TRibbon::SelectElement: `id` selected, the others of `family` not
@@ -176,6 +178,7 @@ private:
 	TRibbonElement* FindElement(BPoint where) const;
 
 	std::vector<std::unique_ptr<TRibbonElement>> fElements;
+	float fHeight = 24;
 	TRibbonElement* fPressed = NULL;
 	bool fPressedDown = false;
 	std::string fTip;

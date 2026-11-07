@@ -42,10 +42,13 @@ private:
 	// TPartGR::AddPartBarElements and PartBarUpdateContents
 	void BuildDrawing(uint32 kind);
 	void UpdateDrawing();
+	// TPartIM::AddPartBarElements
+	void BuildImage();
 
 	TPageView* fPages;
 	bool fSheet = false;
 	bool fDrawing = false;
+	bool fImage = false;
 	uint32 fDrawingKind = 0;		// the part whose icon it shows
 	size_t fShapeCount = size_t(-1);
 	TSpacingEdit* fSpacing = NULL;
