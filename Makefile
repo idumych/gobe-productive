@@ -38,11 +38,11 @@ ifneq ($(HAIKU_CROSS),)
   PLATFORM     := Haiku
   override CXXFLAGS += $(HAIKU_CROSS_CFLAGS)
   override LDFLAGS  += $(HAIKU_CROSS_LDFLAGS)
-  LIBS         := -lbe -ltracker -ltranslation -ltextencoding $(APP_LIBS)
+  LIBS         := -lbe -ltracker -ltranslation -ltextencoding -lGL $(APP_LIBS)
   RESOURCES     = rc -o obj/$(NAME).rsrc $(RDEF) && xres -o $@ obj/$(NAME).rsrc
 else ifeq ($(UNAME),Haiku)
   PLATFORM     := Haiku
-  LIBS         := -lbe -ltracker -ltranslation -ltextencoding $(APP_LIBS)
+  LIBS         := -lbe -ltracker -ltranslation -ltextencoding -lGL $(APP_LIBS)
   INSTALL_DIR  := $(shell finddir B_USER_NONPACKAGED_DIRECTORY)/apps
   RESOURCES     = rc -o obj/$(NAME).rsrc $(RDEF) && xres -o $@ obj/$(NAME).rsrc
 else
@@ -50,7 +50,7 @@ else
     # Plain Linux with Cosmoe (the Haiku API as a library on X11/Wayland)
     PLATFORM    := Cosmoe
     COSMOE_DIRS := config os os/add-ons/graphics os/app os/game os/interface os/kernel os/locale \
-                   os/media os/net os/storage os/support os/translation \
+                   os/media os/net os/opengl os/storage os/support os/translation \
                    os/be_apps/Tracker private/interface private/shared \
                    private/support posix
     override CXXFLAGS += -I$(COSMOE_ROOT)/include \
@@ -59,7 +59,7 @@ else
     # libbe finds Cosmoe's add-ons and data next to itself, so the AppImage
     # (bin/App + lib/) works wherever it is mounted.
     COSMOE_RPATH ?= $$ORIGIN/../lib
-    LIBS        := -L$(COSMOE_ROOT)/lib -lbe -ltracker $(APP_LIBS) \
+    LIBS        := -L$(COSMOE_ROOT)/lib -lbe -ltracker -lopengl -lGL $(APP_LIBS) \
                    -Wl,-rpath,'$(COSMOE_RPATH)'
     INSTALL_DIR := $(HOME)/.local/bin
     # Cosmoe reads resources from a .cosmoe_rsrc section linked into the app

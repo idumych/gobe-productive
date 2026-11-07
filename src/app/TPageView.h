@@ -159,6 +159,7 @@ public:
 	// the graphics rulers (Window > Show Graphics Ruler): top, left
 	class TGRRuler* fGRRulers[2] = {NULL, NULL};
 	class TRibbon* fPartBar = NULL;
+	class TRibbon* fChartRibbon = NULL;
 	class TRibbon* fFormatBar = NULL;
 	class TEntryBar* fEntryBar = NULL;	// a spreadsheet's (TEntryBar)
 	bool fCellsActive = false;	// what the window last heard (kMsgActiveRibbon)
@@ -400,11 +401,24 @@ private:
 		bool active = false;
 		size_t part = 0;
 	} fChart;
+	// each 3D chart's last frame (TRenderingPiece's bitmap)
+	std::map<size_t, std::shared_ptr<struct ChartRender3D>> fChartRenders;
+	// TRenderingPiece::Click's tracking: the camera dragged with a tool
+	struct ChartDrag {
+		bool active = false;
+		int tool = 0;
+		BPoint last;
+		float distance = 0;
+	} fChartDrag;
 	bool ChartClick(BPoint where, int32 clicks);
+	bool ChartDragMoved(BPoint where);
+	bool ChartDragUp();
+	bool ChartKey(const char* bytes, int32 count);
 	bool ChartCommand(BMessage* message);
 public:
 	// the chart part entered, -1 if none
 	int ActiveChartPart() const { return fChart.active ? int(fChart.part) : -1; }
+	bool ActiveChartIs3D() const;
 	void ChartMenuState(bool& seriesInRows, BString& legend, BString& title,
 		bool& titleEnabled, bool& axis) const;
 private:
@@ -457,6 +471,7 @@ private:
 		BRect clip;					// the containing frames (document coordinates)
 		int index;					// the frame's number in its part
 		int page;					// the page it is on (-1: none)
+		float height = 0;			// its height when `rect` leaves room to grow
 	};
 	// what laying out a flow found: text left over, the last frame used,
 	// where each frame's text starts (UINT32_MAX: no text)
@@ -575,7 +590,7 @@ private:
 	void DrawChart(const Document::PlacedFrame& frame, BRect rect);
 	// a 2D chart with axes (T2DXYAxisChart): its pieces as TChartPiece::
 	// Draw draws them
-	void DrawChart2D(const ChartPart& chart, BRect rect);
+	void DrawChart2D(const ChartPart& chart, BRect rect, size_t part);
 	// TChartPart::SetUpContextMenu's items, a chart entered
 	void AddChartContextItems(class BPopUpMenu* menu, BPoint where);
 	void DrawTable(const Document::PlacedFrame& frame, BRect rect);

@@ -218,6 +218,7 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 				// (TChartPart::ActivePartRibbon: a chart entered)
 				fChartRibbon = new TChartRibbon();
 				fChartRibbon->Hide();
+				pages->fChartRibbon = fChartRibbon;
 			}
 			if (text) {
 				fRuler = new TWPRuler(pages);
@@ -2010,6 +2011,9 @@ TDocWindow::ShowActiveRibbon()
 		else
 			view->Hide();
 	};
+	// (TChartPart::FixRibbon: the chart's sub-ribbon)
+	if (chart && fChartRibbon != NULL)
+		fChartRibbon->SelectSubRibbon(fPages != NULL && fPages->ActiveChartIs3D() ? 1 : 0);
 	show(fChartRibbon, ribbons && chart);
 	show(fEntryBar, ribbons && cells);
 	show(fRuler, ribbons && !chart && !(cells && fEntryBar != NULL));

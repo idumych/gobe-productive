@@ -12,6 +12,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
 #include <Window.h>
 
 #include "ChartPart.h"
@@ -19,6 +20,8 @@
 #include "DocWriter.h"
 #include "GobeResources.h"
 #include "TChartDialogs.h"
+#include "TChartGL.h"
+#include "TChartRibbon.h"
 #include "TInkMenus.h"
 #include "Styles.h"
 #include "TDocView.h"
@@ -159,7 +162,7 @@ InkColor(const Color& c, float opacity)
 // box's left at its bottom; the title (TTitlePiece::DrawContent) its text
 // at its position.
 void
-TPageView::DrawChart2D(const ChartPart& chart, BRect r)
+TPageView::DrawChart2D(const ChartPart& chart, BRect r, size_t part)
 {
 	const StyleMgr& styles = fDocument.styles;
 	PushState();
@@ -224,7 +227,29 @@ TPageView::DrawChart2D(const ChartPart& chart, BRect r)
 			PushState();
 			BRegion pieceClip(pr);
 			ConstrainClippingRegion(&pieceClip);
-			if (rendering && categories > 0 && seriesCount > 0) {
+			if (rendering && chart.Is3D()) {
+				// TRenderingPiece::DrawContent: the frame OpenGL drew, what's
+				// clear of the chart letting the piece's fill through; the
+				// labels on it (T3DXYAxisChart::Draw2D) black in the
+				// piece's font
+				int32 width = int32(ceilf(piece.size[0])), height = int32(ceilf(piece.size[1]));
+				std::shared_ptr<ChartRender3D>& render = fChartRenders[part];
+				std::string key = ChartRenderKey(chart, styles, width, height);
+				if (render == NULL || render->key != key) {
+					render = std::make_shared<ChartRender3D>();
+					render->key = key;
+					RenderChart3D(chart, styles, width, height, *render);
+				}
+				if (render->bitmap != NULL) {
+					SetDrawingMode(B_OP_ALPHA);
+					SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
+					DrawBitmap(render->bitmap.get(), BPoint(pr.left, pr.top));
+				}
+				useFont(piece.style);
+				SetHighColor(0, 0, 0);
+				for (const ChartRender3D::Label& text : render->labels)
+					DrawString(text.text.c_str(), BPoint(pr.left + text.x, pr.top + text.y));
+			} else if (rendering && categories > 0 && seriesCount > 0) {
 				// LeftAxisSpace: 4 more than T2DVerticalAxis::DrawOrMeasure's
 				// widest label and 4
 				BFont axisFont = useFont(vertical.style);
@@ -574,9 +599,17 @@ TPageView::AddChartContextItems(BPopUpMenu* menu, BPoint where)
 		menu->AddSeparatorItem();
 	menu->AddItem(new BMenuItem(ChartString(1, 5).String(), new BMessage('sCH1')));
 	BMenuItem* axis = new BMenuItem(ChartString(1, 6).String(), new BMessage('sCH8'));
-	axis->SetEnabled(chart->chartType == Sig("2DSM"));
+	axis->SetEnabled(chart->chartType != Sig("PIE3"));
 	menu->AddItem(axis);
 	menu->SetTargetForItems(Window());
+}
+
+
+bool
+TPageView::ActiveChartIs3D() const
+{
+	const ChartPart* chart = fChart.active ? fDocument.Chart(fChart.part) : NULL;
+	return chart != NULL && chart->Is3D();
 }
 
 
@@ -608,9 +641,51 @@ TPageView::ChartClick(BPoint where, int32 clicks)
 	if (hit == NULL)
 		return false;
 	// TChartPart::Click: in the chart entered, TPartGR::Click: its pieces
-	// selected, moved and sized as a drawing's shapes
+	// selected, moved and sized as a drawing's shapes; the 3D chart's plot
+	// with a tool of TSubRibbon3DTools (other than the pointer): what's
+	// under it selected, the camera dragged (TRenderingPiece::Click)
 	if (fChart.active) {
+		const ChartPart* chart = fDocument.Chart(fChart.part);
+		TChartRibbon* ribbon = dynamic_cast<TChartRibbon*>(fChartRibbon);
+		int tool = ribbon != NULL ? ribbon->SelectedTool() : -1;
+		if (chart != NULL && chart->Is3D() && tool >= 0 && tool != 3) {
+			BPoint at(where.x - (hit->x + dx), where.y - (hit->y + dy));
+			const Shape* top = NULL;
+			for (const GRLayer& layer : chart->graphics.layers)
+				for (const Shape& shape : layer.shapes)
+					if ((shape.pieceValue & 1) != 0 && BRect(shape.origin[0], shape.origin[1],
+							shape.origin[0] + shape.size[0], shape.origin[1] + shape.size[1])
+							.Contains(at))
+						top = &shape;
+			bool handle = false;
+			if (top != NULL)
+				for (const ShapeRef& ref : fShapes)
+					if (ref.part == fChart.part && HitHandle(*top, at.x, at.y, 4) >= 0)
+						handle = true;
+			if (top != NULL && top->kind == Sig("Rndr") && !handle) {
+				int32 object = FindChart3DObject(*chart, fDocument.styles,
+					int32(ceilf(top->size[0])), int32(ceilf(top->size[1])),
+					BPoint(at.x - top->origin[0], at.y - top->origin[1]));
+				fUndo.BeginDocument(fDocument, ChartString(3, 7).String(), CurrentViewState());
+				ChartPart* editing = fDocument.EditableChart(fChart.part);
+				if (object >= 0)
+					editing->chartValue8 = uint32_t(object);
+				ChartCamera camera;
+				fChartDrag = ChartDrag();
+				fChartDrag.active = true;
+				fChartDrag.tool = tool;
+				fChartDrag.last = where;
+				if (ReadChartCamera(*editing, camera))
+					fChartDrag.distance = ChartCameraDistance(camera);
+				SetMouseEventMask(B_POINTER_EVENTS, B_LOCK_WINDOW_FOCUS);
+				Invalidate();
+				return true;
+			}
+		}
 		DrawingClick(where, clicks);
+		// (nothing of the chart selected)
+		if (chart != NULL && fDocument.Chart(fChart.part)->chartValue8 != 0xffffffff)
+			fDocument.EditableChart(fChart.part)->chartValue8 = 0xffffffff;
 		if (Window() != NULL)
 			Window()->PostMessage(kMsgActiveRibbon);
 		return true;
@@ -627,6 +702,65 @@ TPageView::ChartClick(BPoint where, int32 clicks)
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgActiveRibbon);
+	return true;
+}
+
+
+// TRenderingPiece::Click's loop: the camera follows the pointer
+bool
+TPageView::ChartDragMoved(BPoint where)
+{
+	if (!fChartDrag.active)
+		return false;
+	ChartPart* chart = fDocument.EditableChart(fChart.part);
+	ChartCamera camera;
+	if (chart != NULL && ReadChartCamera(*chart, camera)) {
+		MoveChartCamera(camera, fChartDrag.tool, fChartDrag.last.x - where.x,
+			fChartDrag.last.y - where.y, fChartDrag.distance);
+		WriteChartCamera(*chart, camera);
+		Invalidate();
+	}
+	fChartDrag.last = where;
+	return true;
+}
+
+
+// its end: TMoveCameraCmd sent
+bool
+TPageView::ChartDragUp()
+{
+	if (!fChartDrag.active)
+		return false;
+	fChartDrag.active = false;
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
+}
+
+
+// TChartPart::KeyDown, TRenderingPiece::KeyDown: with only the plot
+// selected, the keys that move the camera and its light
+bool
+TPageView::ChartKey(const char* bytes, int32 count)
+{
+	if (!fChart.active || count != 1 || fShapes.size() != 1)
+		return false;
+	const ChartPart* chart = fDocument.Chart(fChart.part);
+	if (chart == NULL || !chart->Is3D())
+		return false;
+	const ShapeRef& ref = fShapes[0];
+	if (ref.layer >= chart->graphics.layers.size()
+			|| ref.index >= chart->graphics.layers[ref.layer].shapes.size()
+			|| chart->graphics.layers[ref.layer].shapes[ref.index].kind != Sig("Rndr"))
+		return false;
+	ChartCamera camera;
+	if (!ReadChartCamera(*chart, camera) || !ChartCameraKey(camera, uint8_t(bytes[0])))
+		return false;
+	fUndo.BeginDocument(fDocument, ChartString(3, 7).String(), CurrentViewState());
+	WriteChartCamera(*fDocument.EditableChart(fChart.part), camera);
+	Invalidate();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
 	return true;
 }
 
@@ -651,8 +785,8 @@ TPageView::ChartMenuState(bool& seriesInRows, BString& legend, BString& title,
 	const Shape* titlePiece = ChartPiece(*chart, Sig("Titl"));
 	title = ChartString(1, PieceVisible(titlePiece) ? 1 : 0);
 	titleEnabled = titlePiece != NULL || !ChartLabel(fDocument, fChart.part).empty();
-	// (TChart::AxisCount: the 2D charts with axes)
-	axis = chart->chartType == Sig("2DSM");
+	// (TChart::AxisCount: all but T3DPieChart's two)
+	axis = chart->chartType != Sig("PIE3");
 }
 
 

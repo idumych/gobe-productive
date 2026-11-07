@@ -869,6 +869,27 @@ ChartSeriesChanged(ChartPart& chart)
 		SetRange(chart.axes[1], range[1][0], range[1][1], -1);
 		return;
 	}
+	if (chart.Is3DAxis()) {
+		// T3DXYAxisChart::FindMinMax: the values (and 0), the categories;
+		// as deep as the series
+		float low = 0, high = 0;
+		for (size_t c = 0; c < chart.Categories(); c++)
+			for (size_t s = 0; s < chart.SeriesCount(); s++) {
+				float v = chart.Value(s, c);
+				low = std::min(low, v);
+				high = std::max(high, v);
+			}
+		SetRange(chart.axes[1], low, high, -1);
+		chart.axisDepth[1] = float(chart.SeriesCount());
+		SetRange(chart.axes[0], 0, float(chart.Categories()), int(chart.Categories()));
+		chart.axisDepth[0] = float(chart.SeriesCount());
+		return;
+	}
+	if (chart.chartType == Sig("PIE3")) {
+		// T3DPieChart::DataChanged: an explosion for each series
+		chart.explosions.resize(chart.SeriesCount());
+		return;
+	}
 	if (chart.chartType != Sig("2DSM"))
 		return;
 	int32_t count = int32_t(chart.SeriesCount());
@@ -1056,46 +1077,72 @@ ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor,
 	const TextMeasure& measure)
 {
 	// T2DXYAxisChart's kinds: bar (0, 0), line, area and stacked area
-	// (2, 0 to 2); T2DXYChart: scatter and line (3, 0 and 1)
+	// (2, 0 to 2); T2DXYChart: scatter and line (3, 0 and 1); T3DBarChart
+	// (0, 1), T3DPieChart (1), T3DAreaChart (2, 3)
 	int32_t kind = -1;
+	uint32_t type = 0;
 	bool xy = false;
 	if (major == 0 && minor == 0)
 		kind = 0;
+	else if (major == 0 && minor == 1)
+		type = Sig("BAR3");
+	else if (major == 1)
+		type = Sig("PIE3");
 	else if (major == 2 && minor <= 2)
 		kind = int32_t(minor) + 1;
+	else if (major == 2 && minor == 3)
+		type = Sig("ARE3");
 	else if (major == 3 && minor <= 1)
 		xy = true;
-	if (kind < 0 && !xy)
+	if (kind < 0 && !xy && type == 0)
 		return false;
 	size_t sheet = 0;
 	SSRange range;
 	bool cells = ChartCells(doc, chart, sheet, range);
 	ChartPart* c = doc.EditableChart(chart);
-	if (c == nullptr || (c->chartType != Sig("2DSM") && c->chartType != Sig("2DXY")))
+	if (c == nullptr)
 		return false;
+	// what the camera does: the chart that was (a T2DChart, a T3DPieChart)
+	// and the one it becomes
+	bool was2D = c->chartType == Sig("2DSM") || c->chartType == Sig("2DXY");
+	bool wasPie = c->chartType == Sig("PIE3");
+	bool toPie = type == Sig("PIE3");
 	c->partValues[0] = major;
 	c->partValues[1] = minor;
-	// T2DXYAxisChart(TChart const&, ...), T2DXYChart(TChart const&, ...):
-	// the legend kept (its series' styles copied: the same ones), new axes
-	// (TAxis: a style each on "GR Default", by its data; T2DXYAxisChart's
-	// horizontal one without gridlines), no sets
+	// T2DXYAxisChart(TChart const&, ...), T2DXYChart(TChart const&, ...),
+	// T3DXYAxisChart, T3DPieChart: the legend kept (its series' styles
+	// copied: the same ones), new axes (TAxis: a style each on "GR
+	// Default", by its data; T2DXYAxisChart's horizontal one without
+	// gridlines; a T3DAxis's depth -1 until it has its data), no sets
 	uint32_t base = FindNamedStyle(doc.styles, "GR Default");
 	if (base >= doc.styles.styles.size())
 		base = FindNamedStyle(doc.styles, "Default");
-	for (ChartAxis& axis : c->axes) {
+	for (int i = 0; i < 2; i++) {
+		ChartAxis& axis = c->axes[i];
 		if (axis.style < doc.styles.styles.size() && doc.styles.styles[axis.style].value4 > 1)
 			doc.styles.styles[axis.style].value4--;
 		axis = ChartAxis();
+		c->axisDepth[i] = -1;
+		if (toPie) {
+			axis.style = 0xffffffff;
+			continue;
+		}
 		axis.style = doc.NewStyle(Sig("Basi"), "", 0x20, base, {});
 		doc.styles.styles[axis.style].value4++;
 	}
 	c->chartValue8 = 0;
 	c->surfaceLabels.clear();
 	c->sets.clear();
+	c->explosions.clear();
 	c->seriesKind = 0;
 	c->xyMinor = 0;
 	c->xyStyled = 0;
-	if (xy) {
+	c->chartBody.clear();
+	if (type != 0) {
+		c->chartType = type;
+		// (T3DChart's 1; T3DXYAxisChart's 2 or T3DPieChart's 4)
+		c->chartFlags = toPie ? 5 : 3;
+	} else if (xy) {
 		c->chartType = Sig("2DXY");
 		c->chartFlags = 2;
 		c->xyMinor = minor;
@@ -1124,21 +1171,21 @@ ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor,
 		StyleXYSeries(doc, *c);
 	ChartSeriesChanged(*c);
 	FixChartLegend(*c, measure);
-	// PositionCamera: the 2D charts' camera
-	for (GRLayer& layer : c->graphics.layers)
-		for (Shape& shape : layer.shapes) {
-			if (shape.kind != Sig("Rndr") || shape.pieceData.size() < 4 + 6 * 4)
-				continue;
-			DocWriter w;
-			const uint32_t camera[6] = {0x3f79a7c1, 0x3f45fba4, 0x3f3ccaa3, 0x3ed26cc2,
-				0x3ec8c975, 0xbf209b20};
-			for (uint32_t bits : camera) {
-				float v;
-				memcpy(&v, &bits, sizeof v);
-				w.Float(v);
+	// TChangeChartTypeCmd::Perform: PositionCamera from a 2D chart or to or
+	// from a pie; a 3D chart to a 3D chart with axes keeps its place
+	if (was2D || wasPie || toPie) {
+		ChartCamera camera;
+		if (ReadChartCamera(*c, camera)) {
+			const uint32_t place[2][6] = {{0x3f79a7c1, 0x3f45fba4, 0x3f3ccaa3, 0x3ed26cc2,
+				0x3ec8c975, 0xbf209b20}, {0x3b9f6230, 0xbeaeb980, 0x3f459b6f, 0xbdc1d29e,
+				0x3d921d54, 0xbeab69ba}};
+			for (int i = 0; i < 3; i++) {
+				memcpy(&camera.position[i], &place[toPie ? 1 : 0][i], sizeof(float));
+				memcpy(&camera.look[i], &place[toPie ? 1 : 0][i + 3], sizeof(float));
 			}
-			std::copy(w.Data().begin(), w.Data().end(), shape.pieceData.begin() + 4);
+			WriteChartCamera(*c, camera);
 		}
+	}
 	return true;
 }
 

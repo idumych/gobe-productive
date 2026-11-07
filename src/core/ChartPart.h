@@ -5,6 +5,7 @@
 #ifndef GOBE_CHART_PART_H
 #define GOBE_CHART_PART_H
 
+#include <array>
 #include <cstdint>
 #include <functional>
 #include <string>
@@ -65,6 +66,15 @@ struct ChartPart {
 	ChartAxis axes[2];
 	uint32_t seriesKind = 0;
 	std::vector<ChartSeriesSet> sets;
+	// T3DXYAxisChart ('BAR3', 'ARE3', 'LIN3'): the axes above (T3DHorizontal
+	// Axis, T3DVerticalAxis), each with its depth, in series (T3DAxis +0x28)
+	float axisDepth[2] = {-1, -1};
+	// T3DPieChart ('PIE3'): TExplosion for each series (how far out, how
+	// far up; T3DPieChart::Draw moves its slice by them)
+	struct Explosion {
+		float out = 0, up = 0;
+	};
+	std::vector<Explosion> explosions;
 	// T2DXYChart ('2DXY'): the axes above (T2DXAxis, T2DVerticalAxis), its
 	// minor type (scatter 0, line 1) and how many series it gave their
 	// symbols (field 0x7c)
@@ -88,7 +98,46 @@ struct ChartPart {
 	// GetPhysicalSeries: the physical series of series s's value `which`
 	// (0 x, 1 y)
 	size_t PhysicalSeries(size_t s, int which) const;
+	// T3DChart: flags' bit 0, drawn through OpenGL
+	bool Is3D() const;
+	// T3DXYAxisChart: a 3D chart with axes
+	bool Is3DAxis() const;
 };
+
+// T3DRenderer in the 'Rndr' piece's data: TCamera (position, where it
+// looks, up; TPositionable) and its TLight (position, look, up, id, off)
+struct ChartCamera {
+	float position[3] = {0, 0, 0};
+	float look[3] = {0, 0, 0};
+	float up[3] = {0, 1, 0};
+	float light[3] = {0, 0, 0.5f};
+	uint32_t lightID = 0x4000;
+	bool lightOff = false;
+};
+
+// false if the chart has no 'Rndr' piece with a renderer
+bool ReadChartCamera(const ChartPart& chart, ChartCamera& camera);
+void WriteChartCamera(ChartPart& chart, const ChartCamera& camera);
+
+// TRenderingPiece::Click's drag by (dx, dy) (the last point less this one)
+// with a tool of TSubRibbon3DTools: 0 toward and away from what it looks
+// at, 1 sideways (it and what it looks at), 2 around (at `distance`, the
+// drag's first distance to what it looks at)
+void MoveChartCamera(ChartCamera& camera, int tool, float dx, float dy, float distance);
+float ChartCameraDistance(const ChartCamera& camera);
+
+// TRenderingPiece::KeyDown: `key` on the camera or its light (arrows, '-',
+// '=' the camera, 'a', 'z' the light), false for another key
+bool ChartCameraKey(ChartCamera& camera, uint8_t key);
+
+// CalcArcPoly (shift 3) for a slice of a T3DPieChart, radius 3500: the points
+// of the arc from `start` through `sweep` degrees, each quarter-circle
+// stepped as FUN_00170d40 does (a Minsky circle)
+std::vector<std::array<float, 2>> ChartArcPoints(float radius, float start, float sweep);
+
+// T3DPieChart::DataChanged's +0x54: the absolute values of the first
+// category's series, summed
+float ChartPieTotal(const ChartPart& chart);
 
 // `a` is positioned at the part record; reads the graphics and the chart
 // up to the part's closing 'cht-'.
@@ -186,9 +235,9 @@ void StyleXYSeries(Document& doc, ChartPart& chart);
 // TChangeChartTypeCmd::Perform: the chart made again as the type (major,
 // minor) from what it shows (its legend; new axes; its series sets or
 // symbols made for the type; its data read in the type's format) and its
-// camera placed. The 2D types so far: bar (0, 0), line, area, stacked
-// area (2, 0 to 2), XY scatter and line (3, 0 and 1); false for the
-// others or a chart that isn't 2D.
+// camera placed: bar (0, 0), 3D bar (0, 1), pie (1, any), line, area, stacked
+// area (2, 0 to 2), 3D area (2, 3), XY scatter and line (3, 0 and 1); false
+// for others.
 bool ChangeChartType(Document& doc, size_t chart, uint32_t major, uint32_t minor,
 	const TextMeasure& measure = nullptr);
 

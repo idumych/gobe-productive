@@ -1909,6 +1909,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 	where.x /= fZoom;
 	where.y /= fZoom;
 	UpdateCursor(where);
+	if (ChartDragMoved(where)) {
+		BView::MouseMoved(where, transit, dragMessage);
+		return;
+	}
 	if (DrawingMoved(where)) {
 		BView::MouseMoved(where, transit, dragMessage);
 		return;
@@ -1980,6 +1984,10 @@ TPageView::MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage)
 void
 TPageView::MouseUp(BPoint where)
 {
+	if (ChartDragUp()) {
+		BView::MouseUp(where);
+		return;
+	}
 	if (DrawingUp(BPoint(where.x / fZoom, where.y / fZoom))) {
 		BView::MouseUp(where);
 		return;
@@ -2008,6 +2016,8 @@ void
 TPageView::KeyDown(const char* bytes, int32 count)
 {
 	if (count < 1)
+		return;
+	if (ChartKey(bytes, count))
 		return;
 	if (!fCaret.active && DrawingKey(bytes, count))
 		return;

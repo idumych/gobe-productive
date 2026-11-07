@@ -492,6 +492,7 @@ TPageView::LayoutText()
 			auto it = std::find_if(flows.begin(), flows.end(),
 				[&](const auto& fl) { return fl.first == f.part; });
 			FrameGeometry g{r, f.frame->angle, ContainerClip(f), f.index, f.page};
+			g.height = f.height;
 			// (a frame window's text frame of several: the text it shows)
 			bool ownRange = fFrameOnly.active && f.frame->textLength > 0
 				&& fDocument.parts.parts[f.part].kind == Sig("WORD")
@@ -1260,7 +1261,9 @@ TPageView::LayoutPart(size_t part, const std::vector<FrameGeometry>& geometry, u
 			line.frame.Set(left, y, right, y + height);
 			line.baseline = y + ascent;
 			line.angle = geometry[frameIndex].angle;
-			line.center = frame.LeftTop() + BPoint(frame.Width() / 2, frame.Height() / 2);
+			// (turned about the frame's middle, not the room it has to grow)
+			line.center = frame.LeftTop() + BPoint(frame.Width() / 2, (geometry[frameIndex].height > 0
+				? geometry[frameIndex].height : frame.Height()) / 2);
 			line.clip = geometry[frameIndex].clip;
 			line.textFrame = frame;
 			for (size_t k = 0; k < placed.size(); k++) {
@@ -2132,214 +2135,11 @@ TPageView::DrawTable(const Document::PlacedFrame& f, BRect r)
 }
 
 
-// A chart: the plot in the renderer piece's rectangle (grouped bars for bar
-// charts, lines otherwise), the legend and the title pieces. Category
-// labels that the chart keeps as text frames are drawn with those.
+// A chart: its pieces (TChartPiece::Draw for each)
 void
 TPageView::DrawChart(const Document::PlacedFrame& f, BRect r)
 {
-	const ChartPart& chart = *fDocument.Chart(f.part);
-	if (chart.chartType == Sig("2DSM") || chart.chartType == Sig("2DXY")) {
-		DrawChart2D(chart, r);
-		return;
-	}
-	BRect plot = r, legend, title;
-	std::string titleText;
-	bool hasLegend = false, hasTitle = false, labelFrames = false;
-	uint32_t titleStyle = 0, legendStyle = 0;
-	for (const GRLayer& layer : chart.graphics.layers) {
-		for (const Shape& s : layer.shapes) {
-			BRect sr(r.left + s.origin[0], r.top + s.origin[1],
-				r.left + s.origin[0] + s.size[0], r.top + s.origin[1] + s.size[1]);
-			// (a hidden piece isn't drawn: TChartPiece::Draw, +0x30 bit 0)
-			if ((s.kind == Sig("Lgnd") || s.kind == Sig("Titl")) && (s.pieceValue & 1) == 0)
-				continue;
-			if (s.kind == Sig("Rndr"))
-				plot = sr;
-			else if (s.kind == Sig("Lgnd")) {
-				legend = sr;
-				legendStyle = s.style;
-				hasLegend = true;
-			} else if (s.kind == Sig("Titl")) {
-				title = sr;
-				titleText = s.text;
-				titleStyle = s.style;
-				hasTitle = true;
-			} else if (s.kind == Sig("FRAM"))
-				labelFrames = true;
-		}
-	}
-	size_t categories = chart.Categories(), seriesCount = chart.SeriesCount();
-	if (categories == 0 || seriesCount == 0)
-		return;
-	auto seriesColor = [&](size_t s) {
-		if (s < chart.series.size()) {
-			ShapeStyle st = ResolveShapeStyle(fDocument.styles, chart.series[s].style);
-			if (st.fill.set)
-				return make_color(st.fill.color.r, st.fill.color.g, st.fill.color.b);
-		}
-		static const rgb_color kDefault[] = {{255, 0, 0, 255}, {0, 200, 0, 255},
-			{0, 0, 255, 255}, {255, 200, 0, 255}};
-		return kDefault[s % 4];
-	};
-
-	PushState();
-	BRegion clip(r);
-	ConstrainClippingRegion(&clip);
-
-	float low = 0, high = 0;
-	for (size_t s = 0; s < seriesCount; s++)
-		for (size_t c = 0; c < categories; c++) {
-			low = std::min(low, chart.Value(s, c));
-			high = std::max(high, chart.Value(s, c));
-		}
-	if (high <= low)
-		high = low + 1;
-	// a round step for about 5 grid lines
-	float step = powf(10, floorf(log10f((high - low) / 5)));
-	for (float m : {1.0f, 2.0f, 5.0f, 10.0f})
-		if ((high - low) / (step * m) <= 6) {
-			step *= m;
-			break;
-		}
-	high = ceilf(high / step) * step;
-	low = floorf(low / step) * step;
-	// a 2D chart's vertical axis (T2DXYAxisChart: TAxis's range and step,
-	// as the data ranged it or Axis… set it; its gridlines if it has them)
-	bool grid = true;
-	if (chart.chartType == Sig("2DSM")) {
-		const ChartAxis& axis = chart.axes[1];
-		auto value = [](uint32_t bits) {
-			float f;
-			memcpy(&f, &bits, sizeof f);
-			return f;
-		};
-		float axisLow = value(axis.values[2]), axisHigh = value(axis.values[3]);
-		float axisStep = value(axis.values[5]);
-		if (axisLow < axisHigh) {
-			low = axisLow;
-			high = axisHigh;
-			step = axisStep > 0 ? axisStep : (high - low) / 4;
-		}
-		grid = axis.flags[1];
-	}
-
-	BFont font(be_plain_font);
-	font.SetSize(9);
-	SetFont(&font);
-	BRect area = plot.InsetByCopy(8, 8);
-	area.left += 36;
-	area.bottom -= labelFrames ? 4 : 16;
-	// bars for the bar types and a 2D chart whose series are bars
-	// (T2DBarSeries, kind 0: what Make Chart makes)
-	bool bars = chart.chartType == Sig("BAR3") || chart.chartType == Sig("BAR2")
-		|| (chart.chartType >> 8) == (Sig("BAR ") >> 8)
-		|| (chart.chartType == Sig("2DSM") && !chart.sets.empty() && chart.sets[0].kind == 0);
-	if (hasLegend && legend.left > area.left + 40 && legend.left < area.right
-		&& legend.top < area.bottom && legend.bottom > area.top)
-		area.right = legend.left - 10;	// the 3D plot doesn't reach the legend
-	float depth = chart.chartType == Sig("BAR3") ? 6 : 0;
-	area.top += depth;
-	area.right -= depth;
-	auto yFor = [&](float v) {
-		return area.bottom - (v - low) / (high - low) * area.Height();
-	};
-
-	SetDrawingMode(B_OP_OVER);
-	SetPenSize(1);
-	for (float v = low; v <= high + step / 2; v += step) {
-		float y = yFor(v);
-		SetHighColor(210, 210, 210);
-		if (grid)
-			StrokeLine(BPoint(area.left, y), BPoint(area.right, y));
-		if (depth > 0)
-			StrokeLine(BPoint(area.left, y), BPoint(area.left + depth, y - depth));
-		char label[32];
-		snprintf(label, sizeof label, "%g", v);
-		SetHighColor(0, 0, 0);
-		DrawString(label, BPoint(area.left - 4 - font.StringWidth(label), y + 3));
-	}
-	SetHighColor(0, 0, 0);
-	StrokeLine(area.LeftTop(), area.LeftBottom());
-	StrokeLine(area.LeftBottom(), area.RightBottom());
-
-	float slot = area.Width() / categories;
-	for (size_t c = 0; c < categories; c++) {
-		float x0 = area.left + c * slot;
-		if (bars) {
-			float gap = slot * 0.15f;
-			float w = (slot - 2 * gap) / seriesCount;
-			for (size_t s = 0; s < seriesCount; s++) {
-				float v = chart.Value(s, c);
-				BRect bar(x0 + gap + s * w, std::min(yFor(v), yFor(0)),
-					x0 + gap + (s + 1) * w - 1, std::max(yFor(v), yFor(0)));
-				rgb_color color = seriesColor(s);
-				if (depth > 0) {
-					// top and side faces, a little darker
-					BPoint top[4] = {bar.LeftTop(), bar.RightTop(),
-						bar.RightTop() + BPoint(depth, -depth), bar.LeftTop() + BPoint(depth, -depth)};
-					BPoint side[4] = {bar.RightTop(), bar.RightBottom(),
-						bar.RightBottom() + BPoint(depth, -depth), bar.RightTop() + BPoint(depth, -depth)};
-					SetHighColor(tint_color(color, B_DARKEN_1_TINT));
-					FillPolygon(top, 4);
-					SetHighColor(tint_color(color, B_DARKEN_2_TINT));
-					FillPolygon(side, 4);
-				}
-				SetHighColor(color);
-				FillRect(bar);
-				SetHighColor(tint_color(color, B_DARKEN_3_TINT));
-				StrokeRect(bar);
-			}
-		}
-		if (!labelFrames && c < chart.data.names1.size()) {
-			const char* label = chart.data.names1[c].c_str();
-			SetHighColor(0, 0, 0);
-			DrawString(label, BPoint(x0 + (slot - font.StringWidth(label)) / 2,
-				area.bottom + 12));
-		}
-	}
-	if (!bars) {
-		SetPenSize(2);
-		for (size_t s = 0; s < seriesCount; s++) {
-			SetHighColor(seriesColor(s));
-			for (size_t c = 0; c < categories; c++) {
-				BPoint p(area.left + (c + 0.5f) * slot, yFor(chart.Value(s, c)));
-				if (c > 0)
-					StrokeLine(BPoint(area.left + (c - 0.5f) * slot,
-						yFor(chart.Value(s, c - 1))), p);
-				FillRect(BRect(p.x - 2, p.y - 2, p.x + 2, p.y + 2));
-			}
-		}
-		SetPenSize(1);
-	}
-
-	if (hasLegend) {
-		TextStyle ts = ResolveTextStyle(fDocument.styles, legendStyle);
-		BFont lf = TDocView::MapFont(ts);
-		SetFont(&lf);
-		float lineHeight = std::max(10.0f, legend.Height() / std::max<size_t>(1,
-			chart.series.size()));
-		for (size_t s = 0; s < chart.series.size(); s++) {
-			float y = legend.top + s * lineHeight;
-			SetHighColor(seriesColor(s));
-			FillRect(BRect(legend.left + 2, y + lineHeight / 2 - 4, legend.left + 10,
-				y + lineHeight / 2 + 4));
-			SetHighColor(ts.color.r, ts.color.g, ts.color.b);
-			DrawString(chart.series[s].name.c_str(),
-				BPoint(legend.left + 14, y + lineHeight / 2 + lf.Size() * 0.35f));
-		}
-	}
-	if (hasTitle && !titleText.empty()) {
-		TextStyle ts = ResolveTextStyle(fDocument.styles, titleStyle);
-		BFont tf = TDocView::MapFont(ts);
-		SetFont(&tf);
-		SetHighColor(ts.color.r, ts.color.g, ts.color.b);
-		float w = tf.StringWidth(titleText.c_str());
-		DrawString(titleText.c_str(), BPoint(title.left + (title.Width() - w) / 2,
-			title.bottom - tf.Size() * 0.3f));
-	}
-	SetDrawingMode(B_OP_COPY);
-	PopState();
+	DrawChart2D(*fDocument.Chart(f.part), r, f.part);
 }
 
 
