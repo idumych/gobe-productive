@@ -372,6 +372,63 @@ TPageView::ImageDragUp(BPoint where)
 }
 
 
+void
+TPageView::ImageModifiersChanged()
+{
+	int main = fDocument.MainPart();
+	if (main < 0 || fDocument.ImagePart(size_t(main)) == NULL)
+		return;
+	bool option = (modifiers() & B_OPTION_KEY) != 0;
+	int32 tool = fImageTool;
+	if (option && fImageToggled < 0
+			&& (fImageTool == kPencil || fImageTool == kBucket || fImageTool == kAirbrush)) {
+		fImageToggled = fImageTool;
+		fImageTool = kEyeDropper;
+	} else if (!option && fImageToggled >= 0) {
+		// (back only if the eyedropper's still the tool)
+		if (fImageTool == kEyeDropper)
+			fImageTool = fImageToggled;
+		fImageToggled = -1;
+	}
+	if (tool != fImageTool && fPartBar != NULL)
+		fPartBar->Update();
+}
+
+
+int
+TPageView::ImageCursor(BPoint where) const
+{
+	int main = fDocument.MainPart();
+	size_t part;
+	int x, y;
+	if (main < 0 || fDocument.ImagePart(size_t(main)) == NULL || !ImageAt(where, part, x, y)
+			|| part != size_t(main))
+		return -1;
+	switch (fImageTool) {
+		// (the marquee's is TPartIMFactory's; over the selection, the hand:
+		// not yet)
+		case kMarquee: return 0x644;
+		case kLasso: return 0x648;
+		case kMagicWand: return 0x647;
+		// MagnifyTool::GetCursor: closer, with Option farther, or neither
+		// (CalcScale)
+		case kMagnify: {
+			bool option = (modifiers() & B_OPTION_KEY) != 0;
+			float scale = option ? fZoom * 0.5f : fZoom + fZoom;
+			if (scale > 64 || scale < 0.015625f)
+				return 0x643;
+			return option ? 0x642 : 0x641;
+		}
+		case kPencil: return 0x640;
+		case kEraser: return 0x64a;
+		case kEyeDropper: return 0x646;
+		case kBucket: return 0x645;
+		case kAirbrush: return 0x649;
+	}
+	return -1;
+}
+
+
 // TPartIM::HandleMessage: a tool chosen ('sI07', TPartIM::SetTool), a color
 // set ('sI00', 'sI01' with "color"), the colors swapped ('sI09': "Swap
 // Colors")
@@ -387,8 +444,10 @@ TPageView::ImageCommand(BMessage* message)
 	if (message->what == 'sI07') {
 		int32 tool = message->GetInt32("Tool", -1);
 		// (Find Color does its work at once: TPartIM's selections, not yet)
-		if (tool >= 0 && tool <= kAirbrush && tool != kFindColor)
+		if (tool >= 0 && tool <= kAirbrush && tool != kFindColor) {
 			fImageTool = tool;
+			fImageToggled = -1;
+		}
 	} else if (message->what == 'sI00' || message->what == 'sI01') {
 		// TPartIM::SetForeColor, SetBackColor ("Set Foreground Color",
 		// "Set Background Color")

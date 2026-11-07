@@ -451,6 +451,13 @@ private:
 	bool ImageDragMoved(BPoint where);
 	bool ImageDragUp(BPoint where);
 	bool ImageCommand(BMessage* message);
+	// TPartIM::Idle: Option held makes the pencil, bucket or airbrush the
+	// eyedropper until it's let go (OptionToggle); the tool to go back to
+	int32 fImageToggled = -1;
+	void ImageModifiersChanged();
+	// TFrameIM::GetCursor: the tool's pointer over the image (its CURS in
+	// ImageProcessing), -1 elsewhere
+	int ImageCursor(BPoint where) const;
 	// the image's frame under a point and the pixel there
 	bool ImageAt(BPoint where, size_t& part, int& x, int& y) const;
 	bool ChartDragMoved(BPoint where);
@@ -707,7 +714,8 @@ private:
 		float start = 0, offset = 0, size = 0;
 	} fResizing;
 	int fCursorShown = 0;	// 0 the default, 1, 2 and 5 the spreadsheet's (resizing columns,
-							// rows; over cells), else TextCursor's
+							// rows; over cells), 0x10000 and an image tool's
+							// CURS, else TextCursor's
 	bool fScriptShift = false;		// RunScript: shift held
 	bool fScriptCommand = false;	// RunScript: Command held
 	uint32 fScriptModifiers = 0;	// RunScript: Command, Option, Control held

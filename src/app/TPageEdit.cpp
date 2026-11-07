@@ -1881,13 +1881,18 @@ TPageView::UpdateCursor(BPoint where)
 		BRect sheet;
 		int shown = HitResize(where, part, columns, index, start, offset) ? (columns ? 1 : 2)
 			: SheetFrameAt(where, sheet) != NULL ? 5 : 0;
+		int image = shown == 0 ? ImageCursor(where) : -1;
+		if (image >= 0)
+			shown = 0x10000 + image;
 		if (shown == 0) {
 			int drawing = DrawingCursor(where);
 			shown = drawing >= 0 ? drawing : TextCursor(where);
 		}
 		if (shown != fCursorShown) {
 			fCursorShown = shown;
-			const BCursor* gobe = shown > 5 ? GobeResources::Cursor(shown)
+			const BCursor* gobe = shown >= 0x10000 ? GobeResources::Cursor(shown - 0x10000,
+					&GobeResources::Part("ImageProcessing"))
+				: shown > 5 ? GobeResources::Cursor(shown)
 				: shown == 1 || shown == 2 || shown == 5
 					? GobeResources::Cursor(shown == 1 ? 1001 : shown == 2 ? 1002 : 1000,
 						&GobeResources::Part("Spreadsheet"))
@@ -2204,6 +2209,13 @@ TPageView::MessageReceived(BMessage* message)
 	if (message->what == kMsgImageIdle) {
 		ImageIdle();
 		return;
+	}
+	if (message->what == B_MODIFIERS_CHANGED) {
+		ImageModifiersChanged();
+		BPoint where;
+		uint32 buttons;
+		GetMouse(&where, &buttons, false);
+		UpdateCursor(BPoint(where.x / fZoom, where.y / fZoom));
 	}
 	if (ImageCommand(message))
 		return;
