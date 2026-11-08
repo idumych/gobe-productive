@@ -13,6 +13,7 @@
 
 #include "GobeResources.h"
 #include "ImageManip.h"
+#include "TImageGIMP.h"
 
 namespace gobe {
 
@@ -97,6 +98,11 @@ AddAddons(bool converters)
 void
 BuildPluginTable()
 {
+	// (the GIMP filters first, as TPartIMFactory looks for them)
+	std::vector<ImagePlugin> gimp;
+	AddGIMPPlugins(gimp);
+	for (const ImagePlugin& plugin : gimp)
+		InsertPlugin(plugin);
 	Image_Init(AddonPath("ImageManip").String());
 	AddAddons(false);
 	AddAddons(true);

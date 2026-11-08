@@ -20,6 +20,7 @@
 #include "GobeResources.h"
 #include "ImageManip.h"
 #include "ImageSelect.h"
+#include "TImageGIMP.h"
 #include "TImagePlugins.h"
 #include "TRibbon.h"
 #include "TStatusDialog.h"
@@ -46,6 +47,8 @@ struct TPageView::PluginRun {
 	bool previewPending = false;	// asked for while one was running
 	bool previewShown = false;
 	bool final = false;
+	std::unique_ptr<GIMPRun> gimp;	// a GIMP filter's process
+	std::unique_ptr<ArchiveBitmap> gimpResult;	// what it updated last
 };
 
 namespace {
@@ -202,7 +205,10 @@ TPageView::RunImagePlugin(int32 index)
 	if (im == NULL || plugin == NULL || fPluginRun)
 		return;
 	if ((modifiers() & B_OPTION_KEY) != 0) {
-		PluginAbout(index);
+		if (plugin->kind == 0)
+			GIMPAbout(*plugin);
+		else
+			PluginAbout(index);
 		return;
 	}
 	// (nothing selected: all of it, a step of its own)
@@ -211,6 +217,8 @@ TPageView::RunImagePlugin(int32 index)
 		ImageSelectionCommand(&all);
 	}
 	im = fDocument.EditableImagePart(part);
+	// (the Plugins menu's first item from now on, whatever comes of it)
+	fLastPlugin[part] = index;
 	fPluginRun.reset(new PluginRun);
 	PluginRun& run = *fPluginRun;
 	run.index = index;
@@ -219,6 +227,26 @@ TPageView::RunImagePlugin(int32 index)
 	run.original = run.floating ? im->floating : im->image;
 	run.before.reset(new Document(fDocument));
 	run.beforeView = CurrentViewState();
+	if (plugin->kind == 0) {
+		// GIMPPlugin::Run: the filter started on the bits, its selection's
+		// rectangle; it asks for its settings itself
+		BRect r = PluginRect(*im, run.floating);
+		IMRect selection;
+		selection.left = int(r.left);
+		selection.top = int(r.top);
+		selection.right = int(r.right);
+		selection.bottom = int(r.bottom);
+		run.gimp.reset(new GIMPRun(BMessenger(this), *plugin, run.original, selection,
+			Window(), im->colors));
+		status_t status = run.gimp->Start();
+		if (status != B_OK) {
+			fPluginRun.reset();
+			BString text;
+			text << strerror(status);
+			(new BAlert("", text.String(), "OK"))->Go(NULL);
+		}
+		return;
+	}
 	// ManipPlugin::GetConfig: the settings it had last, else its own
 	if (!plugin->config) {
 		plugin->config.reset(new BMessage(B_SIMPLE_DATA));
@@ -362,6 +390,40 @@ TPageView::ImagePluginMessage(BMessage* message)
 			RunImagePlugin(message->GetInt32("index", -1));
 			return true;
 		}
+		case GIMPRun::kMsgUpdate: {
+			// the filter's output so far, shown (handle_image_update)
+			ArchiveBitmap* bits = NULL;
+			message->FindPointer("bits", (void**)&bits);
+			std::unique_ptr<ArchiveBitmap> owned(bits);
+			if (!fPluginRun || !fPluginRun->gimp || bits == NULL)
+				return true;
+			PluginRun& run = *fPluginRun;
+			if (IMPart* im = fDocument.EditableImagePart(run.part)) {
+				PutBits(*im, run.floating, run.original, *bits);
+				ImageChanged(run.part, false);
+			}
+			run.gimpResult = std::move(owned);
+			return true;
+		}
+		case GIMPRun::kMsgDone: {
+			// the filter quit: what it put out last, one step named after it
+			if (!fPluginRun || !fPluginRun->gimp)
+				return true;
+			PluginRun& run = *fPluginRun;
+			const ImagePlugin* plugin = EditableImagePlugin(run.index);
+			IMPart* im = fDocument.EditableImagePart(run.part);
+			if (im != NULL) {
+				(run.floating ? im->floating : im->image) = run.original;
+				if (run.gimpResult && plugin != NULL) {
+					fUndo.BeginDocument(*run.before, plugin->name.String(), run.beforeView);
+					im = fDocument.EditableImagePart(run.part);
+					PutBits(*im, run.floating, run.original, *run.gimpResult);
+				}
+				ImageChanged(run.part, run.gimpResult != nullptr);
+			}
+			EndImagePlugin();
+			return true;
+		}
 		case kMsgPluginAbout:
 			if (fPluginRun)
 				PluginAbout(fPluginRun->index);
@@ -450,7 +512,6 @@ TPageView::ImagePluginMessage(BMessage* message)
 					fUndo.BeginDocument(*run.before, plugin->name.String(), run.beforeView);
 					im = fDocument.EditableImagePart(run.part);
 					PutBits(*im, run.floating, run.original, *bits);
-					fLastPlugin[run.part] = run.index;
 					ImageChanged(run.part);
 				}
 			}
