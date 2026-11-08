@@ -1157,6 +1157,9 @@ gimp_recv ()
 		err = read (my_read,
 			&recv_msg.info,
 			sizeof (MsgHeader));
+		/* the host gone: its pipes ended */
+		if (err <= 0)
+			_exit (0);
 		size -= err;
 	}
 	
@@ -1188,6 +1191,9 @@ gimp_recv_info ()
 		err = read (my_info,
 			&info_msg.info,
 			sizeof (MsgHeader));
+		/* the host gone: its pipes ended */
+		if (err <= 0)
+			_exit (0);
 		size -= err;
 	}
 	
@@ -1231,6 +1237,8 @@ gimp_read (size)
 		while (size)
 		{
 			bytes_read = read (my_read, tmp, size);
+			if (bytes_read <= 0)
+				_exit (0);
 			tmp += bytes_read;
 			size -= bytes_read;
 		}
@@ -1253,6 +1261,8 @@ gimp_read_info (size)
 		while (size)
 		{
 			bytes_read = read (my_info, tmp, size);
+			if (bytes_read <= 0)
+				_exit (0);
 			tmp += bytes_read;
 			size -= bytes_read;
 		}

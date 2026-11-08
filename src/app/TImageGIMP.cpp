@@ -30,6 +30,7 @@
 #include <fstream>
 #include <set>
 #include <string>
+#include <fcntl.h>
 #include <unistd.h>
 
 #include "GobeResources.h"
@@ -762,6 +763,9 @@ GIMPRun::Start()
 {
 	if (pipe(fToPlugin) != 0 || pipe(fFromPlugin) != 0 || pipe(fInfo) != 0)
 		return B_ERROR;
+	// (our ends not inherited: the filter sees its pipes end when we do)
+	for (int fd : {fToPlugin[1], fFromPlugin[0], fInfo[1]})
+		fcntl(fd, F_SETFD, FD_CLOEXEC);
 	// "-gimp <read> <write> <info>": its ends of the pipes
 	BString read, write, info;
 	read << fToPlugin[0];

@@ -711,11 +711,19 @@ TDialog::RunDialog()
 			if (list == NULL || list->IsEmpty())
 				continue;
 			float width = 10;
-			for (int32 i = 0; BListItem* item = list->ItemAt(i); i++) {
+			// (an outline list's items after their latch and level's indent,
+			// as BOutlineListView draws them)
+			BOutlineListView* outline = dynamic_cast<BOutlineListView*>(list);
+			int32 count = outline != NULL ? outline->FullListCountItems() : list->CountItems();
+			for (int32 i = 0; i < count; i++) {
+				BListItem* item = outline != NULL ? outline->FullListItemAt(i) : list->ItemAt(i);
+				float indent = outline == NULL ? 0 : be_plain_font->Size()
+					+ item->OutlineLevel() * be_control_look->DefaultItemSpacing()
+					+ be_control_look->DefaultLabelSpacing();
 				if (BStringItem* text = dynamic_cast<BStringItem*>(item))
-					width = std::max(width, list->StringWidth(text->Text()));
+					width = std::max(width, list->StringWidth(text->Text()) + indent);
 				else if (TIconStringItem* icon = dynamic_cast<TIconStringItem*>(item))
-					width = std::max(width, list->StringWidth(icon->Name().c_str()) + 25);
+					width = std::max(width, list->StringWidth(icon->Name().c_str()) + 25 + indent);
 			}
 			width += 10 + (scroll->ScrollBar(B_VERTICAL) != NULL ? 15 : 0);
 			BSize size(width, view->ExplicitPreferredSize().height);
