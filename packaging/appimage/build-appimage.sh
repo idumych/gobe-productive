@@ -76,6 +76,13 @@ cp plugins/COPYING plugins/README.md "$DOC/plugins/"
 for d in mime_db artwork locale; do
 	cp -a "$CROOT/share/cosmoe/$d" "$APPDIR/usr/share/cosmoe/"
 done
+# The MIME database is extended attributes on empty files, and the AppImage
+# runtime's squashfuse dies reading any attribute (taking every file in the
+# image with it): it goes in as a tar that keeps them, which AppRun unpacks
+# into the user's cache and names in COSMOE_SYSTEM_MIME_DB.
+tar --xattrs --xattrs-include='user.*' -C "$APPDIR/usr/share/cosmoe" \
+	-cf "$APPDIR/usr/share/cosmoe/mime_db.tar" mime_db
+rm -rf "$APPDIR/usr/share/cosmoe/mime_db"
 cp -a "$CROOT"/share/cosmoe/*.png "$APPDIR/usr/share/cosmoe/" 2>/dev/null || :
 for f in NotoSans-Regular NotoSans-Bold NotoSans-Italic NotoSans-BoldItalic \
 		NotoSansMono-Regular NotoSansMono-Bold; do
@@ -152,6 +159,19 @@ NO_STRIP=1 LD_LIBRARY_PATH="$APPDIR/usr/lib" "$LDROOT/AppRun" --appdir "$APPDIR"
 	--desktop-file "$GEN/$APP_CMD.desktop" \
 	--icon-file "$GEN/$APP_CMD.png" \
 	--custom-apprun "$GEN/AppRun"
+
+# (no extended attributes left in the image for the runtime to choke on)
+python3 -I - "$APPDIR" <<'PYEOF'
+import os, sys
+for root, dirs, files in os.walk(sys.argv[1]):
+    for name in dirs + files:
+        path = os.path.join(root, name)
+        try:
+            for attr in os.listxattr(path, follow_symlinks=False):
+                os.removexattr(path, attr, follow_symlinks=False)
+        except OSError:
+            pass
+PYEOF
 
 # 5. Pack
 rm -f "$OUT"

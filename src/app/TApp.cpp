@@ -15,6 +15,7 @@
 #include <Entry.h>
 #include <FilePanel.h>
 #include <MenuBar.h>
+#include <NodeInfo.h>
 #include <Path.h>
 #include <String.h>
 
@@ -458,6 +459,12 @@ public:
 			} else
 				ok = ImportFile(path.c_str(), kind, *doc, message, warning);
 			if (!ok) {
+				// (why, for the log)
+				char type[B_MIME_TYPE_LENGTH] = "";
+				BNode node(path.c_str());
+				BNodeInfo(&node).GetType(type);
+				fprintf(stderr, "open %s: kind %d, type \"%s\": %s\n", path.c_str(), (int)kind,
+					type, message.String());
 				// (an import cancelled in the Status window says nothing)
 				if (message.Length() > 0 && fRenderPath.empty())
 					(new BAlert("Open", message.String(), "OK"))->Go(NULL);

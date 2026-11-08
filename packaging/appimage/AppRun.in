@@ -3,11 +3,26 @@
 # usr/lib/libbe.so, and the app finds libbe through its RUNPATH; this sets
 # up the rest:
 #  - fontconfig, for the bundled Noto fonts;
-#  - TRANSLATORS, the image translators to load. Cosmoe's default lookup
-#    misses the bundled ones on the very first run from a mounted AppImage
-#    (cosmoe#4), so name them directly. One path only: AddPaths() drops a
+#  - TRANSLATORS, the image translators to load, named directly. (Their
+#    lookup "missing" on a mounted AppImage was the runtime dying under the
+#    MIME database's attributes, below.) One path only: AddPaths() drops a
 #    character from all but the last entry.
+#  - COSMOE_SYSTEM_MIME_DB, Cosmoe's MIME database: it's extended
+#    attributes, which the AppImage runtime can't serve (reading one kills
+#    it, and every file in the image with it), so it's packed as a tar and
+#    unpacked once per version into the user's cache.
 HERE=$(dirname "$(readlink -f "$0")")
 export FONTCONFIG_FILE="$HERE/etc/fonts/fonts.conf"
+MIME_TAR="$HERE/usr/share/cosmoe/mime_db.tar"
+if [ -f "$MIME_TAR" ]; then
+	SUM=$(cksum < "$MIME_TAR" | cut -d' ' -f1)
+	CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/@APP_NAME@/mime_db-$SUM"
+	if [ ! -d "$CACHE/mime_db" ]; then
+		mkdir -p "$CACHE.tmp" && tar --xattrs --xattrs-include='user.*' -C "$CACHE.tmp" \
+			-xf "$MIME_TAR" 2>/dev/null && rm -rf "$CACHE" && mv "$CACHE.tmp" "$CACHE"
+		rm -rf "$CACHE.tmp"
+	fi
+	[ -d "$CACHE/mime_db" ] && export COSMOE_SYSTEM_MIME_DB="$CACHE/mime_db"
+fi
 export TRANSLATORS="$HERE/usr/lib/addons/Translators"
 exec "$HERE/usr/bin/@APP_NAME@" "$@"
