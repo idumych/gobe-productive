@@ -29,6 +29,8 @@
 #include <String.h>
 #include <StringView.h>
 #include <TextControl.h>
+#include <cmath>
+#include <ControlLook.h>
 #include <TextView.h>
 
 #include "GobeResources.h"
@@ -246,6 +248,77 @@ private:
 };
 
 
+// TextEngineer: its label as wide as `labelDigits` "0"s (its own width
+// with 0), its text as wide as `textDigits` (its text's with 0), not
+// stretched
+class TEditControl : public BTextControl {
+public:
+	TEditControl(const char* label, const char* text, BMessage* message, int32 labelDigits,
+			int32 textDigits)
+		:
+		BTextControl("edit", label, text, message)
+	{
+		float zero = TextView()->StringWidth("0");
+		fLabelWidth = label == NULL || label[0] == '\0' ? 0
+			: labelDigits != 0 ? labelDigits * zero : ceilf(StringWidth(label));
+		fTextWidth = textDigits != 0 ? textDigits * zero : TextView()->StringWidth(text);
+		fTextWidth = std::max(fTextWidth, zero);
+		SetExplicitAlignment(BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
+	}
+
+	virtual BSize MinSize()
+	{
+		BSize size = BTextControl::MinSize();
+		size.width = Divider() + fTextWidth + 2 * kFrameMargin + 2 * kTextInset;
+		return size;
+	}
+
+	virtual BSize MaxSize() { return MinSize(); }
+	virtual BSize PreferredSize() { return MinSize(); }
+
+	virtual void DoLayout()
+	{
+		BTextControl::DoLayout();
+		// (the text after the label's room, not right after the label)
+		BRect frame(Divider(), 0, Bounds().right, Bounds().bottom);
+		frame.InsetBy(kFrameMargin, kFrameMargin);
+		TextView()->MoveTo(frame.LeftTop());
+		TextView()->ResizeTo(frame.Width(), frame.Height());
+		TextView()->SetTextRect(frame.OffsetToCopy(B_ORIGIN));
+	}
+
+private:
+	float Divider() const
+	{
+		return fLabelWidth > 0 ? fLabelWidth + be_control_look->DefaultLabelSpacing() : 0;
+	}
+
+	static const int32 kFrameMargin = 2;	// BTextControl's
+	static const int32 kTextInset = 3;		// its text view's
+	float fLabelWidth;
+	float fTextWidth;
+};
+
+
+// TPopUpMenuEngineer: as wide as its label and items, not stretched
+class TPopUpField : public BMenuField {
+public:
+	TPopUpField(const char* label, BMenu* menu)
+		:
+		BMenuField("popup", label, menu)
+	{
+		SetExplicitAlignment(BAlignment(B_ALIGN_LEFT, B_ALIGN_VERTICAL_CENTER));
+	}
+
+	virtual BSize MaxSize()
+	{
+		BSize size = BMenuField::MaxSize();
+		size.width = PreferredSize().width;
+		return size;
+	}
+};
+
+
 static alignment
 Alignment(uint32 align)
 {
@@ -301,8 +374,9 @@ TDialog::MakeControl(const ItemData& item)
 		}
 		case FourCC("EDIT"):
 		{
-			BTextControl* edit = new BTextControl("edit", label, item.text.c_str(),
-				ControlMessage(item));
+			BTextControl* edit = new TEditControl(label, item.text.c_str(), ControlMessage(item),
+				item.values.size() > 0 ? item.values[0] : 0,
+				item.values.size() > 1 ? item.values[1] : 0);
 			view = edit;
 			break;
 		}
@@ -346,7 +420,7 @@ TDialog::MakeControl(const ItemData& item)
 			popup->SetLabelFromMarked(true);
 			if (popup->CountItems() > 0 && popup->ItemAt(0) != NULL)
 				popup->ItemAt(0)->SetMarked(true);
-			BMenuField* field = new BMenuField("popup", label, popup);
+			BMenuField* field = new TPopUpField(label, popup);
 			field->SetEnabled(item.enabled);
 			view = field;
 			break;
@@ -835,7 +909,7 @@ TDialog::SetItemEnabled(int32 index, bool on, int32 set)
 
 
 void
-TDialog::LoadItemSet(int32 index, int32 itemsId)
+TDialog::LoadItemSet(int32 index, int32 itemsId, const ResourceFile* file)
 {
 	BView* set = Item(index);
 	if (set == NULL)
@@ -858,12 +932,18 @@ TDialog::LoadItemSet(int32 index, int32 itemsId)
 	fSetItems.clear();
 	fSetRadios.clear();
 	ItemList list;
+	const ResourceFile* own = fResources;
+	if (file != NULL)
+		fResources = file;
 	const ResourceFile::Resource* r = fResources->Find(FourCC("Item"), itemsId);
-	if (r == NULL || !ParseItems(r->data, list))
+	if (r == NULL || !ParseItems(r->data, list)) {
+		fResources = own;
 		return;
+	}
 	fBuildingSet = index;
 	AddItems(layout, list.items);
 	fBuildingSet = -1;
+	fResources = own;
 	// the controls at the top of the set's room
 	if (!user)
 		layout->AddItem(BSpaceLayoutItem::CreateGlue());

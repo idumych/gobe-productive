@@ -81,8 +81,8 @@ protected:
 	// TItemSet::LoadItems: the item set `index` shows the controls of Item
 	// resource `itemsId` (they send the set's command with "SubID", their
 	// index); a USER item (TItemHandler in a view put in it) too, as large
-	// as they are
-	void LoadItemSet(int32 index, int32 itemsId);
+	// as they are; from `file` (a part's resources) if it's given
+	void LoadItemSet(int32 index, int32 itemsId, const ResourceFile* file = NULL);
 
 private:
 	void AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int32 group = -1);
