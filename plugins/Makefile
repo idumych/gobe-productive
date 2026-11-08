@@ -16,7 +16,8 @@ ifeq ($(UNAME),Haiku)
   LIBS := -lbe -ltracker
   ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
 else
-  COSMOE_DIRS := config os os/app os/interface os/kernel os/storage os/support os/translation posix
+  COSMOE_DIRS := config os os/app os/interface os/kernel os/storage os/support os/translation posix \
+                 private/interface
   override CXXFLAGS += -I$(COSMOE_ROOT)/include $(addprefix -I$(COSMOE_ROOT)/include/,$(COSMOE_DIRS))
   LIBS := -L$(COSMOE_ROOT)/lib -lbe -ltracker
   ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
@@ -33,7 +34,16 @@ MANIP := $(filter-out Blur,$(sort $(MANIP)))
 MANIP_OUT := $(addprefix $(BUILD)/ImageManip/,$(MANIP))
 COMMON := ImageManip/GIMPGlue.cpp compat/libprefs.cpp
 
-all: $(LIB) $(MANIP_OUT)
+# the GIMP filters: programs each built with gimp.c (sparkl.c with gems.c)
+GIMP := $(filter-out gimp gems,$(basename $(notdir $(wildcard GIMP/*.c))))
+GIMP_OUT := $(addprefix $(BUILD)/GIMP/,$(GIMP))
+override CFLAGS += -IGIMP -include string.h -include stdlib.h -Wno-implicit-function-declaration \
+	-Wno-int-conversion -Wno-incompatible-pointer-types
+ifneq ($(UNAME),Haiku)
+  override CFLAGS += -I$(COSMOE_ROOT)/include $(addprefix -I$(COSMOE_ROOT)/include/,$(COSMOE_DIRS))
+endif
+
+all: $(LIB) $(MANIP_OUT) $(GIMP_OUT) $(BUILD)/GIMP/index
 
 $(LIB): $(LIB_SRCS)
 	@mkdir -p $(dir $@)
@@ -46,6 +56,21 @@ $(BUILD)/ImageManip/%: ImageManip/%/*.cpp ImageManip/%/*.h ImageManip/*.h compat
 	$(CXX) $(CXXFLAGS) -IImageManip/$* $(LDFLAGS_SO) -o $@ ImageManip/$*/*.cpp $(COMMON) \
 		$(if $(shell grep -l 'class TSlider' ImageManip/$*/Config.h),,ImageManip/TSlider.cpp) \
 		-L$(BUILD)/lib -limagemanip $(LIBS) $(ADDON_RPATH)
+
+$(BUILD)/GIMP/%: GIMP/%.c GIMP/gimp.c GIMP/gems.c GIMP/*.h GIMP/GIMPMessage.cpp
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c GIMP/$*.c -o $@.o
+	$(CC) $(CFLAGS) -c GIMP/gimp.c -o $@.gimp.o
+	$(CC) $(CFLAGS) -c GIMP/gems.c -o $@.gems.o
+	$(CXX) $(CXXFLAGS) -c GIMP/GIMPMessage.cpp -o $@.msg.o
+	$(CXX) -o $@ $@.o $@.gimp.o $@.gems.o $@.msg.o $(LIBS) -lm
+	rm -f $@.o $@.gimp.o $@.gems.o $@.msg.o
+
+# what the original kept in each filter's attributes (name, category,
+# GIMP_DESC, GIMP_AUTHOR, GIMP_EMAIL), for systems that lose them
+$(BUILD)/GIMP/index: GIMP/index
+	@mkdir -p $(dir $@)
+	cp GIMP/index $@
 
 clean:
 	rm -rf $(BUILD)

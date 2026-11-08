@@ -1,0 +1,25 @@
+# file	name	category	GIMP_DESC	GIMP_AUTHOR	GIMP_EMAIL (the original filters' attributes)
+bleed	Bleed	Color	Acts as a low pass filter on the color components of the provided region	Spencer Kimball and Peter Mattis	gimp@xcf.berkeley.edu
+c_astretch	Contrast Autostretch (normalize)	Color	This simple plug-in does an automatic contrast stretch.  For each channel in the image, it finds the minimum and maximum values... it uses those values to stretch the individual histograms to the full contrast range.  For some images it may do just what you want; for others it may be total crap :)	Federico Mena Quintero	quartic@polloux.fciencias.unam.mx
+checkerboard	Checkerboard	Render	Creates a checkerboard pattern using squares of variable size in the fore and back colors.  Also, the user can specify a regular checker pattern or the ramped (1,2,3,4,...,N,...,4,3,2,1,2,3....) pattern.	Brent Burton	brentb@io.com
+degrade	Degrade Color Depth	Color	Allows fine reduction of the colour resolution of an image	Adam D. Moss	aspirin@tigerden.com
+deinterlace	De-interlace	Miscellaneous	When an image is taken from a video capture (f.i. a freeze-frame), sometimes only either the odd or the even fields get captured, resulting in an image which, line by line, is data-black-data-black-etc.  This plug-in does an interpolation between the odd or even lines in an image to correct this.	Federico Mena Quintero	quartic@polloux.fciencias.unam.mx
+despeckle	Despeckle	Noise	Uses the classic “De-speckle” algorithm, which I believe was first used by JPL and NASA to remove drop-outs from data sent back from the early planetary space probes.  It simply goes along each pixel, taking the average of the surrounding 8-neighbor pixels. if the difference between the “current” pixel and that average is greater that a certain tolerence, replace it with the average.	Ian Tester	94024831@postoffice.csu.edu.au
+engrave	Engrave	Artistic	Creates a black-and-white 'engraved' version of an image.	Torsten Martinsen	bullestock@dk-online.dk
+enhance	Enhance	Sharpen	Enhances or sharpens the input image	Jef Poskanzer, Peter Mattis	gimp@xcf.berkeley.edu
+fade	Fade	Artistic	Fades out to a border colour.	Marc Bless	bless@ai-lab.fh-furtwangen.de
+flip_horz	Flip Horizontally	Transform	Flips the image horizontally.	Spencer Kimball and Peter Mattis	gimp@xcf.berkeley.edu
+flip_vert	Flip Vertically	Transform	Flips the image horizontally.	Spencer Kimball and Peter Mattis	gimp@xcf.berkeley.edu
+gauss_recurse	Gaussian Blur	Blur	New gaussian blur, much faster for larger radii.	Spencer Kimball and Peter Mattis	gimp@xcf.berkeley.edu
+lensflare	Lens Flare	Artistic	Simulates the “sun in the camera” effect.	Marc Bless	bless@ai-lab.fh-furtwangen.de
+mblur	Motion Blur	Blur	Simulates the effect seen when photographing a moving object at a slow shutter speed. You can choose the angle and amount of displacement.	Torsten Martinsen	bullestock@dk-online.dk
+median	Median	Noise	This plug-in goes along each pixel, taking the median of the surrounding 8-neighbor pixels and the “current” pixel	Ian Tester	94024831@postoffice.csu.edu.au
+mosaic	Mosaic	Artistic	Transforms an image into what appears to be a mosaic, composed of small primitives, each of constant color and of an approximate size.	Spencer Kimball	bullestock@dk-online.dk
+noisify	Add Noise	Noise	This filter adds random noise to an image. The amount of noise can be set individually for each RGB channel.	Torsten Martinsen	bullestock@dk-online.dk
+oilify	Oil Paint	Artistic	Do the 'oil paint' effect.	Torsten Martinsen	bullestock@dk-online.dk
+plasma	Plasma	Render	Produces plasma fractal images. The algorithm is losely based on a description of the fractint algorithm, but completely re-implemented because the fractint code was too ugly to read :)	Stephen Norris	srn@flibble.cs.su.oz.au
+prep4tile	Prep4Tile	Transform	Transform borders colours, such that tiling image is seamless	Torsten Martinsen	bullestock@dk-online.dk
+rot180	Rotate 180°	Transform	Rotates the whole image by 180 degrees	Ian Tester	94024831@postoffice.csu.edu.au
+shift	Shift	Distortion	Displaces each row of images pixels by a random amount. (left or right)  The idea for this filter is based on ppmshift, a program that is part of the netpbm package.	Spencer Kimball and Peter Mattis	gimp@xcf.berkeley.edu
+sparkl	Sparkle	Artistic	Simulate pixel bloom and diffraction effects	John Beale, Michael J. Hammel	mjhammel@csn.net
+threshold	Threshold	Transform	Takes any pixels larger than a threshold and sets them to the maximum value (i.e 255), the rest are set to 0.	Ian Tester	94024831@postoffice.csu.edu.au

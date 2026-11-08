@@ -974,7 +974,7 @@ long min, max, start, prec;
 	data[2] = start;
 	data[3] = prec;
 	
-	return gimp_new_item (dialog_ID, parent_ID, ITEM_SCALE, data, 16);
+	return gimp_new_item (dialog_ID, parent_ID, ITEM_SCALE, data, sizeof (data));	/* (the Gobe Productive port: 4 longs, whatever their size) */
 }
 
 int
