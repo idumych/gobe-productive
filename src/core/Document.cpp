@@ -1,5 +1,7 @@
 #include "Document.h"
 
+#include "ImageSelect.h"
+
 #include "BlankParts.h"
 #include "DocWriter.h"
 #include "Editing.h"
@@ -114,6 +116,18 @@ LoadDocumentBytes(std::vector<uint8_t> data, Document& doc, std::string& error)
 			IMPart im;
 			try {
 				ReadIMPart(pa, im);
+				// its selection (TPart +0x1c: a TIMSelection in the
+				// SelectionMgr), else none
+				im.selection = ImageSelection(im.image.Width(), im.image.Height());
+				const Selection* sel = doc.selections.Find(im.header.selection);
+				if (sel != nullptr && sel->kind == Sig("BITS") && sel->imageAt > 0) {
+					try {
+						a.Seek(sel->imageAt);
+						ReadIMSelection(a, im.selection);
+					} catch (const ArchiveError& x) {
+						doc.warnings.push_back("image selection: " + std::string(x.what()));
+					}
+				}
 				doc.imageParts.emplace_back(i, std::move(im));
 			} catch (const ArchiveError& x) {
 				doc.warnings.push_back("BITS part " + std::to_string(i) + ": " + x.what());
@@ -1129,7 +1143,11 @@ Document::Save(const std::string& to, std::string& error)
 		}
 	}
 	// text selections of edited parts follow the edits
-	if (!textLength.empty() || selectionsChanged || !addedSelections.empty()) {
+	bool imageSelections = false;
+	for (const auto& [index, image] : imageParts)
+		imageSelections = imageSelections || dirtyParts.count(index) > 0;
+	if (!textLength.empty() || selectionsChanged || !addedSelections.empty()
+			|| imageSelections) {
 		for (size_t s = 0; s < file.toc.size(); s++) {
 			if (file.toc[s].name != "SelectionMgr")
 				continue;
@@ -1172,6 +1190,25 @@ Document::Save(const std::string& to, std::string& error)
 							section[at + half * 4 + i] = (v >> (24 - 8 * i)) & 0xff;
 					}
 				}
+			}
+			// an edited image's selection (TIMSelection::Write), its
+			// record's size with it
+			for (const auto& [index, image] : imageParts) {
+				const Selection* sel = selections.Find(image.header.selection);
+				if (!dirtyParts.count(index) || sel == nullptr || sel->kind != Sig("BITS")
+						|| sel->imageAt <= start || sel->recordEnd <= sel->imageAt)
+					continue;
+				DocWriter w;
+				WriteIMSelection(w, image.selection);
+				std::vector<uint8_t> record(section.begin() + (sel->sizeAt - start) + 4,
+					section.begin() + (sel->imageAt - start));
+				record.insert(record.end(), w.Data().begin(), w.Data().end());
+				uint32_t size = uint32_t(record.size());
+				std::vector<uint8_t> sized = {uint8_t(size >> 24), uint8_t(size >> 16),
+					uint8_t(size >> 8), uint8_t(size)};
+				sized.insert(sized.end(), record.begin(), record.end());
+				splices.push_back({{sel->sizeAt - start, sel->recordEnd - start},
+					std::move(sized)});
 			}
 			std::sort(splices.begin(), splices.end(),
 				[](const auto& x, const auto& y) { return x.first.first > y.first.first; });

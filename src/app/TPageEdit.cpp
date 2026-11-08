@@ -2035,6 +2035,9 @@ TPageView::KeyDown(const char* bytes, int32 count)
 		return;
 	if (ChartKey(bytes, count))
 		return;
+	// an image document's image (TPartIM::KeyDown)
+	if (ImageKey(bytes, count))
+		return;
 	if (!fCaret.active && DrawingKey(bytes, count))
 		return;
 	if (fCaret.active) {
@@ -2210,6 +2213,13 @@ TPageView::MessageReceived(BMessage* message)
 		ImageIdle();
 		return;
 	}
+	if (message->what == kMsgImageAnts) {
+		ImageAntsTick();
+		return;
+	}
+	// a picture dropped on an image (TFrameIM::DropNative)
+	if (message->WasDropped() && ImageDrop(message))
+		return;
 	if (message->what == B_MODIFIERS_CHANGED) {
 		ImageModifiersChanged();
 		BPoint where;
@@ -6265,6 +6275,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sTBA': case 'sTBB': case 'sTBC': case 'sTBD':
 		case 's00T':	// Make Chart
 		case 'sI07': case 'sI09': case 'sI00': case 'sI01': case 'sI0A':	// the image's tools, colors, settings
+		case 'sI04': case 'sI05': case 'sI06': case 'sI11': case 'sI12': case 'sM15':	// Image, Duplicate
 		case 'sCHc': case 'sCHd': case 'sCHe': case 'sCH1': case 'sCH8':	// Chart
 		case 'sCH2': case 'sCH5': case 'sCH6': case 'sCHa': case 'sCHb':
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange

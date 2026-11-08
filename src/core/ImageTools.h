@@ -13,30 +13,6 @@
 
 namespace gobe {
 
-// TColor: red, green, blue, alpha
-struct IMColor {
-	uint8_t r = 0, g = 0, b = 0, a = 255;
-	bool operator==(const IMColor& o) const
-		{ return r == o.r && g == o.g && b == o.b && a == o.a; }
-	bool operator!=(const IMColor& o) const { return !(*this == o); }
-};
-
-// IMToolSelection's mask: what the tools may change (empty: all of it)
-struct IMMask {
-	int width = 0, height = 0;
-	std::vector<uint8_t> bits;		// a byte a pixel, nonzero inside
-	bool Empty() const { return bits.empty(); }
-	bool Contains(int x, int y) const;
-};
-
-// the pixels a tool changed (inclusive), none if left > right
-struct IMRect {
-	int left = 0, top = 0, right = -1, bottom = -1;
-	bool Valid() const { return left <= right && top <= bottom; }
-	void Include(int x, int y);
-	void Include(const IMRect& r);
-};
-
 IMColor PixelAt(const ArchiveBitmap& bitmap, int x, int y);
 void SetPixel(ArchiveBitmap& bitmap, int x, int y, IMColor color);
 

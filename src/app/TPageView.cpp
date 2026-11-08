@@ -1,4 +1,6 @@
 #include "TPageView.h"
+
+#include "ImageSelect.h"
 #include "TChartGL.h"
 
 #include <Bitmap.h>
@@ -2085,11 +2087,16 @@ TPageView::DrawImage(const Document::PlacedFrame& f, BRect r)
 		return;
 	auto found = fImages.find(f.part);
 	if (found == fImages.end()) {
-		BRect bounds(0, 0, im.image.Width() - 1, im.image.Height() - 1);
+		// (TFrameIM::DrawContent: the floating bits over the image)
+		ArchiveBitmap composed;
+		if (!im.floating.bits.empty())
+			composed = ComposeFloating(im, im.selection);
+		const ArchiveBitmap& shown = im.floating.bits.empty() ? im.image : composed;
+		BRect bounds(0, 0, shown.Width() - 1, shown.Height() - 1);
 		BBitmap* bitmap = new BBitmap(bounds, B_RGBA32);
-		if (bitmap->InitCheck() != B_OK || bitmap->ImportBits(im.image.bits.data(),
-				im.image.bits.size(), im.image.bytesPerRow, 0,
-				color_space(im.image.colorSpace)) != B_OK) {
+		if (bitmap->InitCheck() != B_OK || bitmap->ImportBits(shown.bits.data(),
+				shown.bits.size(), shown.bytesPerRow, 0,
+				color_space(shown.colorSpace)) != B_OK) {
 			delete bitmap;
 			bitmap = NULL;
 		}
@@ -2106,6 +2113,11 @@ TPageView::DrawImage(const Document::PlacedFrame& f, BRect r)
 	SetDrawingMode(B_OP_ALPHA);
 	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
 	DrawBitmap(found->second.get(), source, dest);
+	// the selection's marching ants (an image document's image)
+	if (int(f.part) == fDocument.MainPart()) {
+		DrawImageSelection(im, source, dest);
+		UpdateImageAnts();
+	}
 	// TFrameIM::Draw: the magnify's rectangle (TPartIM::MarqueeHack) in
 	// black and white stripes
 	if (fImageMarqueePart == f.part && fImageMarquee.IsValid()) {
@@ -2934,6 +2946,8 @@ TPageView::DocumentChangedElsewhere()
 void
 TPageView::GeometryChanged()
 {
+	// (an image undone or resized is drawn again from its pixels)
+	fImages.clear();
 	RebuildFrames();
 	LayoutText();
 	InvalidateLayout();

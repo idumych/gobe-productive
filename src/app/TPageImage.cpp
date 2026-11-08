@@ -10,6 +10,7 @@
 
 #include "GobeResources.h"
 #include "IMPart.h"
+#include "ImageSelect.h"
 #include "ImageTools.h"
 #include "TImageDialogs.h"
 #include "TRibbon.h"
@@ -43,13 +44,6 @@ ColorOf(const uint8_t c[4])
 	return color;
 }
 
-
-// the image's selection mask (IMToolSelection): none yet, all the image
-IMMask
-MaskOf(const IMPart&)
-{
-	return IMMask();
-}
 
 } // namespace
 
@@ -170,6 +164,12 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 		return false;
 	const IMPart* image = fDocument.ImagePart(part);
 	int32 tool = fImageTool;
+	// the selection tools (Flags 1: TPartIM::Click selects)
+	if (tool == kMarquee || tool == kLasso || tool == kMagicWand) {
+		BPoint point;
+		ImagePointOf(part, where, point);
+		return ImageSelectClick(part, point, where);
+	}
 	bool option = (modifiers() & B_OPTION_KEY) != 0;
 	if (option && (tool == kPencil || tool == kBucket || tool == kAirbrush))
 		tool = kEyeDropper;
@@ -193,7 +193,10 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 		IMPart* edit = fDocument.EditableImagePart(part);
 		fImageStroke.brush = std::make_shared<AirbrushBrush>(BuildAirbrush(fore,
 			ToolConfig(kAirbrush).airbrush));
-		AirbrushStamp(edit->image, MaskOf(*edit), *fImageStroke.brush, x, y);
+		int left, top;
+		ArchiveBitmap& bits = ToolBitmap(*edit, left, top);
+		AirbrushStamp(bits, edit->selection.ToolMask(bits.Width(), bits.Height(), left, top),
+			*fImageStroke.brush, x - left, y - top);
 		fImageStroke.lastStamp = system_time();
 		BMessage tick(kMsgImageIdle);
 		fImageStroke.idle = new BMessageRunner(BMessenger(this), &tick, 25000);
@@ -206,18 +209,20 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 		fUndo.BeginDocument(fDocument, IndexString(ImageResources(), strings, 1).c_str(),
 			CurrentViewState());
 		IMPart* edit = fDocument.EditableImagePart(part);
-		IMMask mask = MaskOf(*edit);
+		int left, top;
+		ArchiveBitmap& bits = ToolBitmap(*edit, left, top);
+		IMMask mask = edit->selection.ToolMask(bits.Width(), bits.Height(), left, top);
 		if (tool == kPencil) {
 			IMColor used;
-			changed = PencilDown(edit->image, mask, x, y, fore, back, used);
+			changed = PencilDown(bits, mask, x - left, y - top, fore, back, used);
 			fImageStroke.color[0] = used.r;
 			fImageStroke.color[1] = used.g;
 			fImageStroke.color[2] = used.b;
 			fImageStroke.color[3] = used.a;
 		} else if (tool == kEraser)
-			changed = EraserDown(edit->image, mask, x, y, fZoom, back);
+			changed = EraserDown(bits, mask, x - left, y - top, fZoom, back);
 		else
-			changed = BucketFill(edit->image, mask, x, y, fore,
+			changed = BucketFill(bits, mask, x - left, y - top, fore,
 				ToleranceDistance(ToolConfig(kBucket).tolerance));
 		fImages.erase(part);
 		Invalidate();
@@ -236,6 +241,8 @@ TPageView::ImageClick(BPoint where, int32 clicks, int32 buttons)
 bool
 TPageView::ImageDragMoved(BPoint where)
 {
+	if (ImageSelectMoved(where))
+		return true;
 	if (!fImageStroke.active)
 		return false;
 	int32 tool = fImageStroke.tool;
@@ -267,13 +274,15 @@ TPageView::ImageDragMoved(BPoint where)
 	if (x == fImageStroke.x && y == fImageStroke.y)
 		return true;
 	IMPart* edit = fDocument.EditableImagePart(fImageStroke.part);
-	IMMask mask = MaskOf(*edit);
+	int left, top;
+	ArchiveBitmap& bits = ToolBitmap(*edit, left, top);
+	IMMask mask = edit->selection.ToolMask(bits.Width(), bits.Height(), left, top);
 	if (tool == kPencil)
-		PencilLine(edit->image, mask, fImageStroke.x, fImageStroke.y, x, y,
+		PencilLine(bits, mask, fImageStroke.x - left, fImageStroke.y - top, x - left, y - top,
 			ColorOf(fImageStroke.color));
 	else
-		EraserMove(edit->image, mask, fImageStroke.x, fImageStroke.y, x, y, fZoom,
-			ColorOf(edit->colors[1]));
+		EraserMove(bits, mask, fImageStroke.x - left, fImageStroke.y - top, x - left, y - top,
+			fZoom, ColorOf(edit->colors[1]));
 	fImageStroke.x = x;
 	fImageStroke.y = y;
 	fImages.erase(fImageStroke.part);
@@ -296,9 +305,11 @@ TPageView::AirbrushTo(int x, int y)
 	if (points.empty())
 		return;
 	IMPart* edit = fDocument.EditableImagePart(fImageStroke.part);
-	IMMask mask = MaskOf(*edit);
+	int left, top;
+	ArchiveBitmap& bits = ToolBitmap(*edit, left, top);
+	IMMask mask = edit->selection.ToolMask(bits.Width(), bits.Height(), left, top);
 	for (const std::array<int, 2>& p : points)
-		AirbrushStamp(edit->image, mask, *fImageStroke.brush, p[0], p[1]);
+		AirbrushStamp(bits, mask, *fImageStroke.brush, p[0] - left, p[1] - top);
 	fImageStroke.lastStamp = system_time();
 	if (moved) {
 		fImageStroke.x = x;
@@ -335,6 +346,8 @@ TPageView::ImageIdle()
 bool
 TPageView::ImageDragUp(BPoint where)
 {
+	if (ImageSelectUp(where))
+		return true;
 	if (!fImageStroke.active)
 		return false;
 	fImageStroke.active = false;
@@ -353,8 +366,13 @@ TPageView::ImageDragUp(BPoint where)
 		size_t part;
 		int x, y;
 		if (ImageAt(where, part, x, y) && part == fImageStroke.part) {
+			// (TPartIM::CurrentBitmap's pixel: the floating bits' if they're
+			// there)
 			const IMPart* image = fDocument.ImagePart(part);
 			IMColor picked = PixelAt(image->image, x, y);
+			IMRect m = image->selection.Mask();
+			if (!image->floating.bits.empty() && m.Valid())
+				picked = PixelAt(image->floating, x - m.left, y - m.top);
 			bool back = (modifiers() & B_OPTION_KEY) != 0;
 			fUndo.BeginDocument(fDocument, IndexString(ImageResources(), 1, back ? 5 : 4).c_str(),
 				CurrentViewState());
@@ -406,9 +424,18 @@ TPageView::ImageCursor(BPoint where) const
 	if (main < 0 || fDocument.ImagePart(size_t(main)) == NULL || !ImageAt(where, part, x, y)
 			|| part != size_t(main))
 		return -1;
+	// TFrameIM::GetCursor: the marquee and lasso over the selection (and
+	// neither Shift nor Command down) the hand, B_HAND_CURSOR (the system's)
+	const IMPart* image = fDocument.ImagePart(part);
+	if ((fImageTool == kMarquee || fImageTool == kLasso) && image != NULL
+			&& !image->selection.Empty() && (modifiers() & (B_SHIFT_KEY | B_COMMAND_KEY)) == 0) {
+		BPoint point;
+		ImagePointOf(part, where, point);
+		if (image->selection.Contains(int(lrintf(point.x)), int(lrintf(point.y))))
+			return kImageSystemCursor;
+	}
 	switch (fImageTool) {
-		// (the marquee's is TPartIMFactory's; over the selection, the hand:
-		// not yet)
+		// (the marquee's is TPartIMFactory's)
 		case kMarquee: return 0x644;
 		case kLasso: return 0x648;
 		case kMagicWand: return 0x647;
@@ -437,6 +464,8 @@ TPageView::ImageCursor(BPoint where) const
 bool
 TPageView::ImageCommand(BMessage* message)
 {
+	if (ImageSelectionCommand(message))
+		return true;
 	if (message->what != 'sI07' && message->what != 'sI09' && message->what != 'sI00'
 			&& message->what != 'sI01' && message->what != 'sI0A')
 		return false;
@@ -452,8 +481,11 @@ TPageView::ImageCommand(BMessage* message)
 	}
 	if (message->what == 'sI07') {
 		int32 tool = message->GetInt32("Tool", -1);
-		// (Find Color does its work at once: TPartIM's selections, not yet)
-		if (tool >= 0 && tool <= kAirbrush && tool != kFindColor) {
+		// (Find Color selects at once, and the tool before it stays)
+		if (tool == kFindColor) {
+			fImageToggled = -1;
+			FindImageColor();
+		} else if (tool >= 0 && tool <= kAirbrush) {
 			fImageTool = tool;
 			fImageToggled = -1;
 		}

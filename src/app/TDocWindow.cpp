@@ -2212,6 +2212,28 @@ TDocWindow::MenusBeginning()
 		enable('CCUT', HasTextSelection() || cells || tableCells);
 		enable('COPY', HasTextSelection() || cells || tableCells);
 		enable('sM12', HasTextSelection() || cells || tableCells);
+		// TPartIM::FixMenus: Deselect, Crop, Duplicate and Invert Selection
+		// with something selected; Float Selection then, Unfloat Selection
+		// while it floats (one item, its message and label swapped); Cut,
+		// Copy and Clear with something selected (TPart::HasSelection)
+		if (fImageMenus && fDocument != NULL) {
+			const IMPart* image = fDocument->ImagePart(size_t(fDocument->MainPart()));
+			bool selected = image != NULL && !image->selection.Empty();
+			bool floating = image != NULL && !image->floating.bits.empty();
+			for (uint32 command : {'sI05', 'sI04', 'sM15', 'sI12', 'CCUT', 'COPY', 'sM12'})
+				enable(command, selected);
+			BMenuItem* item = KeyMenuBar()->FindItem('sI06');
+			if (item == NULL)
+				item = KeyMenuBar()->FindItem('sI11');
+			if (item != NULL) {
+				const ResourceFile& resources = GobeResources::Part("ImageProcessing");
+				if (floating || selected) {
+					item->Message()->what = floating ? 'sI06' : 'sI11';
+					item->SetLabel(IndexString(resources, 1, floating ? 11 : 10).c_str());
+				}
+				item->SetEnabled(floating || selected);
+			}
+		}
 		enable('sM16', part);
 		enable('sM17', part && TPageView::HasCopiedFormat());
 		bool drawing = false;

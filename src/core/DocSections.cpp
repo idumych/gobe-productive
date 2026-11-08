@@ -175,6 +175,7 @@ ReadSelectionMgr(DocArchive& a, SelectionMgr& out)
 	for (uint32_t i = 0; i < count; i++) {
 		Selection s;
 		s.id = i;
+		s.sizeAt = a.Position();
 		uint32_t size = a.UInt32();
 		size_t end = a.Position() + size;
 		s.kind = a.UInt32();
@@ -225,6 +226,7 @@ ReadSelectionMgr(DocArchive& a, SelectionMgr& out)
 				break;
 			case Sig("BITS"): {	// TIMSelection
 				base();
+				s.imageAt = a.Position();
 				float r[4];
 				if (a.FileFormatVersion() < 0x16)
 					a.Rect(r);
@@ -242,6 +244,7 @@ ReadSelectionMgr(DocArchive& a, SelectionMgr& out)
 		if (a.Position() > end)
 			throw ArchiveError("selection longer than its record", a.Position());
 		a.Seek(end);
+		s.recordEnd = end;
 		out.selections.push_back(std::move(s));
 	}
 	a.CheckSig(Sig("SelM"));

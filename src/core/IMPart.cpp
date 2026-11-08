@@ -111,6 +111,8 @@ SetImageSize(Document& doc, size_t part, float width, float height)
 	edit->rect[0] = edit->rect[1] = 0;
 	edit->rect[2] = width - 1;
 	edit->rect[3] = height - 1;
+	// (ReplaceBitmap: the selection kept to the new size)
+	edit->selection.Clip(w, h);
 	// its frames (TFrame::SetSize; TFrameIM: the image's rectangle shown),
 	// and for the document's own image its sheet's drawing's (the root's
 	// stays: TBrowseRootFrame draws light gray around a smaller image)

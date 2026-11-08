@@ -44,6 +44,7 @@ static const uint32 kMsgDocumentChanged = 'Gchg';
 static const uint32 kMsgActiveRibbon = 'Grib';
 // the image tool's idle (TPartIM::Idle) while its button is held
 static const uint32 kMsgImageIdle = 'IMid';
+static const uint32 kMsgImageAnts = 'IMan';
 // to the window: the zoom changed in the view (the Scale floater shows it)
 static const uint32 kMsgZoomShown = 'IMzm';
 // test hook: run "script" (RunScript) in the window
@@ -451,6 +452,54 @@ private:
 	bool ImageDragMoved(BPoint where);
 	bool ImageDragUp(BPoint where);
 	bool ImageCommand(BMessage* message);
+	// TPartIM::Click with a selection tool (TPageImageSelect.cpp): the
+	// tool's selection being made, or the selection about to be moved
+	// (once the pointer is 4 pixels away) or being moved
+	struct ImageSelect {
+		enum { kNone, kSelecting, kWaiting, kMoving };
+		int mode = kNone;
+		size_t part = 0;
+		int32 tool = -1;
+		uint32 modifiers = 0;			// kIMShift, kIMCommand, kIMOption
+		IMSelection old, cur;			// the selection before, the tool's
+		BPoint anchor, prev;			// "anchor", "prev" (the image's pixels)
+		BPoint start;					// where the click was (the document's)
+		std::vector<std::array<int, 2>> points;	// the lasso's ("poly")
+		int startX = 0, startY = 0;		// the selection's place as a move began
+		std::shared_ptr<Document> before;	// for the undo step, once it's made
+		UndoStack::ViewState beforeView;
+		std::string label;
+	} fImageSelect;
+	// where each image's pictures are pasted (TPartIM +0xac: CalcPastePt)
+	std::map<size_t, BRect> fImagePaste;
+	// the marching ants (TPartIM +0x94: TPattern 0x87c3e1f0, 0x783c1e0f)
+	pattern fAnts = {{0xf0, 0xe1, 0xc3, 0x87, 0x0f, 0x1e, 0x3c, 0x78}};
+	class BMessageRunner* fImageAnts = NULL;
+	IMPart* MainImage(size_t* part = NULL);
+	const IMPart* MainImage(size_t* part = NULL) const;
+	void ImageChanged(size_t part, bool changed = true);
+	void SetImageSelection(size_t part, IMPart& im, IMSelection selection);
+	void StampImage(IMPart& im);
+	void ImageSelectCommand(int nameIndex, int mode);
+	void BeginImageMove(IMPart& im, bool duplicate);
+	bool ImageSelectClick(size_t part, BPoint point, BPoint where);
+	bool ImageSelectMoved(BPoint where);
+	bool ImageSelectUp(BPoint where);
+	float ZoomOf(size_t part) const;
+	bool ImageSelectionCommand(BMessage* message);
+	void DeleteImageSelection(int nameIndex);
+	void CopyImageSelection(const IMPart& im);
+	BPoint PastePoint(size_t part) const;
+	void PasteImage(size_t part, const ArchiveBitmap& picture, BPoint point, int nameIndex);
+	bool ImageDrop(BMessage* message);
+	bool ImageKey(const char* bytes, int32 count);
+	void FindImageColor();
+	ArchiveBitmap& ToolBitmap(IMPart& im, int& left, int& top);
+	void UpdateImageAnts();
+	void DetachedFromWindow() override;
+	void ImageAntsTick();
+	BRect ImageViewRect(size_t part, BRect pixels) const;
+	void DrawImageSelection(const IMPart& im, BRect source, BRect dest);
 	// TPartIM::Idle: Option held makes the pencil, bucket or airbrush the
 	// eyedropper until it's let go (OptionToggle); the tool to go back to
 	int32 fImageToggled = -1;
@@ -458,6 +507,7 @@ private:
 	// TFrameIM::GetCursor: the tool's pointer over the image (its CURS in
 	// ImageProcessing), -1 elsewhere
 	int ImageCursor(BPoint where) const;
+	static const int kImageSystemCursor = 0xffff;
 	// the image's frame under a point and the pixel there
 	bool ImageAt(BPoint where, size_t& part, int& x, int& y) const;
 	bool ChartDragMoved(BPoint where);

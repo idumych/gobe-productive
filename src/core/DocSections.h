@@ -112,6 +112,9 @@ struct Selection {
 	// file (to clamp them when the text gets shorter)
 	std::vector<std::pair<uint32_t, uint32_t>> textRanges;
 	size_t textRangesAt = 0;
+	// where the record's size is, and where it ends; an image's
+	// (TIMSelection) own data starts at imageAt
+	size_t sizeAt = 0, recordEnd = 0, imageAt = 0;
 };
 struct SelectionMgr {
 	std::vector<Selection> selections;
