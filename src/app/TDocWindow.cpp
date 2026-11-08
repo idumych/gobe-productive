@@ -1,5 +1,7 @@
 #include "TDocWindow.h"
 
+#include "TImagePlugins.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -488,7 +490,9 @@ TDocWindow::InstallPartMenus()
 	} else if (image) {
 		const ResourceFile& resources = GobeResources::Part("ImageProcessing");
 		fPartMenus.push_back(new TMenu(3, resources));
-		fPartMenus.push_back(new TMenu(2, resources));
+		TMenu* plugins = new TMenu(2, resources);
+		AddPluginItems(plugins);
+		fPartMenus.push_back(plugins);
 	} else if (sheet) {
 		const ResourceFile& resources = GobeResources::Part("Spreadsheet");
 		fPartMenus.push_back(new TMenu(52, resources));
@@ -2222,6 +2226,17 @@ TDocWindow::MenusBeginning()
 			bool floating = image != NULL && !image->floating.bits.empty();
 			for (uint32 command : {'sI05', 'sI04', 'sM15', 'sI12', 'CCUT', 'COPY', 'sM12'})
 				enable(command, selected);
+			// the Plugins menu's first item runs the last plug-in again
+			if (BMenuItem* last = KeyMenuBar()->FindItem('sI02')) {
+				int32 index = fPages != NULL ? fPages->LastImagePlugin() : -1;
+				if (index >= 0 && size_t(index) < ImagePlugins().size()) {
+					last->Message()->what = 'sI03';
+					last->Message()->RemoveName("index");
+					last->Message()->AddInt32("index", index);
+					last->SetLabel(ImagePlugins()[size_t(index)].name.String());
+					last->SetEnabled(true);
+				}
+			}
 			BMenuItem* item = KeyMenuBar()->FindItem('sI06');
 			if (item == NULL)
 				item = KeyMenuBar()->FindItem('sI11');

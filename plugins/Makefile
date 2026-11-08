@@ -8,7 +8,7 @@ BUILD := build
 CXX ?= c++
 CC ?= cc
 
-override CXXFLAGS += -O2 -fPIC -Wno-multichar -std=gnu++17 -D_IMPEXP_IMAGEMANIP= \
+override CXXFLAGS += -O2 -fPIC -Wno-multichar -Wno-narrowing -std=gnu++17 -D_IMPEXP_IMAGEMANIP= \
 	-Icompat -Ilibimagemanip -IImageManip -include beos.h
 override CFLAGS += -O2 -fPIC
 
@@ -40,7 +40,7 @@ $(LIB): $(LIB_SRCS)
 
 # an add-on: its sources, the GIMP glue, libprefs, and the shared TSlider
 # unless it brings its own
-$(BUILD)/ImageManip/%: ImageManip/%/*.cpp $(COMMON) ImageManip/TSlider.cpp $(LIB)
+$(BUILD)/ImageManip/%: ImageManip/%/*.cpp ImageManip/%/*.h ImageManip/*.h compat/*.h $(COMMON) ImageManip/TSlider.cpp $(LIB)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -IImageManip/$* $(LDFLAGS_SO) -o $@ ImageManip/$*/*.cpp $(COMMON) \
 		$(if $(shell grep -l 'class TSlider' ImageManip/$*/Config.h),,ImageManip/TSlider.cpp) \

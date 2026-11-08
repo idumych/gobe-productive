@@ -500,6 +500,21 @@ private:
 	void ImageAntsTick();
 	BRect ImageViewRect(size_t part, BRect pixels) const;
 	void DrawImageSelection(const IMPart& im, BRect source, BRect dest);
+	// the image plug-ins (TPageImagePlugins.cpp): the one running, and each
+	// image's last (TPartIM +0x84, for the Plugins menu's first item)
+	struct PluginRun;
+	std::shared_ptr<PluginRun> fPluginRun;
+	std::map<size_t, int32> fLastPlugin;
+	void RunImagePlugin(int32 index);
+	void CurrentPluginSettings();
+	void StartPluginJob(bool final);
+	void FinishPluginSettings(bool ok);
+	void EndImagePlugin();
+	bool ImagePluginMessage(BMessage* message);
+public:
+	// the plug-in an image ran last, -1 if none
+	int32 LastImagePlugin() const;
+private:
 	// TPartIM::Idle: Option held makes the pencil, bucket or airbrush the
 	// eyedropper until it's let go (OptionToggle); the tool to go back to
 	int32 fImageToggled = -1;

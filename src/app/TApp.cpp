@@ -274,13 +274,23 @@ public:
 				return;
 			Document* document = new Document;
 			std::string error;
-			if (!(kind == 'BITS' ? CreateBlankImage(*document, error)
+			// (a plug-in's converted bits: TPartIMFactory::CreateDocument)
+			ArchiveBitmap* image = NULL;
+			message->FindPointer("image", (void**)&image);
+			std::unique_ptr<ArchiveBitmap> owned(image);
+			if (!(kind == 'BITS' ? CreateBlankImage(*document, error,
+					image != NULL ? float(image->Width()) : 512,
+					image != NULL ? float(image->Height()) : 512)
 					: kind == 'SPRD' ? CreateBlankSpreadsheet(*document, error)
 					: kind == 'GRFX' ? CreateBlankDrawing(*document, error)
 					: kind == 'PRES' ? NewPresentation(*document, error)
 					: CreateBlankDocument(*document, error))) {
 				delete document;
 				return;
+			}
+			if (image != NULL && document->MainPart() >= 0) {
+				if (IMPart* im = document->EditableImagePart(size_t(document->MainPart())))
+					im->image = *image;
 			}
 			NewSheetPreferences(*document);
 			BRect frame(80, 60, 720, 620);

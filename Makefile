@@ -25,9 +25,14 @@ UNAME    := $(shell uname -s)
 COSMOE_ROOT ?= /usr
 
 SRCS     := $(wildcard src/core/*.cpp) $(wildcard src/app/*.cpp)
-INCLUDES := src/core src/app
+INCLUDES := src/core src/app plugins/libimagemanip
 # Libraries beyond the Haiku API (same on every platform)
-APP_LIBS := -lz
+# libimagemanip (plugins/, public domain): the image part's plug-ins' library,
+# next to the application as packaged and in plugins/build when built here
+PLUGIN_LIB := plugins/build/lib/libimagemanip.so
+APP_LIBS := -lz -Lplugins/build/lib -limagemanip \
+	-Wl,-rpath,'$$ORIGIN/plugins/build/lib' -Wl,-rpath,'$$ORIGIN/lib'
+override CXXFLAGS += -D_IMPEXP_IMAGEMANIP=
 
 override CXXFLAGS += $(addprefix -I,$(INCLUDES))
 
@@ -76,6 +81,7 @@ OBJS := $(patsubst %.cpp,obj/%.o,$(SRCS))
 HEADERS := $(wildcard src/*/*.h)
 
 all: check-platform $(NAME)
+	$(MAKE) -C plugins $(if $(COSMOE_ROOT),COSMOE_ROOT=$(abspath $(COSMOE_ROOT)))
 
 check-platform:
 ifeq ($(PLATFORM),none)
@@ -96,7 +102,12 @@ obj/$(NAME).rsrc.o: $(RDEF)
 		--add-section .note.GNU-stack=/dev/null \
 		--set-section-flags .note.GNU-stack=noload,readonly obj/$(NAME).rsrc.o
 
-$(NAME): $(OBJS) $(EXTRA_OBJS) $(RDEF)
+# the plug-ins (plugins/Makefile): libimagemanip, the add-ons, the GIMP filters
+plugins: $(PLUGIN_LIB)
+$(PLUGIN_LIB):
+	$(MAKE) -C plugins $(if $(COSMOE_ROOT),COSMOE_ROOT=$(abspath $(COSMOE_ROOT)))
+
+$(NAME): $(OBJS) $(EXTRA_OBJS) $(RDEF) $(PLUGIN_LIB)
 	@mkdir -p obj
 	$(CXX) $(LDFLAGS) $(OBJS) $(EXTRA_OBJS) -o $@ $(LIBS)
 	$(RESOURCES)
@@ -119,4 +130,4 @@ install: all
 clean:
 	rm -rf obj $(NAME)
 
-.PHONY: all check-platform test install clean hpkg
+.PHONY: plugins all check-platform test install clean hpkg

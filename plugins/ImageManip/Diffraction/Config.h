@@ -51,6 +51,7 @@ void InitControlSettings(ConfigView* config);
 
 class MySlider : public TSlider {
 public:
+	using TSlider::SetValue;
 	MySlider(BRect frame, ConfigView* cf, const char* name, const char* label,
 			const char* format, BMessage* message, int32 minValue, int32 maxValue,
 			float scale = 1.0, float offset = 0.0)

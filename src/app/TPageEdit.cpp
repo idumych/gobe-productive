@@ -2217,6 +2217,8 @@ TPageView::MessageReceived(BMessage* message)
 		ImageAntsTick();
 		return;
 	}
+	if (ImagePluginMessage(message))
+		return;
 	// a picture dropped on an image (TFrameIM::DropNative)
 	if (message->WasDropped() && ImageDrop(message))
 		return;
@@ -6276,6 +6278,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 's00T':	// Make Chart
 		case 'sI07': case 'sI09': case 'sI00': case 'sI01': case 'sI0A':	// the image's tools, colors, settings
 		case 'sI04': case 'sI05': case 'sI06': case 'sI11': case 'sI12': case 'sM15':	// Image, Duplicate
+		case 'sI03':	// a plug-in
 		case 'sCHc': case 'sCHd': case 'sCHe': case 'sCH1': case 'sCH8':	// Chart
 		case 'sCH2': case 'sCH5': case 'sCH6': case 'sCHa': case 'sCHb':
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange

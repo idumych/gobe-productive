@@ -45,6 +45,7 @@ void GetSettings(BMessage* ioExtension, Prefs* thePrefs, BRect* selection, BInvo
 class ConfigView;
 class MySlider : public TSlider {
 public:
+	using TSlider::SetValue;
 	MySlider(BRect frame, const char* name, const char* label, const char* format,
 			BMessage* message, int32 minValue, int32 maxValue, float scale = 1.0,
 			float offset = 0.0)
