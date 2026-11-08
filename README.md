@@ -7,7 +7,7 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-75-78-1.svg" alt="Port progress: 75 of 78 features done, 3 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-77-78-0.svg" alt="Port progress: 77 of 78 features done, 1 left (see Features)" width="720"></p>
 
 Not everything is ported yet: most of image editing is still to come. The bar counts the [features](#features) by state.
 
@@ -291,8 +291,8 @@ sizes, headings and options are saved with the document.
 | Feature | State |
 |---|---|
 | New image processing documents (File > New, Image Processing) as the original makes them: a white image 512 points square, its window with the Image and Plugins menus and the PartBar's colors and tools; Document Size… (the image cut off or grown in the background color, light gray around it) | next |
-| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) (so far all but find colour, which makes a selection and comes with them) | in progress |
-| Selections: marquee, lasso and magic wand; moved, duplicated, floated and unfloated, inverted, deselected, deleted; Crop; pictures pasted and dropped in | not yet |
+| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) | next |
+| Selections: marquee, lasso and magic wand (Shift adds, Command takes away, both keep what's in both, Option leaves out the background colour) and Find Color; moved (Option copies), duplicated, floated and unfloated, inverted, deselected, deleted, cut, copied and pasted, moved a pixel with the arrow keys; Crop; pictures pasted and dropped in; the marching ants; the painting tools kept to the selection and working on floating bits | next |
 | Plug-in filters (ImageManip and GIMP plug-ins) and Edit Externally… | not yet |
 
 ### Other formats (translators)
