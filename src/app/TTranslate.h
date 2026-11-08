@@ -33,6 +33,8 @@ enum FileKind {
 	kHTMLFile,		// HTMLTranslator: text/html, or text with an <HTML> tag
 	kExcelFile,		// ExcelTranslator: an OLE compound file with a Workbook or Book
 	kWordFile,		// WORDTranslator: an OLE compound file with a WordDocument stream
+	kImageFile,		// TPartIMFactory::CanImportFile: a translator's bitmap (an image
+					// processing document)
 	kUnknownFile
 };
 FileKind IdentifyFile(const char* path);

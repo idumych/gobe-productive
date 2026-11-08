@@ -486,6 +486,9 @@ public:
 			}
 			BPath p(path.c_str());
 			BRect frame(80, 60, 720, 620);
+			// (an image document's window fits the image: TPartIM's frame)
+			if (doc->MainPart() >= 0 && doc->ImagePart(size_t(doc->MainPart())) != NULL)
+				frame.Set(20, 38, 546, 635);
 			frame.OffsetBy(fWindowCount * 24, fWindowCount * 24);
 			fWindowCount++;
 			// an imported document is untitled: "<name> (converted)"

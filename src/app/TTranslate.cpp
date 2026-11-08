@@ -22,6 +22,8 @@
 #include <TextControl.h>
 #include <TextView.h>
 #include <TranslationUtils.h>
+#include <TranslatorFormats.h>
+#include <TranslatorRoster.h>
 #include <UnicodeBlockObjects.h>
 #include <UTF8.h>
 #include <Window.h>
@@ -186,6 +188,29 @@ WriteTextAttributes(const char* path, const TextAttributes& attributes)
 
 // #pragma mark - opening
 
+// TPartIMFactory::CanImportFile: a translator identifies it (by its type,
+// else by its contents) as a bitmap; its translator's info
+static bool
+IsPictureFile(BPositionIO& file, const char* type, translator_info* _info = NULL)
+{
+	BTranslatorRoster* roster = BTranslatorRoster::Default();
+	translator_info info;
+	file.Seek(0, SEEK_SET);
+	status_t status = roster->Identify(&file, NULL, &info, 0,
+		type != NULL && type[0] != '\0' ? type : NULL, B_TRANSLATOR_BITMAP);
+	if (status != B_OK) {
+		file.Seek(0, SEEK_SET);
+		status = roster->Identify(&file, NULL, &info, 0, NULL, B_TRANSLATOR_BITMAP);
+	}
+	file.Seek(0, SEEK_SET);
+	if (status != B_OK || info.group != B_TRANSLATOR_BITMAP)
+		return false;
+	if (_info != NULL)
+		*_info = info;
+	return true;
+}
+
+
 FileKind
 IdentifyFile(const char* path)
 {
@@ -243,7 +268,7 @@ IdentifyFile(const char* path)
 			return kHTMLFile;
 	}
 	if (strncmp(type, "text/", 5) != 0 || !LooksLikeText(head))
-		return kUnknownFile;
+		return IsPictureFile(file, type) ? kImageFile : kUnknownFile;
 	return TableLikeness(head) >= 0.5f ? kTableFile : kTextFile;
 }
 
@@ -283,6 +308,12 @@ ImportFormat(FileKind kind, const char*& name, const char*& type, const char*& f
 			type = "text/plain";
 			factory = "Spreadsheet";
 			break;
+		case kImageFile:
+			// (ImportFile names the translator's format)
+			name = "";
+			type = "";
+			factory = "Image Processing";
+			break;
 		default:
 			name = "Plain Text";
 			type = "text/plain";
@@ -302,6 +333,20 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 	const char* formatType;
 	const char* factory;
 	ImportFormat(kind, formatName, formatType, factory);
+	// (a picture: the translator's name and type, TIMStatusFile)
+	translator_info picture;
+	BString pictureName, pictureType;
+	if (kind == kImageFile) {
+		BFile file(path, B_READ_ONLY);
+		char type[B_MIME_TYPE_LENGTH] = "";
+		BNodeInfo(&file).GetType(type);
+		if (file.InitCheck() == B_OK && IsPictureFile(file, type, &picture)) {
+			pictureName = picture.name;
+			pictureType = picture.MIME;
+		}
+		formatName = pictureName.String();
+		formatType = pictureType.String();
+	}
 	TStatusDialog* status = new TStatusDialog(TStatusDialog::Title(true, factory,
 		BPath(path).Leaf()).String(), formatName, formatType);
 	status->RunDialog();
@@ -323,6 +368,17 @@ ImportFile(const char* path, FileKind kind, Document& doc, BString& error, BStri
 		TextAttributes attributes;
 		ReadTextAttributes(path, attributes);
 		ok = ImportText(path, doc, message, &attributes);
+	} else if (kind == kImageFile) {
+		// TPartIMFactory::ImportFile, CreateDocument: a new image of the
+		// picture's size with its bits
+		ArchiveBitmap bits;
+		ok = ReadPicture(path, bits) && CreateBlankImage(doc, message, float(bits.Width()),
+			float(bits.Height()));
+		IMPart* im = ok && doc.MainPart() >= 0 ? doc.EditableImagePart(size_t(doc.MainPart()))
+			: NULL;
+		if (im != NULL)
+			im->image = bits;
+		ok = im != NULL;
 	}
 	status->Finish();
 	BPath p(path);
@@ -352,6 +408,15 @@ ReadPicture(const std::string& path, ArchiveBitmap& picture)
 	std::unique_ptr<BBitmap> bitmap(BTranslationUtils::GetBitmap(path.c_str()));
 	if (!bitmap || bitmap->InitCheck() != B_OK)
 		return false;
+	// VerifyAlpha: a picture without alpha opaque, but where it has
+	// B_TRANSPARENT_MAGIC_RGBA32
+	if (bitmap->ColorSpace() == B_RGB32) {
+		uint32* pixel = (uint32*)bitmap->Bits();
+		for (int32 i = 0; i < bitmap->BitsLength() / 4; i++, pixel++) {
+			uint8* bytes = (uint8*)pixel;
+			bytes[3] = *pixel == B_TRANSPARENT_MAGIC_RGBA32 ? 0 : 255;
+		}
+	}
 	BRect bounds = bitmap->Bounds();
 	BBitmap converted(bounds, B_RGBA32);
 	if (converted.InitCheck() != B_OK || converted.ImportBits(bitmap.get()) != B_OK)
