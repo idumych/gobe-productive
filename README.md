@@ -7,7 +7,7 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-77-78-0.svg" alt="Port progress: 77 of 78 features done, 1 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-78-78-0.svg" alt="Port progress: 78 of 78 features done, 0 left (see Features)" width="720"></p>
 
 Not everything is ported yet: most of image editing is still to come. The bar counts the [features](#features) by state.
 
@@ -293,7 +293,7 @@ sizes, headings and options are saved with the document.
 | New image processing documents (File > New, Image Processing) as the original makes them: a white image 512 points square, its window with the Image and Plugins menus and the PartBar's colors and tools; Document Size… (the image cut off or grown in the background color, light gray around it) | next |
 | The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) | next |
 | Selections: marquee, lasso and magic wand (Shift adds, Command takes away, both keep what's in both, Option leaves out the background colour) and Find Color; moved (Option copies), duplicated, floated and unfloated, inverted, deselected, deleted, cut, copied and pasted, moved a pixel with the arrow keys; Crop; pictures pasted and dropped in; the marching ants; the painting tools kept to the selection and working on floating bits | next |
-| Plug-in filters (ImageManip and GIMP plug-ins) and Edit Externally… | not yet |
+| Plug-in filters: the ImageManip add-ons and the GIMP filters the original shipped (built from their GPL sources in `plugins/`), in the Plugins menu by category, each with its settings in the Plugin dialog (a live preview for the add-ons), its progress, its result kept to the selection as one undo step, its settings kept for next time, About… and Option for its credits, the last one at the top of the menu; Edit Externally… (Image menu and the image's context menu) with the editor the Image Processing preferences name; the Image Processing and Spreadsheet preference panels | next |
 
 ### Other formats (translators)
 
@@ -360,3 +360,8 @@ Test options (used by the test scripts): `--menu <index>`, `--dialog <id>`,
 
 MIT, with a notice: see [LICENSE](LICENSE). "Gobe Productive" is a trademark
 of its owners.
+
+The image plug-ins in [`plugins/`](plugins) are separate programs and
+add-ons under their own licences, most of them the GNU General Public
+License (see [plugins/README.md](plugins/README.md)); the packages ship them
+with that licence.

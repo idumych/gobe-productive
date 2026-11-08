@@ -12,8 +12,13 @@ did. They are separate programs and add-ons, under their own licences:
   That source left out each add-on's `Config.h`; the port rebuilt them from
   how the sources use them and from the shipped add-ons' layouts. `long`
   became `int32` (BeOS's `long` was 32 bits).
+  Five add-ons Gobe shipped without their source (Change To Alpha, Set
+  Transparency, Colorify, Invert, Emboss) were written again from what the
+  shipped ones do, under the same licence.
 - `GIMP/`: the GIMP 0.54 filters Gobe shipped and their `gimp.c` library,
-  under the GNU General Public License (`COPYING`).
+  under the GNU General Public License (`COPYING`), with the headers their
+  sources needed (`hcon.h`, `hf_io.h`, `gems.h`, `gems.c`) and `index`, the
+  names, categories and credits the shipped filters kept in attributes.
 - `compat/`: `libprefs` (the settings library the add-ons used) and the
   old headers they need, written for the port (public domain).
 
