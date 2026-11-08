@@ -48,6 +48,14 @@ cp "$APP_NAME" "$PKG/apps/$APP_NAME"
 ln -s "../apps/$APP_NAME" "$PKG/bin/$APP_CMD"
 ln -s "../../../../apps/$APP_NAME" "$PKG/data/deskbar/menu/Applications/$APP_NAME"
 cp README.md LICENSE "$PKG/documentation/packages/$APP_CMD/" 2>/dev/null || :
+# the image part's plug-ins (plugins/, GPL): libimagemanip, the ImageManip
+# add-ons and the GIMP filters where the app looks for them
+mkdir -p "$PKG/lib" "$PKG/add-ons/ImageManip" "$PKG/add-ons/GIMP" \
+	"$PKG/documentation/packages/$APP_CMD/plugins"
+cp plugins/build/lib/libimagemanip.so "$PKG/lib/"
+cp plugins/build/ImageManip/* "$PKG/add-ons/ImageManip/"
+cp plugins/build/GIMP/* "$PKG/add-ons/GIMP/"
+cp plugins/COPYING plugins/README.md "$PKG/documentation/packages/$APP_CMD/plugins/"
 
 # 3. .PackageInfo: haiku >= r1~beta6 is satisfied by the arm64 nightlies
 #    (r1~beta6_hrevNNNNN) and keeps the file the same as the x86_64 one

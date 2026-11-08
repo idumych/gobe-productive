@@ -12,15 +12,23 @@ override CXXFLAGS += -O2 -fPIC -Wno-multichar -Wno-narrowing -std=gnu++17 -D_IMP
 	-Icompat -Ilibimagemanip -IImageManip -include beos.h
 override CFLAGS += -O2 -fPIC
 
-ifeq ($(UNAME),Haiku)
-  LIBS := -lbe -ltracker
+# (Haiku arm64 cross-compiled: make HAIKU_CROSS=1 with the sysroot's env.sh)
+HAIKU := $(if $(HAIKU_CROSS),1,$(if $(filter Haiku,$(UNAME)),1,))
+ifneq ($(HAIKU),)
+  override CXXFLAGS += $(HAIKU_CROSS_CFLAGS)
+  override CFLAGS += $(HAIKU_CROSS_CFLAGS)
+  LIBS := $(HAIKU_CROSS_LDFLAGS) -lbe -ltracker
   ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
+  GIMP_RPATH :=
 else
   COSMOE_DIRS := config os os/app os/interface os/kernel os/storage os/support os/translation posix \
                  private/interface
   override CXXFLAGS += -I$(COSMOE_ROOT)/include $(addprefix -I$(COSMOE_ROOT)/include/,$(COSMOE_DIRS))
   LIBS := -L$(COSMOE_ROOT)/lib -lbe -ltracker
   ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
+  # (the filters are programs of their own: Hokku's libraries where they are;
+  # the AppImage sets theirs to its own)
+  GIMP_RPATH := -Wl,-rpath,$(COSMOE_ROOT)/lib
 endif
 LDFLAGS_SO := -shared -Wl,--no-undefined
 
@@ -39,7 +47,7 @@ GIMP := $(filter-out gimp gems,$(basename $(notdir $(wildcard GIMP/*.c))))
 GIMP_OUT := $(addprefix $(BUILD)/GIMP/,$(GIMP))
 override CFLAGS += -IGIMP -include string.h -include stdlib.h -Wno-implicit-function-declaration \
 	-Wno-int-conversion -Wno-incompatible-pointer-types
-ifneq ($(UNAME),Haiku)
+ifeq ($(HAIKU),)
   override CFLAGS += -I$(COSMOE_ROOT)/include $(addprefix -I$(COSMOE_ROOT)/include/,$(COSMOE_DIRS))
 endif
 
@@ -51,7 +59,9 @@ $(LIB): $(LIB_SRCS)
 
 # an add-on: its sources, the GIMP glue, libprefs, and the shared TSlider
 # unless it brings its own
-$(BUILD)/ImageManip/%: ImageManip/%/*.cpp ImageManip/%/*.h ImageManip/*.h compat/*.h $(COMMON) ImageManip/TSlider.cpp $(LIB)
+# (every add-on's headers: Relief has none, which a pattern can't match)
+ADDON_HEADERS := $(wildcard ImageManip/*/*.h) $(wildcard ImageManip/*.h) $(wildcard compat/*.h)
+$(BUILD)/ImageManip/%: ImageManip/%/*.cpp $(ADDON_HEADERS) $(COMMON) ImageManip/TSlider.cpp $(LIB)
 	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) -IImageManip/$* $(LDFLAGS_SO) -o $@ ImageManip/$*/*.cpp $(COMMON) \
 		$(if $(shell grep -l 'class TSlider' ImageManip/$*/Config.h),,ImageManip/TSlider.cpp) \
@@ -63,7 +73,7 @@ $(BUILD)/GIMP/%: GIMP/%.c GIMP/gimp.c GIMP/gems.c GIMP/*.h GIMP/GIMPMessage.cpp
 	$(CC) $(CFLAGS) -c GIMP/gimp.c -o $@.gimp.o
 	$(CC) $(CFLAGS) -c GIMP/gems.c -o $@.gems.o
 	$(CXX) $(CXXFLAGS) -c GIMP/GIMPMessage.cpp -o $@.msg.o
-	$(CXX) -o $@ $@.o $@.gimp.o $@.gems.o $@.msg.o $(LIBS) -lm
+	$(CXX) -o $@ $@.o $@.gimp.o $@.gems.o $@.msg.o $(LIBS) -lm $(GIMP_RPATH)
 	rm -f $@.o $@.gimp.o $@.gems.o $@.msg.o
 
 # what the original kept in each filter's attributes (name, category,

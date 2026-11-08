@@ -122,7 +122,7 @@ ImageResources()
 
 
 // GIMPPlugin::GIMPDir's folders: next to the application as packaged or as
-// built here, then the user's add-ons
+// built here, the system's add-ons (the Haiku package's), then the user's
 std::vector<BString>
 GIMPDirectories()
 {
@@ -135,6 +135,11 @@ GIMPDirectories()
 			dirs.push_back(BString(app.Path()) << "/../add-ons/GIMP");
 			dirs.push_back(BString(app.Path()) << "/plugins/build/GIMP");
 		}
+	}
+	BPath system;
+	if (find_directory(B_SYSTEM_ADDONS_DIRECTORY, &system) == B_OK) {
+		system.Append("GIMP");
+		dirs.push_back(system.Path());
 	}
 	BPath user;
 	if (find_directory(B_USER_ADDONS_DIRECTORY, &user) == B_OK) {

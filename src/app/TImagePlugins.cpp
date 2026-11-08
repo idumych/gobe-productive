@@ -28,8 +28,8 @@ ImageResources()
 
 // where the add-ons are: next to the application as packaged (add-ons/ in
 // its folder, or beside its bin/ in the AppImage) or as built here
-// (plugins/build), then the user's add-ons (the original's
-// ~/config/add-ons/ImageManip)
+// (plugins/build), the system's (the Haiku package's), then the user's
+// add-ons (the original's ~/config/add-ons/ImageManip)
 BString
 AddonPath(const char* kind)
 {
@@ -41,6 +41,14 @@ AddonPath(const char* kind)
 			path << app.Path() << "/add-ons/" << kind << ":" << app.Path() << "/../add-ons/"
 				<< kind << ":" << app.Path() << "/plugins/build/" << kind;
 		}
+	}
+	// (the Haiku package's: the system's add-ons)
+	BPath system;
+	if (find_directory(B_SYSTEM_ADDONS_DIRECTORY, &system) == B_OK) {
+		system.Append(kind);
+		if (path.Length() > 0)
+			path << ":";
+		path << system.Path();
 	}
 	BPath user;
 	if (find_directory(B_USER_ADDONS_DIRECTORY, &user) == B_OK) {

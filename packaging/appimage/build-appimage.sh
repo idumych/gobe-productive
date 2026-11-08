@@ -66,6 +66,13 @@ for lib in libbe.so libtracker.so libopengl.so libcosmoe-x11.so libcosmoe-waylan
 	install -m 0755 "$CROOT/lib/$lib" "$APPDIR/usr/lib/$lib"
 done
 cp -a "$CROOT/lib/addons" "$APPDIR/usr/lib/"
+# the image part's plug-ins (plugins/, GPL): libimagemanip beside the app's
+# libraries, the ImageManip add-ons and the GIMP filters in add-ons/ beside
+# its bin/, where it looks for them
+install -m 0755 plugins/build/lib/libimagemanip.so "$APPDIR/usr/lib/"
+mkdir -p "$APPDIR/usr/add-ons" "$DOC/plugins"
+cp -a plugins/build/ImageManip plugins/build/GIMP "$APPDIR/usr/add-ons/"
+cp plugins/COPYING plugins/README.md "$DOC/plugins/"
 for d in mime_db artwork locale; do
 	cp -a "$CROOT/share/cosmoe/$d" "$APPDIR/usr/share/cosmoe/"
 done
@@ -87,6 +94,7 @@ cp "$WORK/src/License.md" "$DOC/COSMOE-LICENSE.md" 2>/dev/null \
 	|| curl -fsSL "https://raw.githubusercontent.com/$COSMOE_REPO/$COSMOE_TAG/License.md" \
 		-o "$DOC/COSMOE-LICENSE.md"
 find "$APPDIR/usr/lib" -name '*.so' -exec strip --strip-unneeded {} \;
+find "$APPDIR/usr/add-ons" -type f ! -name index -exec strip --strip-unneeded {} \;
 
 # desktop entry, icon and AppRun from haiku-app.env
 GEN="$ROOT/obj/appimage-gen"
@@ -130,7 +138,10 @@ for so in "$APPDIR"/usr/lib/*.so; do "$PATCHELF" --set-rpath '$ORIGIN' "$so"; do
 for so in $(find "$APPDIR/usr/lib/addons" -name '*.so'); do
 	"$PATCHELF" --set-rpath '$ORIGIN/../..' "$so"
 done
+PLUGINS=$(find "$APPDIR/usr/add-ons/ImageManip" "$APPDIR/usr/add-ons/GIMP" -type f ! -name index)
+for plugin in $PLUGINS; do "$PATCHELF" --set-rpath '$ORIGIN/../../lib' "$plugin"; done
 DEPS_ONLY=""
+for plugin in $PLUGINS; do DEPS_ONLY="$DEPS_ONLY --deploy-deps-only=$plugin"; done
 for so in $(find "$APPDIR/usr/lib/addons" -name '*.so') \
 		"$APPDIR/usr/lib/libcosmoe-x11.so" "$APPDIR/usr/lib/libcosmoe-wayland.so"; do
 	DEPS_ONLY="$DEPS_ONLY --deploy-deps-only=$so"

@@ -2229,15 +2229,18 @@ TDocWindow::MenusBeginning()
 			// Edit Externally… while the preferences use an editor
 			enable('sI08', AppPreferences().imageExternalEditor);
 			// the Plugins menu's first item runs the last plug-in again
-			if (BMenuItem* last = KeyMenuBar()->FindItem('sI02')) {
-				int32 index = fPages != NULL ? fPages->LastImagePlugin() : -1;
-				if (index >= 0 && size_t(index) < ImagePlugins().size()) {
-					last->Message()->what = 'sI03';
-					last->Message()->RemoveName("index");
-					last->Message()->AddInt32("index", index);
-					last->SetLabel(ImagePlugins()[size_t(index)].name.String());
-					last->SetEnabled(true);
-				}
+			// (the "Plugins" menu's first item, a new 'sI03' with the
+			// plug-in's "index", its name)
+			int32 index = fPages != NULL ? fPages->LastImagePlugin() : -1;
+			BMenuItem* plugins = KeyMenuBar()->FindItem("Plugins");
+			BMenuItem* last = plugins != NULL && plugins->Submenu() != NULL
+				? plugins->Submenu()->ItemAt(0) : NULL;
+			if (last != NULL && index >= 0 && size_t(index) < ImagePlugins().size()) {
+				BMessage* run = new BMessage('sI03');
+				run->AddInt32("index", index);
+				last->SetMessage(run);
+				last->SetLabel(ImagePlugins()[size_t(index)].name.String());
+				last->SetEnabled(true);
 			}
 			BMenuItem* item = KeyMenuBar()->FindItem('sI06');
 			if (item == NULL)

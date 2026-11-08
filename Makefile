@@ -129,5 +129,6 @@ install: all
 
 clean:
 	rm -rf obj $(NAME)
+	$(MAKE) -C plugins clean
 
 .PHONY: plugins all check-platform test install clean hpkg
