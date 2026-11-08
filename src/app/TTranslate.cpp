@@ -412,7 +412,7 @@ ReadPicture(const std::string& path, ArchiveBitmap& picture)
 	// B_TRANSPARENT_MAGIC_RGBA32
 	if (bitmap->ColorSpace() == B_RGB32) {
 		uint32* pixel = (uint32*)bitmap->Bits();
-		for (int32 i = 0; i < bitmap->BitsLength() / 4; i++, pixel++) {
+		for (size_t i = 0; i < size_t(bitmap->BitsLength()) / 4; i++, pixel++) {
 			uint8* bytes = (uint8*)pixel;
 			bytes[3] = *pixel == B_TRANSPARENT_MAGIC_RGBA32 ? 0 : 255;
 		}
