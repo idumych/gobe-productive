@@ -1,0 +1,62 @@
+// Config.h for Pixelize: the plug-in's settings (Prefs) and its configuration
+// view. The original's src.zip left this header out; rebuilt for the Gobe
+// Productive port from how the plug-in's sources use it.
+#ifndef CONFIG_H
+#define CONFIG_H
+
+#include <Bitmap.h>
+#include <Box.h>
+#include <Button.h>
+#include <CheckBox.h>
+#include <ColorControl.h>
+#include <Invoker.h>
+#include <MenuField.h>
+#include <MenuItem.h>
+#include <Message.h>
+#include <PopUpMenu.h>
+#include <RadioButton.h>
+#include <Slider.h>
+#include <String.h>
+#include <StringView.h>
+#include <TabView.h>
+#include <TextControl.h>
+#include <View.h>
+#include <Window.h>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "BitmapAccessor.h"
+#include "ImageManipAddon.h"
+
+struct Prefs {
+	int32 width;
+	bool preview;
+};
+extern Prefs DefaultPrefs;
+void LoadPrefs(Prefs* thePrefs);
+void SavePrefs();
+
+class ConfigView;
+class TSlider : public BSlider {
+public:
+	TSlider(BRect frame, const char* name, const char* label, BMessage* message,
+			int32 minValue, int32 maxValue)
+		: BSlider(frame, name, label, message, minValue, maxValue),
+		mPreviewInvoker(NULL) {}
+	virtual void SetValue(int32 value);
+	BInvoker* mPreviewInvoker;
+};
+
+class ConfigView : public BView {
+public:
+	ConfigView(BRect frame, const char* name, uint32 flags, uint32 resizingMode)
+		: BView(frame, name, resizingMode, flags) {}
+	virtual void AttachedToWindow();
+	virtual void MessageReceived(BMessage *msg);
+	BCheckBox* mLivePreview = NULL;
+	TSlider* mWidth = NULL;
+	BInvoker* mPreviewInvoker = NULL;
+};
+
+#endif

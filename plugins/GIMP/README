@@ -1,0 +1,8 @@
+This directory contains a source to image filters designed for use with the GNU Image Manipulation Package version 0.54, which has been recompiled for use with Gobe Productive under BeOS.
+These files are covered by the GNU copyleft (see the file COPYING for details).  Some source files have further restrictions contained within them.
+
+By and large, source to the filters has not been modified.  A few have had bug fixes, and a few have had minor modifications due to compiler differences.  Any source file purposefully modified has been annotated as such near the top of the file.  The support files gimp.c, gimp.h, dialog_types.h, msg.h, and GIMPMessage.cpp, and the Makefile are included so that the filters may be built from scratch.  Some of these files have been modified for use under BeOS.
+
+The original authors of these filters are not liable for issues with these filters when used with Gobe Productive.  Please send any problems to <bugs@gobe.com>.
+
+Please note that usage of the GIMP plugin API by Gobe Productive has been deprecated in favor of libimagemanip <http://www.xs4all.nl/~edmundv/#ImageManip>,

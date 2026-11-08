@@ -1,0 +1,4 @@
+This archive contains source to image filters designed most of which were for use with the GNU Image Manipulation Package.  These have been ported to the libimagemanip API 
+<http://www.xs4all.nl/~edmundv/#ImageManip>.
+
+This source is distributed in compliance with the GNU General Public License.  See the file COPYING in any of the subdirectories for details.
