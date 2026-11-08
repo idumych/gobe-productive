@@ -20,6 +20,12 @@ struct SheetStyles {
 // counted for one more spreadsheet part using them
 SheetStyles AddSheetStyles(StyleMgr& styles, uint32_t base);
 
+// TSSPrefs' default column width and row height (TheSSPrefsPtr), which new
+// spreadsheet parts take; 72 and 16 until the application sets them
+void SetSheetDefaults(float columnWidth, float rowHeight);
+float SheetDefaultColumnWidth();
+float SheetDefaultRowHeight();
+
 // a new spreadsheet part's record (TPartSS::TPartSS(TDoc*)): part id `id`,
 // its selection, the styles; with a frame in the blank spreadsheet's browse
 // root (part 2) when `framed`, else none (a sheet not shown)

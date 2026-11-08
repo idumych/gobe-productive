@@ -278,15 +278,6 @@ GIMPInfo(const ImagePlugin& plugin, BString& description, BString& author, BStri
 }
 
 
-// StringAlert: the text in an info alert with an OK button
-static void
-StringAlert(const char* text)
-{
-	(new BAlert("Alert", text, GobeResources::IndexString(2, 0).String(), NULL, NULL,
-		B_WIDTH_AS_USUAL, B_INFO_ALERT))->Go();
-}
-
-
 // GIMPPlugin::About: the name, "by" the author and <address> on lines of
 // their own, the description
 static void

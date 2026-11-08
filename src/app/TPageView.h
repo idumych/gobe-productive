@@ -13,6 +13,7 @@
 #include <Gradient.h>
 #include <PopUpMenu.h>
 #include <TextView.h>
+#include <Messenger.h>
 #include <View.h>
 
 #include <array>
@@ -500,6 +501,14 @@ private:
 	void ImageAntsTick();
 	BRect ImageViewRect(size_t part, BRect pixels) const;
 	void DrawImageSelection(const IMPart& im, BRect source, BRect dest);
+	// the external editor (TPageImageEditor.cpp): EditorLooper, the
+	// editor's messenger
+	BLooper* fImageEditor = NULL;
+	BMessenger fImageEditorTarget;
+	bool ImageContextMenu(BPoint where);
+	void EditImageExternally();
+	bool ImageEditorMessage(BMessage* message);
+	void EndImageEditor();
 	// the image plug-ins (TPageImagePlugins.cpp): the one running, and each
 	// image's last (TPartIM +0x84, for the Plugins menu's first item)
 	struct PluginRun;
@@ -766,7 +775,11 @@ private:
 	int fInlinePasses = 0;
 	std::vector<Line> fLines;
 	std::map<std::vector<uint32_t>, CellStyle> fCellStyles;
-	std::map<size_t, std::unique_ptr<BBitmap>> fImages;
+	struct CachedImage {
+		std::unique_ptr<BBitmap> bitmap;
+		bool alpha = false;		// TPartIM +0xc5 (CheckForAlpha)
+	};
+	std::map<size_t, CachedImage> fImages;
 	bool fDragging = false;
 	bool fDraggingCells = false;	// cell range: drag from first click
 	bool fDraggingHeadings = false;	// whole rows or columns: the same

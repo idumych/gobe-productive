@@ -2078,6 +2078,22 @@ TPageView::DrawSpreadsheet(const Document::PlacedFrame& f, BRect r)
 }
 
 
+// TPartIM::CheckForAlpha: a pixel less than opaque
+static bool
+ImageHasAlpha(const IMPart& im)
+{
+	if (im.image.colorSpace != B_RGBA32)
+		return false;
+	for (int y = 0; y < im.image.Height(); y++) {
+		const uint8* row = &im.image.bits[size_t(y) * im.image.bytesPerRow];
+		for (int x = 0; x < im.image.Width(); x++)
+			if (row[x * 4 + 3] != 255)
+				return true;
+	}
+	return false;
+}
+
+
 // An image part (TFrameIM): the frame shows its rectangle of the bitmap.
 void
 TPageView::DrawImage(const Document::PlacedFrame& f, BRect r)
@@ -2100,19 +2116,43 @@ TPageView::DrawImage(const Document::PlacedFrame& f, BRect r)
 			delete bitmap;
 			bitmap = NULL;
 		}
-		found = fImages.emplace(f.part, std::unique_ptr<BBitmap>(bitmap)).first;
+		CachedImage cached;
+		cached.bitmap.reset(bitmap);
+		cached.alpha = ImageHasAlpha(im);
+		found = fImages.emplace(f.part, std::move(cached)).first;
 	}
-	if (!found->second)
+	if (!found->second.bitmap)
 		return;
 	const float* c = f.frame->sheetRect;
-	BRect source = c[2] >= c[0] ? BRect(c[0], c[1], c[2], c[3]) : found->second->Bounds();
+	BRect source = c[2] >= c[0] ? BRect(c[0], c[1], c[2], c[3])
+		: found->second.bitmap->Bounds();
 	BRect dest(r.left, r.top, r.left + source.Width(), r.top + source.Height());
 	PushState();
 	BRegion clip(r);
 	ConstrainClippingRegion(&clip);
+	// TFrameIM::Draw: with "Use Checkered Background", an image with
+	// transparency in a frame on a page (not an image document's) over
+	// the "Image Background" style's pattern: 10-point squares, light gray
+	// and white, not zoomed (TPartIMFactory's 100 x 100 bitmap)
+	if (AppPreferences().imageCheckered && int(f.part) != fDocument.MainPart()
+			&& !IsPrinting() && found->second.alpha) {
+		SetHighColor(255, 255, 255);
+		FillRect(dest);
+		SetHighColor(200, 200, 200);
+		float square = 10 / fZoom;
+		int row0 = int(floorf(dest.top / square)), col0 = int(floorf(dest.left / square));
+		for (int row = row0; row * square <= dest.bottom; row++) {
+			for (int col = col0; col * square <= dest.right; col++) {
+				if (((row + col) & 1) == 0)
+					continue;
+				FillRect(BRect(col * square, row * square, (col + 1) * square - 1 / fZoom,
+					(row + 1) * square - 1 / fZoom) & dest);
+			}
+		}
+	}
 	SetDrawingMode(B_OP_ALPHA);
 	SetBlendingMode(B_PIXEL_ALPHA, B_ALPHA_OVERLAY);
-	DrawBitmap(found->second.get(), source, dest);
+	DrawBitmap(found->second.bitmap.get(), source, dest);
 	// the selection's marching ants (an image document's image)
 	if (int(f.part) == fDocument.MainPart()) {
 		DrawImageSelection(im, source, dest);

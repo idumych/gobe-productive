@@ -2226,6 +2226,8 @@ TDocWindow::MenusBeginning()
 			bool floating = image != NULL && !image->floating.bits.empty();
 			for (uint32 command : {'sI05', 'sI04', 'sM15', 'sI12', 'CCUT', 'COPY', 'sM12'})
 				enable(command, selected);
+			// Edit Externally… while the preferences use an editor
+			enable('sI08', AppPreferences().imageExternalEditor);
 			// the Plugins menu's first item runs the last plug-in again
 			if (BMenuItem* last = KeyMenuBar()->FindItem('sI02')) {
 				int32 index = fPages != NULL ? fPages->LastImagePlugin() : -1;

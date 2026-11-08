@@ -1620,6 +1620,8 @@ TPageView::Click(BPoint where, int32 clicks, int32 buttons)
 	// an image's tools (TPartIM::Click)
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && ImageClick(where, clicks, buttons))
 		return;
+	if ((buttons & B_SECONDARY_MOUSE_BUTTON) != 0 && ImageContextMenu(where))
+		return;
 	if ((buttons & B_SECONDARY_MOUSE_BUTTON) == 0 && ChartClick(where, clicks))
 		return;
 	// the selected frame's handles and edge, then the ToolBar's tools: a
@@ -2217,7 +2219,7 @@ TPageView::MessageReceived(BMessage* message)
 		ImageAntsTick();
 		return;
 	}
-	if (ImagePluginMessage(message))
+	if (ImagePluginMessage(message) || ImageEditorMessage(message))
 		return;
 	// a picture dropped on an image (TFrameIM::DropNative)
 	if (message->WasDropped() && ImageDrop(message))
@@ -3646,6 +3648,18 @@ TPageView::MessageReceived(BMessage* message)
 						if (ss == NULL)
 							return;
 						float size;
+						// (the preferences' new default: the sheet's, not
+						// undone)
+						if (message->GetBool("default", false)
+								&& message->FindFloat("value", &size) == B_OK) {
+							SSPart* sheet = fDocument.EditableSpreadsheetPart(fSelectedCell.part);
+							(columns ? sheet->defaultWidth : sheet->defaultHeight) = size;
+							fBook->Reset();
+							Rebuild();
+							Invalidate();
+							Window()->PostMessage(kMsgDocumentChanged);
+							return;
+						}
 						if (message->FindFloat("value", &size) != B_OK) {
 							float current = columns
 								? ss->ColumnWidth(uint16_t(fSelectedCell.column))
@@ -6279,6 +6293,7 @@ TPageView::HandlesCommand(uint32 what)
 		case 'sI07': case 'sI09': case 'sI00': case 'sI01': case 'sI0A':	// the image's tools, colors, settings
 		case 'sI04': case 'sI05': case 'sI06': case 'sI11': case 'sI12': case 'sM15':	// Image, Duplicate
 		case 'sI03':	// a plug-in
+		case 'sI08':	// Edit Externally…
 		case 'sCHc': case 'sCHd': case 'sCHe': case 'sCH1': case 'sCH8':	// Chart
 		case 'sCH2': case 'sCH5': case 'sCH6': case 'sCHa': case 'sCHb':
 		case 'sM40': case 'sM41': case 'sM42': case 'sM43':			// Arrange

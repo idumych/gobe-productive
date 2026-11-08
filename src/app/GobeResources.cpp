@@ -8,6 +8,7 @@
 extern char** environ;
 #endif
 
+#include <Alert.h>
 #include <AppFileInfo.h>
 #include <Cursor.h>
 #include <Application.h>
@@ -274,6 +275,48 @@ GobeResources::Cursor(int32 id, const ResourceFile* file)
 	return cursor;
 }
 
+
+
+void
+StringAlert(const char* text)
+{
+	(new BAlert("Alert", text, GobeResources::IndexString(2, 0).String(), NULL, NULL,
+		B_WIDTH_AS_USUAL, B_INFO_ALERT))->Go();
+}
+
+
+bool
+ErrorAlert(status_t status, const char* text)
+{
+	if (status == B_OK)
+		return false;
+	int32 message = -1;
+	switch (uint32(status)) {
+		case 0x8000000c:
+		case 0x80010000:
+			return true;
+		case 0x80004800: message = 0x1e; break;	// B_NO_TRANSLATOR
+		case 0x80004801: message = 0x1f; break;	// B_ILLEGAL_DATA
+		case 0xa0b00000: message = 0x18; break;
+		case 0xa0b00001: message = 0x19; break;
+		case 0xa0b00002: message = 0x1a; break;
+		case 0xa0b00003: message = 0x1b; break;
+		case 0xa0b00004: message = 0x1c; break;
+		case 0xa0b00005: message = 0x1d; break;
+		case 0xdada0000: message = 0x20; break;
+		case 0xdada0001: message = 0x21; break;
+		case 0xdada0002: message = 0x22; break;
+	}
+	BString shown;
+	if (message >= 0)
+		shown = GobeResources::IndexString(6, message);
+	else if (text == NULL)
+		shown.SetToFormat(GobeResources::IndexString(2, 9).String(), strerror(status));
+	else
+		shown.SetToFormat(GobeResources::IndexString(2, 10).String(), text, strerror(status));
+	StringAlert(shown.String());
+	return true;
+}
 
 
 void

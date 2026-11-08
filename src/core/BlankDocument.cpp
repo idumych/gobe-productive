@@ -459,6 +459,31 @@ NoPortals(DocWriter& w)
 } // namespace
 
 
+static float sSheetColumnWidth = 72, sSheetRowHeight = 16;
+
+
+void
+SetSheetDefaults(float columnWidth, float rowHeight)
+{
+	sSheetColumnWidth = columnWidth;
+	sSheetRowHeight = rowHeight;
+}
+
+
+float
+SheetDefaultColumnWidth()
+{
+	return sSheetColumnWidth;
+}
+
+
+float
+SheetDefaultRowHeight()
+{
+	return sSheetRowHeight;
+}
+
+
 std::vector<uint8_t>
 SheetPartRecord(uint32_t id, uint32_t selection, const SheetStyles& styles, bool framed,
 	uint32_t frameStyle)
@@ -490,8 +515,8 @@ SheetPartRecord(uint32_t id, uint32_t selection, const SheetStyles& styles, bool
 	w.UInt32(0);			// no formulas
 	w.UInt32(0);			// no links
 	w.Sig(Sig("disp"));
-	w.Float(16);
-	w.Float(72);
+	w.Float(sSheetRowHeight);
+	w.Float(sSheetColumnWidth);
 	for (uint32_t style : {styles.grid, styles.header, styles.column, styles.row, styles.lock})
 		w.UInt32(style);
 	w.Sig(Sig("dopt"));

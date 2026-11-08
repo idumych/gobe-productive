@@ -47,6 +47,14 @@ public:
 	static const BCursor* Cursor(int32 id, const ResourceFile* file = NULL);
 };
 
+// StringAlert: the text in an info alert with an OK button (STR# 2, 0)
+void StringAlert(const char* text);
+// ErrorAlert: nothing for B_OK (false), else the error's message from STR#
+// 6 for the translation and the program's own errors, or STR# 2's "%s"
+// (9) or "%s: %s" (10, with `text`) with strerror's; nothing shown for a
+// cancel; true
+bool ErrorAlert(status_t status, const char* text = NULL);
+
 // a URL in the program for its kind (`mime`: "text/html", "text/x-email");
 // on Linux (Cosmoe) the desktop's, through xdg-open
 void LaunchURL(const char* mime, const char* url);

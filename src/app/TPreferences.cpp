@@ -17,6 +17,7 @@
 
 #include <cstdlib>
 
+#include "BlankParts.h"
 #include "GobeResources.h"
 #include "TDocWindow.h"
 #include "TSpellBar.h"
@@ -31,8 +32,11 @@ const uint32 kCommand = 'APPL';
 // Prefs (3), in the order TDialogPrefs::LoadAllPrefs lists them; the groups
 // are named by "Application" and the parts' PART resources
 const PreferencePanel kPanels[] = {
-	{0, "General", 41}, {0, "Spell Checking", 42}, {1, "General", 308}, {2, "General", 204}
+	{0, "General", 41, NULL}, {0, "Spell Checking", 42, NULL}, {1, "General", 308, NULL},
+	{2, "General", 204, NULL}, {3, "General", 3, "ImageProcessing"},
+	{4, "General", 1000, "Spreadsheet"}
 };
+const int32 kPanelCount = int32(sizeof(kPanels) / sizeof(kPanels[0]));
 
 int32 sLastPanel = 0;		// TDialogPrefs' mTheLastGroup
 
@@ -46,9 +50,10 @@ U32(const std::vector<uint8_t>& data, size_t at)
 
 
 const std::vector<uint8_t>*
-PrefResource(int32 id)
+PrefResource(int32 id, const char* part = NULL)
 {
-	const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("PREF"), id);
+	const ResourceFile& file = part != NULL ? GobeResources::Part(part) : GobeResources::File();
+	const ResourceFile::Resource* r = file.Find(FourCC("PREF"), id);
 	return r != NULL ? &r->data : NULL;
 }
 
@@ -105,6 +110,90 @@ GraphicsDefaults(Preferences& p)
 	p.polyCloseManually = U32(*data, 4) != 0;
 	p.polyAutosmooth = U32(*data, 8) != 0;
 	p.shiftConstraint = float(U32(*data, 12));
+}
+
+
+// TDialog::SetTextItem with a float: no decimals when there are none
+BString
+FloatText(float value)
+{
+	BString text;
+	if (value == float(int32(value)))
+		text << int32(value);
+	else
+		text << value;
+	return text;
+}
+
+
+// TIMPrefs::PrefDefault (its PREF 0): Use External Editor, the editor's
+// signature, Use Checkered Background
+void
+ImageDefaults(Preferences& p)
+{
+	const std::vector<uint8_t>* data = PrefResource(0, "ImageProcessing");
+	if (data == NULL || data->size() < 4)
+		return;
+	p.imageExternalEditor = U32(*data, 0) != 0;
+	size_t at = 4, end = at;
+	while (end < data->size() && (*data)[end] != 0)
+		end++;
+	p.imageEditor.assign(data->begin() + long(at), data->begin() + long(end));
+	// (its last bytes past the resource's end read as 0)
+	at = end + 1;
+	uint32_t checkered = 0;
+	for (size_t i = 0; i < 4 && at + i < data->size(); i++)
+		checkered |= uint32_t((*data)[at + i]) << (8 * i);
+	p.imageCheckered = checkered != 0;
+}
+
+
+// TSSPrefs::PrefDefault (its PREF 0): the column width, the row height
+void
+SheetDefaults(Preferences& p)
+{
+	const std::vector<uint8_t>* data = PrefResource(0, "Spreadsheet");
+	if (data == NULL || data->size() < 8)
+		return;
+	p.sheetColumnWidth = float(U32(*data, 0));
+	p.sheetRowHeight = float(U32(*data, 4));
+}
+
+
+// the preferences of panel group `group` (the Spell Checking panel's of
+// group 0 with `spelling`)
+void
+CopyGroup(Preferences& to, const Preferences& from, int group)
+{
+	switch (group) {
+		case 0: {
+			Preferences keep = to;
+			to = from;
+			for (int other = 1; other < 5; other++)
+				CopyGroup(to, keep, other);
+			break;
+		}
+		case 1:
+			to.pcHomeEnd = from.pcHomeEnd;
+			to.pcPageKeys = from.pcPageKeys;
+			to.liveTextWrap = from.liveTextWrap;
+			break;
+		case 2:
+			to.fourHandles = from.fourHandles;
+			to.polyCloseManually = from.polyCloseManually;
+			to.polyAutosmooth = from.polyAutosmooth;
+			to.shiftConstraint = from.shiftConstraint;
+			break;
+		case 3:
+			to.imageCheckered = from.imageCheckered;
+			to.imageExternalEditor = from.imageExternalEditor;
+			to.imageEditor = from.imageEditor;
+			break;
+		case 4:
+			to.sheetColumnWidth = from.sheetColumnWidth;
+			to.sheetRowHeight = from.sheetRowHeight;
+			break;
+	}
 }
 
 
@@ -179,6 +268,16 @@ Load(Preferences& p)
 		p.polyAutosmooth = b;
 	if (store.FindFloat("shift constraint", &f) == B_OK)
 		p.shiftConstraint = f;
+	if (store.FindBool("external editor", &b) == B_OK)
+		p.imageExternalEditor = b;
+	if (store.FindString("editor signature", &s) == B_OK)
+		p.imageEditor = s;
+	if (store.FindBool("checkered background", &b) == B_OK)
+		p.imageCheckered = b;
+	if (store.FindFloat("column width", &f) == B_OK)
+		p.sheetColumnWidth = f;
+	if (store.FindFloat("row height", &f) == B_OK)
+		p.sheetRowHeight = f;
 }
 
 } // namespace
@@ -195,7 +294,10 @@ AppPreferences()
 		SpellingDefaults(sPreferences);
 		TextDefaults(sPreferences);
 		GraphicsDefaults(sPreferences);
+		ImageDefaults(sPreferences);
+		SheetDefaults(sPreferences);
 		Load(sPreferences);
+		SetSheetDefaults(sPreferences.sheetColumnWidth, sPreferences.sheetRowHeight);
 	}
 	return sPreferences;
 }
@@ -230,6 +332,12 @@ SavePreferences()
 	store.AddBool("poly close manually", p.polyCloseManually);
 	store.AddBool("poly autosmooth", p.polyAutosmooth);
 	store.AddFloat("shift constraint", p.shiftConstraint);
+	store.AddBool("external editor", p.imageExternalEditor);
+	store.AddString("editor signature", p.imageEditor.c_str());
+	store.AddBool("checkered background", p.imageCheckered);
+	store.AddFloat("column width", p.sheetColumnWidth);
+	store.AddFloat("row height", p.sheetRowHeight);
+	SetSheetDefaults(p.sheetColumnWidth, p.sheetRowHeight);
 	BFile file(PreferencesPath().Path(), B_WRITE_ONLY | B_CREATE_FILE | B_ERASE_FILE);
 	if (file.InitCheck() == B_OK)
 		store.Flatten(&file);
@@ -283,13 +391,16 @@ TDialogPrefs::Init()
 	list->GetFont(&font);
 	font.SetSize(9);
 	list->SetFont(&font);
-	const char* groups[3] = {"Application", NULL, NULL};
-	// the parts' names (PART 4, 3)
-	static const int32 kParts[3] = {0, 4, 3};
-	std::string names[3];
-	for (int g = 1; g < 3; g++) {
-		if (const ResourceFile::Resource* r = GobeResources::File().Find(FourCC("PART"),
-				kParts[g])) {
+	const char* groups[5] = {"Application", NULL, NULL, NULL, NULL};
+	// the parts' names (PART 4, 3; the add-on parts' PART 0)
+	static const int32 kParts[5] = {0, 4, 3, 0, 0};
+	static const char* const kPartFiles[5] = {NULL, NULL, NULL, "ImageProcessing",
+		"Spreadsheet"};
+	std::string names[5];
+	for (int g = 1; g < 5; g++) {
+		const ResourceFile& file = kPartFiles[g] != NULL ? GobeResources::Part(kPartFiles[g])
+			: GobeResources::File();
+		if (const ResourceFile::Resource* r = file.Find(FourCC("PART"), kParts[g])) {
 			if (r->data.size() > 28) {
 				size_t end = 28;
 				while (end < r->data.size() && r->data[end] != 0)
@@ -315,7 +426,7 @@ TDialogPrefs::Init()
 	// the list's rows: groups and panels in turn
 	int32 row = 0;
 	group = -1;
-	for (int32 i = 0; i < int32(sizeof(kPanels) / sizeof(kPanels[0])); i++) {
+	for (int32 i = 0; i < kPanelCount; i++) {
 		if (kPanels[i].group != group) {
 			group = kPanels[i].group;
 			row++;
@@ -369,13 +480,14 @@ void
 TDialogPrefs::ShowPanel(int32 panel)
 {
 	if (panel == fPanel || panel < 0
-			|| panel >= int32(sizeof(kPanels) / sizeof(kPanels[0])))
+			|| panel >= kPanelCount)
 		return;
 	fPanel = panel;
 	sLastPanel = panel;
 	if (BBox* box = dynamic_cast<BBox*>(Item(5)))
 		box->SetLabel(kPanels[panel].name);
-	LoadItemSet(7, kPanels[panel].items);
+	LoadItemSet(7, kPanels[panel].items,
+		kPanels[panel].part != NULL ? &GobeResources::Part(kPanels[panel].part) : NULL);
 	PanelInit(false);
 	InvalidateLayout();
 }
@@ -407,6 +519,20 @@ TDialogPrefs::ItemHit(int32 index, BMessage* message)
 						ruler.AddInt32("rulerDivisions", p.rulerDivisions);
 					window->PostMessage(&ruler);
 				}
+				// TSSPrefs::PrefSave: the front sheet's default column width
+				// and row height
+				if (p.sheetColumnWidth != fBackup.sheetColumnWidth) {
+					BMessage width('sM64');
+					width.AddFloat("value", p.sheetColumnWidth);
+					width.AddBool("default", true);
+					window->PostMessage(&width);
+				}
+				if (p.sheetRowHeight != fBackup.sheetRowHeight) {
+					BMessage height('sM65');
+					height.AddFloat("value", p.sheetRowHeight);
+					height.AddBool("default", true);
+					window->PostMessage(&height);
+				}
 			}
 			fBackup = AppPreferences();
 			PanelClose();
@@ -432,7 +558,7 @@ TDialogPrefs::ItemHit(int32 index, BMessage* message)
 				return true;
 			// the panel at that row (a group's row shows nothing)
 			int32 row = 0, group = -1;
-			for (int32 i = 0; i < int32(sizeof(kPanels) / sizeof(kPanels[0])); i++) {
+			for (int32 i = 0; i < kPanelCount; i++) {
 				if (kPanels[i].group != group) {
 					group = kPanels[i].group;
 					row++;
@@ -461,29 +587,14 @@ TDialogPrefs::PanelInit(bool revert)
 		return;
 	int group = kPanels[fPanel].group;
 	if (revert) {
-		if (kPanels[fPanel].items == 41) {
-			Preferences keep = p;
-			p = fBackup;
-			p.spelling = keep.spelling;
-			p.pcHomeEnd = keep.pcHomeEnd;
-			p.pcPageKeys = keep.pcPageKeys;
-			p.liveTextWrap = keep.liveTextWrap;
-			p.fourHandles = keep.fourHandles;
-			p.polyCloseManually = keep.polyCloseManually;
-			p.polyAutosmooth = keep.polyAutosmooth;
-			p.shiftConstraint = keep.shiftConstraint;
-		} else if (kPanels[fPanel].items == 42)
+		if (kPanels[fPanel].items == 42)
 			p.spelling = fBackup.spelling;
-		else if (group == 1) {
-			p.pcHomeEnd = fBackup.pcHomeEnd;
-			p.pcPageKeys = fBackup.pcPageKeys;
-			p.liveTextWrap = fBackup.liveTextWrap;
-		} else {
-			p.fourHandles = fBackup.fourHandles;
-			p.polyCloseManually = fBackup.polyCloseManually;
-			p.polyAutosmooth = fBackup.polyAutosmooth;
-			p.shiftConstraint = fBackup.shiftConstraint;
-		}
+		else if (kPanels[fPanel].items == 41) {
+			SpellPrefs spelling = p.spelling;
+			CopyGroup(p, fBackup, 0);
+			p.spelling = spelling;
+		} else
+			CopyGroup(p, fBackup, group);
 	}
 	switch (kPanels[fPanel].items) {
 		case 41:
@@ -550,6 +661,17 @@ TDialogPrefs::PanelInit(bool revert)
 			SetCheckBoxItem(10, p.polyAutosmooth, 7);
 			SetTextItem(11, std::to_string(int(p.shiftConstraint)).c_str(), 7);
 			break;
+		case 3:
+			// TIMPrefs::setPanelItems
+			SetCheckBoxItem(0, p.imageCheckered, 7);
+			SetCheckBoxItem(1, p.imageExternalEditor, 7);
+			SetTextItem(2, p.imageEditor.c_str(), 7);
+			break;
+		case 1000:
+			// TSSPrefs::setPanelItems
+			SetTextItem(0, FloatText(p.sheetColumnWidth).String(), 7);
+			SetTextItem(1, FloatText(p.sheetRowHeight).String(), 7);
+			break;
 	}
 }
 
@@ -578,6 +700,12 @@ TDialogPrefs::PanelDefault()
 			break;
 		case 204:
 			GraphicsDefaults(p);
+			break;
+		case 3:
+			ImageDefaults(p);
+			break;
+		case 1000:
+			SheetDefaults(p);
 			break;
 	}
 	PanelInit(false);
@@ -698,6 +826,33 @@ TDialogPrefs::PanelItemHit(int32 sub, BMessage* message)
 				}
 			}
 			break;
+		case 3:
+			switch (sub) {
+				case 0: p.imageCheckered = CheckBoxItem(0, 7); break;
+				case 1: p.imageExternalEditor = CheckBoxItem(1, 7); break;
+				case 2: p.imageEditor = TextItem(2, 7).String(); break;
+			}
+			break;
+		case 1000:
+		{
+			// TSSPrefs::PrefItemHit: from 8 to 512 points, else the alert
+			// and the value as it was
+			if (sub != 0 && sub != 1)
+				break;
+			float& value = sub == 0 ? p.sheetColumnWidth : p.sheetRowHeight;
+			BString text = TextItem(sub, 7);
+			char* end;
+			double typed = strtod(text.String(), &end);
+			if (end == text.String() || *end != '\0' || typed < 8 || typed > 512) {
+				BString alert;
+				alert.SetToFormat(GobeResources::IndexString(6, 13).String(), 8, 512);
+				StringAlert(alert.String());
+				SetTextItem(sub, FloatText(value).String(), 7);
+				return true;
+			}
+			value = float(typed);
+			break;
+		}
 	}
 	return false;
 }
@@ -712,27 +867,9 @@ TDialogPrefs::PanelClose()
 	if (fPanel < 0)
 		return;
 	int group = kPanels[fPanel].group;
-	if (group == 0) {
-		Preferences keep = p;
-		p = fBackup;
-		p.pcHomeEnd = keep.pcHomeEnd;
-		p.pcPageKeys = keep.pcPageKeys;
-		p.liveTextWrap = keep.liveTextWrap;
-		p.fourHandles = keep.fourHandles;
-		p.polyCloseManually = keep.polyCloseManually;
-		p.polyAutosmooth = keep.polyAutosmooth;
-		p.shiftConstraint = keep.shiftConstraint;
+	CopyGroup(p, fBackup, group);
+	if (group == 0)
 		TSpellBar::AppSpeller().SetUserOptions(p.spelling);
-	} else if (group == 1) {
-		p.pcHomeEnd = fBackup.pcHomeEnd;
-		p.pcPageKeys = fBackup.pcPageKeys;
-		p.liveTextWrap = fBackup.liveTextWrap;
-	} else {
-		p.fourHandles = fBackup.fourHandles;
-		p.polyCloseManually = fBackup.polyCloseManually;
-		p.polyAutosmooth = fBackup.polyAutosmooth;
-		p.shiftConstraint = fBackup.shiftConstraint;
-	}
 }
 
 } // namespace gobe

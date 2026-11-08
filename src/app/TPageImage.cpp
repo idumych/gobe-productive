@@ -466,6 +466,11 @@ TPageView::ImageCommand(BMessage* message)
 {
 	if (ImageSelectionCommand(message))
 		return true;
+	// Edit Externally…
+	if (message->what == 'sI08') {
+		EditImageExternally();
+		return true;
+	}
 	if (message->what != 'sI07' && message->what != 'sI09' && message->what != 'sI00'
 			&& message->what != 'sI01' && message->what != 'sI0A')
 		return false;

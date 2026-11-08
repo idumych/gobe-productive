@@ -1,8 +1,8 @@
-// The preferences (TAppPrefs, TWPPrefs, TGRPrefs; the add-on parts'
-// panels aren't ported): factory settings from the PREF resources (41, 42,
-// 204; the text part's are fixed), kept in the port's preferences file
-// under the original's names (TPrefStore), and File > Preferences…
-// (TDialogPrefs, DIAL/Item 40).
+// The preferences (TAppPrefs, TWPPrefs, TGRPrefs, and the add-on parts'
+// TIMPrefs and TSSPrefs): factory settings from the PREF resources (41, 42,
+// 204, the parts' PREF 0; the text part's are fixed), kept in the port's
+// preferences file under the original's names (TPrefStore), and File >
+// Preferences… (TDialogPrefs, DIAL/Item 40).
 #ifndef GOBE_TPREFERENCES_H
 #define GOBE_TPREFERENCES_H
 
@@ -29,6 +29,12 @@ struct Preferences {
 	// TGRPrefs (Item 204)
 	bool fourHandles = false, polyCloseManually = true, polyAutosmooth = true;
 	float shiftConstraint = 45;
+	// TIMPrefs (Image Processing's Item 3): Use Checkered Background, Use
+	// External Editor, the editor's signature
+	bool imageCheckered = true, imageExternalEditor = false;
+	std::string imageEditor;
+	// TSSPrefs (Spreadsheet's Item 1000)
+	float sheetColumnWidth = 72, sheetRowHeight = 16;
 };
 
 // the preferences as they are (read the first time)
@@ -36,12 +42,14 @@ Preferences& AppPreferences();
 // TApp::WriteAllPreferences
 void SavePreferences();
 
-// the panels: their group (0 Application, 1 Word Processing, 2 Graphics),
-// name and Item resource
+// the panels: their group (0 Application, 1 Word Processing, 2 Graphics,
+// 3 Image Processing, 4 Spreadsheet), name, Item resource and the part
+// whose resources have it (NULL: the application's)
 struct PreferencePanel {
 	int group;
 	const char* name;
 	int32 items;
+	const char* part;
 };
 
 class TDialogPrefs : public TDialog {

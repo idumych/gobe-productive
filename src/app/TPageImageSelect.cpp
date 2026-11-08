@@ -816,6 +816,7 @@ TPageView::DetachedFromWindow()
 {
 	delete fImageAnts;
 	fImageAnts = NULL;
+	EndImageEditor();
 	BView::DetachedFromWindow();
 }
 

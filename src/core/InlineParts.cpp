@@ -969,8 +969,8 @@ AddDrawingFrame(Document& doc, size_t drawing, size_t layer, uint32_t kind, cons
 			// rectangle
 			raw.UInt16(0);
 			raw.UInt16(0);
-			raw.UInt16(uint16_t(std::ceil(height / 16)));
-			raw.UInt16(uint16_t(std::ceil(width / 72)));
+			raw.UInt16(uint16_t(std::ceil(height / SheetDefaultRowHeight())));
+			raw.UInt16(uint16_t(std::ceil(width / SheetDefaultColumnWidth())));
 		} else {
 			uint32_t selection = uint32_t(doc.selections.selections.size());
 			DocWriter body;
