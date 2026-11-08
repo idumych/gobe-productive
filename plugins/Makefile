@@ -28,7 +28,8 @@ LIB_SRCS := libimagemanip/ImageManip.cpp libimagemanip/BitmapAccessor.cpp \
 	libimagemanip/BBitmapAccessor.cpp
 
 MANIP := $(notdir $(patsubst %/,%,$(dir $(wildcard ImageManip/*/*.cpp))))
-MANIP := $(sort $(MANIP))
+MANIP := $(filter-out Blur,$(sort $(MANIP)))
+# (Blur came in the source but not with the original: it stays out)
 MANIP_OUT := $(addprefix $(BUILD)/ImageManip/,$(MANIP))
 COMMON := ImageManip/GIMPGlue.cpp compat/libprefs.cpp
 
