@@ -17,7 +17,7 @@ HAIKU := $(if $(HAIKU_CROSS),1,$(if $(filter Haiku,$(UNAME)),1,))
 ifneq ($(HAIKU),)
   override CXXFLAGS += $(HAIKU_CROSS_CFLAGS)
   override CFLAGS += $(HAIKU_CROSS_CFLAGS)
-  LIBS := $(HAIKU_CROSS_LDFLAGS) -lbe -ltracker
+  LIBS := $(HAIKU_CROSS_LDFLAGS) -lbe -ltracker -ltranslation
   ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
   GIMP_RPATH :=
 else

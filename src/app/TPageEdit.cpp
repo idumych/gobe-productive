@@ -8,6 +8,7 @@
 #include "TGRRuler.h"
 #include "TTearOffs.h"
 #include "TPageView.h"
+#include "TImagePlugins.h"
 #include "TMenu.h"
 #include "TSheetDialogs.h"
 #include "TFormatBar.h"
@@ -4597,6 +4598,14 @@ TPageView::RunScript(const std::string& script, Document& document)
 				else
 					fprintf(stderr, "cellrect %d %d (not visible)\n", row, column);
 			}
+		} else if (command.compare(0, 7, "plugin ") == 0) {
+			// "plugin NAME": the image plug-in of that name run (Plugins)
+			const std::vector<ImagePlugin>& plugins = ImagePlugins();
+			for (size_t i = 0; i < plugins.size(); i++)
+				if (command.substr(7) == plugins[i].name.String()) {
+					RunImagePlugin(int32(i));
+					break;
+				}
 		} else if (command.compare(0, 6, "prefs ") == 0) {
 			// "prefs N": the Preferences dialog shows panel N; "prefs
 			// press S": its control S pressed; "prefs button B"
