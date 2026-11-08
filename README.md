@@ -9,7 +9,7 @@ works like the original, down to its menus and dialogs.
 
 <p align="center"><img src="docs/progress-78-78-0.svg" alt="Port progress: 78 of 78 features done, 0 left (see Features)" width="720"></p>
 
-Not everything is ported yet: most of image editing is still to come. The bar counts the [features](#features) by state.
+Every feature of the original is ported: the bar counts the [features](#features) by state.
 
 ![Gobe Productive on Haiku: a drawing with the ToolBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
@@ -21,8 +21,7 @@ Not everything is ported yet: most of image editing is still to come. The bar co
 
 ## What it does
 
-What's ported so far; [Features](#features) has the full list, with what
-isn't yet.
+[Features](#features) has the full list, area by area.
 
 **Word processing.** Styles and the style sheet, the FormatBar and ruler,
 tabs, columns, headers and footers, footnotes and endnotes, live fields, find and replace,
@@ -42,9 +41,20 @@ original's fill and pen inks, dashed, dotted and hashed pens and arrows.
 out anywhere in a document, text wrapped around them, text frames linked
 so the text flows on. Open Frame Window edits a frame on its own.
 Tables are made with Insert Table… and edited with the Table menu.
-Pictures in a document are shown and saved but not edited yet; image
-documents (File > New, Image Processing) are made, resized and painted
-with the first of the original's tools.
+Pictures dropped or pasted into a document go in as picture frames.
+
+**Images.** Image processing documents, new or opened from any picture
+the system can read (PNG, JPEG, GIF, BMP, TIFF, WebP…): the painting
+tools (pencil, airbrush, eraser, bucket, eyedropper, magnify), selections
+(marquee, lasso, magic wand, Find Color) that move, float, crop and
+invert, and the original's plug-in filters: the ImageManip add-ons and the
+GIMP filters Gobe shipped, built from their sources, with their settings,
+previews and progress. Edit Externally… hands an image to another editor
+and takes it back.
+
+![Gobe Productive on Haiku: a picture with the Lens Flare plug-in applied](docs/screenshots/haiku-image-lensflare.png)
+
+*On Haiku: a picture opened as an image document, the GIMP Lens Flare filter applied.*
 
 **Presentations.** File > New makes a presentation the way the original
 did, and the original's presentations open and show their slides in the
@@ -65,6 +75,10 @@ Styles can be exported to a file and imported into another document.
 ![Gobe Productive on Linux: an HTML page with a picture in the text and a table](docs/screenshots/linux-table-picture.png)
 
 *On Linux (X11): an HTML page opened with its table and picture.*
+
+![Gobe Productive on Linux: an image with Mosaic applied to the selection and the Plugins menu](docs/screenshots/linux-image-plugins.png)
+
+*On Linux (X11): the Mosaic filter applied to a selection, and the Plugins menu by category.*
 
 
 ## Next to the original
@@ -93,20 +107,21 @@ shown on Linux.*
 
 ## Install
 
-The current release is **0.2.1**: the word processor, spreadsheets,
-drawings, frames and presentations as in 0.2.0 (see [Features](#features)
-for what isn't ported yet), with saving fixed, the ToolBar drawn as the
-original's, and the FormatBar's pop-up menus working on Linux (0.1.1 was
-the word processor only).
+The current release is **1.0.0**, the whole of Gobe Productive: since
+0.2.1, image processing (the painting tools, selections, the plug-in
+filters, Edit Externally…, pictures opened as images), tables, charts in
+2D and 3D, slide shows, Views & Layers, the graphics ruler, tear-off
+palettes, the Status window, the Missing Fonts dialog and every dialog of
+the original the earlier releases lacked.
 
 | System | Download | Install |
 |---|---|---|
-| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-0.2.1-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v0.2.1/gobeproductive-0.2.1-1-x86_64.hpkg) | `pkgman install ./gobeproductive-0.2.1-1-x86_64.hpkg` |
-| Linux, glibc 2.39+ (x86_64) | [GobeProductive-0.2.1-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.1/GobeProductive-0.2.1-x86_64.AppImage) | `chmod +x GobeProductive-0.2.1-x86_64.AppImage`, then run it |
-| Linux, glibc 2.39+ (aarch64) | [GobeProductive-0.2.1-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v0.2.1/GobeProductive-0.2.1-aarch64.AppImage) | `chmod +x GobeProductive-0.2.1-aarch64.AppImage`, then run it |
+| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-1.0.0-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v1.0.0/gobeproductive-1.0.0-1-x86_64.hpkg) | `pkgman install ./gobeproductive-1.0.0-1-x86_64.hpkg` |
+| Linux, glibc 2.39+ (x86_64) | [GobeProductive-1.0.0-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.0/GobeProductive-1.0.0-x86_64.AppImage) | `chmod +x GobeProductive-1.0.0-x86_64.AppImage`, then run it |
+| Linux, glibc 2.39+ (aarch64) | [GobeProductive-1.0.0-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.0/GobeProductive-1.0.0-aarch64.AppImage) | `chmod +x GobeProductive-1.0.0-aarch64.AppImage`, then run it |
 
 Checksums and release notes are on the
-[release page](https://github.com/idumych/gobe-productive/releases/tag/v0.2.1).
+[release page](https://github.com/idumych/gobe-productive/releases/tag/v1.0.0).
 On Haiku it appears in the Deskbar's Applications menu. The Command key is
 **Alt** on Haiku and **Ctrl** on Linux.
 

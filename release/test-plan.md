@@ -54,3 +54,12 @@ Steps: in the reopened document, click the FormatBar's style pop-up (the
 field showing "Body+" or "Body"), then its item "Edit Styles…". Take a
 screenshot.
 PASS when: OCR (`{p}-styles.txt`) shows the floater's "Available Styles".
+
+### open-picture
+Steps: make a picture on the host (`magick -size 320x240 gradient:'#3070c0-#60c060'
+picture.png`) and copy it to the guest as `$HOME/picture-{p}.png`. Quit the
+app, then launch it with `"$HOME/picture-{p}.png"` as its argument. Take a
+screenshot.
+PASS when: OCR (`{p}-picture.txt`) shows the image document's own menu
+"Plugins", and the app log has no "open …: kind" line (a file that didn't
+open says why there).

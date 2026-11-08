@@ -11,13 +11,13 @@ resource app_signature "application/x-vnd.gobe-port.productive";
 resource app_flags B_SINGLE_LAUNCH;
 
 resource app_version {
-	major  = 0,
-	middle = 2,
-	minor  = 1,
-	variety = B_APPV_DEVELOPMENT,
+	major  = 1,
+	middle = 0,
+	minor  = 0,
+	variety = B_APPV_FINAL,
 	internal = 1,
 	short_info = "Gobe Productive for Haiku",
-	long_info = "A port of Gobe Productive 2.0.1 to 64-bit Haiku (preview). It needs the original Gobe Productive."
+	long_info = "A port of Gobe Productive 2.0.1 to 64-bit Haiku. It needs the original Gobe Productive."
 };
 
 resource file_types message {
