@@ -2505,6 +2505,9 @@ TPageView::MessageReceived(BMessage* message)
 				path = refPath.Path();
 			else
 				message->FindString("path", &path);
+			// (in an image: TPartIM::InsertMessage, the file's picture)
+			if (path != NULL && InsertImageFile(path))
+				return;
 			if (path == NULL || !fCaret.active || fDocument.WordPart(fCaret.part) == NULL) {
 				beep();
 				return;

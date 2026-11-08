@@ -493,6 +493,7 @@ private:
 	BPoint PastePoint(size_t part) const;
 	void PasteImage(size_t part, const ArchiveBitmap& picture, BPoint point, int nameIndex);
 	bool ImageDrop(BMessage* message);
+	bool InsertImageFile(const char* path);
 	bool ImageKey(const char* bytes, int32 count);
 	void FindImageColor();
 	ArchiveBitmap& ToolBitmap(IMPart& im, int& left, int& top);

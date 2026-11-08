@@ -7,6 +7,7 @@
 // marching ants around it (TIMSelection::Draw, TPartIM::Idle).
 #include "TPageView.h"
 
+#include <Beep.h>
 #include <Bitmap.h>
 #include <Clipboard.h>
 #include <Entry.h>
@@ -34,7 +35,7 @@ enum {
 
 // STR# 1 of the image part (from 0)
 enum {
-	kStrPasteImage = 3, kStrDragAndDrop = 6, kStrCropImage = 7, kStrMoveSelection = 8,
+	kStrPasteImage = 3, kStrInsert = 20, kStrDragAndDrop = 6, kStrCropImage = 7, kStrMoveSelection = 8,
 	kStrDeselect = 9, kStrFloatSelection = 10, kStrUnfloatSelection = 11, kStrSelectAll = 13,
 	kStrCut = 16, kStrDelete = 17, kStrClear = 18, kStrDuplicate = 19, kStrInvertSelection = 22
 };
@@ -696,6 +697,29 @@ TPageView::PasteImage(size_t part, const ArchiveBitmap& picture, BPoint point, i
 	s.OffsetBy(Rounded(x), Rounded(y));
 	SetImageSelection(part, *im, s);
 	ImageChanged(part);
+}
+
+
+// TPartIM::InsertMessage: File > Insert… in an image, the file's picture
+// pasted (TIMInsertCommand: a TIMPasteCommand named "Insert"); false
+// outside an image
+bool
+TPageView::InsertImageFile(const char* path)
+{
+	size_t part;
+	const IMPart* im = MainImage(&part);
+	if (im == NULL)
+		return false;
+	BBitmap* bitmap = BTranslationUtils::GetBitmap(path);
+	ArchiveBitmap picture;
+	bool found = FromBBitmap(bitmap, picture, im->image.colorSpace);
+	delete bitmap;
+	if (!found) {
+		beep();
+		return true;
+	}
+	PasteImage(part, picture, PastePoint(part), kStrInsert);
+	return true;
 }
 
 
