@@ -74,6 +74,10 @@ protected:
 
 private:
 	void Update();
+	// TInkView's opacity: the front document's selection's, for the kind
+	void UpdateOpacity();
+	// 'TRN-', 'TRN+', 'TRN#', 'TRN%' (TDialogNewColor::MessageReceived)
+	void Transparency(uint32 what);
 	void SetWindowTitle();
 	BListView* List() const;
 	void EditPen(bool make);
@@ -102,6 +106,8 @@ private:
 	BMenu* fSets = NULL;
 	BView* fKinds = NULL;
 	class TInkSetView* fInks = NULL;
+	BView* fInkPane = NULL;					// TInkView: the inks and the opacity
+	class TInkOpacityView* fOpacity = NULL;
 	BScrollView* fPenScroll = NULL;
 };
 

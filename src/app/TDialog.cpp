@@ -167,9 +167,11 @@ TDialog::AddItems(BGroupLayout* layout, const std::vector<ItemData>& items, int3
 				spacing = item.children[0].values[2] - 1;
 			BGroupLayout* inner = new BGroupLayout(
 				item.vertical ? B_VERTICAL : B_HORIZONTAL, spacing);
+			// (a fixed group: ItemGroup's frame starts that big, and grows
+			// to hold its items)
 			if (item.type == FourCC("FGRP"))
-				inner->SetInsets(item.insets[0], item.insets[1], item.insets[0],
-					item.insets[1]);
+				inner->SetExplicitMinSize(BSize(item.insets[0] > 0 ? item.insets[0] : B_SIZE_UNSET,
+					item.insets[1] > 0 ? item.insets[1] : B_SIZE_UNSET));
 			layout->AddItem(inner);
 			AlignItem(inner, item);
 			AddItems(inner, item.children, group);

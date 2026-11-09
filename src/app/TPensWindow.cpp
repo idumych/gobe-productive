@@ -1,4 +1,5 @@
 #include "TPensWindow.h"
+#include "TPageView.h"
 
 #include <Alert.h>
 #include <Application.h>
@@ -297,7 +298,9 @@ public:
 		fSet = set;
 		if (fSelected >= int32(fSet.inks.size()))
 			fSelected = -1;
-		BSize size(Columns() * Step() + fSet.gap, Rows() * Step() + fSet.gap);
+		// (TInkSetView::UpdateSetInfo: at least 69 by 97)
+		BSize size(std::max(69.0f, float(Columns() * Step() + fSet.gap)),
+			std::max(97.0f, float(Rows() * Step() + fSet.gap)));
 		SetExplicitMinSize(size);
 		SetExplicitPreferredSize(size);
 		InvalidateLayout();
@@ -454,9 +457,16 @@ TPensWindow::Init()
 		user->SetExplicitPreferredSize(BSize(B_SIZE_UNSET, B_SIZE_UNSET));
 		BGroupLayout* layout = new BGroupLayout(B_VERTICAL, 0);
 		user->SetLayout(layout);
-		layout->AddView(fInks);
+		// (TInkView: the inks in a scroll view, the opacity right of them)
+		BGroupView* pane = new BGroupView(B_HORIZONTAL, 0);
+		pane->GroupLayout()->AddView(new BScrollView("Color Scroll", fInks, 0, false, true));
+		pane->GroupLayout()->AddView(fOpacity = new TInkOpacityView());
+		layout->AddView(fInkPane = pane);
 		// (TPenView: the list, its width controls right of it)
 		BGroupView* pens = new BGroupView(B_HORIZONTAL, 0);
+		// (TDialogNewColor::InitPostRecalc: TPenView made 180 by 200)
+		pens->SetExplicitMinSize(BSize(180, 200));
+		pens->SetExplicitPreferredSize(BSize(180, 200));
 		pens->GroupLayout()->AddView(fPenScroll);
 		pens->GroupLayout()->AddView(fWidth = new TPenWidthView());
 		layout->AddView(pens);
@@ -494,6 +504,7 @@ TPensWindow::ChangeMajorType(int32 major)
 	if (fMajor != 1 && fMinor == 3)
 		ChangeMinorType(0);
 	SetWindowTitle();
+	UpdateOpacity();
 	if (fKinds != NULL)
 		fKinds->Invalidate();
 }
@@ -508,29 +519,47 @@ TPensWindow::ChangeMinorType(int32 minor)
 	SetWindowTitle();
 	Update();
 	if (fInks != NULL && fPenScroll != NULL) {
+		// (each view's own state: while the window is hidden, IsHidden()
+		// is true for all of them)
+		BView* pens = fPenScroll->Parent();
 		if (fMinor == 3) {
-			if (!fInks->IsHidden())
-				fInks->Hide();
-			if (fPenScroll->Parent()->IsHidden())
-				fPenScroll->Parent()->Show();
+			if (!fInkPane->IsHidden(fInkPane))
+				fInkPane->Hide();
+			if (pens->IsHidden(pens))
+				pens->Show();
 		} else {
-			if (fInks->IsHidden())
-				fInks->Show();
-			if (!fPenScroll->Parent()->IsHidden())
-				fPenScroll->Parent()->Hide();
+			if (fInkPane->IsHidden(fInkPane))
+				fInkPane->Show();
+			if (!pens->IsHidden(pens))
+				pens->Hide();
 			fInks->Select(-1);
 		}
 	}
 	if (fKinds != NULL)
 		fKinds->Invalidate();
+	// (the item as large as what it shows wants, which TDialog::RunDialog's
+	// ResizeToPreferred keeps too)
+	BView* shownPane = fMinor == 3 ? (fPenScroll != NULL ? fPenScroll->Parent() : NULL)
+		: fInkPane;
+	if (BView* user = Item(1)) {
+		if (shownPane != NULL) {
+			shownPane->InvalidateLayout(true);
+			BSize want = shownPane->PreferredSize();
+			user->SetExplicitMinSize(want);
+			user->SetExplicitPreferredSize(want);
+		}
+		if (GetLayout() != NULL)
+			GetLayout()->InvalidateLayout(true);
+	}
 	ResizeToPreferred();
 	// (and as large as the ink view asks: the dialog's items keep their
 	// sizes otherwise)
-	for (int pass = 0; pass < 4 && fInks != NULL && !fInks->IsHidden(); pass++) {
+	// (IsHidden() is true for all of them while the window is)
+	for (int pass = 0; pass < 4 && fInkPane != NULL && fMinor != 3; pass++) {
 		Layout(true);
-		BSize want = fInks->ExplicitMinSize();
+		BSize want = fInkPane->PreferredSize();
 		BView* user = Item(1);
-		BRect shown = user != NULL ? user->Bounds() : fInks->Bounds();
+		BRect shown = user != NULL ? user->Bounds() : fInkPane->Bounds();
 		float dx = std::max(0.0f, want.width - shown.Width());
 		float dy = std::max(0.0f, want.height - shown.Height());
 		if (dx < 1 && dy < 1)
@@ -571,6 +600,7 @@ TPensWindow::Update()
 		ActiveInkSet(fMinor, &fDocSets, fSet);
 		if (fInks != NULL)
 			fInks->SetSet(fSet.set);
+		UpdateOpacity();
 		return;
 	}
 	fPens.clear();
@@ -592,6 +622,59 @@ TPensWindow::Update()
 		list->Select(std::min(selected, list->CountItems() - 1));
 	if (fWidth != NULL)
 		fWidth->Update();
+}
+
+
+void
+TPensWindow::UpdateOpacity()
+{
+	if (fOpacity == NULL)
+		return;
+	TDocWindow* window = TDocWindow::Front();
+	if (window == NULL || window->LockWithTimeout(100000) != B_OK)
+		return;
+	ShapeStyle style;
+	bool any = false;
+	if (TPageView* pages = dynamic_cast<TPageView*>(window->FindView("TPageView")))
+		any = fMajor < 2 && pages->SelectedShapeStyle(style);
+	window->Unlock();
+	if (any)
+		fOpacity->SetOpacity(int32(std::lround((fMajor == 0 ? style.fillOpacity
+			: style.penOpacity) * 100)));
+}
+
+
+void
+TPensWindow::Transparency(uint32 what)
+{
+	if (fOpacity == NULL)
+		return;
+	TDocWindow* window = TDocWindow::Front();
+	if (what == 'TRN#' || what == 'TRN%') {
+		// the slider: the fill's, pen's or text's transparency ('sf0D',
+		// 'sf0E', 'sf0R' with the opacity)
+		static const uint32 kCommands[3] = {'sf0D', 'sf0E', 'sf0R'};
+		int32 opacity = 100 - fOpacity->Transparency();
+		BMessage set(kCommands[std::max(0, std::min(2, int(fMajor)))]);
+		set.AddInt32(kValueString, opacity);
+		set.AddBool("Compress", true);
+		if (window != NULL)
+			window->PostMessage(&set);
+		fOpacity->SetOpacity(opacity);
+		return;
+	}
+	// the buttons: a hundredth more ('TRN-') or less opaque ('sf0T' on
+	// TPropFillTransparent, TPropPenTransparent, TPropTextTransparent)
+	static const uint32 kProperties[3] = {'FTra', 'PTra', 'TTra'};
+	float step = what == 'TRN-' ? 0.01f : -0.01f;
+	BMessage relative('sf0T');
+	relative.AddFloat(kValueString, step);
+	relative.AddInt32("prop type", int32(kProperties[std::max(0, std::min(2, int(fMajor)))]));
+	relative.AddBool("Compress", true);
+	relative.AddFloat("max", 1.0f);
+	if (window != NULL)
+		window->PostMessage(&relative);
+	fOpacity->SetOpacity(fOpacity->Opacity() + (what == 'TRN-' ? 1 : -1));
 }
 
 
@@ -905,6 +988,12 @@ TPensWindow::MessageReceived(BMessage* message)
 	switch (message->what) {
 		case kMsgRefresh:
 			Update();
+			return;
+		case 'TRN-':
+		case 'TRN+':
+		case 'TRN#':
+		case 'TRN%':
+			Transparency(message->what);
 			return;
 		case kMsgMajorType:
 			ChangeMajorType(message->GetInt32(kValueString, fMajor));

@@ -84,6 +84,31 @@ private:
 	BSlider* fSlider = NULL;
 };
 
+// TInkView's opacity controls, right of the inks: the opacity ("100%"),
+// more and less opaque (MICN 0x21, 0x20: 'TRN-' / 'TRN+', a hundredth
+// more or less) and a vertical slider of the transparency (0-100: 'TRN#',
+// 'TRN%' while dragging), all to the window (TDialogNewColor::
+// MessageReceived), which posts them to the front document.
+class TInkOpacityView : public BView {
+public:
+	TInkOpacityView();
+
+	virtual void AttachedToWindow();
+
+	// TInkView::SetOpacity: 0-100, the label and the slider (at 100 less)
+	void SetOpacity(int32 opacity);
+	int32 Opacity() const { return fOpacity; }
+	// the slider's transparency
+	int32 Transparency() const;
+
+private:
+	int32 fOpacity = 100;
+	BStringView* fLabel = NULL;
+	BControl* fMore = NULL;
+	BControl* fLess = NULL;
+	BSlider* fSlider = NULL;
+};
+
 } // namespace gobe
 
 #endif

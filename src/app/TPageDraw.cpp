@@ -1415,16 +1415,25 @@ TPageView::ShapeCommand(BMessage* message)
 	// the Transparency floater's buttons ('sf0T', TFormatCommand::
 	// ParseMessage with "prop type" ' Tra'): each shape's own opacity
 	// (TPropShapeTransparent, 1 without one) plus the value, 0 to 1
+	// (the Inks window's opacity buttons: "prop type" FTra, the fill's own,
+	// or PTra, the pen's)
 	float delta = what == 'sf0T' ? message->GetFloat(kValueString, 0.1f) : 0;
+	uint32 stepType = uint32(message->GetInt32("prop type", 0));
 	auto stepped = [&](uint32_t style) {
 		ShapeStyle shape = ResolveShapeStyle(fDocument.styles, style);
+		if (stepType == Sig("FTra"))
+			return std::vector<Property>{OpacityProperty(Sig("FTra"),
+				std::max(0.0f, std::min(1.0f, shape.fillOpacity + delta)))};
+		if (stepType == Sig("PTra"))
+			return std::vector<Property>{OpacityProperty(Sig("PTra"),
+				std::max(0.0f, std::min(1.0f, shape.penOpacity + delta)))};
 		float opacity = std::max(0.0f, std::min(1.0f,
 			std::min(shape.fillOpacity, shape.penOpacity) + delta));
 		return std::vector<Property>{OpacityProperty(Sig("FTra"), opacity),
 			OpacityProperty(Sig("PTra"), opacity)};
 	};
 	if (what == 'sf0T') {
-		if (message->GetInt32("prop type", 0) != int32(Sig(" Tra")))
+		if (stepType != Sig(" Tra") && stepType != Sig("FTra") && stepType != Sig("PTra"))
 			return true;
 	} else if (what == 'sf09') {
 		// the pen's size (TPropPenSize: the FormatBar pen menu's Pen Size,

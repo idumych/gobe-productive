@@ -1295,6 +1295,66 @@ TPenWidthView::Post(float width)
 }
 
 
+TInkOpacityView::TInkOpacityView()
+	:
+	BView("InkView", B_WILL_DRAW)
+{
+	SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+	fLabel = new BStringView("opacity", "100%");
+	fLabel->SetAlignment(B_ALIGN_CENTER);
+	fMore = new TRepeatButton(0x21, new BMessage('TRN-'));
+	fLess = new TRepeatButton(0x20, new BMessage('TRN+'));
+	fSlider = new BSlider("slider", NULL, new BMessage('TRN#'), 0, 100, B_VERTICAL);
+	fSlider->SetModificationMessage(new BMessage('TRN%'));
+	fSlider->SetBarColor(make_color(0xee, 0xee, 0xee));
+	// (TVerticalSlider: made 21 by 50)
+	fSlider->SetExplicitMinSize(BSize(B_SIZE_UNSET, 50));
+	fSlider->SetExplicitMaxSize(BSize(30, B_SIZE_UNLIMITED));
+	// (TInkView::PositionSubViews: the label, a button under it, the
+	// slider, the other button at the bottom, in a column)
+	BGroupLayout* layout = new BGroupLayout(B_VERTICAL, 3);
+	SetLayout(layout);
+	layout->SetInsets(4, 2, 4, 2);
+	layout->AddView(fLabel);
+	layout->AddView(fMore, 0.0f);
+	layout->AddView(fSlider);
+	layout->AddView(fLess, 0.0f);
+	layout->SetItemWeight(2, 1);
+	fLabel->SetExplicitMinSize(BSize(fLabel->StringWidth("100%") + 4, B_SIZE_UNSET));
+	SetOpacity(100);
+}
+
+
+void
+TInkOpacityView::AttachedToWindow()
+{
+	BView::AttachedToWindow();
+	fMore->SetTarget(Window());
+	fLess->SetTarget(Window());
+	fSlider->SetTarget(Window());
+}
+
+
+void
+TInkOpacityView::SetOpacity(int32 opacity)
+{
+	fOpacity = std::max(int32(0), std::min(int32(100), opacity));
+	BString text;
+	text.SetToFormat("%d%%", int(fOpacity));
+	fLabel->SetText(text.String());
+	// (TVerticalSlider's transparency runs down from 0 at the top; a
+	// vertical BSlider's values run up, so it takes the opacity)
+	fSlider->SetValue(fOpacity);
+}
+
+
+int32
+TInkOpacityView::Transparency() const
+{
+	return 100 - fSlider->Value();
+}
+
+
 void
 TPenWidthView::MessageReceived(BMessage* message)
 {

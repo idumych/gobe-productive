@@ -3007,6 +3007,26 @@ TPageView::MessageReceived(BMessage* message)
 			UpdateMarks();
 			return;
 		}
+		// the Inks window's opacity buttons on text or cells ('sf0T' with
+		// TTra or FTra): the current opacity a hundredth more or less
+		case 'sf0T': {
+			uint32 type = uint32(message->GetInt32("prop type", 0));
+			float current = 1;
+			CellStyle cell;
+			if (!fCaret.active && ActiveCellStyle(cell)
+					&& (type == Sig("FTra") || type == Sig("TTra")))
+				current = type == Sig("FTra") ? cell.fillOpacity : cell.text.opacity;
+			else if (fCaret.active && type == Sig("TTra"))
+				current = StyleAt(TextSelectionRange().first).opacity;
+			else
+				return;
+			float opacity = current + message->GetFloat(kValueString, 0);
+			BMessage set(type == Sig("FTra") ? 'sf0D' : 'sf0R');
+			set.AddInt32(kValueString, int32(std::lround(std::max(0.0f, std::min(1.0f, opacity))
+				* 100)));
+			MessageReceived(&set);
+			return;
+		}
 		// the text's and the fill's transparency (TFormatCommand: 'sf0R'
 		// TPropTextTransparent, 'sf0D' TPropFillTransparent, value / 100)
 		case 'sf0R':
