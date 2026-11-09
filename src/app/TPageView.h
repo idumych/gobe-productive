@@ -178,6 +178,7 @@ public:
 	class TRibbon* fFormatBar = NULL;
 	class TEntryBar* fEntryBar = NULL;	// a spreadsheet's (TEntryBar)
 	bool fCellsActive = false;	// what the window last heard (kMsgActiveRibbon)
+	bool fTextActive = false;	// (and of the caret)
 	class TPageBar* fPageBar = NULL;
 	class TRibbon* fSpellBar = NULL;
 	// TDocWindow (TPageBar::SetPageNumbers): the pages in view, from 1

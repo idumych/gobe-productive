@@ -131,7 +131,6 @@ private:
 	void Print();
 	void GeometryChanged();
 
-	BStringView* fStatus;
 	TMenuBar* fBar = NULL;
 	std::vector<BMenu*> fPartMenus;	// the active part's (InstallPartMenus)
 	bool fSheetMenus = false;

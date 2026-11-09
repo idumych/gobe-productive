@@ -179,9 +179,6 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 	if (getenv("GOBE_DEBUG_MENUS") != NULL)
 		menuBar->AddItem(MakeDialogsMenu());
 
-	fStatus = new BStringView("status", "Gobe Productive port: menus and dialogs "
-		"from the original resources");
-
 	BView* desk;
 	if (document != NULL) {
 		fDocument = document;
@@ -254,13 +251,6 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 				fSheetBar->Hide();
 		} else
 			desk = new TDocView(*document);
-		// (the status line is the port's: which slide a presentation shows,
-		// and commands not ported yet)
-		BString status;
-		if (!document->slides.empty())
-			status << "Slide " << document->currentSlide + 1 << " of "
-				<< document->slides.size() << " (arrows, space or click to change)";
-		fStatus->SetText(status.String());
 	} else {
 		desk = new BView("desk", B_WILL_DRAW);
 		desk->SetViewColor(152, 152, 152);
@@ -321,12 +311,8 @@ TDocWindow::TDocWindow(BRect frame, const char* title, Document* document)
 		bars.End();
 		middle.End();
 	}
-	layout
-		.AddGroup(B_HORIZONTAL)
-			.SetInsets(B_USE_SMALL_INSETS, 2, B_USE_SMALL_INSETS, 2)
-			.Add(fStatus)
-			.AddGlue()
-		.End();
+	// (the active part's ribbon as the document opens)
+	ShowActiveRibbon();
 }
 
 
@@ -1289,13 +1275,9 @@ TDocWindow::MessageReceived(BMessage* message)
 			return;
 		}
 		case kMsgSlideChanged:
-		{
-			BString status;
-			status << "Slide " << message->GetInt32("slide", 0) + 1 << ": "
-				<< message->GetString("name", "");
-			fStatus->SetText(status.String());
+			// (the Presentation window follows the slide shown)
+			TDialogPRNavigate::Refresh();
 			return;
-		}
 		case kCmdNew:
 			be_app->PostMessage(kCmdNew);
 			return;
@@ -1750,7 +1732,6 @@ TDocWindow::MessageReceived(BMessage* message)
 	if (message->FindString("name", &name) == B_OK)
 		text << " name \"" << name << "\"";
 	text << " - not ported yet";
-	fStatus->SetText(text.String());
 	printf("%s\n", text.String());
 
 	switch (message->what) {
@@ -1924,7 +1905,6 @@ TDocWindow::Save(const std::string& path)
 	// another window had changed it, which marked it changed again)
 	fSeenGeneration = fShared->generation;
 	fShared->TitlesChanged();
-	fStatus->SetText(("Saved " + path).c_str());
 	return true;
 }
 
@@ -2049,11 +2029,13 @@ TDocWindow::UpdateTextMarks(const char* family, uint32_t faceFlags,
 void
 TDocWindow::ShowActiveRibbon()
 {
-	bool ribbons = fPartBar != NULL && !fPartBar->IsHidden();
+	// (each view's own state: IsHidden() is true for all while the window
+	// is hidden)
+	bool ribbons = fPartBar != NULL && !fPartBar->IsHidden(fPartBar);
 	bool chart = fPages != NULL && fPages->ActiveChartPart() >= 0;
 	bool cells = !chart && fPages != NULL && fPages->fSelectedCell.active;
 	auto show = [](BView* view, bool on) {
-		if (view == NULL || on == !view->IsHidden())
+		if (view == NULL || on == !view->IsHidden(view))
 			return;
 		if (on)
 			view->Show();
@@ -2065,7 +2047,15 @@ TDocWindow::ShowActiveRibbon()
 		fChartRibbon->SelectSubRibbon(fPages != NULL && fPages->ActiveChartIs3D() ? 1 : 0);
 	show(fChartRibbon, ribbons && chart);
 	show(fEntryBar, ribbons && cells);
-	show(fRuler, ribbons && !chart && !(cells && fEntryBar != NULL));
+	// (in a drawing, the text ruler only while its text is edited: the
+	// active part is the drawing's otherwise)
+	bool drawing = false;
+	if (fDocument != NULL && fDocument->MainPart() >= 0) {
+		uint32 kind = fDocument->parts.parts[size_t(fDocument->MainPart())].kind;
+		drawing = kind == Sig("GRFX") || kind == Sig("PRES");
+	}
+	bool text = !drawing || (fPages != NULL && fPages->fCaret.active);
+	show(fRuler, ribbons && !chart && !(cells && fEntryBar != NULL) && text);
 	if (fPartBar != NULL)
 		fPartBar->Update();
 }

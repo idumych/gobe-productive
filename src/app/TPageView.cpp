@@ -2775,8 +2775,10 @@ TPageView::Draw(BRect updateRect)
 		Window()->PostMessage(kMsgActiveRibbon);
 	}
 	if (!IsPrinting() && Window() != NULL && (fSelectedCell.active != fCellsActive
+			|| fCaret.active != fTextActive
 			|| (fEntryBar != NULL && fSelectedCell.active == fEntryBar->IsHidden()))) {
 		fCellsActive = fSelectedCell.active;
+		fTextActive = fCaret.active;
 		Window()->PostMessage(kMsgActiveRibbon);
 	}
 	if (fEntryBar != NULL && !IsPrinting())
