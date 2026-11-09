@@ -7,9 +7,9 @@ charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
 
-<p align="center"><img src="docs/progress-78-78-0.svg" alt="Port progress: 78 of 78 features done, 0 left (see Features)" width="720"></p>
+<p align="center"><img src="docs/progress-78-78.svg" alt="Port progress: 78 of 78 features done (see Features)" width="720"></p>
 
-Every feature of the original is ported: the bar counts the [features](#features) by state.
+Every feature of the original is ported: the bar counts the [features](#features).
 
 ![Gobe Productive on Haiku: a drawing with the ToolBar, pen types and arrows](docs/screenshots/haiku-drawing.png)
 
@@ -198,45 +198,44 @@ comes with them (`LICENSE-WordNet`) and must stay with the files.
 
 ## Features
 
-What the original Gobe Productive 2.0.1 does, area by area. The last
-column is the release each feature came in, or "not yet". The "not yet"
-rows came from checking every menu command and dialog of the original
-(the main program and each part), and the menus its code builds (context
-menus, tear-off menus), against the port.
+What the original Gobe Productive 2.0.1 does, area by area. The list
+came from checking every menu command and dialog of the original (the
+main program and each part), and the menus its code builds (context
+menus, tear-off menus), against the port; every one is done.
 
 ### Documents and windows
 
 | Feature | State |
 |---|---|
-| Opening and saving Gobe Productive documents; only what was edited is rewritten, everything else is kept byte for byte | 0.1.1 |
-| File menu: New (word processing), Open Recent, Revert, Insert… (text and RTF), Page Setup, Print, Help (the original's User's Guide), About | 0.1.1 |
-| File > New spreadsheets, laid out as the original's (rows 1-500, columns A-T, its grid and heading styles) | 0.2.0 |
-| File > New drawings: an empty page as the original makes it (drawing tools aren't ported yet, so it stays empty) | 0.2.0 |
-| File > New presentations: one blank slide on a "Background" layer, the screen's size, as the original makes it | 0.2.0 |
-| Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | 0.2.0 |
-| Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | 0.2.0 |
-| New Window: more windows on a document (titled "name:1", "name:2"), each scrolled, zoomed and selected on its own, one undo history and saved state; an edit shows in all; the last window to close asks to save (the sheet shown is the document's, for all its windows) | 0.2.0 |
-| The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | 0.2.0 |
-| The ToolBar's part tool: text, spreadsheet, drawing, table and picture frames dragged out in a drawing | 0.2.0 |
-| The ToolBar's Bezier tool (a press a point, a drag its control points) and toolbar shapes (the original's shapes, chosen from its menu, dragged out) | 0.2.0 |
-| The Missing Fonts dialog: a document using fonts that aren't installed says which (BeOS's Bitstream fonts count as there when the Liberation fonts, which have their widths, are) | next |
-| Tear-off palettes: the FormatBar's menus dragged off into floating windows (Styles; Text Formatting from the font, size and face menus; Named Selections; Shape Transparency; each ink menu into the Inks window on its kind) and the zoom's slider dragged off into Scale | next |
-| The Status window: progress while a file is imported or exported, with Cancel | next |
+| Opening and saving Gobe Productive documents; only what was edited is rewritten, everything else is kept byte for byte | done |
+| File menu: New (word processing), Open Recent, Revert, Insert… (text and RTF), Page Setup, Print, Help (the original's User's Guide), About | done |
+| File > New spreadsheets, laid out as the original's (rows 1-500, columns A-T, its grid and heading styles) | done |
+| File > New drawings: an empty page as the original makes it | done |
+| File > New presentations: one blank slide on a "Background" layer, the screen's size, as the original makes it | done |
+| Sheets: the SheetBar, a tab per sheet; New Sheet…, Delete Sheet, Rename Sheet…, tabs dragged to reorder, all undoable | done |
+| Show Clipboard (Window menu): the last copied text with its styles, or cells with their values | done |
+| New Window: more windows on a document (titled "name:1", "name:2"), each scrolled, zoomed and selected on its own, one undo history and saved state; an edit shows in all; the last window to close asks to save (the sheet shown is the document's, for all its windows) | done |
+| The ToolBar (Window > Show ToolBar, shown at first in drawings): the original's tools in a column beside the document, the arrow and the shape tools working | done |
+| The ToolBar's part tool: text, spreadsheet, drawing, table and picture frames dragged out in a drawing | done |
+| The ToolBar's Bezier tool (a press a point, a drag its control points) and toolbar shapes (the original's shapes, chosen from its menu, dragged out) | done |
+| The Missing Fonts dialog: a document using fonts that aren't installed says which (BeOS's Bitstream fonts count as there when the Liberation fonts, which have their widths, are) | done |
+| Tear-off palettes: the FormatBar's menus dragged off into floating windows (Styles; Text Formatting from the font, size and face menus; Named Selections; Shape Transparency; each ink menu into the Inks window on its kind) and the zoom's slider dragged off into Scale | done |
+| The Status window: progress while a file is imported or exported, with Cancel | done |
 
 ### Word processor
 
 | Feature | State |
 |---|---|
-| Typing, selection (double, triple and quadruple clicks; the arrow keys with Command, Option and Control; Home/End, Page Up/Down), cut, copy and paste with styles, undo and redo, Find/Change, the context menu | 0.1.1 |
-| Fonts, sizes, faces, colours, alignment, Paragraph Format, tabs, line and paragraph spacing, Copy/Paste Format, Show/Hide Invisibles | 0.1.1 |
-| Pages that come and go with the text; margins, headers and footers; columns; line, frame and page breaks; separator lines | 0.1.1 |
-| Page numbers, dates, times and formulas as live fields; footnotes and endnotes | 0.1.1 |
-| Styles: applying paragraph and basic styles, New Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, formatting a style directly) | 0.1.1 |
-| Import Styles and Export Styles (Edit Styles' File menu): the styles picked, written as the original's styles files and read back | 0.2.0 |
-| Spell checking with the original's dictionaries | 0.1.1 |
-| Spreadsheet and drawing odds and ends: row and column sizes dragged at the headings, the SheetBar's tab menu (rename, reorder), SYLK dates, HTML column spans (the cells after a span in their columns), short dashes drawn as marks, the frame window's white page | 0.2.0 |
-| Writing Tools' Thesaurus… and Dictionary…, on files made from WordNet (see [The thesaurus and dictionary](#the-thesaurus-and-dictionary)) | 0.2.0 |
-| Word Count, the text ruler, the FormatBar and PartBar, zoom, the browse view, Preferences, History, Document Size | 0.1.1 |
+| Typing, selection (double, triple and quadruple clicks; the arrow keys with Command, Option and Control; Home/End, Page Up/Down), cut, copy and paste with styles, undo and redo, Find/Change, the context menu | done |
+| Fonts, sizes, faces, colours, alignment, Paragraph Format, tabs, line and paragraph spacing, Copy/Paste Format, Show/Hide Invisibles | done |
+| Pages that come and go with the text; margins, headers and footers; columns; line, frame and page breaks; separator lines | done |
+| Page numbers, dates, times and formulas as live fields; footnotes and endnotes | done |
+| Styles: applying paragraph and basic styles, New Style, Edit Styles (Modify, Copy, Cut, Paste and Clear Style, formatting a style directly) | done |
+| Import Styles and Export Styles (Edit Styles' File menu): the styles picked, written as the original's styles files and read back | done |
+| Spell checking with the original's dictionaries | done |
+| Spreadsheet and drawing odds and ends: row and column sizes dragged at the headings, the SheetBar's tab menu (rename, reorder), SYLK dates, HTML column spans (the cells after a span in their columns), short dashes drawn as marks, the frame window's white page | done |
+| Writing Tools' Thesaurus… and Dictionary…, on files made from WordNet (see [The thesaurus and dictionary](#the-thesaurus-and-dictionary)) | done |
+| Word Count, the text ruler, the FormatBar and PartBar, zoom, the browse view, Preferences, History, Document Size | done |
 
 ### Spreadsheets
 
@@ -247,71 +246,71 @@ sizes, headings and options are saved with the document.
 
 | Feature | State |
 |---|---|
-| Cells edited (values and formulas, evaluated), cut, copy and paste, Fill Down and Fill Right, rows inserted and deleted | 0.1.1 |
-| The EntryBar (Enter, Tab, Escape, Accept and Cancel) and Paste Function (the original's functions by category, with their help) | 0.2.0 |
-| Number…, Lock and Unlock Cells, Column Width… and Row Height… (or a heading's edge dragged), Display Options… | 0.2.0 |
-| Fill Up and Left; Move Cells… (formulas and names follow); Insert Cells… and Delete Cells…, whole rows and columns (#REF! for deleted references); Sort… by up to three keys | 0.2.0 |
-| Cells copied and pasted as cells (relative references adjusted), Paste Special…, Copy Format and Paste Format | 0.2.0 |
-| Calculate Now, Auto Calculate, Go To Cell…; named selections (Name Selection…, Edit Names…, names in formulas) | 0.2.0 |
-| The FormatBar and PartBar for cells: font, size, faces, colours, alignment, Wrap Text, borders (with Transparency > Other…), Number Formatting | 0.2.0 |
-| Selecting rows, columns and every cell by the headings; several ranges at once with Command-click; Select Dependents | 0.2.0 |
-| Charts made from cells: Make Chart (the PartBar's button, the cells' context menu) charts the selected cells as a 2D bar chart beside the data, series and categories named from the labels, linked to the cells; undoable, saved | 0.2.0 |
+| Cells edited (values and formulas, evaluated), cut, copy and paste, Fill Down and Fill Right, rows inserted and deleted | done |
+| The EntryBar (Enter, Tab, Escape, Accept and Cancel) and Paste Function (the original's functions by category, with their help) | done |
+| Number…, Lock and Unlock Cells, Column Width… and Row Height… (or a heading's edge dragged), Display Options… | done |
+| Fill Up and Left; Move Cells… (formulas and names follow); Insert Cells… and Delete Cells…, whole rows and columns (#REF! for deleted references); Sort… by up to three keys | done |
+| Cells copied and pasted as cells (relative references adjusted), Paste Special…, Copy Format and Paste Format | done |
+| Calculate Now, Auto Calculate, Go To Cell…; named selections (Name Selection…, Edit Names…, names in formulas) | done |
+| The FormatBar and PartBar for cells: font, size, faces, colours, alignment, Wrap Text, borders (with Transparency > Other…), Number Formatting | done |
+| Selecting rows, columns and every cell by the headings; several ranges at once with Command-click; Select Dependents | done |
+| Charts made from cells: Make Chart (the PartBar's button, the cells' context menu) charts the selected cells as a 2D bar chart beside the data, series and categories named from the labels, linked to the cells; undoable, saved | done |
 
 ### Frames and drawing
 
 | Feature | State |
 |---|---|
-| Viewing drawings, charts (2D), images, tables, clocks and presentations | 0.1.1 |
-| Frames: selected by their edge; the Frame menu's parts, Make Linked Frame (text flowing on), Clone Frame, Autogrow and Scrollbars, undoable and saved | 0.2.0 |
-| Frames: moved by the edge and resized by the handles, undoable; Open Frame Window (another window of the document showing just that frame); a growing frame as high as its text. Text wrapped around shapes and frames (Arrange > Text Wrap…: None, Regular, Tight, Top & Bottom, the side and the distances), by their boxes; Both Sides lays the text on the larger side | 0.2.0 |
-| Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | 0.2.0 |
-| Drawing tools: several shapes selected (Shift-click, a rubber band in a drawing), moved and deleted together; Arrange's Bring to Front, Send to Back, Move Forward and Move Backward; Rotate (a corner handle turns the shape) and Reshape (a path's points, a line's ends) | 0.2.0 |
-| Drawing tools: Align Objects… (as the original, each choice tried at once), Align to Grid, Lock and Unlock, Draw Grid and AutoGrid (snapping), Create Outlines; a curve's control points reshaped; turned shapes hit by their turned outline | 0.2.0 |
-| Drawing tools: Group and Ungroup (the shapes in a new drawing part, framed in their place; Ungroup puts them back), groups selected, moved and deleted as one | 0.2.0 |
-| Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | 0.2.0 |
-| Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | 0.2.0 |
-| Fill and pen inks for frames in the FormatBar: a selected frame's fill (its background in a drawing), its pen (its border) and their transparency; the pen's size (Hairline to 8 pt, Other…) in the pen ink's menu, for shapes and frames | 0.2.0 |
-| The drawing's PartBar: the vertical and horizontal align buttons (undoable), Text Wrap (its dialog), the arrows menu (none, at the start, at the end, both), arrowheads drawn at lines' and open paths' ends; the pen ink's pen types (Default, Non-Printing, small, medium and large dashes, hollow and filled dots, hash marks) applied, drawn and saved | 0.2.0 |
-| Pens made, edited and deleted in the Inks window's pens (a click on the pen ink menu's pen icon; Edit > New Pen…, Edit Pen…, Clear; a double click applies one) with the pen dialog (name, kind, printable, gap and dash widths, a sample); a document's own pens saved and reloaded exactly and listed in the pen menu; the pen menu and the arrows menu marking what the selection has; very short dashes drawn as marks across, as the original draws them | 0.2.0 |
-| Ink set files: the original's ink sets (its "Ink Sets" folder, SETF archives) read and written, a document's own sets | 0.2.0 |
-| The Inks window's Kind menu (fill, pen and text ink) and its colours, patterns (bitmap patterns too), gradients and pens (opened by a click on an ink menu's icon; a click applies an ink); the Sets menu choosing among the application's sets, the ink set files and the document's own; the File menu's New Set…, Save Set, Save Set As…, Revert To Saved Set and Set Dimensions…; inks made, edited, cleared, cut, copied and pasted into the sets (a document's saved with it, a file's to its file) | 0.2.0 |
-| Editing inks and pens in the Inks window: Cut, Copy and Paste, the pen view's width buttons and slider, a colour, pattern or gradient edited | 0.2.0 |
-| Views & Layers…: a drawing's views (New View, Delete View, Rename View…, switching between them) and layers (New Layer, Delete Layer, Rename Layer…, the active layer), each layer shown, editable, locked or printed per view; new shapes go on the active layer | next |
-| Context menus in drawings: on the page, Draw Grid, AutoGrid and Show or Hide Graphics Ruler; on a polygon or curve, Closed, Smooth, Unsmooth, Auto-Smooth, Add To Tool Bar and its handles' edits; on an arc, Closed, Start Angle… and Arc Angle…; on a round rectangle, Corner Radius…; on a group or frame, Ungroup and Open group; in Reshape, a point's Delete, Smooth, Unsmooth and Auto-Smooth Handle(s) and a control point's Delete Control(s) | next |
-| Document > Document Size… for drawings (pages across and down), spreadsheets (rows and columns) and presentations (the slide size, with a pop-up of screen sizes); a new drawing is one page, as the original's are | next |
-| The graphics ruler (Window > Show Graphics Ruler, or the drawing's context menu): rulers along the top and left of a drawing, in the sheet's unit, numbered on from page to page, with the unit menu on the right button | next |
+| Viewing drawings, charts (2D), images, tables, clocks and presentations | done |
+| Frames: selected by their edge; the Frame menu's parts, Make Linked Frame (text flowing on), Clone Frame, Autogrow and Scrollbars, undoable and saved | done |
+| Frames: moved by the edge and resized by the handles, undoable; Open Frame Window (another window of the document showing just that frame); a growing frame as high as its text. Text wrapped around shapes and frames (Arrange > Text Wrap…: None, Regular, Tight, Top & Bottom, the side and the distances), by their boxes; Both Sides lays the text on the larger side | done |
+| Drawing tools: rectangles, ellipses, round rectangles, arcs, lines, freehand and polygons dragged out in a drawing (a new drawing or a text document's sheet drawing); selected, moved, resized by a corner, deleted; undone, saved | done |
+| Drawing tools: several shapes selected (Shift-click, a rubber band in a drawing), moved and deleted together; Arrange's Bring to Front, Send to Back, Move Forward and Move Backward; Rotate (a corner handle turns the shape) and Reshape (a path's points, a line's ends) | done |
+| Drawing tools: Align Objects… (as the original, each choice tried at once), Align to Grid, Lock and Unlock, Draw Grid and AutoGrid (snapping), Create Outlines; a curve's control points reshaped; turned shapes hit by their turned outline | done |
+| Drawing tools: Group and Ungroup (the shapes in a new drawing part, framed in their place; Ungroup puts them back), groups selected, moved and deleted as one | done |
+| Pattern and gradient inks and transparency in the FormatBar for text and cells (the original's pattern and gradient sets) | done |
+| Fill and pen inks for shapes in the FormatBar: colours, patterns and gradients for the fill and the pen, the fill's, pen's and shapes' transparency (with Other…), shown in its indicators | done |
+| Fill and pen inks for frames in the FormatBar: a selected frame's fill (its background in a drawing), its pen (its border) and their transparency; the pen's size (Hairline to 8 pt, Other…) in the pen ink's menu, for shapes and frames | done |
+| The drawing's PartBar: the vertical and horizontal align buttons (undoable), Text Wrap (its dialog), the arrows menu (none, at the start, at the end, both), arrowheads drawn at lines' and open paths' ends; the pen ink's pen types (Default, Non-Printing, small, medium and large dashes, hollow and filled dots, hash marks) applied, drawn and saved | done |
+| Pens made, edited and deleted in the Inks window's pens (a click on the pen ink menu's pen icon; Edit > New Pen…, Edit Pen…, Clear; a double click applies one) with the pen dialog (name, kind, printable, gap and dash widths, a sample); a document's own pens saved and reloaded exactly and listed in the pen menu; the pen menu and the arrows menu marking what the selection has; very short dashes drawn as marks across, as the original draws them | done |
+| Ink set files: the original's ink sets (its "Ink Sets" folder, SETF archives) read and written, a document's own sets | done |
+| The Inks window's Kind menu (fill, pen and text ink) and its colours, patterns (bitmap patterns too), gradients and pens (opened by a click on an ink menu's icon; a click applies an ink); the Sets menu choosing among the application's sets, the ink set files and the document's own; the File menu's New Set…, Save Set, Save Set As…, Revert To Saved Set and Set Dimensions…; inks made, edited, cleared, cut, copied and pasted into the sets (a document's saved with it, a file's to its file) | done |
+| Editing inks and pens in the Inks window: Cut, Copy and Paste, the pen view's width buttons and slider, a colour, pattern or gradient edited | done |
+| Views & Layers…: a drawing's views (New View, Delete View, Rename View…, switching between them) and layers (New Layer, Delete Layer, Rename Layer…, the active layer), each layer shown, editable, locked or printed per view; new shapes go on the active layer | done |
+| Context menus in drawings: on the page, Draw Grid, AutoGrid and Show or Hide Graphics Ruler; on a polygon or curve, Closed, Smooth, Unsmooth, Auto-Smooth, Add To Tool Bar and its handles' edits; on an arc, Closed, Start Angle… and Arc Angle…; on a round rectangle, Corner Radius…; on a group or frame, Ungroup and Open group; in Reshape, a point's Delete, Smooth, Unsmooth and Auto-Smooth Handle(s) and a control point's Delete Control(s) | done |
+| Document > Document Size… for drawings (pages across and down), spreadsheets (rows and columns) and presentations (the slide size, with a pop-up of screen sizes); a new drawing is one page, as the original's are | done |
+| The graphics ruler (Window > Show Graphics Ruler, or the drawing's context menu): rulers along the top and left of a drawing, in the sheet's unit, numbered on from page to page, with the unit menu on the right button | done |
 
 ### Presentations
 
 | Feature | State |
 |---|---|
-| Slide shows: Start Presentation…, the Presentation window (Show Presentation Window…: Start, Start Here, the slides and their layers, dragged into place), its Options (Auto-start, Cursor); full screen with the cursor hidden, the original's keys | next |
-| New Slide…, Duplicate Slide…, Rename Slide…, Delete Slide, and moving between slides | next |
-| Slide transitions (Jump, Wipe, Venetian Blinds, Elevator Doors) and their Settings… | next |
-| A presentation's layers: New Layer…, Duplicate Layer…, Rename Layer…, Delete Layer, a slide's layers from its pop-up | next |
+| Slide shows: Start Presentation…, the Presentation window (Show Presentation Window…: Start, Start Here, the slides and their layers, dragged into place), its Options (Auto-start, Cursor); full screen with the cursor hidden, the original's keys | done |
+| New Slide…, Duplicate Slide…, Rename Slide…, Delete Slide, and moving between slides | done |
+| Slide transitions (Jump, Wipe, Venetian Blinds, Elevator Doors) and their Settings… | done |
+| A presentation's layers: New Layer…, Duplicate Layer…, Rename Layer…, Delete Layer, a slide's layers from its pop-up | done |
 
 ### Tables
 
 | Feature | State |
 |---|---|
-| The Table menu: Merge Cells, Split Cell…, Select Row, Select Column, Insert and Delete Row and Column, Distribute Rows and Columns Evenly, Cell Gutter…, and the cells' vertical alignment (top, center, bottom); cells selected by dragging across them | next |
-| Insert Table… and the table's options (Cell Gutter…) | next |
-| Editing a table: Tab and the arrows from cell to cell, rows growing and shrinking with their text, cells copied, cut and pasted (into the table or as a table of their own), rows and columns resized by dragging their edges with the original's pointers, the whole table by its frame's handle | next |
+| The Table menu: Merge Cells, Split Cell…, Select Row, Select Column, Insert and Delete Row and Column, Distribute Rows and Columns Evenly, Cell Gutter…, and the cells' vertical alignment (top, center, bottom); cells selected by dragging across them | done |
+| Insert Table… and the table's options (Cell Gutter…) | done |
+| Editing a table: Tab and the arrows from cell to cell, rows growing and shrinking with their text, cells copied, cut and pasted (into the table or as a table of their own), rows and columns resized by dragging their edges with the original's pointers, the whole table by its frame's handle | done |
 
 ### Charts
 
 | Feature | State |
 |---|---|
-| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… (2D bar, line, area, stacked area, XY scatter and line; 3D bar, pie and 3D area, drawn with OpenGL as the original draws them) and Axis…; a chart entered with its PartBar and ribbon (for 3D charts the camera's tools: move it toward and away, sideways, around, and the pointer; the arrow, -, = and a, z keys), its plot, legend and title selected, moved and sized like shapes; the legend's context menu (a series' colour, symbols, colour of symbols, Display As, Bring Forward and Send Backward). (3D charts aren't drawn on Haiku arm64, which has no OpenGL) | next |
+| The Chart menu: Series In Rows, Show Legend, Show Title, Chart Type… (2D bar, line, area, stacked area, XY scatter and line; 3D bar, pie and 3D area, drawn with OpenGL as the original draws them) and Axis…; a chart entered with its PartBar and ribbon (for 3D charts the camera's tools: move it toward and away, sideways, around, and the pointer; the arrow, -, = and a, z keys), its plot, legend and title selected, moved and sized like shapes; the legend's context menu (a series' colour, symbols, colour of symbols, Display As, Bring Forward and Send Backward). (3D charts aren't drawn on Haiku arm64, which has no OpenGL) | done |
 
 ### Image processing
 
 | Feature | State |
 |---|---|
-| New image processing documents (File > New, Image Processing) as the original makes them: a white image 512 points square, its window with the Image and Plugins menus and the PartBar's colors and tools; Document Size… (the image cut off or grown in the background color, light gray around it) | next |
-| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) | next |
-| Selections: marquee, lasso and magic wand (Shift adds, Command takes away, both keep what's in both, Option leaves out the background colour) and Find Color; moved (Option copies), duplicated, floated and unfloated, inverted, deselected, deleted, cut, copied and pasted, moved a pixel with the arrow keys; Crop; pictures pasted and dropped in; the marching ants; the painting tools kept to the selection and working on floating bits | next |
-| Plug-in filters: the ImageManip add-ons and the GIMP filters the original shipped (built from their GPL sources in `plugins/`), in the Plugins menu by category, each with its settings in the Plugin dialog (a live preview for the add-ons), its progress, its result kept to the selection as one undo step, its settings kept for next time, About… and Option for its credits, the last one at the top of the menu; Edit Externally… (Image menu and the image's context menu) with the editor the Image Processing preferences name; the Image Processing and Spreadsheet preference panels | next |
+| New image processing documents (File > New, Image Processing) as the original makes them: a white image 512 points square, its window with the Image and Plugins menus and the PartBar's colors and tools; Document Size… (the image cut off or grown in the background color, light gray around it) | done |
+| The painting tools: pencil, airbrush, eraser, paint bucket, eyedropper, find colour and magnify, with their settings; the foreground and background colours (edited, swapped, chosen from the colour set) | done |
+| Selections: marquee, lasso and magic wand (Shift adds, Command takes away, both keep what's in both, Option leaves out the background colour) and Find Color; moved (Option copies), duplicated, floated and unfloated, inverted, deselected, deleted, cut, copied and pasted, moved a pixel with the arrow keys; Crop; pictures pasted and dropped in; the marching ants; the painting tools kept to the selection and working on floating bits | done |
+| Plug-in filters: the ImageManip add-ons and the GIMP filters the original shipped (built from their GPL sources in `plugins/`), in the Plugins menu by category, each with its settings in the Plugin dialog (a live preview for the add-ons), its progress, its result kept to the selection as one undo step, its settings kept for next time, About… and Option for its credits, the last one at the top of the menu; Edit Externally… (Image menu and the image's context menu) with the editor the Image Processing preferences name; the Image Processing and Spreadsheet preference panels | done |
 
 ### Other formats (translators)
 
@@ -319,20 +318,20 @@ Opened with File > Open, saved with Save As's File Format menu.
 
 | Feature | State |
 |---|---|
-| Plain text: opened and saved | 0.1.1 |
-| RTF: opened and saved | 0.1.1 |
-| RTF: pictures in the text saved (image parts, as PNG; the original wrote JPEG) | 0.2.0 |
-| RTF: tables saved as RTF tables, and tables and pictures read back when an RTF file is opened | 0.2.0 |
-| HTML: text documents opened and saved (paragraphs, headings, alignment, sizes, colours, faces, lists, rules, entities) | 0.2.0 |
-| HTML: tables saved as tables (a table in the text, a table sheet), as the original wrote them | 0.2.0 |
-| HTML: pictures in the text saved as PNG files in a "<name>.images" folder (image parts; the original drew any frame and wrote GIF or JPEG) | 0.2.0 |
-| HTML: tables opened as tables (a table part in the text, its cells' text formatted, WIDTH, BORDER, CELLPADDING, tables in cells; a cell spanning columns keeps the cells after it in their columns, the spanned ones left empty: cells aren't merged) and pictures (PNG, and through the system's translators GIF, JPEG and the rest; else the ALT text) | 0.2.0 |
-| Text tables: tab, comma or semicolon separated, opened as spreadsheets and saved from them (cells as shown, or formulas with Show Formulas on) | 0.2.0 |
-| SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths, row heights, the default font) | 0.2.0 |
-| Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | 0.2.0 |
-| Microsoft Word: Word 97 and later documents opened (their style sheet applied: faces, sizes, fonts, colours, alignment, indents, spacing; line breaks, fields as their results) | 0.2.0 |
-| Microsoft Word: text documents saved as Word 97 (text, faces, sizes, fonts, colours, alignment, indents, spacing, line and page breaks, fields as their text; not frames, tables or styles) | 0.2.0 |
-| Microsoft Word: tables saved as Word tables and pictures saved in Word documents | 0.2.0 |
+| Plain text: opened and saved | done |
+| RTF: opened and saved | done |
+| RTF: pictures in the text saved (image parts, as PNG; the original wrote JPEG) | done |
+| RTF: tables saved as RTF tables, and tables and pictures read back when an RTF file is opened | done |
+| HTML: text documents opened and saved (paragraphs, headings, alignment, sizes, colours, faces, lists, rules, entities) | done |
+| HTML: tables saved as tables (a table in the text, a table sheet), as the original wrote them | done |
+| HTML: pictures in the text saved as PNG files in a "<name>.images" folder (image parts; the original drew any frame and wrote GIF or JPEG) | done |
+| HTML: tables opened as tables (a table part in the text, its cells' text formatted, WIDTH, BORDER, CELLPADDING, tables in cells; a cell spanning columns keeps the cells after it in their columns, the spanned ones left empty: cells aren't merged) and pictures (PNG, and through the system's translators GIF, JPEG and the rest; else the ALT text) | done |
+| Text tables: tab, comma or semicolon separated, opened as spreadsheets and saved from them (cells as shown, or formulas with Show Formulas on) | done |
+| SYLK: opened and saved (values, R1C1 formulas, number formats, dates, column widths, row heights, the default font) | done |
+| Microsoft Excel: Excel 5 and later workbooks opened (a sheet per worksheet, values, formulas, number formats, dates, widths, defined names as named selections); spreadsheets saved as Excel 97 | done |
+| Microsoft Word: Word 97 and later documents opened (their style sheet applied: faces, sizes, fonts, colours, alignment, indents, spacing; line breaks, fields as their results) | done |
+| Microsoft Word: text documents saved as Word 97 (text, faces, sizes, fonts, colours, alignment, indents, spacing, line and page breaks, fields as their text; not frames, tables or styles) | done |
+| Microsoft Word: tables saved as Word tables and pictures saved in Word documents | done |
 
 Ranges are written A1..B2, as Gobe Productive writes them (A1:B2 is still
 understood).

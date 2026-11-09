@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="64" viewBox="0 0 720 64" role="img" aria-label="78 of 78 features done (100%)">
+<style>
+text { font-family: -apple-system, "Segoe UI", "Noto Sans", Helvetica, Arial, sans-serif; fill: #1f2328; }
+.title { font-size: 15px; font-weight: 600; }
+.small { font-size: 12px; fill: #59636e; }
+.done { fill: #1f6feb; }
+.left { fill: #d1d9e0; }
+@media (prefers-color-scheme: dark) {
+  text { fill: #f0f6fc; }
+  .small { fill: #9198a1; }
+  .done { fill: #4493f8; }
+  .left { fill: #3d444d; }
+}
+</style>
+<text class="title" x="0" y="20">Port progress: 100%</text>
+<text class="small" x="720" y="20" text-anchor="end">78 of 78 features done</text>
+<clipPath id="bar"><rect x="0" y="34" width="720" height="22" rx="4"/></clipPath>
+<g clip-path="url(#bar)">
+<rect class="left" x="0" y="34" width="720" height="22"/>
+<rect class="done" x="0" y="34" width="720.0" height="22"/>
+</g>
+</svg>
