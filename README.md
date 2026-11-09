@@ -125,11 +125,12 @@ Checksums and release notes are on the
 On Haiku it appears in the Deskbar's Applications menu. The Command key is
 **Alt** on Haiku and **Ctrl** on Linux.
 
-Documents lay out best with the Liberation fonts (metrically like the
-Times, Helvetica and Courier designs of BeOS's Bitstream fonts): on Haiku
-`pkgman install liberation_fonts`; the AppImage brings them along.
-Without them the port uses Noto, which is wider, so lines break in other
-places than they did in Gobe.
+Documents lay out with the Liberation fonts, which have the widths of the
+Times, Helvetica and Courier designs of BeOS's Bitstream fonts: the Haiku
+package installs them (`liberation_fonts`) and the AppImage brings them
+along. Without them the port falls back to Noto, whose lines are wider and
+taller, so text breaks in other places than it did in Gobe and can run out
+of its frames.
 
 ### You need the original Gobe Productive 2.0
 
