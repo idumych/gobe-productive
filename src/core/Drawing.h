@@ -219,6 +219,9 @@ int UngroupShape(Document& doc, size_t drawing, size_t layer, size_t index, std:
 // the Bezier tool: a path through `vertices` (drawing coordinates, their
 // control points offsets from them), open; -1 as AddShape
 int AddBezierShape(Document& doc, size_t part, size_t layer, const std::vector<Vertex>& vertices);
+// a path shape of several paths (drawing coordinates, as AddBezierShape's;
+// a glyph's contours), in the new-shape style; -1 as AddShape
+int AddPathsShape(Document& doc, size_t part, size_t layer, std::vector<BezierPath> paths);
 
 // TPropArrows 'Arrw' (a short: 0 none, 1 at the start, 2 at the end, 3
 // both ends; STR# 11, 20-23)

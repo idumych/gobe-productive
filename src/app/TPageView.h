@@ -617,6 +617,12 @@ private:
 		std::vector<uint32_t> starts;
 	};
 	void RebuildFrames();
+	// TPartGR::DragOut: a new shape's wrap in a word processing document
+	void DefaultShapeWrap(size_t part, size_t layer, size_t index);
+	// Create Outlines: the text frame it takes (none: off), the command
+	const gobe::Frame* OutlinesFrame() const;
+	bool CreateOutlines();
+	static std::vector<BezierPath> ShapePaths(BShape& shape, float x, float y);
 	// TBrowseRootFrame::SetSize, TSSFrame::LogicalFrameOrigin: a spreadsheet
 	// document's sheet frame (fFrames[fSheetFrame]) as big as the view,
 	// where it is scrolled to, showing the cells from fSheetRow and

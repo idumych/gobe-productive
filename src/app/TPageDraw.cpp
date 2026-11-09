@@ -10,11 +10,13 @@
 // Each change is one undo step (STR# 1101's labels).
 #include "TGRRuler.h"
 #include "TPageView.h"
+#include "TextWrap.h"
 #include "TDrawDialogs.h"
 #include "TFormatBar.h"
 #include "TToolBar.h"
 
 #include <Menu.h>
+#include <Beep.h>
 #include <Shape.h>
 #include <MenuItem.h>
 #include <Window.h>
@@ -322,13 +324,14 @@ TPageView::FixShapeMenu(BMenu* menu) const
 	for (int32 i = 0; BMenuItem* item = menu->ItemAt(i); i++) {
 		uint32 what = item->Message() != NULL ? item->Message()->what : 0;
 		bool arrange = what == 'sM40' || what == 'sM41' || what == 'sM42' || what == 'sM43'
-			|| what == 'sM45' || what == 'sM4T';
+			|| what == 'sM45';
 		bool mode = what == 'sM4A' || what == 'sM4B' || what == 'sM4C';
 		bool grid = what == 'sM4D' || what == 'sM4E';
 		// (Text Wrap with shapes or a frame selected)
 		item->SetEnabled((arrange && !fShapes.empty()) || mode || (grid && gr != nullptr)
 			|| (what == 'sM46' && shapes >= 2) || (what == 'sM47' && groups > 0)
 			|| (what == 'sf0U' && (!fShapes.empty() || fFrame.active))
+			|| (what == 'sM4T' && OutlinesFrame() != nullptr)
 			|| (what == 'sM44' && fShapes.size() >= 2) || (what == 'sM48' && unlocked)
 			|| (what == 'sM49' && locked));
 		if (mode)
@@ -799,8 +802,10 @@ TPageView::FinishShape(bool dropFollower)
 			CurrentViewState());
 		int index = fTool == kToolBezier ? AddBezierShape(fDocument, part, layer, vertices)
 			: AddToolbarShape(fDocument, part, layer, shape, points.front(), points.back());
-		if (index >= 0)
+		if (index >= 0) {
 			fShapes = {Ref(part, layer, size_t(index))};
+			DefaultShapeWrap(part, layer, size_t(index));
+		}
 		fTool = kToolArrow;
 		if (fToolBar != NULL)
 			fToolBar->Update();
@@ -824,6 +829,7 @@ TPageView::FinishShape(bool dropFollower)
 		return;
 	}
 	fShapes = {Ref(part, layer, size_t(index))};
+	DefaultShapeWrap(part, layer, size_t(index));
 	// (the tool goes back to the arrow, as TDocWindow does after a shape)
 	fTool = kToolArrow;
 	if (fToolBar != NULL)
@@ -831,6 +837,235 @@ TPageView::FinishShape(bool dropFollower)
 	Invalidate();
 	if (Window() != NULL)
 		Window()->PostMessage(kMsgDocumentChanged);
+}
+
+
+// the text frame Create Outlines takes (FUN_00252a68: a TWPFrame among
+// the selection): the selected frame, a text part's, in a drawing
+const gobe::Frame*
+TPageView::OutlinesFrame() const
+{
+	if (!fFrame.active)
+		return nullptr;
+	const gobe::Frame* frame = FrameAt(fDocument, fFrame.pointer);
+	if (frame == nullptr || fDocument.WordPart(frame->part) == nullptr
+			|| fDocument.GraphicsPart(frame->container) == nullptr)
+		return nullptr;
+	return frame;
+}
+
+
+// Create Outlines (TGRCreateOutlineCommand, TWPFrame::TextToShapes): each
+// character of the selected text frame a path shape in its drawing where
+// it was laid out (TGRTextPathExtractor: the glyph's outline), in the new
+// shapes' style; the frame taken out, the shapes selected
+bool
+TPageView::CreateOutlines()
+{
+	const gobe::Frame* frame = OutlinesFrame();
+	if (frame == nullptr) {
+		beep();
+		return true;
+	}
+	size_t text = frame->part, drawing = frame->container;
+	uint32_t pointer[3] = {fFrame.pointer[0], fFrame.pointer[1], fFrame.pointer[2]};
+	int frameIndex = -1;
+	float drawX = 0, drawY = 0;
+	bool placed = false;
+	float dx = fMargin - fBounds.left, dy = fMargin - fBounds.top;
+	for (const Document::PlacedFrame& f : fFrames) {
+		if (f.frame == frame)
+			frameIndex = f.index;
+		if (f.part == drawing && !placed) {
+			drawX = f.x + dx;
+			drawY = f.y + dy;
+			placed = true;
+		}
+	}
+	const GRPart* gr = fDocument.GraphicsPart(drawing);
+	if (!placed || frameIndex < 0 || gr == nullptr || gr->layers.empty()) {
+		beep();
+		return true;
+	}
+	// the glyphs, from the laid-out lines
+	std::vector<std::vector<BezierPath>> glyphs;
+	for (const Line& line : fLines) {
+		if (line.part != text || line.frameIndex != frameIndex)
+			continue;
+		for (const Line::Piece& p : line.pieces) {
+			if (p.field != 0 || p.width > 0 || p.text.empty())
+				continue;
+			float x = line.frame.left + p.x - drawX;
+			float y = line.baseline + p.dy - drawY;
+			for (size_t at = 0; at < p.text.size(); ) {
+				size_t length = 1;
+				unsigned char c = (unsigned char)p.text[at];
+				if (c >= 0xf0)
+					length = 4;
+				else if (c >= 0xe0)
+					length = 3;
+				else if (c >= 0xc0)
+					length = 2;
+				std::string character = p.text.substr(at, length);
+				float left = x + p.font.StringWidth(p.text.c_str(), int32(at));
+				at += length;
+				if (character == " " || character == "\t")
+					continue;
+				BShape shape;
+				BShape* shapes[1] = {&shape};
+				p.font.GetGlyphShapes(character.c_str(), 1, shapes);
+				std::vector<BezierPath> paths = ShapePaths(shape, left, y);
+				if (!paths.empty())
+					glyphs.push_back(paths);
+			}
+		}
+	}
+	fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, 37).String(),
+		CurrentViewState());
+	size_t layer = DrawingLayer(fDocument, drawing);
+	std::vector<ShapeRef> made;
+	for (const std::vector<BezierPath>& paths : glyphs) {
+		int index = AddPathsShape(fDocument, drawing, layer, paths);
+		if (index >= 0)
+			made.push_back(Ref(drawing, layer, size_t(index)));
+	}
+	// (TGRCommand::RemoveMarkedShapes: the frame, and its entry in the
+	// drawing's layers)
+	if (GRPart* editable = fDocument.EditableGraphicsPart(drawing))
+		for (GRLayer& l : editable->layers)
+			for (size_t i = 0; i < l.shapes.size(); i++)
+				if (l.shapes[i].kind == Sig("FRAM") && l.shapes[i].frame[0] == pointer[0]
+						&& l.shapes[i].frame[1] == pointer[1] && l.shapes[i].frame[2] == pointer[2]) {
+					l.shapes.erase(l.shapes.begin() + long(i));
+					for (ShapeRef& ref : made)
+						if (&l == &editable->layers[ref.layer] && ref.index > i)
+							ref.index--;
+					break;
+				}
+	if (pointer[0] < fDocument.tails.size() && pointer[1] < fDocument.tails[pointer[0]].portals.size()) {
+		std::vector<Portal>& portals = fDocument.tails[pointer[0]].portals;
+		std::vector<gobe::Frame>& frames = portals[pointer[1]].frames;
+		if (pointer[2] < frames.size()) {
+			frames.erase(frames.begin() + long(pointer[2]));
+			if (frames.empty())
+				portals.erase(portals.begin() + long(pointer[1]));
+		}
+		fDocument.dirtyTails.insert(pointer[0]);
+	}
+	fFrame.active = false;
+	fCaret.active = false;
+	fAnchor.active = false;
+	fShapes = made;
+	GeometryChanged();
+	Invalidate();
+	if (Window() != NULL)
+		Window()->PostMessage(kMsgDocumentChanged);
+	return true;
+}
+
+
+// TGRTextPathExtractor: a glyph's outline (BFont::GetGlyphShapes, its
+// origin on the baseline) as Gobe's paths, moved to x, y in the drawing:
+// each contour a closed path, its points corners with their curves'
+// control points
+std::vector<BezierPath>
+TPageView::ShapePaths(BShape& shape, float x, float y)
+{
+	class Paths : public BShapeIterator {
+	public:
+		Paths(float x, float y) : fX(x), fY(y) {}
+
+		virtual status_t IterateMoveTo(BPoint* point)
+		{
+			Close();
+			Add(*point);
+			return B_OK;
+		}
+
+		virtual status_t IterateLineTo(int32 count, BPoint* points)
+		{
+			for (int32 i = 0; i < count; i++)
+				Add(points[i]);
+			return B_OK;
+		}
+
+		virtual status_t IterateBezierTo(int32 count, BPoint* points)
+		{
+			for (int32 i = 0; i + 2 < count * 3 && fPath.vertices.size() > 0; i += 3) {
+				Vertex& last = fPath.vertices.back();
+				last.control2[0] = points[i].x + fX - last.point[0];
+				last.control2[1] = points[i].y + fY - last.point[1];
+				Add(points[i + 2]);
+				Vertex& next = fPath.vertices.back();
+				next.control1[0] = points[i + 1].x + fX - next.point[0];
+				next.control1[1] = points[i + 1].y + fY - next.point[1];
+			}
+			return B_OK;
+		}
+
+		virtual status_t IterateClose()
+		{
+			Close();
+			return B_OK;
+		}
+
+		void Close()
+		{
+			// (a contour ending where it began: the two points one)
+			if (fPath.vertices.size() > 2) {
+				Vertex& first = fPath.vertices.front();
+				const Vertex& last = fPath.vertices.back();
+				if (fabsf(first.point[0] - last.point[0]) < 0.01f
+						&& fabsf(first.point[1] - last.point[1]) < 0.01f) {
+					first.control1[0] = last.control1[0];
+					first.control1[1] = last.control1[1];
+					fPath.vertices.pop_back();
+				}
+			}
+			if (fPath.vertices.size() >= 2) {
+				fPath.closed = true;
+				fPaths.push_back(fPath);
+			}
+			fPath = BezierPath();
+		}
+
+		std::vector<BezierPath> fPaths;
+
+	private:
+		void Add(BPoint point)
+		{
+			Vertex v = {};
+			v.point[0] = point.x + fX;
+			v.point[1] = point.y + fY;
+			v.flags = 4;
+			fPath.vertices.push_back(v);
+		}
+
+		float fX, fY;
+		BezierPath fPath;
+	};
+	Paths paths(x, y);
+	paths.Iterate(&shape);
+	paths.Close();
+	return paths.fPaths;
+}
+
+
+// TPartGR::DragOut: a shape dragged out over text (a main part that wraps,
+// flag 0x100000: word processing) wraps it Tight, on both sides, 10
+// points round
+void
+TPageView::DefaultShapeWrap(size_t part, size_t layer, size_t index)
+{
+	int main = fDocument.MainPart();
+	if (main < 0 || fDocument.WordPart(size_t(main)) == NULL)
+		return;
+	ShapeWrap wrap;
+	wrap.kind = 2;
+	wrap.to = 0;
+	std::fill(wrap.margins, wrap.margins + 4, 10.0f);
+	if (SetShapeWrap(fDocument, part, layer, index, wrap))
+		GeometryChanged();
 }
 
 
@@ -1343,10 +1578,11 @@ TPageView::ShapeCommand(BMessage* message)
 			Window()->PostMessage(kMsgDocumentChanged);
 		return true;
 	}
-	// Align to Grid (1101, 21), Lock and Unlock (4, 5), Create Outlines (37)
-	if ((what == 'sM45' || what == 'sM48' || what == 'sM49' || what == 'sM4T')
-			&& !fShapes.empty()) {
-		int label = what == 'sM45' ? 21 : what == 'sM48' ? 4 : what == 'sM49' ? 5 : 37;
+	if (what == 'sM4T')
+		return CreateOutlines();
+	// Align to Grid (1101, 21), Lock and Unlock (4, 5)
+	if ((what == 'sM45' || what == 'sM48' || what == 'sM49') && !fShapes.empty()) {
+		int label = what == 'sM45' ? 21 : what == 'sM48' ? 4 : 5;
 		fUndo.BeginDocument(fDocument, GobeResources::IndexString(1101, label).String(),
 			CurrentViewState());
 		GRPart* gr = fDocument.EditableGraphicsPart(fShapes[0].part);
@@ -1363,10 +1599,8 @@ TPageView::ShapeCommand(BMessage* message)
 				sh.values[0] &= ~kShapeLocked;
 			else if (ShapeLocked(sh))
 				continue;
-			else if (what == 'sM45')
-				AlignToGrid(sh, gr->gridSpacing);
 			else
-				OutlineShape(sh);
+				AlignToGrid(sh, gr->gridSpacing);
 		}
 		Invalidate();
 		if (Window() != NULL)

@@ -1019,30 +1019,44 @@ namespace {
 int
 AddPathShape(Document& doc, size_t part, size_t layer, BezierPath path)
 {
-	GRPart* gr = doc.EditableGraphicsPart(part);
-	if (gr == nullptr || layer >= gr->layers.size() || path.vertices.size() < 2)
+	if (path.vertices.size() < 2)
 		return -1;
-	float left = path.vertices[0].point[0], right = left;
-	float top = path.vertices[0].point[1], bottom = top;
-	for (const Vertex& v : path.vertices) {
-		left = std::min(left, v.point[0]);
-		right = std::max(right, v.point[0]);
-		top = std::min(top, v.point[1]);
-		bottom = std::max(bottom, v.point[1]);
-	}
+	return AddPathsShape(doc, part, layer, {path});
+}
+
+} // namespace
+
+
+int
+AddPathsShape(Document& doc, size_t part, size_t layer, std::vector<BezierPath> paths)
+{
+	GRPart* gr = doc.EditableGraphicsPart(part);
+	if (gr == nullptr || layer >= gr->layers.size() || paths.empty()
+			|| paths[0].vertices.empty())
+		return -1;
+	float left = paths[0].vertices[0].point[0], right = left;
+	float top = paths[0].vertices[0].point[1], bottom = top;
+	for (const BezierPath& path : paths)
+		for (const Vertex& v : path.vertices) {
+			left = std::min(left, v.point[0]);
+			right = std::max(right, v.point[0]);
+			top = std::min(top, v.point[1]);
+			bottom = std::max(bottom, v.point[1]);
+		}
 	if (right - left <= 0 && bottom - top <= 0)
 		return -1;
-	for (Vertex& v : path.vertices) {
-		v.point[0] -= left;
-		v.point[1] -= top;
-	}
+	for (BezierPath& path : paths)
+		for (Vertex& v : path.vertices) {
+			v.point[0] -= left;
+			v.point[1] -= top;
+		}
 	Shape s;
 	s.kind = Sig("BEZI");
 	s.origin[0] = left;
 	s.origin[1] = top;
 	s.size[0] = right - left;
 	s.size[1] = bottom - top;
-	s.paths = {path};
+	s.paths = paths;
 	uint32_t id = 0;
 	for (const GRLayer& l : gr->layers)
 		for (const Shape& other : l.shapes)
@@ -1054,8 +1068,6 @@ AddPathShape(Document& doc, size_t part, size_t layer, BezierPath path)
 	gr->layers[layer].shapes.push_back(s);
 	return int(gr->layers[layer].shapes.size() - 1);
 }
-
-} // namespace
 
 
 int
