@@ -27,11 +27,17 @@ Every feature of the original is ported: the bar counts the [features](#features
 tabs, columns, headers and footers, footnotes and endnotes, live fields, find and replace,
 spelling, Word Count, the thesaurus and dictionary, History and Undo.
 
+![Gobe Productive on Linux: a report with headings, a footnote and the SpellBar](docs/screenshots/linux-word-processing.png)
+
+*On Linux (X11): a report with its own headings and a footnote, the spelling checker on a misspelled word.*
 
 **Spreadsheets.** Formulas and the original's functions, cell formats,
 borders, sorting and fill, sheets in tabs, and Make Chart for charts of
 the selected cells.
 
+![Gobe Productive on Linux: a spreadsheet with a formula and a bar chart made from its cells](docs/screenshots/linux-spreadsheet-chart.png)
+
+*On Linux (X11): quarterly figures with a formula column, and Make Chart's bar chart of them.*
 
 **Drawing.** The ToolBar's shapes, lines, curves and Bezier paths:
 select, move, resize, rotate, reshape, align, group, lock, give them the
@@ -42,6 +48,10 @@ out anywhere in a document, text wrapped around them, text frames linked
 so the text flows on. Open Frame Window edits a frame on its own.
 Tables are made with Insert Table… and edited with the Table menu.
 Pictures dropped or pasted into a document go in as picture frames.
+
+![Gobe Productive on Linux: a spreadsheet frame in a text document, the text wrapped around it](docs/screenshots/linux-frames.png)
+
+*On Linux (X11): a spreadsheet frame dragged out with the ToolBar's part tool, the text wrapped around it.*
 
 **Images.** Image processing documents, new or opened from any picture
 the system can read (PNG, JPEG, GIF, BMP, TIFF, WebP…): the painting
@@ -56,17 +66,27 @@ and takes it back.
 
 *On Haiku: a picture opened as an image document, the GIMP Lens Flare filter applied.*
 
+![Gobe Productive on Linux: an image with Mosaic applied to the selection and the Plugins menu](docs/screenshots/linux-image-plugins.png)
+
+*On Linux (X11): the Mosaic filter applied to a selection, and the Plugins menu by category.*
+
 **Presentations.** File > New makes a presentation the way the original
 did, and the original's presentations open and show their slides in the
 document. The Presentation window adds, names and orders slides and
 their layers; Start shows them full screen with their transitions, as
 the original does.
 
+![Gobe Productive on Linux: a title slide with a gradient background and the Presentation window's slides and layers](docs/screenshots/linux-presentation.png)
+
+*On Linux (X11): a title slide on a gradient, and the Presentation window with the slides and their layers.*
 
 **Inks and pens.** The original's colours, patterns, gradients and
 transparency, its pen types and widths, the Inks window with ink sets and
 editors for each kind.
 
+![Gobe Productive on Linux: a shape with a radial gradient, the torn-off Fill Ink window and Edit Gradient](docs/screenshots/linux-inks.png)
+
+*On Linux (X11): the fill ink menu torn off into its window, and the gradient editor on the shape's gradient.*
 
 **Other formats.** Word 97 and later, Excel, RTF, HTML, SYLK and text
 tables open and save; Word, RTF and HTML keep their tables and pictures.
@@ -75,10 +95,6 @@ Styles can be exported to a file and imported into another document.
 ![Gobe Productive on Linux: an HTML page with a picture in the text and a table](docs/screenshots/linux-table-picture.png)
 
 *On Linux (X11): an HTML page opened with its table and picture.*
-
-![Gobe Productive on Linux: an image with Mosaic applied to the selection and the Plugins menu](docs/screenshots/linux-image-plugins.png)
-
-*On Linux (X11): the Mosaic filter applied to a selection, and the Plugins menu by category.*
 
 
 ## Next to the original
