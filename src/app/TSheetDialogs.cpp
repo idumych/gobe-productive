@@ -214,10 +214,7 @@ TDialogNumFormat::SetHelpText(int32 category)
 	std::string help;
 	if (category >= 0 && category < int32(formats.Categories().size()))
 		help = formats.Categories()[category].help;
-	if (BScrollView* scroll = dynamic_cast<BScrollView*>(Item(10))) {
-		if (BTextView* text = dynamic_cast<BTextView*>(scroll->Target()))
-			text->SetText(help.c_str());
-	}
+	SetTextItem(10, help.c_str());
 }
 
 
@@ -672,9 +669,7 @@ TDialogPasteFunction::ItemHit(int32 index, BMessage* message)
 			help = std::string(GobeResources::IndexString(2, 34).String()) + "\n\n"
 				+ GobeResources::IndexString(2, 35).String();
 		}
-		if (BScrollView* text = dynamic_cast<BScrollView*>(Item(5)))
-			if (BTextView* view = dynamic_cast<BTextView*>(text->Target()))
-				view->SetText(help.c_str());
+		SetTextItem(5, help.c_str());
 		SetItemEnabled(0, item != NULL && item->function >= 0);
 		return false;
 	}

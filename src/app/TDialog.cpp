@@ -382,12 +382,27 @@ TDialog::MakeControl(const ItemData& item)
 		}
 		case FourCC("TEXT"):
 		{
+			// TextBoxEngineer: a text view on the dialog's gray, no scroll
+			// bar, as wide as its params' "0"s and 2 more and as tall as
+			// their lines and 10 more, its text 5 in
 			BTextView* text = new BTextView("text");
 			text->MakeSelectable(item.values.size() > 2 && item.values[2] != 0);
 			text->MakeEditable(item.values.size() > 3 && item.values[3] != 0);
 			text->SetAlignment(Alignment(item.align));
 			text->SetText(label);
-			view = new BScrollView("text scroll", text, 0, false, true);
+			text->SetViewUIColor(B_PANEL_BACKGROUND_COLOR);
+			text->SetInsets(5, 5, 5, 5);
+			text->SetWordWrap(true);
+			if (item.values.size() >= 2 && item.values[0] > 0 && item.values[1] > 0) {
+				font_height height;
+				be_plain_font->GetHeight(&height);
+				BSize size(item.values[0] * be_plain_font->StringWidth("0") + 2,
+					(height.ascent + height.descent + height.leading) * item.values[1] + 10);
+				text->SetExplicitMinSize(size);
+				text->SetExplicitPreferredSize(size);
+				text->SetExplicitMaxSize(size);
+			}
+			view = text;
 			break;
 		}
 		case FourCC("POPM"):
@@ -787,11 +802,8 @@ TDialog::SetTextItem(int32 index, const char* text, int32 set)
 		control->SetText(text);
 	else if (BStringView* label = dynamic_cast<BStringView*>(Item(index, set)))
 		label->SetText(text);
-	else if (BScrollView* scroll = dynamic_cast<BScrollView*>(Item(index, set))) {
-		// a TEXT item
-		if (BTextView* view = dynamic_cast<BTextView*>(scroll->Target()))
-			view->SetText(text);
-	}
+	else if (BTextView* view = dynamic_cast<BTextView*>(Item(index, set)))
+		view->SetText(text);	// a TEXT item
 }
 
 
