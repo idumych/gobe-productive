@@ -162,22 +162,24 @@ the app), and you can name the image, installer or program in the
 BeOS-format (BFS) CD images can't be read yet: copy the installer or the
 folder out of the image first (Haiku can mount it), and choose that.
 
-### Where 0.2.1 was tested
+### Where 1.0.0 was tested
 
 | System | What was tested |
 |---|---|
-| Haiku R1/beta6 (x86_64) | Installed the package, unpacked the original from its installer, opened a document, typed and saved (the title loses its "*", quitting doesn't ask again), reopened it, Edit Styles; the ToolBar |
-| Linux x86_64, X11 | The AppImage (Xvfb and Openbox): unpacked the original from its installer, opened a document, typed, saved, quit and reopened it, Edit Styles from the style menu |
+| Haiku R1/beta6 (x86_64) | Installed the package (it brought the Liberation fonts), unpacked the original from its installer, opened a document, typed, saved and quit, reopened it, Edit Styles; opened a PNG as an image document |
+| Linux x86_64, X11 | The AppImage (Xvfb and Openbox): unpacked the original from its installer, opened a document, typed, saved, quit and reopened it, Edit Styles from the style menu; opened a PNG as an image document |
 | Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
 | Linux aarch64, X11 | Started on an arm64 machine: the window appears |
 | Renku OS | Not tried; the Haiku package should install there |
 
-There's no Haiku arm64 package yet. The other features were
-tried during development in a Haiku R1/beta6 VM and by the host tests,
-not on the release builds. Also untested so far: real hardware,
-interactive Wayland desktops, real Gobe Productive CD images (only images
-made from the installer), and opening documents saved by the port in the
-original on BeOS.
+There's no Haiku arm64 package yet. The other features, the plug-in
+filters and the rest of image processing among them, were tried during
+development in a Haiku R1/beta6 VM, on Linux and by the host tests, not on
+the release builds. Also untested so far: real hardware, interactive
+Wayland desktops (beyond opening pictures with a development AppImage),
+drag and drop from a Linux file manager, real Gobe Productive CD images
+(only images made from the installer), and opening documents saved by the
+port in the original on BeOS.
 
 ## The thesaurus and dictionary
 
