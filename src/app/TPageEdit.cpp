@@ -2036,6 +2036,18 @@ TPageView::KeyDown(const char* bytes, int32 count)
 {
 	if (count < 1)
 		return;
+	// (a cell the keys or the cell editor moved to, scrolled into view)
+	struct Reveal {
+		TPageView* view;
+		int row, column;
+		bool active;
+		~Reveal()
+		{
+			if (view->fSelectedCell.active && (!active || view->fSelectedCell.row != row
+					|| view->fSelectedCell.column != column))
+				view->RevealSelectedCell();
+		}
+	} reveal{this, fSelectedCell.row, fSelectedCell.column, fSelectedCell.active};
 	if (ChartKey(bytes, count))
 		return;
 	// an image document's image (TPartIM::KeyDown)
@@ -2208,6 +2220,18 @@ TPageView::KeyDown(const char* bytes, int32 count)
 void
 TPageView::MessageReceived(BMessage* message)
 {
+	// (a cell the keys or the cell editor moved to, scrolled into view)
+	struct Reveal {
+		TPageView* view;
+		int row, column;
+		bool active;
+		~Reveal()
+		{
+			if (view->fSelectedCell.active && (!active || view->fSelectedCell.row != row
+					|| view->fSelectedCell.column != column))
+				view->RevealSelectedCell();
+		}
+	} reveal{this, fSelectedCell.row, fSelectedCell.column, fSelectedCell.active};
 	// a chart's series (the legend's context menu)
 	if (message->HasInt32("series") && ChartCommand(message))
 		return;

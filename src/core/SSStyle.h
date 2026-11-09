@@ -39,6 +39,11 @@ CellStyle ResolveCellStyle(const StyleMgr& styles, const std::vector<uint32_t>& 
 // The text shown for a value with a number format ("General", "$#.00;
 // [Red]-$#.00", "m/d/yyyy", ...); `red` is set by a [Red] section.
 std::string FormatCellValue(const SSValue& value, const std::string& format, bool* red = nullptr);
+// the Number dialog's categories (the original's TNumberFormatFactory), which
+// FormatCellValue matches formats against; none: formats are taken as
+// written
+class NumberFormats;
+void SetCellNumberFormats(const NumberFormats* formats);
 
 // whether a number format shows dates or times (its first section has
 // d, m, y, h or s outside quotes and brackets)

@@ -27,6 +27,7 @@
 #include <GradientLinear.h>
 #include <GradientRadial.h>
 #include <Region.h>
+#include <ScrollBar.h>
 #include <Window.h>
 #include <Shape.h>
 
@@ -51,7 +52,7 @@ TPageView::CanShow(const Document& document)
 
 TPageView::TPageView(Document& document, UndoStack& undo)
 	:
-	BView("TPageView", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE | B_NAVIGABLE),
+	BView("TPageView", B_WILL_DRAW | B_FULL_UPDATE_ON_RESIZE | B_FRAME_EVENTS | B_NAVIGABLE),
 	fUndo(undo),
 	fMargin(kDesk),
 	fBook(new SSBook(document)),
@@ -206,6 +207,177 @@ TPageView::RebuildFrames()
 	}
 	if (first)
 		fBounds.Set(0, 0, 612, 792);
+	PinSheetFrame();
+}
+
+
+void
+TPageView::PinSheetFrame()
+{
+	fSheetFrame = -1;
+	int main = fDocument.MainPart();
+	int root = fDocument.RootPart();
+	if (fFrameOnly.active || main < 0 || root < 0
+			|| fDocument.parts.parts[size_t(root)].kind != Sig("BROT")
+			|| fDocument.SpreadsheetPart(size_t(main)) == NULL)
+		return;
+	const SSPart& ss = *fDocument.SpreadsheetPart(size_t(main));
+	for (size_t i = 0; i < fFrames.size(); i++) {
+		Document::PlacedFrame& f = fFrames[i];
+		if (f.part != size_t(main))
+			continue;
+		// (TSSFrame::MaxLogicalFrameOrigin: the headings and every row and
+		// column of the sheet)
+		float headerHeight = ss.options[3] ? ss.defaultHeight : 0;
+		float headerWidth = ss.options[4] ? 36 : 0;
+		float width = headerWidth, height = headerHeight;
+		for (int column = 0; column <= int(ss.used.to.b); column++)
+			width += roundf(ss.ColumnWidth(uint16_t(column)));
+		for (int row = 0; row <= int(ss.used.to.a); row++)
+			height += roundf(ss.RowHeight(uint16_t(row)));
+		// the first row and column: those whose edges the view is scrolled
+		// to (ScrollTo keeps it on one)
+		BRect visible = Window() != NULL ? Bounds()
+			: BRect(0, 0, f.width * fZoom, f.height * fZoom);
+		float left = 0, top = 0;
+		fSheetColumn = 0;
+		while (fSheetColumn < int(ss.used.to.b)
+				&& left + roundf(ss.ColumnWidth(uint16_t(fSheetColumn))) / 2
+					<= visible.left / fZoom) {
+			left += roundf(ss.ColumnWidth(uint16_t(fSheetColumn)));
+			fSheetColumn++;
+		}
+		fSheetRow = 0;
+		while (fSheetRow < int(ss.used.to.a)
+				&& top + roundf(ss.RowHeight(uint16_t(fSheetRow))) / 2 <= visible.top / fZoom) {
+			top += roundf(ss.RowHeight(uint16_t(fSheetRow)));
+			fSheetRow++;
+		}
+		fBounds = fBounds | BRect(f.x, f.y, f.x + width, f.y + height);
+		f.x += left;
+		f.y += top;
+		f.width = visible.Width() / fZoom + 1;
+		f.height = visible.Height() / fZoom + 1;
+		fSheetFrame = int(i);
+		// (the root frame, the window's white, and the sheet's drawing,
+		// which holds its charts, as big)
+		uint32_t drawing = 0xffffffff;
+		size_t sheet = size_t(std::max(0, fDocument.CurrentSheet()));
+		if (sheet < fDocument.sheets.sheets.size())
+			drawing = fDocument.sheets.sheets[sheet].graphicsPart;
+		for (Document::PlacedFrame& r : fFrames)
+			if (fDocument.parts.parts[r.part].kind == Sig("BROT") || r.part == drawing) {
+				r.x = f.x;
+				r.y = f.y;
+				r.width = f.width;
+				r.height = f.height;
+			}
+		return;
+	}
+}
+
+
+void
+TPageView::ScrollTo(BPoint where)
+{
+	if (fSheetFrame < 0) {
+		BView::ScrollTo(where);
+		return;
+	}
+	// TSSFrame::SetLogicalFrameOrigin: the nearest row and column edges
+	const SSPart& ss = *fDocument.SpreadsheetPart(fFrames[size_t(fSheetFrame)].part);
+	float x = 0, y = 0;
+	for (int column = 0; column < int(ss.used.to.b); column++) {
+		float w = roundf(ss.ColumnWidth(uint16_t(column)));
+		if ((x + w / 2) * fZoom > where.x)
+			break;
+		x += w;
+	}
+	for (int row = 0; row < int(ss.used.to.a); row++) {
+		float h = roundf(ss.RowHeight(uint16_t(row)));
+		if ((y + h / 2) * fZoom > where.y)
+			break;
+		y += h;
+	}
+	BPoint snapped(roundf(x * fZoom), roundf(y * fZoom));
+	if (snapped == Bounds().LeftTop())
+		return;
+	BView::ScrollTo(snapped);
+	RebuildFrames();
+	LayoutText();
+	Invalidate();
+	if (BScrollBar* bar = ScrollBar(B_VERTICAL))
+		bar->SetSteps(roundf(ss.defaultHeight * fZoom), Bounds().Height());
+	if (BScrollBar* bar = ScrollBar(B_HORIZONTAL))
+		bar->SetSteps(roundf(ss.defaultWidth * fZoom), Bounds().Width());
+}
+
+
+void
+TPageView::FrameResized(float width, float height)
+{
+	BView::FrameResized(width, height);
+	if (fSheetFrame < 0)
+		return;
+	RebuildFrames();
+	LayoutText();
+	// (the saved first cell, once the view has its size)
+	if (!fSheetScrollRestored && fSheetFrame >= 0) {
+		fSheetScrollRestored = true;
+		const Document::PlacedFrame& f = fFrames[size_t(fSheetFrame)];
+		const SSPart& ss = *fDocument.SpreadsheetPart(f.part);
+		float x = 0, y = 0;
+		for (int column = 0; column < int(f.frame->cells[1]); column++)
+			x += roundf(ss.ColumnWidth(uint16_t(column)));
+		for (int row = 0; row < int(f.frame->cells[0]); row++)
+			y += roundf(ss.RowHeight(uint16_t(row)));
+		ScrollTo(BPoint(x * fZoom, y * fZoom));
+	}
+	Invalidate();
+}
+
+
+void
+TPageView::RevealSelectedCell()
+{
+	if (fSheetFrame < 0 || !fSelectedCell.active
+			|| fSelectedCell.part != fFrames[size_t(fSheetFrame)].part
+			|| fSelectedCell.kind != SelectionKind::cells)
+		return;
+	const Document::PlacedFrame& f = fFrames[size_t(fSheetFrame)];
+	const SSPart& ss = *fDocument.SpreadsheetPart(f.part);
+	float headerHeight = ss.options[3] ? ss.defaultHeight : 0;
+	float headerWidth = ss.options[4] ? 36 : 0;
+	// the cell's edges from the sheet's corner, and the cells' area in view
+	float left = 0, top = 0;
+	for (int column = 0; column < fSelectedCell.column; column++)
+		left += roundf(ss.ColumnWidth(uint16_t(column)));
+	for (int row = 0; row < fSelectedCell.row; row++)
+		top += roundf(ss.RowHeight(uint16_t(row)));
+	float right = left + roundf(ss.ColumnWidth(uint16_t(fSelectedCell.column)));
+	float bottom = top + roundf(ss.RowHeight(uint16_t(fSelectedCell.row)));
+	BRect view = Bounds();
+	float viewLeft = view.left / fZoom, viewTop = view.top / fZoom;
+	float viewRight = viewLeft + view.Width() / fZoom - headerWidth;
+	float viewBottom = viewTop + view.Height() / fZoom - headerHeight;
+	float x = viewLeft, y = viewTop;
+	if (left < viewLeft)
+		x = left;
+	else if (right > viewRight)
+		x = viewLeft + (right - viewRight);
+	if (top < viewTop)
+		y = top;
+	else if (bottom > viewBottom)
+		y = viewTop + (bottom - viewBottom);
+	if (x == viewLeft && y == viewTop)
+		return;
+	// (onto the next edge, so that the cell is wholly shown)
+	float cx = 0, cy = 0;
+	for (int column = 0; cx < x - 0.5f && column < int(ss.used.to.b); column++)
+		cx += roundf(ss.ColumnWidth(uint16_t(column)));
+	for (int row = 0; cy < y - 0.5f && row < int(ss.used.to.a); row++)
+		cy += roundf(ss.RowHeight(uint16_t(row)));
+	ScrollTo(BPoint(cx * fZoom, cy * fZoom));
 }
 
 
@@ -1657,6 +1829,10 @@ TPageView::SheetLayout(const Document::PlacedFrame& f, BRect r) const
 	// visible columns and rows, with their view positions
 	g.firstRow = f.frame->cells[0];
 	g.firstColumn = f.frame->cells[1];
+	if (fSheetFrame >= 0 && f.frame == fFrames[size_t(fSheetFrame)].frame) {
+		g.firstRow = fSheetRow;
+		g.firstColumn = fSheetColumn;
+	}
 	for (float x = r.left + g.headerWidth; g.firstColumn + int(g.xs.size()) <= 0x2be; ) {
 		g.xs.push_back(x);
 		if (x > r.right)

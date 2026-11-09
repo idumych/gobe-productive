@@ -63,6 +63,12 @@ public:
 	virtual void MouseMoved(BPoint where, uint32 transit, const BMessage* dragMessage);
 	virtual void MouseUp(BPoint where);
 	virtual void MessageReceived(BMessage* message);
+	// a spreadsheet document's sheet scrolls by whole rows and columns
+	// (TSSFrame::SetLogicalFrameOrigin) and fills the window
+	// (TBrowseRootFrame::SetSize)
+	virtual void ScrollTo(BPoint where);
+	using BView::ScrollTo;
+	virtual void FrameResized(float width, float height);
 
 	// after the document was saved (and loaded again) or reverted
 	void DocumentReloaded();
@@ -610,6 +616,17 @@ private:
 		std::vector<uint32_t> starts;
 	};
 	void RebuildFrames();
+	// TBrowseRootFrame::SetSize, TSSFrame::LogicalFrameOrigin: a spreadsheet
+	// document's sheet frame (fFrames[fSheetFrame]) as big as the view,
+	// where it is scrolled to, showing the cells from fSheetRow and
+	// fSheetColumn; fBounds the whole sheet (TSSFrame::MaxLogicalFrameOrigin)
+	void PinSheetFrame();
+	// the selected cell scrolled into a spreadsheet document's view
+	// (TSSFrame::MakeVisible)
+	void RevealSelectedCell();
+	int fSheetFrame = -1;
+	int fSheetRow = 0, fSheetColumn = 0;
+	bool fSheetScrollRestored = false;	// scrolled to the saved first cell
 	const Document::PlacedFrame* CaretFrame() const;
 	float fZoom = 1;
 	bool fBrowse = false;			// browse view: no pages

@@ -5,6 +5,9 @@
 #include <cstdio>
 #include <cstring>
 #include <ctime>
+#include <map>
+
+#include "NumberFormats.h"
 
 namespace gobe {
 
@@ -215,7 +218,7 @@ FormatDate(int64_t seconds, const std::string& f)
 // A number section: literal text around one numeric pattern of #, 0, ',',
 // '.'; '%' multiplies by 100
 std::string
-FormatNumber(double n, const std::string& f)
+FormatNumber(double n, const std::string& f, bool zeroBeforePoint = false)
 {
 	size_t first = f.find_first_of("#0.,");
 	if (first == std::string::npos)
@@ -247,7 +250,7 @@ FormatNumber(double n, const std::string& f)
 	std::string fp = digits.find('.') == std::string::npos ? "" : digits.substr(digits.find('.') + 1);
 	while (fp.size() > size_t(decimals) && fp.back() == '0')
 		fp.pop_back();
-	if (ip == "0" && minInt == 0)
+	if (ip == "0" && minInt == 0 && !zeroBeforePoint)
 		ip.clear();
 	while (ip.size() < size_t(minInt))
 		ip = "0" + ip;
@@ -285,7 +288,66 @@ StripColor(std::string section, bool* red)
 	return section;
 }
 
+const NumberFormats* sNumberFormats = nullptr;
+
+
+// TPropNumFormat::SetFormatString: a format the Number dialog's categories
+// make (TNumberFormatFactory::FindFormat) is its type's formats made for its
+// decimals and commas (TNumberFormat::Parameterize), token by token: the
+// type's thousands separator stays even without commas (Currency's
+// "$#,###.0" made into "$#.00" still groups), and with no decimals the
+// point goes too ("#." shows "200"); a '#' before the point shows a 0
+// (decimalX::NextIntegralDigit). Section k's pattern, as FormatNumber takes
+// it; false if `format` isn't one of theirs.
+bool
+CategoryPattern(const std::string& format, size_t k, std::string& section)
+{
+	if (sNumberFormats == nullptr)
+		return false;
+	struct Match {
+		bool found = false;
+		NumberFormatGroupInfo info;
+	};
+	static std::map<std::string, Match> cache;
+	auto it = cache.find(format);
+	if (it == cache.end()) {
+		Match m;
+		m.found = sNumberFormats->Find(format, m.info) && m.info.category >= 0
+			&& size_t(m.info.category) < sNumberFormats->Categories().size()
+			&& size_t(m.info.type)
+				< sNumberFormats->Categories()[size_t(m.info.category)].groups.size();
+		it = cache.emplace(format, m).first;
+	}
+	const Match& m = it->second;
+	if (!m.found)
+		return false;
+	const auto& base = sNumberFormats->Categories()[size_t(m.info.category)]
+		.groups[size_t(m.info.type)];
+	const std::string& type = base[k].empty() ? base[0] : base[k];
+	size_t point = section.find('.');
+	size_t end = point == std::string::npos ? section.size() : point;
+	if ((type.find(',') != std::string::npos || m.info.commas)
+			&& section.substr(0, end).find(',') == std::string::npos) {
+		size_t digit = section.find_first_of("#0");
+		if (digit != std::string::npos && digit < end)
+			section.insert(digit + 1, ",");
+	}
+	if (m.info.decimals == 0 && point != std::string::npos) {
+		point = section.find('.');
+		if (point + 1 >= section.size() || (section[point + 1] != '#' && section[point + 1] != '0'))
+			section.erase(point, 1);
+	}
+	return true;
+}
+
 } // namespace
+
+
+void
+SetCellNumberFormats(const NumberFormats* formats)
+{
+	sNumberFormats = formats;
+}
 
 
 CellStyle
@@ -336,11 +398,16 @@ FormatCellValue(const SSValue& value, const std::string& format, bool* red)
 			StripColor(SplitSections(format)[0], red));
 	std::vector<std::string> sections = SplitSections(format);
 	double n = value.number;
+	auto number = [&](double v, size_t k) {
+		std::string section = StripColor(sections[k], red);
+		bool category = CategoryPattern(format, k, section);
+		return FormatNumber(v, section, category);
+	};
 	if (n < 0 && sections.size() >= 2)
-		return FormatNumber(-n, StripColor(sections[1], red));
+		return number(-n, 1);
 	if (n == 0 && sections.size() >= 3)
-		return FormatNumber(n, StripColor(sections[2], red));
-	std::string s = FormatNumber(n, StripColor(sections[0], red));
+		return number(n, 2);
+	std::string s = number(n, 0);
 	if (n < 0)
 		s = "-" + s;
 	return s;

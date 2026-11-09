@@ -37,6 +37,8 @@
 #include "TDialogNewDoc.h"
 #include "TDialogSplash.h"
 #include "TRecentDocs.h"
+#include "TSheetDialogs.h"
+#include "SSStyle.h"
 #include "TPensWindow.h"
 #include "TTearOffs.h"
 #include "TTranslate.h"
@@ -549,6 +551,8 @@ public:
 			return;
 		fReady = true;
 		InstallTextConverter();
+		// (cells' number formats as the Number dialog's categories make them)
+		SetCellNumberFormats(&AppNumberFormats());
 		if (!fPending.empty()) {
 			OpenPending();
 			if (!fRenderPath.empty() && !fHasDocument) {

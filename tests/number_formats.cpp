@@ -15,6 +15,7 @@
 #include "DocArchive.h"
 #include "Document.h"
 #include "NumberFormats.h"
+#include "SSStyle.h"
 
 using namespace gobe;
 
@@ -123,6 +124,31 @@ main(int argc, char** argv)
 		Check(again == format, format + " comes back as " + again + " (category "
 			+ std::to_string(info.category) + " type " + std::to_string(info.type) + ")");
 	}
+	// cells shown as the original shows StockPrice's (checked on BeOS 5):
+	// Currency's type groups its thousands though made without commas,
+	// "#." loses its point, a '#' before the point shows a 0
+	SetCellNumberFormats(&formats);
+	struct {
+		double value;
+		const char* format;
+		const char* shown;
+	} cells[] = {
+		{6000, "$#.00;-$#.00", "$6,000.00"},
+		{0, "$#.00;[Red]$#.00", "$0.00"},
+		{-200, "$#.00;[Red]$#.00", "$200.00"},
+		{200, "#.;-#.", "200"},
+		{1234.5, "#.00", "1234.50"},
+		{1234.5, "#,###.00", "1,234.50"},
+	};
+	for (const auto& c : cells) {
+		SSValue v;
+		v.type = SSValue::kNumber;
+		v.number = c.value;
+		std::string shown = FormatCellValue(v, c.format);
+		Check(shown == c.shown, std::to_string(c.value) + " in " + c.format + " shows "
+			+ shown + ", not " + c.shown);
+	}
+	SetCellNumberFormats(nullptr);
 	printf("formats %d, ok %d, failed %d\n", roundTrips, ok, failed);
 	return failed == 0 && roundTrips > 0 ? 0 : 1;
 }
