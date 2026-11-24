@@ -57,7 +57,8 @@ GIMP_OUT := $(addprefix $(BUILD)/GIMP/,$(GIMP))
 override CFLAGS += -IGIMP -include string.h -include stdlib.h -Wno-implicit-function-declaration \
 	-Wno-int-conversion -Wno-incompatible-pointer-types
 ifneq ($(VOS),)
-  override CFLAGS += $(filter-out -include LinuxBuildCompatibility.h,$(shell pkg-config --cflags vos))
+  # (first, as for C++: SupportDefs.h needs LinuxBuildCompatibility.h's types)
+  override CFLAGS := $(shell pkg-config --cflags vos) $(CFLAGS)
 else ifeq ($(HAIKU),)
   override CFLAGS += -I$(COSMOE_ROOT)/include $(addprefix -I$(COSMOE_ROOT)/include/,$(COSMOE_DIRS))
 endif
