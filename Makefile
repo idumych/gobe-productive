@@ -59,8 +59,10 @@ else
     # VitruvianOS with vos-dev (pkg-config), or a link-time SDK's env.sh
     PLATFORM    := VitruvianOS
     override CXXFLAGS += $(shell pkg-config --cflags vos) -fPIC
+    # (libopengl needs the Game Kit's BWindowScreen, which the link-only SDK
+    # leaves out: V\OS's own libraries resolve it at run time)
     LIBS        := $(shell pkg-config --libs vos) -ltracker -ltranslation -ltextencoding \
-                   -lopengl -lGL $(APP_LIBS)
+                   -lopengl -lGL $(APP_LIBS) -Wl,--allow-shlib-undefined
   else ifneq ($(wildcard $(VOS_HEADERS)/os/BeBuild.h),)
     # VitruvianOS 0.6.x: headers in the system package, no pkg-config
     PLATFORM    := VitruvianOS
