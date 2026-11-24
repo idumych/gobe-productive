@@ -20,7 +20,7 @@ ifneq ($(VOS),)
   # VitruvianOS: the Haiku API on Linux; libbe and libimagemanip in /system/lib
   # (first: its -include LinuxBuildCompatibility.h must come before beos.h)
   override CXXFLAGS := $(shell pkg-config --cflags vos) $(CXXFLAGS)
-  LIBS := $(LDFLAGS) $(shell pkg-config --libs vos) -ltracker
+  LIBS := $(LDFLAGS) $(shell pkg-config --libs vos) -ltracker -ltranslation
   ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
   GIMP_RPATH :=
 else ifneq ($(HAIKU),)
