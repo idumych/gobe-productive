@@ -18,7 +18,8 @@ HAIKU := $(if $(HAIKU_CROSS),1,$(if $(filter Haiku,$(UNAME)),1,))
 VOS := $(if $(HAIKU),,$(shell pkg-config --exists vos 2>/dev/null && echo 1))
 ifneq ($(VOS),)
   # VitruvianOS: the Haiku API on Linux; libbe and libimagemanip in /system/lib
-  override CXXFLAGS += $(shell pkg-config --cflags vos)
+  # (first: its -include LinuxBuildCompatibility.h must come before beos.h)
+  override CXXFLAGS := $(shell pkg-config --cflags vos) $(CXXFLAGS)
   LIBS := $(LDFLAGS) $(shell pkg-config --libs vos) -ltracker
   ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
   GIMP_RPATH :=
