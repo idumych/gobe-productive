@@ -123,20 +123,21 @@ shown on Linux.*
 
 ## Install
 
-The current release is **1.0.1**: since 1.0.0, spreadsheets fill
-their window and scroll through the whole sheet, number formats, dialog
-sizes and the Inks window's opacity controls match the original, new shapes
-in text documents wrap Tight, and Create Outlines turns a text frame's text
-into shapes. 1.0.0 was the whole of Gobe Productive.
+The current release is **1.0.2**: it saves documents safely (a new file
+replaces the old one only once it is written and reads back), keeps
+documents, imports and plug-ins from crashing the app or writing outside
+their folder, fixes COUNTIF and SUMIF, and imports large CSV and SYLK files
+in a moment. 1.0.1 matched more of the original's spreadsheets, number
+formats and dialogs; 1.0.0 was the whole of Gobe Productive.
 
 | System | Download | Install |
 |---|---|---|
-| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-1.0.1-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v1.0.1/gobeproductive-1.0.1-1-x86_64.hpkg) | `pkgman install ./gobeproductive-1.0.1-1-x86_64.hpkg` |
-| Linux, glibc 2.39+ (x86_64) | [GobeProductive-1.0.1-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.1/GobeProductive-1.0.1-x86_64.AppImage) | `chmod +x GobeProductive-1.0.1-x86_64.AppImage`, then run it |
-| Linux, glibc 2.39+ (aarch64) | [GobeProductive-1.0.1-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.1/GobeProductive-1.0.1-aarch64.AppImage) | `chmod +x GobeProductive-1.0.1-aarch64.AppImage`, then run it |
+| Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-1.0.2-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/gobeproductive-1.0.2-1-x86_64.hpkg) | `pkgman install ./gobeproductive-1.0.2-1-x86_64.hpkg` |
+| Linux, glibc 2.39+ (x86_64) | [GobeProductive-1.0.2-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/GobeProductive-1.0.2-x86_64.AppImage) | `chmod +x GobeProductive-1.0.2-x86_64.AppImage`, then run it |
+| Linux, glibc 2.39+ (aarch64) | [GobeProductive-1.0.2-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/GobeProductive-1.0.2-aarch64.AppImage) | `chmod +x GobeProductive-1.0.2-aarch64.AppImage`, then run it |
 
 Checksums and release notes are on the
-[release page](https://github.com/idumych/gobe-productive/releases/tag/v1.0.1).
+[release page](https://github.com/idumych/gobe-productive/releases/tag/v1.0.2).
 On Haiku it appears in the Deskbar's Applications menu. The Command key is
 **Alt** on Haiku and **Ctrl** on Linux.
 
@@ -177,7 +178,7 @@ the app), and you can name the image, installer or program in the
 BeOS-format (BFS) CD images can't be read yet: copy the installer or the
 folder out of the image first (Haiku can mount it), and choose that.
 
-### Where 1.0.1 was tested
+### Where 1.0.2 was tested
 
 | System | What was tested |
 |---|---|
