@@ -1,6 +1,7 @@
 # The image part's plug-ins, built from source as the original shipped them:
 # libimagemanip (public domain), the ImageManip add-ons and the GIMP filters
-# (GPL, see COPYING). Haiku: make; Linux: make COSMOE_ROOT=<Hokku prefix>.
+# (GPL, see COPYING). Haiku: make; Linux: make COSMOE_ROOT=<Hokku prefix>;
+# VitruvianOS: make with pkg-config vos (vos-dev, or the link-time SDK's env.sh).
 # Output in build/: lib/libimagemanip.so, ImageManip/<name>, GIMP/<name>.
 
 UNAME := $(shell uname -s)
@@ -14,7 +15,14 @@ override CFLAGS += -O2 -fPIC
 
 # (Haiku arm64 cross-compiled: make HAIKU_CROSS=1 with the sysroot's env.sh)
 HAIKU := $(if $(HAIKU_CROSS),1,$(if $(filter Haiku,$(UNAME)),1,))
-ifneq ($(HAIKU),)
+VOS := $(if $(HAIKU),,$(shell pkg-config --exists vos 2>/dev/null && echo 1))
+ifneq ($(VOS),)
+  # VitruvianOS: the Haiku API on Linux; libbe and libimagemanip in /system/lib
+  override CXXFLAGS += $(shell pkg-config --cflags vos)
+  LIBS := $(LDFLAGS) $(shell pkg-config --libs vos) -ltracker
+  ADDON_RPATH := -Wl,-rpath,'$$ORIGIN/../lib'
+  GIMP_RPATH :=
+else ifneq ($(HAIKU),)
   override CXXFLAGS += $(HAIKU_CROSS_CFLAGS)
   override CFLAGS += $(HAIKU_CROSS_CFLAGS)
   LIBS := $(HAIKU_CROSS_LDFLAGS) -lbe -ltracker -ltranslation
@@ -47,7 +55,9 @@ GIMP := $(filter-out gimp gems,$(basename $(notdir $(wildcard GIMP/*.c))))
 GIMP_OUT := $(addprefix $(BUILD)/GIMP/,$(GIMP))
 override CFLAGS += -IGIMP -include string.h -include stdlib.h -Wno-implicit-function-declaration \
 	-Wno-int-conversion -Wno-incompatible-pointer-types
-ifeq ($(HAIKU),)
+ifneq ($(VOS),)
+  override CFLAGS += $(filter-out -include LinuxBuildCompatibility.h,$(shell pkg-config --cflags vos))
+else ifeq ($(HAIKU),)
   override CFLAGS += -I$(COSMOE_ROOT)/include $(addprefix -I$(COSMOE_ROOT)/include/,$(COSMOE_DIRS))
 endif
 
