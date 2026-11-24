@@ -401,7 +401,7 @@ MoveCells(SSPart& part, const std::vector<SSRange>& block, int rows, int columns
 		if (lands)
 			edited = InvalidateFormulaReferences(cell.formula, landing, cell.id);
 		if (moves)
-			edited = MoveFormulaReferences(cell.formula, block, rows, columns, cell.id);
+			edited |= MoveFormulaReferences(cell.formula, block, rows, columns, cell.id);
 		if (edited && changed != nullptr)
 			changed->push_back({cell.id, cell.id});
 	}

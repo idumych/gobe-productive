@@ -23,6 +23,9 @@ ReadBitmap(DocArchive& a, ArchiveBitmap& out)
 		if (compressed) {
 			uint32_t packed = a.UInt32();
 			std::vector<uint8_t> data = a.Bytes(packed);
+			// (zlib packs at most about 1032:1: a larger size is a broken file)
+			if (size / 1032 > data.size() + 1)
+				throw ArchiveError("bitmap data doesn't decompress", a.Position());
 			out.bits.resize(size);
 			uLongf length = size;
 			if (uncompress(out.bits.data(), &length, data.data(), packed) != Z_OK

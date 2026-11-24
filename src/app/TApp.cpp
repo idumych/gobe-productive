@@ -1,6 +1,7 @@
 // TApp: application entry. Loads the original binary's resources, then opens a
 // document window. The real TApp (splash, preferences, part factories,
 // document management) comes with later milestones.
+#include <memory>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -443,7 +444,9 @@ public:
 	void OpenDocument(const std::string& path)
 	{
 		try {
-			Document* doc = new Document;	// owned by the app for now
+			// (freed if it doesn't open, or throws; the window's once it has one)
+			std::unique_ptr<Document> owned(new Document);
+			Document* doc = owned.get();
 			std::string error;
 			// TApp::RefsReceived: a Gobe document, else the translator that
 			// reads it best (a new untitled document)
@@ -472,7 +475,6 @@ public:
 					(new BAlert("Open", message.String(), "OK"))->Go(NULL);
 				else if (message.Length() > 0)
 					fprintf(stderr, "error opening %s: %s\n", path.c_str(), message.String());
-				delete doc;
 				return;
 			}
 			if (warning.Length() > 0) {
@@ -502,7 +504,7 @@ public:
 			fWindowCount++;
 			// an imported document is untitled: "<name> (converted)"
 			TDocWindow* window = new TDocWindow(frame,
-				doc->path.empty() ? doc->name.c_str() : p.Leaf(), doc);
+				doc->path.empty() ? doc->name.c_str() : p.Leaf(), owned.release());
 			window->Show();
 			// TPartPR::FinishOpenDoc: Options > Auto-start starts the show
 			if (doc->presentationPart >= 0 && doc->presentation.autoStart)

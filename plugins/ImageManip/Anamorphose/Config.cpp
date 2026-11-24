@@ -284,7 +284,7 @@ void LoadPrefs(Prefs* thePrefs)
 
 		if (!PREFGetData(data, "surrounding", &p, &size, &type))
 		{
-			memcpy(&surrounding, p, sizeof(double)); // Not guaranteed to be word aligned.
+			memcpy(&surrounding, p, sizeof(int32)); // Not guaranteed to be word aligned.
 			DefaultPrefs.keep_surr = DefaultPrefs.use_bkgr = DefaultPrefs.set_transparent = false;
 			switch(surrounding)
 			{

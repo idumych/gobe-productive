@@ -2,6 +2,7 @@
 
 #include "TImagePlugins.h"
 
+#include <DataIO.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -1764,7 +1765,9 @@ PrintSettings(const LeafSheet& sheet)
 	if (sheet.printSettings.empty())
 		return NULL;
 	BMessage* settings = new BMessage;
-	if (settings->Unflatten((const char*)sheet.printSettings.data()) != B_OK) {
+	// (read no further than the document's bytes)
+	BMemoryIO io(sheet.printSettings.data(), sheet.printSettings.size());
+	if (settings->Unflatten(&io) != B_OK) {
 		delete settings;
 		return NULL;
 	}

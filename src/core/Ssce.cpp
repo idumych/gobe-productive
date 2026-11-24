@@ -509,6 +509,8 @@ CompressedLexicon::SegmentWords(size_t index) const
 				done = true;
 			}
 		}
+		if (!done)	// (the segment ended mid-word: the word ends there)
+			buffer[std::min(p, sizeof(buffer) - 1)] = 0;
 		words.push_back(buffer);
 	}
 	return words;

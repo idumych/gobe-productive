@@ -145,6 +145,8 @@ UnflattenR5Message(const std::vector<uint8_t>& data, uint32_t& what,
 			if (mini)
 				count = data.at(at++);
 			else {
+				if (at + 4 > data.size())
+					return false;
 				count = Get32(data, at, swap);
 				at += 4;
 			}

@@ -101,6 +101,9 @@ ReadWPPart(DocArchive& a, WPPart& out)
 	out.bodyStart = a.Position();
 	a.CheckSig(Sig("par+"));
 	uint32_t count = a.UInt32();
+	// (each paragraph takes bytes of the file: a larger count is a broken file)
+	if (count > a.Size() - a.Position())
+		throw ArchiveError("too many paragraphs", a.Position());
 	out.paragraphs.resize(count);
 	for (WPParagraph& p : out.paragraphs)
 		ReadParagraph(a, p);

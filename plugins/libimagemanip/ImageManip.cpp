@@ -134,7 +134,7 @@ LoadAddon(const char *path)
 
 	// Create a temporary add-on info struct on the stack
 	AddonInfo info;
-	strcpy(info.name, name);
+	snprintf(info.name, sizeof info.name, "%s", name);	// (a 255-character name fits)
 	info.image = image;
 
 	// Find all symbols in the add-on
@@ -195,9 +195,7 @@ LoadDir(const char *path, int32& loadErr, int32& nLoaded)
 	char cwd[PATH_MAX] = "";
 	while ((dent = readdir(dir)) != NULL)
 	{
-		strcpy(cwd, path);
-		strcat(cwd, "/");
-		strcat(cwd, dent->d_name);
+		snprintf(cwd, sizeof cwd, "%s/%s", path, dent->d_name);
 		status_t err = stat(cwd, &stbuf);
 		if (debug) printf("stat(%s) = %08lx\n", cwd, err);
 		if (!err &&

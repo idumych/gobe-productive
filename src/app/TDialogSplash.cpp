@@ -1,6 +1,7 @@
 // The About box.
 #include "TDialogSplash.h"
 
+#include <DataIO.h>
 #include <Bitmap.h>
 #include <Button.h>
 #include <Message.h>
@@ -25,7 +26,8 @@ LogoBitmap()
 		if (r->name != "GPlogo")
 			continue;
 		BMessage archive;
-		if (archive.Unflatten((const char*)r->data.data()) != B_OK)
+		BMemoryIO io(r->data.data(), r->data.size());	// (read no further than the data)
+		if (archive.Unflatten(&io) != B_OK)
 			return NULL;
 		BBitmap* bitmap = new BBitmap(&archive);
 		if (bitmap->InitCheck() != B_OK) {

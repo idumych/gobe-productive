@@ -127,13 +127,13 @@ ReadFile(const std::string& path, std::vector<uint8_t>& data, uint64_t offset = 
 	std::ifstream in(path, std::ios::binary);
 	if (!in)
 		return false;
-	if (size == UINT64_MAX) {
-		in.seekg(0, std::ios::end);
-		uint64_t length = uint64_t(in.tellg());
-		if (offset > length)
-			return false;
+	// (a size from an image's directory: no more than the file holds)
+	in.seekg(0, std::ios::end);
+	uint64_t length = uint64_t(in.tellg());
+	if (offset > length || (size != UINT64_MAX && size > length - offset))
+		return false;
+	if (size == UINT64_MAX)
 		size = length - offset;
-	}
 	data.resize(size_t(size));
 	in.seekg(std::streamoff(offset));
 	in.read(reinterpret_cast<char*>(data.data()), std::streamsize(size));

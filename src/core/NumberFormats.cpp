@@ -136,7 +136,7 @@ ParameterizeFormat(const std::string& format, int decimals, bool commas)
 				do {
 					previous = i;
 					i--;
-				} while ((i != 0 && s[i] == '0') || s[i] == '#');
+				} while (i != 0 && (s[i] == '0' || s[i] == '#'));	// (not past the start)
 				first = digit(i) ? i : previous;
 			}
 			s.erase(first, last - first + 1);

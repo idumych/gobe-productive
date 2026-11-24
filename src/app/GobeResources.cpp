@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <thread>
 #ifdef APP_COSMOE
 #include <spawn.h>
 #include <sys/wait.h>
@@ -326,8 +327,9 @@ LaunchURL(const char* mime, const char* url)
 	// (be_roster->Launch doesn't reach the Linux desktop)
 	char* argv[] = {const_cast<char*>("xdg-open"), const_cast<char*>(url), NULL};
 	pid_t pid;
+	// (waited for elsewhere: xdg-open runs some browsers in the foreground)
 	if (posix_spawnp(&pid, "xdg-open", NULL, NULL, argv, environ) == 0)
-		waitpid(pid, NULL, 0);
+		std::thread([pid] { waitpid(pid, NULL, 0); }).detach();
 #else
 	const char* argv[] = {url, NULL};
 	be_roster->Launch(mime, 1, const_cast<char**>(argv));

@@ -139,6 +139,9 @@ DecodePNG(const std::vector<uint8_t>& png, ArchiveBitmap& bitmap)
 		return false;
 	size_t bits = size_t(channels) * size_t(depth);
 	size_t row = (size_t(width) * bits + 7) / 8, step = std::max<size_t>(1, bits / 8);
+	// (zlib packs at most about 1032:1: more pixels than that can't be there)
+	if ((row + 1) * height / 1032 > deflated.size() + 1)
+		return false;
 	std::vector<uint8_t> raw((row + 1) * height);
 	uLongf size = uLongf(raw.size());
 	if (uncompress(raw.data(), &size, deflated.data(), uLong(deflated.size())) != Z_OK

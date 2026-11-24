@@ -291,8 +291,8 @@ ParseCellName(const char*& text, CellID& cell)
 		text++;
 	}
 	int row = 0;
-	while (*text >= '0' && *text <= '9')
-		row = uint16_t(row * 10 + *text++ - '0');
+	while (*text >= '0' && *text <= '9' && row <= 0x4000)	// (no wrap past 65535)
+		row = row * 10 + *text++ - '0';
 	if (row == 0 || column >= 0x2bf || row - 1 >= 0x4000)
 		return false;
 	cell = {uint16_t(row - 1), uint16_t(column)};

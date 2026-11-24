@@ -22,6 +22,7 @@
 #include "TDocumentDialogs.h"
 #include "TWPRuler.h"
 
+#include <DataIO.h>
 #include <Alert.h>
 #include <Application.h>
 #include <Beep.h>
@@ -6526,8 +6527,8 @@ TPageView::ImportStyles(BMessage* message)
 		return;
 	}
 	BMessage archive;
-	if (flattened.empty()
-			|| archive.Unflatten(reinterpret_cast<const char*>(flattened.data())) != B_OK)
+	BMemoryIO io(flattened.data(), flattened.size());	// (read no further than the file's bytes)
+	if (flattened.empty() || archive.Unflatten(&io) != B_OK)
 		return;
 	std::vector<StyleDefinition> styles = RestoreStyles(MessageToArchive(archive));
 	std::vector<std::string> names;

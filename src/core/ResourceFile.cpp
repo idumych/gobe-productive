@@ -1,5 +1,7 @@
 #include "ResourceFile.h"
 
+#include <algorithm>
+
 #include <cstring>
 #include <fstream>
 #include <iterator>
@@ -14,7 +16,7 @@ const uint32_t kIndexEntrySize = 12;
 
 uint32_t U32(const std::vector<uint8_t>& d, size_t at)
 {
-	if (at + 4 > d.size())
+	if (d.size() < 4 || at > d.size() - 4)
 		return 0;
 	return uint32_t(d[at]) | uint32_t(d[at + 1]) << 8 | uint32_t(d[at + 2]) << 16
 		| uint32_t(d[at + 3]) << 24;
@@ -22,7 +24,7 @@ uint32_t U32(const std::vector<uint8_t>& d, size_t at)
 
 uint16_t U16(const std::vector<uint8_t>& d, size_t at)
 {
-	if (at + 2 > d.size())
+	if (d.size() < 2 || at > d.size() - 2)
 		return 0;
 	return uint16_t(d[at] | d[at + 1] << 8);
 }
@@ -88,7 +90,7 @@ ResourceFile::Load(const std::string& path)
 	uint32_t slots = (indexSize - kIndexHeaderSize) / kIndexEntrySize;
 
 	size_t p = base + infoOffset;
-	size_t end = p + infoSize - 8;	// table end: checksum + terminator
+	size_t end = p + std::max<size_t>(infoSize, 8) - 8;	// table end: checksum + terminator
 	while (p < end && p + 4 <= d.size()) {
 		uint32_t type = U32(d, p);	// stored little-endian
 		p += 4;
@@ -97,6 +99,10 @@ ResourceFile::Load(const std::string& path)
 			uint32_t index = U32(d, p + 4);	// 1-based slot
 			uint16_t nameSize = U16(d, p + 8);
 			p += 10;
+			if (nameSize > d.size() - p) {
+				fError = path + " is cut short";
+				return false;
+			}
 			std::string name(reinterpret_cast<const char*>(&d[p]),
 				strnlen(reinterpret_cast<const char*>(&d[p]), nameSize));
 			p += nameSize;
