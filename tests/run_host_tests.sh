@@ -13,7 +13,7 @@ DOCS="$OUT/documents"
 find "$APP/Samples" "$APP/Labels" -type f ! -name '*.json' 2>/dev/null | sort > "$DOCS"
 # Without the original (CI, a fresh checkout): only the tests that need
 # neither its documents nor its dictionaries
-PORTABLE="text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment"
+PORTABLE="write_file text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment"
 if [ ! -s "$DOCS" ]; then
 	if [ $# -gt 0 ]; then
 		echo "FAIL: no documents found in $APP/Samples and $APP/Labels"
@@ -33,7 +33,7 @@ for c in src/core/*.cpp; do
 done
 
 # tests that take no arguments; all others get every sample document
-NO_ARGS="image_new image_tools image_select text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment spell import_original sylk sylk_formula ss_table doc_word text_wrap ink_edit rtf_tables draw_smooth doc_fonts draw_poly doc_drawsize draw_layers ruler_ticks zoom_slider"
+NO_ARGS="write_file image_new image_tools image_select text_range text_url text_words doc_measure doc_columns doc_notes doc_wordcount doc_fragment spell import_original sylk sylk_formula ss_table doc_word text_wrap ink_edit rtf_tables draw_smooth doc_fonts draw_poly doc_drawsize draw_layers ruler_ticks zoom_slider"
 TOOLS="core_dump ss_dump"	# not tests
 
 TESTS=${*:-$(ls tests/*.cpp | xargs -n1 basename | sed 's/\.cpp$//')}

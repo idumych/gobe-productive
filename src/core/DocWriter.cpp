@@ -9,6 +9,10 @@
 #include <fcntl.h>
 #include <unistd.h>
 #include <fs_attr.h>
+#elif defined(__linux__)
+#include <fcntl.h>
+#include <unistd.h>
+#include <sys/xattr.h>
 #endif
 
 #include "Document.h"
@@ -167,6 +171,32 @@ CopyAttributes(const char* from, const char* to)
 	if (out >= 0)
 		close(out);
 }
+#elif defined(__linux__)
+// The old file's extended attributes onto the new one (Cosmoe keeps a
+// file's attributes, its type among them, as user.* xattrs)
+static void
+CopyAttributes(const char* from, const char* to)
+{
+	int in = open(from, O_RDONLY), out = open(to, O_WRONLY);
+	ssize_t length = in >= 0 && out >= 0 ? flistxattr(in, NULL, 0) : -1;
+	std::vector<char> names(length > 0 ? size_t(length) : 0);
+	if (length > 0)
+		length = flistxattr(in, names.data(), names.size());
+	for (ssize_t at = 0; at < length; at += ssize_t(strlen(&names[size_t(at)])) + 1) {
+		const char* name = &names[size_t(at)];
+		ssize_t size = fgetxattr(in, name, NULL, 0);
+		if (size < 0 || size > 1 << 24)
+			continue;
+		std::vector<char> value(static_cast<size_t>(size));
+		size = fgetxattr(in, name, value.data(), value.size());
+		if (size >= 0)
+			fsetxattr(out, name, value.data(), size_t(size), 0);
+	}
+	if (in >= 0)
+		close(in);
+	if (out >= 0)
+		close(out);
+}
 #endif
 
 
@@ -197,7 +227,7 @@ WriteFile(const std::string& path, const void* data, size_t size, std::string& e
 	}
 	if (fs::exists(target, ec)) {
 		fs::permissions(temporary, fs::status(target, ec).permissions(), ec);
-#ifdef __HAIKU__
+#if defined(__HAIKU__) || defined(__linux__)
 		CopyAttributes(target.c_str(), temporary.c_str());
 #endif
 	}
