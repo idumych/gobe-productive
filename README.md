@@ -1,8 +1,9 @@
 # Gobe Productive, ported
 
 Gobe Productive 2.0.1, the integrated office suite for BeOS, rebuilt for
-today's systems: **Haiku** (and Renku OS) and **Linux** (X11 and Wayland),
-on x86_64 (and arm64 on Linux). One document can hold text, spreadsheets, drawings,
+today's systems: **Haiku** (and Renku OS), **VitruvianOS** (a BeOS-like OS
+based on Linux) and **Linux** (X11 and Wayland), on x86_64 (and arm64 on
+VitruvianOS and Linux). One document can hold text, spreadsheets, drawings,
 charts, pictures and slides, each in a frame of its own, the way Gobe
 did it in 1999. The port opens and saves Gobe Productive documents and
 works like the original, down to its menus and dialogs.
@@ -135,11 +136,13 @@ formats and dialogs; 1.0.0 was the whole of Gobe Productive.
 | Haiku R1/beta6, Renku OS (x86_64) | [gobeproductive-1.0.2-1-x86_64.hpkg](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/gobeproductive-1.0.2-1-x86_64.hpkg) | `pkgman install ./gobeproductive-1.0.2-1-x86_64.hpkg` |
 | Linux, glibc 2.39+ (x86_64) | [GobeProductive-1.0.2-x86_64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/GobeProductive-1.0.2-x86_64.AppImage) | `chmod +x GobeProductive-1.0.2-x86_64.AppImage`, then run it |
 | Linux, glibc 2.39+ (aarch64) | [GobeProductive-1.0.2-aarch64.AppImage](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/GobeProductive-1.0.2-aarch64.AppImage) | `chmod +x GobeProductive-1.0.2-aarch64.AppImage`, then run it |
+| VitruvianOS 0.6 (amd64) | [gobeproductive_1.0.2-1_amd64.deb](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/gobeproductive_1.0.2-1_amd64.deb) | `sudo apt install ./gobeproductive_1.0.2-1_amd64.deb` |
+| VitruvianOS 0.6 (arm64) | [gobeproductive_1.0.2-1_arm64.deb](https://github.com/idumych/gobe-productive/releases/download/v1.0.2/gobeproductive_1.0.2-1_arm64.deb) | `sudo apt install ./gobeproductive_1.0.2-1_arm64.deb` |
 
 Checksums and release notes are on the
 [release page](https://github.com/idumych/gobe-productive/releases/tag/v1.0.2).
-On Haiku it appears in the Deskbar's Applications menu. The Command key is
-**Alt** on Haiku and **Ctrl** on Linux.
+On Haiku and VitruvianOS it appears in the Deskbar's Applications menu. The
+Command key is **Alt** on Haiku and **Ctrl** on VitruvianOS and Linux.
 
 Documents lay out with the Liberation fonts, which have the widths of the
 Times, Helvetica and Courier designs of BeOS's Bitstream fonts: the Haiku
@@ -167,7 +170,7 @@ into its settings folder and remembers it, so this happens once:
 
 | System | Unpacked into |
 |---|---|
-| Haiku, Renku OS | `~/config/settings/Gobe Productive port/Original` |
+| Haiku, Renku OS, VitruvianOS | `~/config/settings/Gobe Productive port/Original` |
 | Linux | `~/.config/cosmoe/Gobe Productive port/Original` |
 
 It also looks on its own in the usual places (`~/Gobe Productive 2.0`,
@@ -186,6 +189,8 @@ folder out of the image first (Haiku can mount it), and choose that.
 | Linux x86_64, X11 | The AppImage (Xvfb and Openbox): unpacked the original from its installer, opened a document, typed, saved, quit and reopened it, Edit Styles from the style menu; opened a PNG as an image document |
 | Linux, Wayland | Started on headless sway (x86_64 and aarch64): the window appears |
 | Linux aarch64, X11 | Started on an arm64 machine: the window appears |
+| VitruvianOS 0.6.3 (amd64) | Installed the .deb on a fresh installation (QEMU/KVM), unpacked the original from its installer, opened a document, typed, saved and quit, reopened it, Edit Styles; opened a PNG as an image document |
+| VitruvianOS 0.6.3 (arm64) | Installed the .deb on a fresh installation (emulated QEMU), unpacked the original from its installer, opened a document |
 | Renku OS | Not tried; the Haiku package should install there |
 
 There's no Haiku arm64 package yet. The other features, the plug-in
