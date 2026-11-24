@@ -205,6 +205,11 @@ ReadSSPart(DocArchive& a, SSPart& out)
 		c.id = id;
 		out.cells.push_back(std::move(c));
 	}
+	// (column by column, as TSparseArray writes them: SetCellInput's
+	// searches rely on it, whatever the file holds)
+	std::stable_sort(out.cells.begin(), out.cells.end(), [](const SSCell& x, const SSCell& y) {
+		return std::make_pair(x.id.b, x.id.a) < std::make_pair(y.id.b, y.id.a);
+	});
 
 	// TSSDepManager(TPartSS*, TInputArchive&)
 	out.depmStart = a.Position();

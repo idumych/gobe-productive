@@ -36,9 +36,9 @@ for d in ${TYPECHECK_INCLUDES:-}; do INC="$INC -I$ROOT/$d"; done
 status=0 n=0
 for f in $TYPECHECK_SRCS; do
 	n=$((n + 1))
-	out=$(g++ -std=c++17 -Wall -Wno-cpp -Wno-multichar -fsyntax-only $INC \
+	out=$(g++ -std=c++17 -Wall -Wno-cpp -Wno-multichar -fsyntax-only $INC ${TYPECHECK_CFLAGS:-} \
 		-include "$CACHE/shim.h" "$ROOT/$f" 2>&1 \
-		| grep -E "^[^ ].*: (error|warning): " | grep -v "^$H/" | grep -v "redefined" || true)
+		| grep -E "^[^ ].*: (fatal error|error|warning): " | grep -v "^$H/" | grep -v "redefined" || true)
 	if [ -n "$out" ]; then echo "$out"; status=1; else echo "ok  $f"; fi
 done
 echo "typecheck: $n files, $( [ $status = 0 ] && echo PASS || echo FAIL )"

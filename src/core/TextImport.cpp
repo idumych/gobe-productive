@@ -398,7 +398,11 @@ ImportTable(const std::string& path, Document& doc, std::string& error, char del
 	// and row, then the cell runs to the next delimiter or LF
 	uint32_t row = 0, column = 0;
 	size_t at = 0;
-	std::string ignored;
+	struct Cell {
+		uint16_t column, row;
+		std::string text;
+	};
+	std::vector<Cell> cells;
 	while (at < text.size()) {
 		if (StepCancelled(error, 1, 3, 2.0 * double(at), double(text.size())))
 			return false;
@@ -414,22 +418,28 @@ ImportTable(const std::string& path, Document& doc, std::string& error, char del
 		size_t end = at;
 		while (end < text.size() && text[end] != delimiter && text[end] != '\n')
 			end++;
-		if (end > at && row <= 0x3fff && column <= 0x2be) {	// (the grid: TCellRef::ActualValid)
-			std::string cell = text.substr(at, end - at);
-			uint16_t r = uint16_t(row), c = uint16_t(column);
-			if (!SetCellInput(*ss, r, c, cell, nullptr, ignored)) {
-				// a formula that doesn't parse: the text as it is
-				SetCellInput(*ss, r, c, "x", nullptr, ignored);
-				for (SSCell& sc : ss->cells)
-					if (sc.id.a == r && sc.id.b == c)
-						sc.text = cell;
-			}
-			if (r > ss->used.to.a)
-				ss->used.to.a = r;
-			if (c > ss->used.to.b)
-				ss->used.to.b = c;
-		}
+		if (end > at && row <= 0x3fff && column <= 0x2be)	// (the grid: TCellRef::ActualValid)
+			cells.push_back({uint16_t(column), uint16_t(row), text.substr(at, end - at)});
 		at = end;
+	}
+	// (in the cells' own order, column by column: each one goes on the end)
+	std::stable_sort(cells.begin(), cells.end(), [](const Cell& x, const Cell& y) {
+		return std::make_pair(x.column, x.row) < std::make_pair(y.column, y.row);
+	});
+	std::string ignored;
+	for (const Cell& cell : cells) {
+		uint16_t r = cell.row, c = cell.column;
+		if (!SetCellInput(*ss, r, c, cell.text, nullptr, ignored)) {
+			// a formula that doesn't parse: the text as it is
+			SetCellInput(*ss, r, c, "x", nullptr, ignored);
+			for (SSCell& sc : ss->cells)
+				if (sc.id.a == r && sc.id.b == c)
+					sc.text = cell.text;
+		}
+		if (r > ss->used.to.a)
+			ss->used.to.a = r;
+		if (c > ss->used.to.b)
+			ss->used.to.b = c;
 	}
 	UpdateDependencies(doc, part);
 	ReportProgress(1, 1);

@@ -470,40 +470,6 @@ WriteSheetMgr(const SheetMgr& mgr)
 
 
 std::vector<uint8_t>
-WriteCommandMgr()
-{
-	DocWriter w;
-	w.Sig(Sig("CMDM"));
-	w.UInt32(0);	// command count
-	w.Sig(Sig("CmdM"));
-	return w.Data();
-}
-
-
-std::vector<uint8_t>
-WriteHistoryMgr()
-{
-	// TOrderTable::Write: count, then two u32s
-	DocWriter w;
-	w.UInt32(0);	// count
-	w.UInt32(0);	// two u32s
-	w.UInt32(0);
-	return w.Data();
-}
-
-
-std::vector<uint8_t>
-WriteWindowMgr()
-{
-	// TDocWindow::Write per window: doc pointer, internal TOC, window name
-	// For blank: 0 windows
-	DocWriter w;
-	w.UInt32(0);	// window count
-	return w.Data();
-}
-
-
-std::vector<uint8_t>
 WriteFactoryTable(const std::vector<PartFactoryEntry>& factories)
 {
 	DocWriter w;
@@ -513,36 +479,6 @@ WriteFactoryTable(const std::vector<PartFactoryEntry>& factories)
 		w.UInt32(f.id);
 		w.String(f.name);
 	}
-	return w.Data();
-}
-
-
-std::vector<uint8_t>
-WriteDocumentMisc(const DocumentMisc& misc)
-{
-	DocWriter w;
-	w.UInt32(misc.blockCount);
-	w.UInt32(misc.value70);
-	for (const auto& msg : misc.messages)
-		w.Bytes(msg);
-	return w.Data();
-}
-
-
-std::vector<uint8_t>
-WriteSelectionMgr(const SelectionMgr& mgr)
-{
-	DocWriter w;
-	w.Sig(Sig("SELM"));
-	w.UInt32(uint32_t(mgr.selections.size()));
-	for (const auto& sel : mgr.selections) {
-		w.UInt32(0);	// record size placeholder
-		w.UInt32(sel.kind);
-		w.UInt32(sel.part);
-		w.UInt32(sel.value);
-		// ... selection-specific data ...
-	}
-	w.Sig(Sig("SelM"));
 	return w.Data();
 }
 

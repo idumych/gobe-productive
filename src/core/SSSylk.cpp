@@ -16,25 +16,6 @@
 
 namespace gobe {
 
-namespace {
-
-// SYLK's error values; ErrString's others (#ARG!, #USER!, ...) aren't
-// among them
-bool
-SylkError(const std::string& text)
-{
-	static const char* const kErrors[] = {
-		"#DIV/0!", "#N/A", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#NULL!"
-	};
-	for (const char* error : kErrors)
-		if (text == error)
-			return true;
-	return false;
-}
-
-} // namespace
-
-
 SylkSheet
 SpreadsheetToSylk(const Document& doc, size_t part)
 {
@@ -95,7 +76,7 @@ SpreadsheetToSylk(const Document& doc, size_t part)
 			case SSValue::kError:
 				out.kind = SylkCell::kError;
 				out.text = ErrorText(v.error);
-				if (!SylkError(out.text))
+				if (!IsSylkError(out.text))
 					out.text = "#VALUE!";
 				break;
 			default:
@@ -141,17 +122,26 @@ SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFo
 	auto set = [&](uint16_t row, uint16_t column, uint32_t kind, const std::string& text,
 			uint32_t value) {
 		SetCellInput(*ss, row, column, "x", nullptr, error);
-		for (SSCell& c : ss->cells)
-			if (c.id.a == row && c.id.b == column) {
-				c.kind = kind;
-				c.text = text;
-				c.value = value;
-			}
+		// (the cells column by column: found by a binary search)
+		auto c = std::lower_bound(ss->cells.begin(), ss->cells.end(), std::make_pair(column, row),
+			[](const SSCell& c, const std::pair<uint16_t, uint16_t>& key) {
+				return std::make_pair(c.id.b, c.id.a) < key;
+			});
+		if (c != ss->cells.end() && c->id.a == row && c->id.b == column) {
+			c->kind = kind;
+			c->text = text;
+			c->value = value;
+		}
 	};
+	// in the cells' own order, column by column: each one goes on the end
+	std::vector<SylkCell> ordered = sheet.cells;
+	std::stable_sort(ordered.begin(), ordered.end(), [](const SylkCell& x, const SylkCell& y) {
+		return std::make_pair(x.column, x.row) < std::make_pair(y.column, y.row);
+	});
 	// the grid (TCellRef::ActualValid): cells past it dropped, not stored
 	// where they can't be seen (row or column 0xffff ends the saved cells)
 	auto inGrid = [](uint32_t row, uint32_t column) { return row <= 0x3fff && column <= 0x2be; };
-	for (const SylkCell& cell : sheet.cells) {
+	for (const SylkCell& cell : ordered) {
 		uint16_t row = cell.row, column = cell.column;
 		if (!inGrid(row, column))
 			continue;

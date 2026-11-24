@@ -78,6 +78,55 @@ ToUpperUTF8(std::string& text)
 }
 
 
+// ToLowerUTF8: ToUpperUTF8's other way (Latin Extended-A as the original
+// steps it: every code one on)
+void
+ToLowerUTF8(std::string& text)
+{
+	for (size_t i = 0; i < text.size(); i += LeadLength(uint8_t(text[i]))) {
+		uint8_t c = uint8_t(text[i]);
+		if (c < 0x80) {
+			if (c >= 'A' && c <= 'Z')
+				text[i] = char(c + 0x20);
+			continue;
+		}
+		if (LeadLength(c) != 2 || i + 1 >= text.size())
+			continue;
+		uint8_t b = uint8_t(text[i + 1]);
+		auto up = [&]() { text[i + 1] = char(b + 1); };
+		switch (c) {
+			case 0xc3:
+				if (b >= 0x80 && b <= 0x9e && b != 0x97)
+					text[i + 1] = char(b + 0x20);
+				break;
+			case 0xc4:
+				if (b >= 0x80 && b <= 0xbd && b != 0xb8)
+					up();
+				break;
+			case 0xc5:
+				if (b >= 0x81 && b <= 0xbd && b != 0x89 && b != 0xb8)
+					up();
+				else if (b == 0x80) {
+					text[i] = char(0xc4);
+					text[i + 1] = char(0xbf);
+				} else if (b == 0xb8) {
+					text[i] = char(0xc3);
+					text[i + 1] = char(0xbf);
+				}
+				break;
+			case 0xc7:
+				if ((b >= 0x8d && b <= 0x9b) || (b >= 0x9e && b <= 0xae) || (b >= 0xba && b <= 0xbe))
+					up();
+				break;
+			case 0xc8:
+				if (b >= 0x80 && b <= 0x96)
+					up();
+				break;
+		}
+	}
+}
+
+
 bool
 CharsMatchUTF8(const char* pattern, const char* text, bool caseSensitive)
 {

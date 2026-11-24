@@ -81,8 +81,6 @@ struct ItemList {
 
 bool ParseItems(const std::vector<uint8_t>& data, ItemList& list);
 
-bool IsGroupType(uint32_t type);
-
 } // namespace gobe
 
 #endif

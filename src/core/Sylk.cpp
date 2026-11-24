@@ -80,12 +80,10 @@ ParseValue(const std::string& text, SylkCell& cell)
 		cell.number = text == "TRUE" ? 1 : 0;
 		return true;
 	}
-	for (const char* error : kErrors) {
-		if (text == error) {
-			cell.kind = SylkCell::kError;
-			cell.text = text;
-			return true;
-		}
+	if (IsSylkError(text)) {
+		cell.kind = SylkCell::kError;
+		cell.text = text;
+		return true;
 	}
 	if (text.empty())
 		return false;
@@ -397,6 +395,15 @@ WriteSylk(const SylkSheet& sheet)
 	}
 	out += "E\r\n";
 	return out;
+}
+
+bool
+IsSylkError(const std::string& text)
+{
+	for (const char* error : kErrors)
+		if (text == error)
+			return true;
+	return false;
 }
 
 } // namespace gobe

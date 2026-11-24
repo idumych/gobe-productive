@@ -2117,8 +2117,11 @@ SetCellInput(SSPart& part, uint16_t row, uint16_t column, const std::string& inp
 	const std::function<bool(const std::string&)>& isName, std::string& error)
 {
 	// cells are kept column by column, as TSparseArray writes them
-	auto it = std::find_if(part.cells.begin(), part.cells.end(),
-		[&](const SSCell& c) { return c.id.a == row && c.id.b == column; });
+	auto at = std::lower_bound(part.cells.begin(), part.cells.end(), std::make_pair(column, row),
+		[](const SSCell& c, const std::pair<uint16_t, uint16_t>& key) {
+			return std::make_pair(c.id.b, c.id.a) < key;
+		});
+	auto it = at != part.cells.end() && at->id.a == row && at->id.b == column ? at : part.cells.end();
 	SSCell cell;
 	if (it != part.cells.end())
 		cell = *it;
@@ -2169,9 +2172,6 @@ SetCellInput(SSPart& part, uint16_t row, uint16_t column, const std::string& inp
 	}
 	if (value.kind == Sig("NONE"))
 		return true;
-	auto at = std::find_if(part.cells.begin(), part.cells.end(), [&](const SSCell& c) {
-		return std::make_pair(c.id.b, c.id.a) > std::make_pair(column, row);
-	});
 	part.cells.insert(at, value);
 	// the used range grows to include the cell
 	part.used.to.a = std::max(part.used.to.a, row);

@@ -16,6 +16,8 @@ struct WPPart;
 // ToUpperUTF8: ASCII and some two-byte letters upper case (as the
 // original maps them)
 void ToUpperUTF8(std::string& text);
+// ToLowerUTF8: the same letters lower case
+void ToLowerUTF8(std::string& text);
 // CharsMatchUTF8(pattern, text, caseSensitive, true): the characters
 // match, the text's upper-cased unless `caseSensitive`
 bool CharsMatchUTF8(const char* pattern, const char* text, bool caseSensitive);

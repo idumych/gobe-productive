@@ -1,6 +1,7 @@
 #include "SSEval.h"
 
 #include "Editing.h"
+#include "Find.h"
 #include "SSStyle.h"
 
 #include <algorithm>
@@ -521,6 +522,90 @@ SSEvaluator::Reduce(const SSValue& v, CellID at)
 }
 
 
+namespace {
+
+// TCountIFFunction / TSumIFFunction's criterion: text starting "<", "<=",
+// "<>", ">", ">=" or "=" (none: equal), then a number or text; any other
+// value: equal to it
+struct Criterion {
+	SSValue value;
+	bool equal = true, less = false, greater = false;
+
+	// CheckCell: the cell against the value, as the value's type compares
+	// (-2: the cell can't be compared, which meets no criterion)
+	int Compare(const SSValue& cell) const
+	{
+		auto sign = [](auto a, auto b) { return a < b ? -1 : b < a ? 1 : 0; };
+		double n;
+		bool b;
+		std::string text;
+		switch (value.type) {
+			case SSValue::kNumber:
+				return cell.GetNum(n) ? sign(n, value.number) : -2;
+			case SSValue::kBool:
+				return cell.GetBool(b) ? sign(b, value.number != 0) : -2;
+			case SSValue::kString:
+				return cell.GetString(text) ? sign(strcmp(text.c_str(), value.text.c_str()), 0) : -2;
+			case SSValue::kError:
+				return cell.type == SSValue::kError ? sign(cell.error, value.error) : -2;
+			case SSValue::kTime:
+				return cell.type == SSValue::kTime ? sign(cell.time, value.time) : -2;
+			case SSValue::kNone:
+				return cell.type == SSValue::kNone ? 0 : -2;
+			default:
+				return -2;
+		}
+	}
+
+	bool Meets(const SSValue& cell) const
+	{
+		int r = Compare(cell);
+		return (r == 0 && equal) || (r == -1 && less) || (r == 1 && greater);
+	}
+};
+
+
+Criterion
+ParseCriterion(const SSValue& v)
+{
+	Criterion c;
+	c.value = v;
+	if (v.type != SSValue::kString)
+		return c;
+	std::string s = v.text;
+	if (!s.empty()) {
+		char first = s[0];
+		c.less = first == '<';
+		c.equal = s.size() > 1 && s[1] == '=';
+		bool unequal = c.less && s.size() > 1 && s[1] == '>';
+		c.greater = unequal || first == '>';
+		if (c.equal || unequal)
+			s.erase(0, 2);
+		else if (c.greater || c.less || first == '=')
+			s.erase(0, 1);
+		if (!unequal && first != '>' && !c.less)
+			c.equal = true;
+	}
+	double n;
+	c.value = StringToNumber(s, n) ? SSValue::Number(n) : SSValue::String(s);
+	return c;
+}
+
+
+// fact: n! for a whole n from 0 to 150, else none (#NUM!)
+bool
+Factorial(double n, double& out)
+{
+	if (!(n >= 0) || n != floor(n) || n > 150)
+		return false;
+	for (out = 1; n > 0; n--)
+		out *= n;
+	return true;
+}
+
+} // namespace
+
+
 // a formula's nesting, counted: a file's formula of thousands of nested
 // operators is an error, not a stack overflow
 static const int kMaxDepth = 100;	// (~1.7 KB of stack each: a window thread has 256 KB)
@@ -961,12 +1046,9 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 		double a;
 		if (!numArg(a))
 			return finish(SSValue::Error(kErrValue));
-		if (a < 0 || a != trunc(a))
+		double r;
+		if (!Factorial(a, r))
 			return finish(SSValue::Error(kErrNum));
-		int n = (int)a;
-		double r = 1.0;
-		for (int i = 2; i <= n; i++)
-			r *= i;
 		return finish(SSValue::Number(r));
 	}
 	if (name == "EXP") {
@@ -979,20 +1061,13 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 		double n, k;
 		if (!numArg(n) || !numArg(k))
 			return finish(SSValue::Error(kErrValue));
+		// TCombinFunction: n! / (k! (n-k)!), through fact
 		n = trunc(n);
 		k = trunc(k);
-		if (n < 0 || k < 0 || n < k)
+		double fn, fk, fnk;
+		if (n < k || !Factorial(n, fn) || !Factorial(k, fk) || !Factorial(n - k, fnk))
 			return finish(SSValue::Error(kErrNum));
-		if (k == 0 || n == k)
-			return finish(SSValue::Number(1.0));
-		if (k > n - k)
-			k = n - k;
-		double r = 1.0;
-		for (int i = 0; i < (int)k; i++) {
-			r *= (n - i);
-			r /= (i + 1);
-		}
-		return finish(SSValue::Number(r));
+		return finish(SSValue::Number(fn / (fk * fnk)));
 	}
 	if (name == "ATAN2") {
 		double x, y;
@@ -1146,7 +1221,7 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 			return finish(SSValue::Error(kErrValue));
 		if (count < 2)
 			return finish(SSValue::Error(kErrDiv0));
-		double variance = sum2 / (count - 1) - (sum * sum) / ((count - 1) * count);
+		double variance = sum2 / (count - 1) - (sum * sum) / ((count - 1) * double(count));
 		if (variance < 0)
 			variance = 0;
 		return finish(SSValue::Number(sqrt(variance)));
@@ -1182,7 +1257,7 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 			return finish(SSValue::Error(kErrValue));
 		if (count < 2)
 			return finish(SSValue::Error(kErrDiv0));
-		return finish(SSValue::Number(sum2 / (count - 1) - (sum * sum) / ((count - 1) * count)));
+		return finish(SSValue::Number(sum2 / (count - 1) - (sum * sum) / ((count - 1) * double(count))));
 	}
 	if (name == "DATE") {
 		double y, m, d;
@@ -1561,97 +1636,21 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 			return finish(SSValue::Error(kErrValue));
 		return finish(SSValue::Number(n));
 	}
-	// UTF-8-aware case conversion helpers
-	auto encode_utf8 = [](uint32_t cp, std::string& out) {
-		if (cp < 0x80) {
-			out += static_cast<char>(cp);
-		} else if (cp < 0x800) {
-			out += static_cast<char>(0xC0 | (cp >> 6));
-			out += static_cast<char>(0x80 | (cp & 0x3F));
-		} else if (cp < 0x10000) {
-			out += static_cast<char>(0xE0 | (cp >> 12));
-			out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-			out += static_cast<char>(0x80 | (cp & 0x3F));
-		} else {
-			out += static_cast<char>(0xF0 | (cp >> 18));
-			out += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
-			out += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-			out += static_cast<char>(0x80 | (cp & 0x3F));
-		}
-	};
-	auto decode_utf8 = [](const std::string& s, size_t& i, uint32_t& cp) -> bool {
-		unsigned char c = static_cast<unsigned char>(s[i]);
-		if (c < 0x80) {
-			cp = c;
-			i += 1;
-			return true;
-		} else if (c < 0xE0) {
-			cp = ((c & 0x1F) << 6) | (static_cast<unsigned char>(s[i + 1]) & 0x3F);
-			i += 2;
-			return true;
-		} else if (c < 0xF0) {
-			cp = ((c & 0x0F) << 12) | ((static_cast<unsigned char>(s[i + 1]) & 0x3F) << 6)
-				| (static_cast<unsigned char>(s[i + 2]) & 0x3F);
-			i += 3;
-			return true;
-		} else {
-			cp = ((c & 0x07) << 18) | ((static_cast<unsigned char>(s[i + 1]) & 0x3F) << 12)
-				| ((static_cast<unsigned char>(s[i + 2]) & 0x3F) << 6)
-				| (static_cast<unsigned char>(s[i + 3]) & 0x3F);
-			i += 4;
-			return true;
-		}
-	};
-	auto toupper_utf8 = [&](const std::string& s) -> std::string {
-		std::string out;
-		size_t i = 0;
-		while (i < s.size()) {
-			uint32_t cp;
-			if (!decode_utf8(s, i, cp))
-				break;
-			if (cp < 0x80) {
-				out += static_cast<char>(toupper(cp));
-			} else {
-				// Basic Latin uppercase: lowercase (0xE0-0xFF) to uppercase (0xC0-0xFF)
-				if (cp >= 0xE0 && cp <= 0xFF)
-					cp -= 32;
-				encode_utf8(cp, out);
-			}
-		}
-		return out;
-	};
-	auto tolower_utf8 = [&](const std::string& s) -> std::string {
-		std::string out;
-		size_t i = 0;
-		while (i < s.size()) {
-			uint32_t cp;
-			if (!decode_utf8(s, i, cp))
-				break;
-			if (cp < 0x80) {
-				out += static_cast<char>(tolower(cp));
-			} else {
-				// Basic Latin lowercase: uppercase (0xC0-0xDF) to lowercase (0xE0-0xFF)
-				if (cp >= 0xC0 && cp <= 0xDF)
-					cp += 32;
-				encode_utf8(cp, out);
-			}
-		}
-		return out;
-	};
-
 	if (name == "UPPER") {
 		SSValue v = next();
 		std::string s;
 		if (!v.GetString(s))
 			return finish(SSValue::String(""));
-		return finish(SSValue::String(toupper_utf8(s)));
+		ToUpperUTF8(s);	// (TString::UpperCase)
+		return finish(SSValue::String(s));
 	}
 	if (name == "LOWER") {
 		SSValue v = next();
 		std::string s;
 		if (!v.GetString(s))
 			return finish(SSValue::String(""));
-		return finish(SSValue::String(tolower_utf8(s)));
+		ToLowerUTF8(s);	// (TString::LowerCase)
+		return finish(SSValue::String(s));
 	}
 	if (name == "TRIM") {
 		SSValue v = next();
@@ -2466,133 +2465,37 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 		SSValue v = next();
 		return finish(SSValue::Bool(v.type == SSValue::kTime));
 	}
-	if (name == "SUMIF") {
+	if (name == "SUMIF" || name == "COUNTIF") {
+		// TSumIFFunction / TCountIFFunction: the stored cells of a range
+		// that meet the criterion, counted or their partners in the sum
+		// range (the same size) added up
 		SSValue rangeV = next(false);
 		SSValue critV = next();
-		SSValue sumRangeV = next(false);
-		if (rangeV.type != SSValue::kRange)
+		SSValue sumV = name == "SUMIF" && used < argc ? next(false) : rangeV;
+		if (rangeV.type != SSValue::kRange || sumV.type != SSValue::kRange)
 			return finish(SSValue::Error(kErrValue));
 		const SSRange& range = rangeV.range;
-		int rangePart = rangeV.part;
-		int sumPart = rangePart;
-		const SSRange& sumR = sumRangeV.type == SSValue::kRange
-			? sumRangeV.range : range;
-		if (sumRangeV.type == SSValue::kRange)
-			sumPart = sumRangeV.part;
-		// Parse criteria string
-		std::string crit;
-		critV.GetString(crit);
-		char op = 0;
-		double val = 0;
-		if (!crit.empty() && (crit[0] == '>' || crit[0] == '<' || crit[0] == '='
-		                        || crit[0] == '!')) {
-			op = crit[0];
-			if (crit.size() > 1 && crit[1] == '=') {
-				op = '=';
-				if (!StringToNumber(crit.substr(2), val))
-					return finish(SSValue::Error(kErrValue));
-			} else {
-				if (!StringToNumber(crit.substr(1), val))
-					return finish(SSValue::Error(kErrValue));
-			}
-		} else {
-			val = 0;
-			if (StringToNumber(crit, val)) {
-				op = '=';
-			} else {
-				op = 't';
-			}
-		}
-		double sum = 0;
-		for (int r = range.from.a; r <= range.to.a; r++) {
-			for (int c = range.from.b; c <= range.to.b; c++) {
-				SSValue v = CellValue(rangePart, r, c);
-				if (v.type == SSValue::kError)
-					return finish(v);
-				int sr = r;
-				int sc = c - range.from.b + sumR.from.b;
-				if (v.type == SSValue::kNone || v.type == SSValue::kString) {
-					if (op == 't') {
-						std::string s;
-						v.GetString(s);
-						if (s == crit)
-							sum += CellValue(sumPart, sr, sc).number;
-					}
-					continue;
-				}
-				double n;
-				if (!v.GetNum(n)) continue;
-				bool match = false;
-				switch (op) {
-					case '>': match = n > val; break;
-					case '<': match = n < val; break;
-					case '=': match = n == val; break;
-					case 't': match = true; break;
-				}
-				if (match)
-					sum += CellValue(sumPart, sr, sc).number;
-			}
-		}
-		return finish(SSValue::Number(sum));
-	}
-	if (name == "COUNTIF") {
-		SSValue rangeV = next(false);
-		SSValue critV = next();
-		if (rangeV.type != SSValue::kRange)
+		const SSRange& sum = sumV.range;
+		int r0 = std::min(range.from.a, range.to.a), r1 = std::max(range.from.a, range.to.a);
+		int c0 = std::min(range.from.b, range.to.b), c1 = std::max(range.from.b, range.to.b);
+		int s0 = std::min(sum.from.a, sum.to.a), t0 = std::min(sum.from.b, sum.to.b);
+		if (r1 - r0 != std::max(sum.from.a, sum.to.a) - s0
+				|| c1 - c0 != std::max(sum.from.b, sum.to.b) - t0)
 			return finish(SSValue::Error(kErrValue));
-		const SSRange& range = rangeV.range;
-		std::string crit;
-		critV.GetString(crit);
-		char op = 0;
-		double val = 0;
-		if (!crit.empty() && (crit[0] == '>' || crit[0] == '<' || crit[0] == '='
-		                        || crit[0] == '!')) {
-			op = crit[0];
-			if (crit.size() > 1 && crit[1] == '=') {
-				op = '=';
-				if (!StringToNumber(crit.substr(2), val))
-					return finish(SSValue::Error(kErrValue));
-			} else {
-				if (!StringToNumber(crit.substr(1), val))
-					return finish(SSValue::Error(kErrValue));
-			}
-		} else {
-			val = 0;
-			if (StringToNumber(crit, val)) {
-				op = '=';
-			} else {
-				op = 't';
-			}
-		}
+		Criterion criterion = ParseCriterion(critV);
+		double total = 0;
 		int count = 0;
-		for (int r = range.from.a; r <= range.to.a; r++) {
-			for (int c = range.from.b; c <= range.to.b; c++) {
+		for (int r = r0; r <= r1; r++)
+			for (int c = c0; c <= c1; c++) {
 				SSValue v = CellValue(rangeV.part, r, c);
-				if (v.type == SSValue::kError)
-					return finish(v);
-				if (v.type == SSValue::kNone || v.type == SSValue::kString) {
-					if (op == 't') {
-						std::string s;
-						v.GetString(s);
-						if (s == crit)
-							count++;
-					}
+				if (v.type == SSValue::kNone || !criterion.Meets(v))
 					continue;
-				}
+				count++;
 				double n;
-				if (!v.GetNum(n)) continue;
-				bool match = false;
-				switch (op) {
-					case '>': match = n > val; break;
-					case '<': match = n < val; break;
-					case '=': match = n == val; break;
-					case 't': match = true; break;
-				}
-				if (match)
-					count++;
+				if (CellValue(sumV.part, r - r0 + s0, c - c0 + t0).GetNum(n))
+					total += n;
 			}
-		}
-		return finish(SSValue::Number(count));
+		return finish(SSValue::Number(name == "SUMIF" ? total : count));
 	}
 	if (name == "ALERT") {
 		// shows an alert when the condition is true (Functions/System

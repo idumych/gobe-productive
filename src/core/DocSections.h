@@ -180,26 +180,9 @@ struct SheetMgr {
 void ReadSheetMgr(DocArchive& a, SheetMgr& out);
 std::vector<uint8_t> WriteSheetMgr(const SheetMgr& mgr);
 
-// "CommandMgr" (unparseable): 'CMDM', count, per-command 'TCMD' blocks, 'CmdM'.
-std::vector<uint8_t> WriteCommandMgr();
-
-// "HistoryMgr" (unparseable): TOrderTable::Write (no explicit sig, writes
-// count), then two u32s. For blank: count 0, two zero u32s.
-std::vector<uint8_t> WriteHistoryMgr();
-
-// "WindowMgr" (unparseable): TDocWindow::Write per window (doc pointer,
-// internal TOC, window name). For blank: 0 windows.
-std::vector<uint8_t> WriteWindowMgr();
-
 // PartFactory Table write helper.
 std::vector<uint8_t> WriteFactoryTable(
 	const std::vector<PartFactoryEntry>& factories);
-
-// Document Misc write helper.
-std::vector<uint8_t> WriteDocumentMisc(const DocumentMisc& misc);
-
-// SelectionMgr write helper.
-std::vector<uint8_t> WriteSelectionMgr(const SelectionMgr& mgr);
 
 // PartMgr write helper — writes from PartRecord data (for creating new docs).
 std::vector<uint8_t> WritePartMgrFromRecords(const PartMgr& mgr);

@@ -122,9 +122,12 @@ hpkg:
 test:
 	sh tests/run_host_tests.sh
 
+# (the image plug-ins' library goes in lib/ beside the app: the rpath's $$ORIGIN/lib)
 install: all
 	mkdir -p "$(INSTALL_DIR)"
 	cp $(NAME) "$(INSTALL_DIR)/"
+	mkdir -p "$(INSTALL_DIR)/lib"
+	cp $(PLUGIN_LIB) "$(INSTALL_DIR)/lib/"
 	@if command -v mimeset >/dev/null 2>&1; then mimeset -f "$(INSTALL_DIR)/$(NAME)"; fi
 
 clean:

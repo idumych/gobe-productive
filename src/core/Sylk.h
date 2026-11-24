@@ -77,6 +77,9 @@ std::string FormulaToSylk(const std::string& formula, uint16_t row, uint16_t col
 // reference that would land before row 1 or column A.
 //   "R[-1]C[-1]+R2C2" at row 1, column 1 -> "=A1+$B$2"
 std::string FormulaFromSylk(const std::string& formula, uint16_t row, uint16_t column);
+// SYLK's error values (#DIV/0!, #N/A, ...); ErrString's others (#ARG!,
+// #USER!, ...) aren't among them
+bool IsSylkError(const std::string& text);
 
 } // namespace gobe
 

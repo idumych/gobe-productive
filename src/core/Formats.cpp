@@ -60,13 +60,6 @@ ParseDialog(const std::vector<uint8_t>& data, DialogData& dialog)
 
 
 bool
-IsGroupType(uint32_t type)
-{
-	return type == FourCC("GRUP") || type == FourCC("FGRP") || type == FourCC("GBOX");
-}
-
-
-bool
 ParseItems(const std::vector<uint8_t>& data, ItemList& list)
 {
 	RsrReader r(data);

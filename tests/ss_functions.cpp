@@ -156,6 +156,11 @@ int main()
 	// error: FACT(-1)
 	setFormula(32, "FACT(-1)");
 	Check(IsError(eval(32, 2)), "FACT(-1) is error");
+	// fact: 150 at most (no loop of billions)
+	setFormula(406, "FACT(151)");
+	Check(IsError(eval(406, 2)), "FACT(151) is error");
+	setFormula(407, "COMBIN(2000000000,2)");
+	Check(IsError(eval(407, 2)), "COMBIN past fact's 150 is error");
 
 	// ====== EXP ======
 	// python3 -c "import math; print(repr(math.exp(0)), repr(math.exp(1)))"
@@ -381,6 +386,13 @@ int main()
 	setFormula(92, "LOWER(\"HELLO WORLD\")");
 	got.clear(); eval(92, 2).GetString(got);
 	Check(got == "hello world", "LOWER(\"HELLO WORLD\")");
+	// ToUpperUTF8 / ToLowerUTF8: ÷ and × aren't letters; ÿ is Ÿ
+	setFormula(408, "UPPER(\"ÿ÷\")");
+	got.clear(); eval(408, 2).GetString(got);
+	Check(got == "Ÿ÷", "UPPER(\"ÿ÷\") == Ÿ÷");
+	setFormula(409, "LOWER(\"Ÿ×É\")");
+	got.clear(); eval(409, 2).GetString(got);
+	Check(got == "ÿ×é", "LOWER(\"Ÿ×É\") == ÿ×é");
 	setFormula(93, "LOWER(\"hÉllo\")");
 	got.clear(); eval(93, 2).GetString(got);
 	Check(got == "héllo", "LOWER(\"hÉllo\")");
@@ -1018,6 +1030,21 @@ int main()
 	// error: COUNTIF with text and numeric comparison (none match)
 	setFormulaE(452, "COUNTIF(C300:C307,\">5\")");
 	CheckNum(eval(452, 4).number, 0.0, "COUNTIF text > 5 = 0");
+	// TCountIFFunction's two-character operators, text matching no number
+	setFormulaE(453, "COUNTIF(A300:A307,\">=3\")");
+	CheckNum(eval(453, 4).number, 6.0, "COUNTIF A>=3");
+	setFormulaE(454, "COUNTIF(A300:A307,\"<=2\")");
+	CheckNum(eval(454, 4).number, 2.0, "COUNTIF A<=2");
+	setFormulaE(455, "COUNTIF(A300:A307,\"<>2\")");
+	CheckNum(eval(455, 4).number, 7.0, "COUNTIF A<>2");
+	setFormulaE(456, "COUNTIF(A300:A307,\"x\")");
+	CheckNum(eval(456, 4).number, 0.0, "COUNTIF numbers vs text");
+	// TSumIFFunction: the sum range's cells at the same offset (rows too);
+	// a sum range of another size fails
+	setFormulaE(457, "SUMIF(A300:A301,\">0\",B302:B303)");
+	CheckNum(eval(457, 4).number, 70.0, "SUMIF offset sum range");
+	setFormulaE(458, "SUMIF(A300:A301,\">0\",B300:B302)");
+	Check(IsError(eval(458, 4)), "SUMIF sum range of another size");
 
 	// ====== RATE ======
 	// Args: pv, fv, periods - same sign required
