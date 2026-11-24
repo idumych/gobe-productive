@@ -488,7 +488,7 @@ FillPatternPixels(const Ink& ink, int& width, int& height, std::vector<uint8_t>&
 		height = int(bounds[3] - bounds[1] + 1);
 		// B_RGB32 and B_RGBA32: B, G, R, A
 		if ((space != 0x0008 && space != 0x2008) || width <= 0 || height <= 0
-				|| bytesPerRow < uint32_t(width) * 4 || size < bytesPerRow * uint32_t(height))
+				|| bytesPerRow < uint64_t(width) * 4 || size < uint64_t(bytesPerRow) * uint64_t(height))
 			return false;
 		std::vector<uint8_t> bits;
 		if (a.Bool()) {

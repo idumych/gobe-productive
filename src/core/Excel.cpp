@@ -1,6 +1,7 @@
 // Excel import: an OLE compound file reader ([MS-CFB]) and TImportExcel's
 // BIFF records (ExcelTranslator/TImportExcel.c, TBiffReader.c,
 // TExcelParser.c for formulas).
+#include "DocWriter.h"
 #include "Excel.h"
 
 #include <algorithm>
@@ -27,14 +28,14 @@ namespace {
 uint16_t
 U16(const std::vector<uint8_t>& d, size_t at)
 {
-	return at + 2 <= d.size() ? uint16_t(d[at] | d[at + 1] << 8) : 0;
+	return d.size() >= 2 && at <= d.size() - 2 ? uint16_t(d[at] | d[at + 1] << 8) : 0;
 }
 
 
 uint32_t
 U32(const std::vector<uint8_t>& d, size_t at)
 {
-	return at + 4 <= d.size() ? uint32_t(d[at] | d[at + 1] << 8 | d[at + 2] << 16
+	return d.size() >= 4 && at <= d.size() - 4 ? uint32_t(d[at] | d[at + 1] << 8 | d[at + 2] << 16
 		| uint32_t(d[at + 3]) << 24) : 0;
 }
 
@@ -43,7 +44,7 @@ double
 F64(const std::vector<uint8_t>& d, size_t at)
 {
 	double v = 0;
-	if (at + 8 <= d.size())
+	if (d.size() >= 8 && at <= d.size() - 8)
 		memcpy(&v, &d[at], 8);	// (little-endian hosts)
 	return v;
 }
@@ -81,6 +82,9 @@ CompoundFile::Open(const std::vector<uint8_t>& data, std::string& error)
 	uint32_t difat = U32(data, 0x44);
 	for (uint32_t k = 0; difat != kEndOfChain && difat != kFree && k < 10000; k++) {
 		size_t at = sector(difat);
+		// (no more FAT sectors than the file has sectors)
+		if (at + fSectorSize > data.size() || fatSectors.size() > data.size() / fSectorSize)
+			break;
 		for (uint32_t i = 0; i + 1 < fSectorSize / 4; i++) {
 			uint32_t s = U32(data, at + i * 4);
 			if (s != kFree)
@@ -131,7 +135,7 @@ CompoundFile::Chain(uint32_t first, uint64_t size, bool mini) const
 	const std::vector<uint32_t>& fat = mini ? fMiniFAT : fFAT;
 	uint32_t unit = mini ? fMiniSectorSize : fSectorSize;
 	for (uint32_t s = first, k = 0; s != kEndOfChain && s != kFree && s < fat.size()
-			&& out.size() < size && k < 1000000; s = fat[s], k++) {
+			&& out.size() < size && k < fat.size(); s = fat[s], k++) {	// (longer: a loop)
 		if (mini) {
 			size_t at = size_t(s) * unit;
 			if (at + unit > fMiniStream.size())
@@ -392,11 +396,14 @@ GobeFormat(const std::string& excel)
 // TExcelParser: a formula's tokens (BIFF8's or BIFF5's) as Gobe's text; ""
 // if one can't be (an unknown function, a name, another sheet)
 std::string
-FormulaText(const std::vector<uint8_t>& d, size_t at, size_t length, int row, int column, bool biff8,
+FormulaText(const std::vector<uint8_t>& data, size_t at, size_t length, int row, int column, bool biff8,
 	const std::vector<std::string>& names)
 {
 	std::vector<std::string> stack;
-	size_t end = std::min(d.size(), at + length);
+	size_t end = std::min(data.size(), at + length);
+	// (zeros after the end: a token cut short reads them, not past the record)
+	std::vector<uint8_t> d(data);
+	d.resize(d.size() + 16);
 	auto binary = [&](const char* op) {
 		if (stack.size() < 2)
 			return false;
@@ -740,6 +747,8 @@ ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error)
 					// a string whose characters go on in a CONTINUE gets a new
 					// flags byte there
 					size_t length = U16(all, at);
+					if (at + 3 > all.size())
+						break;
 					size_t q = at + 2;
 					uint8_t flags = all[q++];
 					uint16_t runs = 0;
@@ -759,6 +768,8 @@ ReadExcel(const std::vector<uint8_t>& file, ExcelBook& book, std::string& error)
 								flags = (flags & ~1) | (all[q] & 1);
 								q++;
 							}
+						if (q >= all.size())
+							break;
 						uint32_t ch;
 						if (flags & 1) {
 							ch = U16(all, q);
@@ -1791,13 +1802,7 @@ ExportExcel(const Document& doc, const std::string& path, std::string& error)
 	// (the Status window: the workbook made, then written)
 	if (StepCancelled(error, 1, 2))
 		return false;
-	std::ofstream file(path, std::ios::binary | std::ios::trunc);
-	if (!file) {
-		error = "cannot write " + path;
-		return false;
-	}
-	file.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()));
-	if (!file)
+	if (!WriteFile(path, bytes, error))
 		return false;
 	ReportProgress(1, 1);
 	return true;

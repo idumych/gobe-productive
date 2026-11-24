@@ -49,6 +49,19 @@ struct TPageView::PluginRun {
 	bool final = false;
 	std::unique_ptr<GIMPRun> gimp;	// a GIMP filter's process
 	std::unique_ptr<ArchiveBitmap> gimpResult;	// what it updated last
+
+	// (the window closed mid-run: the worker polls the cancel queue, so
+	// it's stopped before the queue goes)
+	~PluginRun()
+	{
+		if (worker >= B_OK) {
+			cancel.AddMessage(new BMessage('_CNC'));
+			status_t result;
+			wait_for_thread(worker, &result);
+		}
+		delete configAccessor;
+		delete configBits;
+	}
 };
 
 namespace {
@@ -375,8 +388,6 @@ TPageView::EndImagePlugin()
 		return;
 	if (fPluginRun->status != NULL)
 		fPluginRun->status->Finish();
-	delete fPluginRun->configAccessor;
-	delete fPluginRun->configBits;
 	fPluginRun.reset();
 }
 
@@ -414,6 +425,10 @@ TPageView::ImagePluginMessage(BMessage* message)
 			IMPart* im = fDocument.EditableImagePart(run.part);
 			if (im != NULL) {
 				(run.floating ? im->floating : im->image) = run.original;
+				bool broken = false;
+				message->FindBool("broken", &broken);
+				if (broken)
+					run.gimpResult.reset();
 				if (run.gimpResult && plugin != NULL) {
 					fUndo.BeginDocument(*run.before, plugin->name.String(), run.beforeView);
 					im = fDocument.EditableImagePart(run.part);

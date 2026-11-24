@@ -1884,17 +1884,23 @@ private:
 
 	void Unary(std::vector<FormulaToken>& out)
 	{
+		// (every nesting passes here: a bound, not a stack overflow)
+		if (++fDepth > 100)
+			throw std::string("the formula is too complex");
 		if (Take("-")) {
 			out.push_back(Token(0xd));
 			Unary(out);
+			fDepth--;
 			return;
 		}
 		if (Take("+")) {
 			Unary(out);
+			fDepth--;
 			return;
 		}
 		std::vector<FormulaToken> operand;
 		Primary(operand);
+		fDepth--;
 		while (Take("%")) {
 			std::vector<FormulaToken> r = {Token(0xc)};
 			r.insert(r.end(), operand.begin(), operand.end());
@@ -2061,6 +2067,7 @@ private:
 	CellID fAt;
 	const std::function<bool(const std::string&)>& fIsName;
 	size_t fPos = 0;
+	int fDepth = 0;
 };
 
 } // namespace

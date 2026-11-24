@@ -57,6 +57,8 @@ const Entity kEntities[] = {
 void
 AppendUTF8(std::string& out, uint32_t code)
 {
+	if (code > 0x10ffff)
+		code = 0xfffd;
 	if (code < 0x80)
 		out += char(code);
 	else if (code < 0x800) {
@@ -148,7 +150,15 @@ public:
 		if (state.hidden || text.empty())
 			return;
 		std::string out;
-		for (char c : text) {
+		for (size_t i = 0; i < text.size(); i++) {
+			char c = text[i];
+			if ((unsigned char)c == 0xf3) {
+				// (U+C0000-U+FFFFF read as Embed's markers: U+FFFD instead)
+				while (i + 1 < text.size() && (text[i + 1] & 0xc0) == 0x80)
+					i++;
+				out += "\xef\xbf\xbd";
+				continue;
+			}
 			if (!state.pre && isspace((unsigned char)c)) {
 				// runs of white space as one space, none at a line's start
 				if ((out.empty() && (fLineStart || fLastSpace)) || (!out.empty() && out.back() == ' '))

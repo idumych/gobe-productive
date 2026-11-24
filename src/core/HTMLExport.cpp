@@ -1,5 +1,6 @@
 // HTML export: TExportHTML (writeHeader, writeBody, WriteWord, BeginParagraph,
 // NextRun, PreCheckCharStyles, PostCheckCharStyles, convertToHTMLBuffer).
+#include "DocWriter.h"
 #include "HTMLExport.h"
 
 #include <algorithm>
@@ -492,13 +493,7 @@ ExportHTML(const Document& doc, const std::string& path, const std::string& titl
 	// (the Status window: the HTML made, then written with its pictures)
 	if (StepCancelled(error, 1, 2))
 		return false;
-	std::ofstream file(path, std::ios::binary | std::ios::trunc);
-	if (!file) {
-		error = "cannot write " + path;
-		return false;
-	}
-	file.write(text.data(), std::streamsize(text.size()));
-	if (!file)
+	if (!WriteFile(path, text.data(), text.size(), error))
 		return false;
 	if (images.empty()) {
 		ReportProgress(1, 1);

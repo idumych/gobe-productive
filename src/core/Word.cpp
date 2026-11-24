@@ -23,14 +23,14 @@ namespace {
 uint16_t
 U16(const std::vector<uint8_t>& d, size_t at)
 {
-	return at + 2 <= d.size() ? uint16_t(d[at] | d[at + 1] << 8) : 0;
+	return d.size() >= 2 && at <= d.size() - 2 ? uint16_t(d[at] | d[at + 1] << 8) : 0;
 }
 
 
 uint32_t
 U32(const std::vector<uint8_t>& d, size_t at)
 {
-	return at + 4 <= d.size() ? uint32_t(d[at] | d[at + 1] << 8 | d[at + 2] << 16
+	return d.size() >= 4 && at <= d.size() - 4 ? uint32_t(d[at] | d[at + 1] << 8 | d[at + 2] << 16
 		| uint32_t(d[at + 3]) << 24) : 0;
 }
 
@@ -414,7 +414,7 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 	if (lcbFonts > 4 && fcFonts + lcbFonts <= table.size()) {
 		uint16_t count = U16(table, fcFonts);
 		size_t at = fcFonts + 4;
-		for (uint16_t i = 0; i < count && at < fcFonts + lcbFonts; i++) {
+		for (uint16_t i = 0; i < count && at < fcFonts + lcbFonts && at < table.size(); i++) {
 			size_t length = size_t(table[at]) + 1;
 			std::string name;
 			for (size_t k = at + 40; k + 1 < at + length; k += 2) {
@@ -443,6 +443,8 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 			break;
 		uint32_t lcb = U32(table, at + 1);
 		size_t plc = at + 5;
+		if (lcb < 4 || plc + lcb > table.size())
+			break;
 		size_t n = (lcb - 4) / 12;
 		for (size_t i = 0; i < n; i++) {
 			uint32_t fc = U32(table, plc + (n + 1) * 4 + i * 8 + 2);
@@ -475,7 +477,7 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 	// the FKPs: FC ranges and their CHPX / PAPX
 	auto fkpEntries = [&](uint32_t fc, uint32_t lcb, bool paragraphs,
 			std::vector<std::pair<std::pair<uint32_t, uint32_t>, size_t>>& out) {
-		if (lcb < 8 || fc + lcb > table.size())
+		if (lcb < 8 || size_t(fc) + lcb > table.size())
 			return;
 		size_t n = (lcb - 4) / 8;
 		for (size_t i = 0; i < n; i++) {
@@ -487,6 +489,8 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 			for (size_t k = 0; k < crun; k++) {
 				uint32_t from = U32(word, page + k * 4), to = U32(word, page + (k + 1) * 4);
 				size_t offsetAt = page + (size_t(crun) + 1) * 4 + k * (paragraphs ? 13 : 1);
+				if (offsetAt >= page + 511)
+					break;
 				size_t offset = size_t(word[offsetAt]) * 2;
 				out.push_back({{from, to}, offset == 0 ? 0 : page + offset});
 			}
@@ -521,7 +525,8 @@ ReadWord(const std::vector<uint8_t>& file, std::vector<WordParagraph>& paragraph
 		for (const auto& e : chpx)
 			if (fc >= e.first.first && fc < e.first.second) {
 				if (e.second != 0 && e.second < word.size()) {
-					size_t from = e.second + 1, to = e.second + 1 + word[e.second];
+					size_t from = e.second + 1,
+						to = std::min(word.size(), e.second + 1 + word[e.second]);
 					for (size_t q = from; q + 4 <= to; ) {
 						uint16_t sprm = U16(word, q);
 						if (sprm == 0x4a30) {

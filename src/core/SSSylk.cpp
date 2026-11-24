@@ -148,8 +148,13 @@ SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFo
 				c.value = value;
 			}
 	};
+	// the grid (TCellRef::ActualValid): cells past it dropped, not stored
+	// where they can't be seen (row or column 0xffff ends the saved cells)
+	auto inGrid = [](uint32_t row, uint32_t column) { return row <= 0x3fff && column <= 0x2be; };
 	for (const SylkCell& cell : sheet.cells) {
 		uint16_t row = cell.row, column = cell.column;
+		if (!inGrid(row, column))
+			continue;
 		// the cell's format (an F record's P); rtd_C_field_K: a number in a
 		// date or time format is days since 1900 (as Excel counts): back to
 		// Gobe's count
@@ -198,7 +203,7 @@ SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFo
 	// TImportSYLK::rtd_F: characters * 7 (the export divides by 7.45); a
 	// width of 0 leaves the default (SetLineSize's 0)
 	for (const auto& width : sheet.columnWidths)
-		if (width.second > 0)
+		if (width.second > 0 && inGrid(0, width.first))
 			SetLineSize(*ss, true, width.first, width.first, float(width.second * 7));
 	// rtd_F, sendRowHeight: the default height (F;D...;M) and each row's
 	// (F;M;R); the fonts (P;F) are kept for cells that refer to them
@@ -206,13 +211,15 @@ SylkToSpreadsheet(Document& doc, size_t part, const SylkSheet& sheet, int& badFo
 	if (sheet.defaultRowHeight > 0)
 		ss->defaultHeight = sheet.defaultRowHeight;
 	for (const auto& height : sheet.rowHeights)
-		if (height.second > 0)
+		if (height.second > 0 && inGrid(height.first, 0))
 			SetLineSize(*ss, false, height.first, height.first, height.second);
 	if (sheet.rows > ss->used.to.a + 1)
-		ss->used.to.a = uint16_t(sheet.rows - 1);
+		ss->used.to.a = uint16_t(std::min<long>(sheet.rows - 1, 0x3fff));
 	if (sheet.columns > ss->used.to.b + 1)
-		ss->used.to.b = uint16_t(sheet.columns - 1);
+		ss->used.to.b = uint16_t(std::min<long>(sheet.columns - 1, 0x2be));
 	for (const SylkCell& cell : sheet.cells) {
+		if (!inGrid(cell.row, cell.column))
+			continue;
 		if (cell.row > ss->used.to.a)
 			ss->used.to.a = cell.row;
 		if (cell.column > ss->used.to.b)

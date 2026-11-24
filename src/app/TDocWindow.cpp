@@ -1877,13 +1877,11 @@ TDocWindow::Save(const std::string& path)
 	if (fDocument == NULL)
 		return false;
 	if (path == fDocument->path && !fShared->backedUp) {
-		BEntry backup((path + "~").c_str());
-		if (!backup.Exists()) {
-			std::string error;
-			if (!WriteFile(path + "~", fDocument->bytes, error)) {
-				(new BAlert("Save", error.c_str(), "OK"))->Go(NULL);
-				return false;
-			}
+		// (replaces an older session's "~": it must be the version on disk now)
+		std::string error;
+		if (!WriteFile(path + "~", fDocument->bytes, error)) {
+			(new BAlert("Save", error.c_str(), "OK"))->Go(NULL);
+			return false;
 		}
 		fShared->backedUp = true;
 	}

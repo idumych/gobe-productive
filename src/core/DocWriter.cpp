@@ -1,7 +1,15 @@
 #include "DocWriter.h"
 
 #include <cstring>
+#include <cstdio>
+#include <filesystem>
 #include <fstream>
+#ifdef __HAIKU__
+#include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <fs_attr.h>
+#endif
 
 #include "Document.h"
 
@@ -134,20 +142,78 @@ SaveDocument(const Document& doc, const DocChanges& changes)
 }
 
 
-bool
-WriteFile(const std::string& path, const std::vector<uint8_t>& data, std::string& error)
+#ifdef __HAIKU__
+// The old file's attributes (its type, icon position, ...) onto the new one
+static void
+CopyAttributes(const char* from, const char* to)
 {
-	std::ofstream file(path, std::ios::binary | std::ios::trunc);
-	if (!file) {
-		error = "cannot write " + path;
-		return false;
+	int in = open(from, O_RDONLY), out = open(to, O_WRONLY);
+	DIR* names = in >= 0 ? fs_fopen_attr_dir(in) : NULL;
+	if (names != NULL && out >= 0) {
+		while (dirent* entry = fs_read_attr_dir(names)) {
+			attr_info info;
+			if (fs_stat_attr(in, entry->d_name, &info) != 0 || info.size > 1 << 24)
+				continue;
+			std::vector<char> value(size_t(info.size));
+			ssize_t got = fs_read_attr(in, entry->d_name, info.type, 0, value.data(), value.size());
+			if (got >= 0)
+				fs_write_attr(out, entry->d_name, info.type, 0, value.data(), size_t(got));
+		}
 	}
-	file.write(reinterpret_cast<const char*>(data.data()), data.size());
-	if (!file) {
-		error = "error writing " + path;
+	if (names != NULL)
+		fs_close_attr_dir(names);
+	if (in >= 0)
+		close(in);
+	if (out >= 0)
+		close(out);
+}
+#endif
+
+
+// Writes a new file and renames it over the old one, so a failed write
+// leaves the old file whole
+bool
+WriteFile(const std::string& path, const void* data, size_t size, std::string& error)
+{
+	namespace fs = std::filesystem;
+	std::error_code ec;
+	fs::path target = fs::weakly_canonical(path, ec);	// (through a link, to the file itself)
+	if (ec)
+		target = path;
+	std::string temporary = target.string() + ".saving";
+	{
+		std::ofstream file(temporary, std::ios::binary | std::ios::trunc);
+		if (!file) {
+			error = "cannot write " + path;
+			return false;
+		}
+		file.write(static_cast<const char*>(data), std::streamsize(size));
+		file.close();
+		if (!file) {
+			error = "error writing " + path;
+			std::remove(temporary.c_str());
+			return false;
+		}
+	}
+	if (fs::exists(target, ec)) {
+		fs::permissions(temporary, fs::status(target, ec).permissions(), ec);
+#ifdef __HAIKU__
+		CopyAttributes(target.c_str(), temporary.c_str());
+#endif
+	}
+	if (std::rename(temporary.c_str(), target.c_str()) != 0) {
+		error = "cannot write " + path;
+		std::remove(temporary.c_str());
 		return false;
 	}
 	return true;
+}
+
+
+bool
+WriteFile(const std::string& path, const std::vector<uint8_t>& data, std::string& error)
+{
+	return WriteFile(path, data.data(), data.size(), error);
 }
 
 } // namespace gobe

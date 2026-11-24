@@ -427,6 +427,10 @@ int main()
 	setFormula(103, "SUBSTITUTE(\"hello\",\"x\",\"X\",1)");
 	got.clear(); eval(103, 2).GetString(got);
 	Check(got == "hello", "SUBSTITUTE no match");
+	// new text holding the old: replaced once, not again inside the new text
+	setFormula(405, "SUBSTITUTE(\"a-b\",\"-\",\"--\")");
+	got.clear(); eval(405, 2).GetString(got);
+	Check(got == "a--b", "SUBSTITUTE new text holds the old");
 	// error: SUBSTITUTE instance 0
 	setFormula(104, "SUBSTITUTE(\"abc\",\"b\",\"X\",0)");
 	Check(IsError(eval(104, 2)), "SUBSTITUTE instance 0 is error");

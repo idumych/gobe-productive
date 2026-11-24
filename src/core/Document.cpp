@@ -514,8 +514,8 @@ Document::DeleteSheet(size_t sheet, std::string& error)
 	sheets.sheetCount = uint32_t(count - 1);
 	sheetsChanged = true;
 	// the shown sheet's index after the move
-	if (shown > int(sheet)) {
-		int root = RootPart();
+	int root = RootPart();
+	if (shown > int(sheet) && root >= 0 && parts.parts[size_t(root)].data.size() >= 36) {
 		std::vector<uint8_t>& record = parts.parts[size_t(root)].data;
 		for (int i = 0; i < 4; i++)
 			record[32 + i] = uint8_t(uint32_t(shown - 1) >> (24 - 8 * i));
@@ -543,7 +543,7 @@ Document::MoveSheet(size_t from, size_t to)
 		: shown > int(from) && shown <= int(to) ? shown - 1
 		: shown < int(from) && shown >= int(to) ? shown + 1 : shown;
 	int root = RootPart();
-	if (now != shown && root >= 0) {
+	if (now != shown && root >= 0 && parts.parts[size_t(root)].data.size() >= 36) {
 		std::vector<uint8_t>& record = parts.parts[size_t(root)].data;
 		for (int i = 0; i < 4; i++)
 			record[32 + i] = uint8_t(uint32_t(now) >> (24 - 8 * i));
@@ -700,8 +700,9 @@ Document::ShowSheet(size_t sheet, std::string& error)
 	tails[size_t(root)].portals[0].frames[0].raw = pointers.Data();
 	dirtyTails.insert(size_t(root));
 	std::vector<uint8_t>& record = parts.parts[size_t(root)].data;
-	for (int i = 0; i < 4; i++)
-		record[32 + i] = uint8_t(sheet >> (24 - 8 * i));
+	if (record.size() >= 36)	// (a short record from the file: shown as sheet 0)
+		for (int i = 0; i < 4; i++)
+			record[32 + i] = uint8_t(sheet >> (24 - 8 * i));
 	ComputeHiddenFrames();
 	return true;
 }
@@ -1231,11 +1232,11 @@ Document::Save(const std::string& to, std::string& error)
 		}
 	}
 	std::vector<uint8_t> data = SaveDocument(*this, changes);
-	if (!WriteFile(to, data, error))
-		return false;
+	// (checked before it replaces the file on disk)
 	Document fresh;
-	if (!LoadDocument(to, fresh, error))
+	if (!LoadDocumentBytes(data, fresh, error) || !WriteFile(to, data, error))
 		return false;
+	fresh.path = to;
 	int slide = currentSlide;
 	*this = std::move(fresh);
 	if (presentationPart >= 0 && slide != currentSlide)

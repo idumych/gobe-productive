@@ -1,5 +1,6 @@
 #include "TImageGIMP.h"
 
+#include <algorithm>
 #include <Alert.h>
 #include <Application.h>
 #include <Autolock.h>
@@ -60,6 +61,8 @@ enum {
 	kItemRadioButton, kItemImageMenu, kItemScale, kItemFrame, kItemLabel, kItemText,
 	kGroupRadio = 1 << 16
 };
+
+static const long kMaxPayload = 16 * 1024 * 1024;	// (more: a broken filter)
 
 struct MsgHeader {
 	int32 type;
@@ -600,9 +603,14 @@ public:
 		fItems.erase(found);
 	}
 
+	// (now, not queued: no message after this calls back into the run,
+	// which may be about to be deleted)
 	void Close()
 	{
-		PostMessage(B_QUIT_REQUESTED);
+		if (Lock()) {
+			fRun = NULL;
+			Quit();
+		}
 	}
 
 	// DispatchMessage: Escape shows Cancel pressed for a moment and
@@ -633,6 +641,8 @@ public:
 			BWindow::MessageReceived(message);
 			return;
 		}
+		if (fRun == NULL)
+			return;
 		if (id == 3) {
 			fRun->About();
 			return;
@@ -858,10 +868,15 @@ GIMPRun::Run()
 		MsgHeader header;
 		if (!ReadAll(&header, sizeof(header)))
 			break;
-		std::vector<uint8> payload(size_t(std::max(0L, header.size)));
-		if (!payload.empty() && !ReadAll(payload.data(), payload.size()))
+		if (header.size < 0 || header.size > kMaxPayload)
 			break;
-		void* data = payload.empty() ? NULL : payload.data();
+		// (zeros after what the filter sent: a short message reads them,
+		// its text ends)
+		std::vector<uint8> payload(size_t(header.size) + std::max({sizeof(MsgImage),
+			sizeof(MsgDialog), sizeof(MsgParams), sizeof(MsgProgress), sizeof(MsgColor)}) + 1);
+		if (header.size > 0 && !ReadAll(payload.data(), size_t(header.size)))
+			break;
+		void* data = header.size == 0 ? NULL : payload.data();
 		switch (header.type) {
 			case kQuit:
 				fQuit = true;
@@ -914,7 +929,10 @@ GIMPRun::Run()
 				break;
 		}
 	}
-	fView.SendMessage(kMsgDone);
+	// (the pipe ended without kQuit: the filter crashed, its output unfinished)
+	BMessage done(kMsgDone);
+	done.AddBool("broken", true);
+	fView.SendMessage(&done);
 }
 
 
@@ -1038,6 +1056,8 @@ GIMPRun::HandleParams(void* data)
 			write(fToPlugin[1], saved, size_t(size));
 		return;
 	}
+	if (params.size > kMaxPayload)
+		return;
 	std::vector<uint8> value(size_t(std::max(0L, params.size)));
 	if (!value.empty() && !ReadAll(value.data(), value.size()))
 		return;

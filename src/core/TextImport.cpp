@@ -1,4 +1,5 @@
 // Plain text in and out of word processing documents (Gobe Text Translator).
+#include "DocWriter.h"
 #include "TextImport.h"
 
 #include "Document.h"
@@ -413,7 +414,7 @@ ImportTable(const std::string& path, Document& doc, std::string& error, char del
 		size_t end = at;
 		while (end < text.size() && text[end] != delimiter && text[end] != '\n')
 			end++;
-		if (end > at && row < 0xffff && column < 0xffff) {
+		if (end > at && row <= 0x3fff && column <= 0x2be) {	// (the grid: TCellRef::ActualValid)
 			std::string cell = text.substr(at, end - at);
 			uint16_t r = uint16_t(row), c = uint16_t(column);
 			if (!SetCellInput(*ss, r, c, cell, nullptr, ignored)) {
@@ -485,13 +486,7 @@ ExportTable(const Document& doc, size_t part, const std::string& path, char deli
 	}
 	if (!shown.empty())
 		text += '\n';
-	std::ofstream file(path, std::ios::binary | std::ios::trunc);
-	if (!file) {
-		error = "cannot write " + path;
-		return false;
-	}
-	file.write(text.data(), std::streamsize(text.size()));
-	if (!file)
+	if (!WriteFile(path, text.data(), text.size(), error))
 		return false;
 	ReportProgress(1, 1);
 	return true;
@@ -697,16 +692,8 @@ ExportText(const Document& doc, size_t part, const std::string& path, std::strin
 	// (the Status window: the text made, then written)
 	if (StepCancelled(error, 1, 2))
 		return false;
-	std::ofstream file(path, std::ios::binary | std::ios::trunc);
-	if (!file) {
-		error = "cannot write " + path;
+	if (!WriteFile(path, text.data(), text.size(), error))
 		return false;
-	}
-	file.write(text.data(), std::streamsize(text.size()));
-	if (!file) {
-		error = "cannot write " + path;
-		return false;
-	}
 	ReportProgress(1, 1);
 	return true;
 }

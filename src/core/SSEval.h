@@ -77,6 +77,7 @@ private:
 	std::map<uint32_t, const SSCell*> fCells;
 	std::map<uint32_t, SSValue> fCache;
 	std::map<uint32_t, bool> fBusy;
+	int fDepth = 0;
 };
 
 // The spreadsheet parts of a document, evaluated together: formulas can

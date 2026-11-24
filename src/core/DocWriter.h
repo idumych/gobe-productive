@@ -50,6 +50,7 @@ struct DocChanges {
 std::vector<uint8_t> SaveDocument(const Document& doc, const DocChanges& changes);
 bool WriteFile(const std::string& path, const std::vector<uint8_t>& data,
 	std::string& error);
+bool WriteFile(const std::string& path, const void* data, size_t size, std::string& error);
 
 } // namespace gobe
 

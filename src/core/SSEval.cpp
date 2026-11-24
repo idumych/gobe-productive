@@ -412,7 +412,10 @@ SSEvaluator::Value(uint16_t row, uint16_t column)
 				return SSValue::Error(kErrRef);
 			fBusy[key] = true;
 			Iter it{c.formula, 0, c.id};
+			int depth = fDepth;	// (the bound is for one formula's nesting)
+			fDepth = 0;
 			v = Eval(it, true);
+			fDepth = depth;
 			fBusy[key] = false;
 			break;
 		}
@@ -518,12 +521,23 @@ SSEvaluator::Reduce(const SSValue& v, CellID at)
 }
 
 
+// a formula's nesting, counted: a file's formula of thousands of nested
+// operators is an error, not a stack overflow
+static const int kMaxDepth = 100;	// (~1.7 KB of stack each: a window thread has 256 KB)
+struct Nesting {
+	int& depth;
+	explicit Nesting(int& d) : depth(d) { depth++; }
+	~Nesting() { depth--; }
+};
+
+
 // TEvaluator::Skip: step over one operand
 void
 SSEvaluator::Skip(Iter& it)
 {
+	Nesting nesting(fDepth);
 	const FormulaToken* t = it.Next();
-	if (!t)
+	if (!t || fDepth > kMaxDepth)
 		return;
 	while (t && (t->kind == 0xe || t->kind == 0xf)) {
 		t = it.Next();
@@ -546,10 +560,11 @@ SSEvaluator::Skip(Iter& it)
 SSValue
 SSEvaluator::Eval(Iter& it, bool reduce)
 {
+	Nesting nesting(fDepth);
 	const FormulaToken* t = it.Next();
 	while (t && (t->kind == 0xe || t->kind == 0xf))
 		t = it.Next();
-	if (!t)
+	if (!t || fDepth > kMaxDepth)
 		return SSValue::Error(kErrFormula);
 	if (t->kind < 0xe)
 		return Operator(it, t->kind);
@@ -1692,6 +1707,7 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 				for (int c = 0; c < utf8CharLen(oldText) && byteEnd < source.size(); c++)
 					byteEnd = NextCharacter(source, byteEnd);
 				source.replace(bytePos, byteEnd - bytePos, newText);
+				start = pos + utf8CharLen(newText);	// (on after the new text)
 			}
 		} else {
 			for (int i = 0; i < instance; i++) {
@@ -1705,6 +1721,7 @@ SSEvaluator::Function(Iter& it, const std::string& name, int argc)
 				for (int c = 0; c < utf8CharLen(oldText) && byteEnd < source.size(); c++)
 					byteEnd = NextCharacter(source, byteEnd);
 				source.replace(bytePos, byteEnd - bytePos, newText);
+				start = pos + utf8CharLen(newText);	// (on after the new text)
 			}
 		}
 		return finish(SSValue::String(source));

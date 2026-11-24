@@ -423,7 +423,9 @@ ReadValetPackage(const std::vector<uint8_t>& data, size_t& base,
 	}
 	// (paths come from the package: none may leave the destination)
 	for (const ValetItem& i : items)
-		if (i.path.empty() || i.path[0] == '/' || i.path.find("..") != std::string::npos) {
+		if (i.path.empty() || i.path[0] == '/' || i.path.find("..") != std::string::npos
+				|| (i.kind == ValetItem::kLink && (i.link.empty() || i.link[0] == '/'
+					|| i.link.find("..") != std::string::npos))) {
 			error = "The package has an unexpected path: " + i.path;
 			return false;
 		}
@@ -591,6 +593,11 @@ ReadIsoImage(const std::string& image, std::vector<IsoFile>& files, std::string&
 				name.resize(semicolon);
 			if (!folder && !name.empty() && name.back() == '.')
 				name.pop_back();
+			// (names come from the image: none may leave the destination)
+			if (name.empty() || name == "." || name == ".." || name.find('/') != std::string::npos) {
+				at += length;
+				continue;
+			}
 			IsoFile file;
 			file.path = dir.path + "/" + name;
 			file.offset = uint64_t(LittleU32(r + 2)) * 2048;

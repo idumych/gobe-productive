@@ -2,6 +2,7 @@
 // 0x400, the CHPX and PAPX FKPs and a SEPX in the WordDocument stream; the
 // style sheet, the section table, the piece table, the bin tables, the
 // font table and the DOP in the 1Table stream.
+#include "DocWriter.h"
 #include "Word.h"
 
 #include <algorithm>
@@ -919,11 +920,8 @@ ExportWord(const Document& doc, const std::string& path, std::string& error)
 	// (the Status window: the Word file made, then written)
 	if (StepCancelled(error, 1, 2))
 		return false;
-	std::ofstream out(path, std::ios::binary);
-	if (!out.write(reinterpret_cast<const char*>(bytes.data()), std::streamsize(bytes.size()))) {
-		error = "cannot write " + path;
+	if (!WriteFile(path, bytes, error))
 		return false;
-	}
 	ReportProgress(1, 1);
 	return true;
 }

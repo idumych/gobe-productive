@@ -1,4 +1,5 @@
 // RTF in and out of word processing documents (Gobe RTF translator).
+#include "DocWriter.h"
 #include "RTF.h"
 
 #include <unistd.h>
@@ -2153,16 +2154,8 @@ ExportRTF(const Document& doc, size_t part, const std::string& path, std::string
 	// (the Status window: the RTF made, then written)
 	if (StepCancelled(error, 1, 2))
 		return false;
-	std::ofstream file(path, std::ios::binary | std::ios::trunc);
-	if (!file) {
-		error = "cannot write " + path;
+	if (!WriteFile(path, rtf.data(), rtf.size(), error))
 		return false;
-	}
-	file.write(rtf.data(), std::streamsize(rtf.size()));
-	if (!file) {
-		error = "cannot write " + path;
-		return false;
-	}
 	ReportProgress(1, 1);
 	return true;
 }
